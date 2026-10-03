@@ -3,8 +3,16 @@ import { z } from "zod";
 const schema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SECRET_KEY: z.string().min(10),
-  OPENAI_API_KEY: z.string().min(10).optional(),
-  ANTHROPIC_API_KEY: z.string().min(10).optional(),
+  OPENAI_API_KEY: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().min(10).optional(),
+  ),
+  ANTHROPIC_API_KEY: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().min(10).optional(),
+  ),
   ANTHROPIC_TEXT_MODEL: z.string().default("claude-haiku-4-5-20251001"),
   OPENAI_TEXT_MODEL: z.string().default("gpt-5-mini"),
   OPENAI_IMAGE_MODEL: z.string().default("gpt-image-2.5-sunburst"),

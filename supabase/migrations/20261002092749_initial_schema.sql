@@ -131,6 +131,8 @@ create policy "owner reads usage" on public.usage_events for select to authentic
 revoke all on public.allowed_users,public.projects,public.scenes,public.jobs,public.exports,public.usage_events from anon;
 grant select on public.allowed_users,public.projects,public.scenes,public.jobs,public.exports,public.usage_events to authenticated;
 grant insert,update,delete on public.projects,public.scenes to authenticated;
+grant all on public.allowed_users,public.projects,public.scenes,public.jobs,public.exports,public.usage_events to service_role;
+grant usage,select on sequence public.usage_events_id_seq to service_role;
 
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
 values('private-media','private-media',false,52428800,array['image/jpeg','image/png','image/webp','audio/mpeg','audio/wav','audio/mp4','audio/aac','audio/x-m4a','video/mp4'])

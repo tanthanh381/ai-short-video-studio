@@ -110,7 +110,7 @@ const project: Project = {
   settings: {
     ...DEFAULT_PROJECT_SETTINGS,
     backgroundMusicPath: "music.mp3",
-    subtitle: { ...DEFAULT_PROJECT_SETTINGS.subtitle, enabled: false },
+    subtitle: { ...DEFAULT_PROJECT_SETTINGS.subtitle, enabled: true },
   },
   scenes: [scene(0, 1800), scene(1, 2200)],
   createdAt: new Date().toISOString(),

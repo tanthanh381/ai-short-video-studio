@@ -148,4 +148,4 @@ Lệnh đầu chạy typecheck, unit test và production build. Lệnh thứ hai
 
 ## Phong cách nội dung tham khảo
 
-Trang Facebook công khai được tham khảo ở mức nhịp kể: câu mở đầu ngắn, nội dung chiêm nghiệm tiếng Việt, hình theo cảnh và thời lượng ngắn. Dự án không sao chép video, tên thương hiệu hoặc tài sản của trang đó.
+Không truy cập được nội dung công khai của trang Facebook tham khảo trong môi trường triển khai, nên bản đầu dùng phong cách mặc định: kể chuyện tiếng Việt, mở đầu ngắn, hình minh họa theo cảnh, giọng đọc tự nhiên, phụ đề rõ và video dọc. Dự án không sao chép video, tên thương hiệu hoặc tài sản của trang đó.
