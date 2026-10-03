@@ -20,6 +20,6 @@ Ngày lập: 02/10/2026. Cập nhật triển khai: 03/10/2026.
 | Mobile                                                   | viewport 390 × 844, kiểm tra DOM và ảnh chụp            | Đạt; preview, storyboard và thiết lập cùng truy cập được; không tràn ngang |
 | GitHub Pages                                             | workflow Pages + mở URL public và URL con `/media`      | Đạt ngày 03/10/2026; routing trực tiếp không lỗi                            |
 
-Lệnh nghiệm thu cuối `pnpm check` chạy thành công ngày 03/10/2026. GitHub Actions CI và workflow GitHub Pages đã chạy thành công trên repository public ngày 03/10/2026 trước thay đổi tích hợp Claude; cần chờ workflow mới sau khi push.
+Lệnh nghiệm thu cuối `pnpm check` chạy thành công ngày 03/10/2026. GitHub Actions CI và workflow GitHub Pages cho commit tích hợp Claude/OpenAI đều chạy thành công; trang Cài đặt public đã hiển thị riêng trạng thái Claude, ChatGPT/OpenAI và FFmpeg tự host.
 
 Không đánh dấu luồng AI là “đã kiểm chứng” cho đến khi gọi dịch vụ thật. Render lõi đã được kiểm tra bằng MP4 thật; riêng bước burn-in phụ đề trong container vẫn chờ Docker production có `libass` và Noto Sans. Chưa có Supabase project riêng, Cloudflare Tunnel, Claude key và OpenAI key nên chưa thể thực hiện các phép thử production còn lại.
