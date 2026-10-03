@@ -12,6 +12,8 @@ const config: AppConfig = {
   DAILY_BUDGET_USD: 3,
   MAX_CONCURRENT_JOBS: 1,
   AI_FEATURES_ENABLED: false,
+  OPENAI_FEATURES_ENABLED: false,
+  ANTHROPIC_FEATURES_ENABLED: false,
   RENDER_WORKER_ENABLED: false,
   NODE_ENV: "test",
 };

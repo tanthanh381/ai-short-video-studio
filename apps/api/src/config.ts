@@ -12,6 +12,14 @@ const configSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  OPENAI_FEATURES_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  ANTHROPIC_FEATURES_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   RENDER_WORKER_ENABLED: z
     .enum(["true", "false"])
     .default("false")

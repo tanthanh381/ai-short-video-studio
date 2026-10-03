@@ -12,5 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-no
 RUN corepack enable
 WORKDIR /app
 COPY --from=build /app /app
+RUN mkdir -p /app/apps/worker/tmp && chown -R node:node /app
 ENV NODE_ENV=production
+USER node
 CMD ["pnpm", "--filter", "@studio/worker", "exec", "tsx", "src/index.ts"]

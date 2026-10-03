@@ -26,7 +26,7 @@ jobs:
       - run: pnpm build
       - name: Kiem tra khong lo secret trong bundle
         run: |
-          if grep -R -E "(sk-[A-Za-z0-9_-]{20,}|sb_secret_)" apps/web/dist; then
+          if grep -R -E "(sk-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sb_secret_)" apps/web/dist; then
             echo "Phat hien chuoi giong secret trong frontend bundle"
             exit 1
           fi

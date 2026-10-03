@@ -3,23 +3,36 @@ import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
 import { projectSchema, type Project, type Scene } from "@studio/shared";
 import { getConfig } from "./config";
+import { AnthropicStoryboardAdapter } from "./anthropic";
 import { groupWords, OpenAIAdapter } from "./openai";
+import type { StoryboardProvider } from "./providers";
 import { renderProject } from "./render";
 
 const config = getConfig();
 const log = pino({
   level: "info",
-  redact: ["apiKey", "SUPABASE_SECRET_KEY", "OPENAI_API_KEY"],
+  redact: [
+    "apiKey",
+    "SUPABASE_SECRET_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+  ],
 });
 const db = createClient(config.SUPABASE_URL, config.SUPABASE_SECRET_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
-const ai = config.OPENAI_API_KEY
+const openai = config.OPENAI_API_KEY
   ? new OpenAIAdapter(config.OPENAI_API_KEY, {
       text: config.OPENAI_TEXT_MODEL,
       image: config.OPENAI_IMAGE_MODEL,
       tts: config.OPENAI_TTS_MODEL,
     })
+  : null;
+const anthropic = config.ANTHROPIC_API_KEY
+  ? new AnthropicStoryboardAdapter(
+      config.ANTHROPIC_API_KEY,
+      config.ANTHROPIC_TEXT_MODEL,
+    )
   : null;
 const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
@@ -116,9 +129,18 @@ async function removePrefix(prefix: string) {
 }
 
 async function storyboard(job: JobRow, project: Project) {
-  if (!ai) throw new Error("Chưa cấu hình OPENAI_API_KEY trên worker");
+  const providerName = project.settings.textProvider;
+  const provider: StoryboardProvider | null =
+    providerName === "openai" ? openai : anthropic;
+  if (!provider) {
+    throw new Error(
+      providerName === "openai"
+        ? "Chưa cấu hình OpenAI cho phần kịch bản"
+        : "Chưa cấu hình Claude cho phần kịch bản",
+    );
+  }
   await setProgress(job.id, 10, "Đang phân tích nội dung");
-  const result = await ai.createStoryboard({
+  const result = await provider.createStoryboard({
     title: project.title,
     sourceText: project.sourceText,
     inputMode: project.inputMode,
@@ -156,7 +178,10 @@ async function storyboard(job: JobRow, project: Project) {
 }
 
 async function generateMedia(job: JobRow, project: Project) {
-  if (!ai) throw new Error("Chưa cấu hình OPENAI_API_KEY trên worker");
+  if (!openai)
+    throw new Error(
+      "Chưa cấu hình OpenAI để tạo ảnh, giọng đọc và đồng bộ phụ đề",
+    );
   const targetId =
     job.job_type === "regenerate_scene"
       ? String(job.payload.sceneId ?? "")
@@ -189,7 +214,7 @@ async function generateMedia(job: JobRow, project: Project) {
           Math.round((finished / scenes.length) * 85),
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
-        const image = await ai.createImage(
+        const image = await openai.createImage(
           `${scene.imagePrompt}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
         );
@@ -213,7 +238,10 @@ async function generateMedia(job: JobRow, project: Project) {
           Math.round((finished / scenes.length) * 85) + 4,
           `Đang tạo giọng đọc cảnh ${scene.order + 1}`,
         );
-        audio = await ai.createSpeech(scene.narration, project.settings.voice);
+        audio = await openai.createSpeech(
+          scene.narration,
+          project.settings.voice,
+        );
         audioPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.mp3`;
         await upload(audioPath, audio, "audio/mpeg");
         await db
@@ -235,7 +263,7 @@ async function generateMedia(job: JobRow, project: Project) {
         Math.round((finished / scenes.length) * 85) + 7,
         `Đang đồng bộ phụ đề cảnh ${scene.order + 1}`,
       );
-      const words = await ai.transcribe(audio);
+      const words = await openai.transcribe(audio);
       const subtitles = groupWords(words);
       const actualDurationMs = Math.max(
         ...subtitles.map((c) => c.endMs),
@@ -437,7 +465,16 @@ process.on("SIGTERM", () => {
 process.on("SIGINT", () => {
   stopping = true;
 });
-log.info({ workerId, aiConfigured: Boolean(ai) }, "worker_started");
+log.info(
+  {
+    workerId,
+    providers: {
+      anthropicStoryboard: Boolean(anthropic),
+      openaiStoryboardAndMedia: Boolean(openai),
+    },
+  },
+  "worker_started",
+);
 while (!stopping) {
   await poll();
   await new Promise((resolve) => setTimeout(resolve, config.WORKER_POLL_MS));

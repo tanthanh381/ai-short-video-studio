@@ -166,7 +166,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           <div className="demo-bar">
             <strong>Đang xem chế độ mẫu.</strong> Anh có thể tạo và sửa
             storyboard trên máy này; tạo AI và xuất MP4 cần kết nối Supabase,
-            Railway và API key.
+            máy render và API key.
           </div>
         )}
         {children}
@@ -600,6 +600,21 @@ function NewProjectPage() {
           </button>
           {advanced && (
             <div className="form-grid advanced-panel">
+              <Field label="AI chia cảnh và viết kịch bản">
+                <select
+                  value={settings.textProvider}
+                  onChange={(e) =>
+                    setSettings((s) => ({
+                      ...s,
+                      textProvider: e.target
+                        .value as ProjectSettings["textProvider"],
+                    }))
+                  }
+                >
+                  <option value="anthropic">Claude</option>
+                  <option value="openai">ChatGPT / OpenAI</option>
+                </select>
+              </Field>
               <Field label="Giọng đọc">
                 <select
                   value={settings.voice}
@@ -779,8 +794,14 @@ function StudioPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<{
     ai: boolean;
+    openai: boolean;
+    anthropic: boolean;
     render: boolean;
-  } | null>(isDemo ? { ai: false, render: false } : null);
+  } | null>(
+    isDemo
+      ? { ai: false, openai: false, anthropic: false, render: false }
+      : null,
+  );
   const saveTimer = useRef<number | null>(null);
   useEffect(() => {
     void Promise.all([
@@ -898,12 +919,21 @@ function StudioPage() {
       );
       return;
     }
-    if (
-      (type === "storyboard" || type === "generate_media") &&
-      !capabilities?.ai
-    ) {
+    const storyboardEnabled =
+      project?.settings.textProvider === "anthropic"
+        ? capabilities?.anthropic
+        : capabilities?.openai;
+    const requestedAiEnabled =
+      type === "storyboard"
+        ? storyboardEnabled
+        : type === "generate_media"
+          ? capabilities?.openai
+          : true;
+    if (!requestedAiEnabled) {
       setError(
-        "Tính năng AI chưa được cấu hình trên máy chủ. Anh vẫn có thể tải ảnh và audio của mình lên.",
+        type === "storyboard"
+          ? `Chưa cấu hình ${project?.settings.textProvider === "anthropic" ? "Claude" : "OpenAI"} cho phần kịch bản.`
+          : "Chưa cấu hình OpenAI để tạo ảnh, giọng đọc và đồng bộ phụ đề. Anh vẫn có thể tải media của mình lên.",
       );
       return;
     }
@@ -964,8 +994,8 @@ function StudioPage() {
       setError("Tạo lại cảnh cần kết nối OpenAI và worker thật.");
       return;
     }
-    if (!capabilities?.ai) {
-      setError("Tạo lại cảnh cần cấu hình AI trên worker.");
+    if (!capabilities?.openai) {
+      setError("Tạo lại cảnh cần cấu hình OpenAI trên worker.");
       return;
     }
     setBusyAction(`regenerate-${sceneId}`);
@@ -1056,6 +1086,10 @@ function StudioPage() {
     (sum, s) => sum + (s.actualDurationMs ?? s.estimatedDurationMs),
     0,
   );
+  const storyboardEnabled =
+    project.settings.textProvider === "anthropic"
+      ? capabilities?.anthropic
+      : capabilities?.openai;
   return (
     <div className="studio">
       <div className="studio-top">
@@ -1085,7 +1119,7 @@ function StudioPage() {
             variant="secondary"
             onClick={() => void runAction("storyboard")}
             busy={busyAction === "storyboard"}
-            disabled={!isDemo && !capabilities?.ai}
+            disabled={!isDemo && !storyboardEnabled}
           >
             <WandSparkles size={17} /> Chia cảnh
           </Button>
@@ -1093,7 +1127,7 @@ function StudioPage() {
             variant="secondary"
             onClick={() => void runAction("generate_media")}
             busy={busyAction === "generate_media"}
-            disabled={!isDemo && !capabilities?.ai}
+            disabled={!isDemo && !capabilities?.openai}
           >
             <Sparkles size={17} /> Tạo media
           </Button>
@@ -1113,11 +1147,16 @@ function StudioPage() {
       )}
       {!isDemo &&
         capabilities &&
-        (!capabilities.ai || !capabilities.render) && (
+        (!storyboardEnabled ||
+          !capabilities.openai ||
+          !capabilities.render) && (
           <div className="studio-notice">
             <Notice tone="warn">
-              {!capabilities.ai
-                ? "Chưa cấu hình AI: Chia cảnh, tạo ảnh và giọng đọc đang tắt. "
+              {!storyboardEnabled
+                ? `Chưa cấu hình ${project.settings.textProvider === "anthropic" ? "Claude" : "OpenAI"}: Chia cảnh đang tắt. `
+                : ""}
+              {!capabilities.openai
+                ? "Chưa cấu hình OpenAI: Tạo ảnh, giọng đọc và phụ đề đang tắt. "
                 : ""}
               {!capabilities.render
                 ? "Chưa cấu hình worker: Xuất MP4 đang tắt."
@@ -1273,6 +1312,33 @@ function StudioPage() {
             <h2>Thiết lập</h2>
           </div>
           <div className="settings-scroll">
+            <div className="setting-group">
+              <h3>
+                <Sparkles /> AI kịch bản
+              </h3>
+              <Field label="Nhà cung cấp">
+                <select
+                  value={project.settings.textProvider}
+                  onChange={(e) =>
+                    change({
+                      ...project,
+                      settings: {
+                        ...project.settings,
+                        textProvider: e.target
+                          .value as ProjectSettings["textProvider"],
+                      },
+                    })
+                  }
+                >
+                  <option value="anthropic">Claude</option>
+                  <option value="openai">ChatGPT / OpenAI</option>
+                </select>
+              </Field>
+              <p className="microcopy">
+                Chỉ áp dụng khi bấm “Chia cảnh”. Ảnh, giọng đọc và phụ đề dùng
+                OpenAI.
+              </p>
+            </div>
             <div className="setting-group">
               <h3>
                 <Mic2 /> Giọng đọc
@@ -1676,7 +1742,13 @@ function SettingsPage() {
   const [settings, setSettings] = useState({
     dailyBudgetUsd: 3,
     maxConcurrentJobs: 1,
-    capabilities: { supabase: !isDemo, ai: false, render: false },
+    capabilities: {
+      supabase: !isDemo,
+      ai: false,
+      openai: false,
+      anthropic: false,
+      render: false,
+    },
   });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -1718,7 +1790,8 @@ function SettingsPage() {
     label: enabled ? "Đã kết nối" : "Chưa cấu hình",
   });
   const supabaseState = connection(settings.capabilities.supabase);
-  const aiState = connection(settings.capabilities.ai);
+  const openaiState = connection(settings.capabilities.openai);
+  const anthropicState = connection(settings.capabilities.anthropic);
   const renderState = connection(settings.capabilities.render);
   return (
     <SimplePage
@@ -1737,15 +1810,22 @@ function SettingsPage() {
           </div>
           <div className="connection-row">
             <div>
-              <strong>OpenAI</strong>
+              <strong>Claude</strong>
+              <span>Chia cảnh và biên tập kịch bản</span>
+            </div>
+            <b className={anthropicState.className}>{anthropicState.label}</b>
+          </div>
+          <div className="connection-row">
+            <div>
+              <strong>ChatGPT / OpenAI</strong>
               <span>Kịch bản, hình ảnh, giọng đọc và đồng bộ phụ đề</span>
             </div>
-            <b className={aiState.className}>{aiState.label}</b>
+            <b className={openaiState.className}>{openaiState.label}</b>
           </div>
           <div className="connection-row">
             <div>
               <strong>Worker render</strong>
-              <span>FFmpeg trên Railway</span>
+              <span>FFmpeg trên máy tự host</span>
             </div>
             <b className={renderState.className}>{renderState.label}</b>
           </div>

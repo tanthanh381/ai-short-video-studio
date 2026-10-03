@@ -6,7 +6,13 @@ import { supabase } from "./supabase";
 export type AccountSettings = {
   dailyBudgetUsd: number;
   maxConcurrentJobs: number;
-  capabilities: { supabase: boolean; ai: boolean; render: boolean };
+  capabilities: {
+    supabase: boolean;
+    ai: boolean;
+    openai: boolean;
+    anthropic: boolean;
+    render: boolean;
+  };
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

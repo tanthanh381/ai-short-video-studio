@@ -12,7 +12,7 @@ Studio tiếng Việt để sản xuất video ngắn theo luồng: nhập ý t�
 - Giao diện React + TypeScript hoàn chỉnh cho máy tính và điện thoại.
 - Có chế độ mẫu để xem và sửa storyboard khi chưa cấu hình dịch vụ. Chế độ này được ghi rõ trên giao diện và không giả lập AI hay video đầu ra.
 - API Express có xác thực Supabase, danh sách tài khoản được phép, signed upload/download, giới hạn file, rate limit, ngân sách ngày, idempotency và giới hạn tác vụ đồng thời.
-- Worker có adapter OpenAI, hàng đợi PostgreSQL bền vững, checkpoint theo cảnh, retry giới hạn, heartbeat và FFmpeg render MP4 H.264/AAC.
+- Worker có adapter Claude và OpenAI, hàng đợi PostgreSQL bền vững, checkpoint theo cảnh, retry giới hạn, heartbeat và FFmpeg render MP4 H.264/AAC.
 - Migration Supabase tạo database, RLS và bucket riêng tư.
 - GitHub Actions kiểm tra source và tự động triển khai GitHub Pages.
 - Frontend mẫu đã được triển khai và xác minh URL trực tiếp, gồm cả đường dẫn con `/media`.
@@ -38,10 +38,11 @@ Nếu chưa có API key, vẫn có thể tạo dự án, sửa storyboard, tải
 | Thành phần  | Công nghệ                                  | Vai trò                                             |
 | ----------- | ------------------------------------------ | --------------------------------------------------- |
 | Frontend    | React, TypeScript, Vite, GitHub Pages      | Studio, xem trước, chỉnh sửa và theo dõi job        |
-| Backend     | Node.js, Express, Railway                  | Giữ secret, kiểm tra quyền, cấp signed URL, tạo job |
+| Backend     | Node.js, Express, Docker, Cloudflare Tunnel | Giữ secret, kiểm tra quyền, cấp signed URL, tạo job |
 | Dữ liệu     | Supabase Auth, PostgreSQL, private Storage | Đăng nhập, metadata, hàng đợi bền vững và media     |
-| Worker      | Node.js, FFmpeg, Noto Sans, Railway        | Gọi AI, checkpoint từng cảnh và render video        |
-| AI mặc định | OpenAI adapter                             | Storyboard, ảnh, TTS và word timestamp              |
+| Worker      | Node.js, FFmpeg, Noto Sans, Docker         | Gọi AI, checkpoint từng cảnh và render video        |
+| AI văn bản  | Claude hoặc OpenAI                         | Chia cảnh và biên tập storyboard theo từng dự án    |
+| AI media    | OpenAI                                     | Ảnh, TTS tiếng Việt và word timestamp               |
 
 Frontend không chứa secret. Worker render là một service riêng có CPU, dung lượng tạm và thời gian chạy phù hợp; GitHub Actions không được dùng làm hàng đợi video.
 
@@ -78,7 +79,7 @@ pnpm dev:api
 pnpm dev:worker
 ```
 
-Tên biến và placeholder nằm trong [.env.example](.env.example). Không đưa `.env`, service-role key hoặc OpenAI key vào GitHub.
+Tên biến và placeholder nằm trong [.env.example](.env.example). Không đưa `.env`, Supabase secret, Claude key hoặc OpenAI key vào GitHub.
 
 ## Triển khai production
 
@@ -91,20 +92,11 @@ Tên biến và placeholder nằm trong [.env.example](.env.example). Không đ�
 
 Chủ sở hữu sản phẩm không cần tự chạy SQL; các bước migration và cấp quyền nên do kỹ thuật viên hoặc quy trình triển khai thực hiện.
 
-### 2. Railway
+### 2. Máy tự host và Cloudflare Tunnel
 
-Tạo hai service từ cùng repository:
+API và worker chạy bằng `docker-compose.selfhost.yml`. Chỉ API đi qua Cloudflare Tunnel; worker không có cổng public. Secret được chia theo nguyên tắc tối thiểu: API không nhận khóa AI, worker không nhận token Tunnel.
 
-- API dùng `railway.api.json` và `Dockerfile.api`.
-- Worker dùng `railway.worker.json` và `Dockerfile`.
-
-Đặt secret ở Railway, không đặt ở frontend:
-
-- Cả hai service: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`.
-- API: `ALLOWED_ORIGINS`, `DAILY_BUDGET_USD`, `MAX_CONCURRENT_JOBS`, `MAX_UPLOAD_MB`. Sau khi worker và OpenAI đã sẵn sàng, đặt `AI_FEATURES_ENABLED=true` và `RENDER_WORKER_ENABLED=true` để giao diện báo đúng trạng thái.
-- Worker: `OPENAI_API_KEY` và các biến `OPENAI_*_MODEL` nếu muốn đổi model.
-
-API cần một public domain. Worker không cần public domain.
+Hướng dẫn vận hành nằm tại [docs/TU-HOST.md](docs/TU-HOST.md). Phương án này không có phí Railway nhưng máy chạy Docker phải bật khi tạo video.
 
 ### 3. GitHub Pages
 
@@ -112,7 +104,7 @@ Trong repository, vào **Settings → Secrets and variables → Actions → Vari
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `VITE_API_URL` là domain của Railway API
+- `VITE_API_URL` là hostname HTTPS của Cloudflare Tunnel
 - `VITE_DEMO_MODE=false`
 
 Vào **Settings → Pages → Build and deployment**, chọn **GitHub Actions**. Mỗi lần push nhánh `main`, workflow sẽ build và publish thư mục `apps/web/dist`.
@@ -123,14 +115,16 @@ Sau khi có URL Pages, cập nhật `ALLOWED_ORIGINS` của API bằng đúng or
 
 Không có dịch vụ trả phí nào được tự động mua hoặc nâng gói bởi source code này.
 
-| Dịch vụ      | Mức khởi đầu tham khảo            | Cách phát sinh chi phí                                                              |
-| ------------ | --------------------------------- | ----------------------------------------------------------------------------------- |
-| GitHub Pages | Miễn phí với public repository    | Lưu trữ và băng thông theo giới hạn GitHub Pages                                    |
-| Supabase     | Free: 0 USD; Pro từ 25 USD/tháng  | Database, storage, egress, số người dùng; Free có thể pause project không hoạt động |
-| Railway      | Hobby 5 USD/tháng gồm 5 USD usage | RAM, CPU, storage và network usage của API/worker                                   |
-| OpenAI API   | Trả theo sử dụng                  | Model văn bản, số ảnh/chất lượng ảnh, TTS và transcription                          |
+| Dịch vụ            | Mức khởi đầu                   | Cách phát sinh chi phí                                                    |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------- |
+| GitHub Pages       | Gói miễn phí phù hợp frontend  | Lưu trữ và băng thông theo hạn mức GitHub Pages                           |
+| Supabase           | Có gói Free                    | Database, storage, egress và số người dùng theo hạn mức                   |
+| Cloudflare Tunnel  | Có thể dùng gói Free           | Domain riêng nếu chọn mua; lưu lượng theo chính sách Cloudflare           |
+| Máy chạy Docker    | Không có phí nền tảng riêng    | Điện, mạng và phần cứng do chủ dự án cung cấp                             |
+| Claude API         | Trả theo sử dụng               | Token đầu vào/đầu ra khi tạo storyboard                                   |
+| OpenAI API         | Trả theo sử dụng               | Token văn bản, số ảnh/chất lượng ảnh, TTS và transcription                |
 
-Giá có thể thay đổi. Trước khi bật production, kiểm tra lại trang giá chính thức của [Supabase](https://supabase.com/pricing), [Railway](https://railway.com/pricing) và [OpenAI](https://openai.com/api/pricing/). Ứng dụng hiển thị ước tính trước khi tạo media, áp dụng ngân sách ngày và mặc định chỉ chạy một job đồng thời.
+Giá và hạn mức có thể thay đổi. Trước khi bật production, kiểm tra trang giá chính thức của [Supabase](https://supabase.com/pricing), [Cloudflare](https://www.cloudflare.com/plans/), [Anthropic](https://www.anthropic.com/pricing) và [OpenAI](https://openai.com/api/pricing/). Ứng dụng hiển thị ước tính trước khi tạo media, áp dụng ngân sách ngày và mặc định chỉ chạy một job đồng thời.
 
 ## Bảo mật và vận hành
 

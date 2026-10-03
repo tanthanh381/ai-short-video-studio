@@ -11,6 +11,7 @@
     "smoke:render": "tsx src/render.smoke.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "@studio/shared": "workspace:*",
     "@supabase/supabase-js": "2.86.0",
     "pino": "10.1.0",

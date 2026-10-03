@@ -1,36 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { Scene } from "@studio/shared";
-
-type Word = { word: string; start: number; end: number };
-export type StoryboardResult = {
-  hook: string;
-  narration: string;
-  scenes: Array<{
-    narration: string;
-    imagePrompt: string;
-    estimatedDurationMs: number;
-  }>;
-  suggestedTitle: string;
-  suggestedDescription: string;
-};
-
-export type StoryboardInput = {
-  title: string;
-  sourceText: string;
-  inputMode: string;
-  rewrite: boolean;
-  audience: string;
-  style: string;
-  duration: number;
-  visualStyle: string;
-};
-
-export interface AIProvider {
-  createStoryboard(input: StoryboardInput): Promise<StoryboardResult>;
-  createImage(prompt: string, aspectRatio: string): Promise<Uint8Array>;
-  createSpeech(text: string, voice: string): Promise<Uint8Array>;
-  transcribe(audio: Uint8Array): Promise<Word[]>;
-}
+import {
+  buildStoryboardInstruction,
+  parseStoryboard,
+  storyboardJsonSchema,
+  type AIProvider,
+  type StoryboardInput,
+  type StoryboardResult,
+  type WordTimestamp,
+} from "./providers";
 
 async function checked(response: Response) {
   if (!response.ok) {
@@ -56,43 +34,6 @@ export class OpenAIAdapter implements AIProvider {
   }
 
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {
-    const instruction = `Bạn là biên tập viên video ngắn tiếng Việt. Tạo storyboard ${input.duration} giây cho đối tượng: ${input.audience}. Phong cách: ${input.style}. ${input.inputMode === "full-script" && !input.rewrite ? "Giữ nguyên nội dung và câu chữ của kịch bản, chỉ chia cảnh." : "Có thể biên tập câu chữ để tăng nhịp kể."} Mỗi cảnh 4-9 giây. Prompt ảnh không chứa chữ, logo hay thương hiệu; phong cách hình: ${input.visualStyle}.`;
-    const schema = {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "hook",
-        "narration",
-        "scenes",
-        "suggestedTitle",
-        "suggestedDescription",
-      ],
-      properties: {
-        hook: { type: "string" },
-        narration: { type: "string" },
-        suggestedTitle: { type: "string" },
-        suggestedDescription: { type: "string" },
-        scenes: {
-          type: "array",
-          minItems: 2,
-          maxItems: 18,
-          items: {
-            type: "object",
-            additionalProperties: false,
-            required: ["narration", "imagePrompt", "estimatedDurationMs"],
-            properties: {
-              narration: { type: "string" },
-              imagePrompt: { type: "string" },
-              estimatedDurationMs: {
-                type: "integer",
-                minimum: 2000,
-                maximum: 15000,
-              },
-            },
-          },
-        },
-      },
-    };
     const response = await checked(
       await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
@@ -100,14 +41,14 @@ export class OpenAIAdapter implements AIProvider {
         headers: { ...this.headers(), "content-type": "application/json" },
         body: JSON.stringify({
           model: this.models.text,
-          instructions: instruction,
+          instructions: buildStoryboardInstruction(input),
           input: `Tên video: ${input.title}\nNội dung:\n${input.sourceText}`,
           text: {
             format: {
               type: "json_schema",
               name: "storyboard",
               strict: true,
-              schema,
+              schema: storyboardJsonSchema,
             },
           },
         }),
@@ -123,7 +64,7 @@ export class OpenAIAdapter implements AIProvider {
         ?.flatMap((o) => o.content ?? [])
         .find((c) => c.type === "output_text")?.text;
     if (!text) throw new Error("OpenAI không trả về storyboard");
-    return JSON.parse(text) as StoryboardResult;
+    return parseStoryboard(text);
   }
 
   async createImage(prompt: string, aspectRatio: string): Promise<Uint8Array> {
@@ -174,7 +115,7 @@ export class OpenAIAdapter implements AIProvider {
     return new Uint8Array(await response.arrayBuffer());
   }
 
-  async transcribe(audio: Uint8Array): Promise<Word[]> {
+  async transcribe(audio: Uint8Array): Promise<WordTimestamp[]> {
     const form = new FormData();
     form.append(
       "file",
@@ -193,16 +134,16 @@ export class OpenAIAdapter implements AIProvider {
         body: form,
       }),
     );
-    const data = (await response.json()) as { words?: Word[] };
+    const data = (await response.json()) as { words?: WordTimestamp[] };
     if (!data.words?.length)
       throw new Error("Không nhận được timestamp từ audio thật");
     return data.words;
   }
 }
 
-export function groupWords(words: Word[]): Scene["subtitles"] {
+export function groupWords(words: WordTimestamp[]): Scene["subtitles"] {
   const cues: Scene["subtitles"] = [];
-  let group: Word[] = [];
+  let group: WordTimestamp[] = [];
   const flush = () => {
     if (!group.length) return;
     cues.push({

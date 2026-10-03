@@ -71,6 +71,7 @@ export const sceneSchema = z.object({
 });
 
 export const projectSettingsSchema = z.object({
+  textProvider: z.enum(["anthropic", "openai"]).default("anthropic"),
   targetAudience: z.string().max(500).default("Người xem Việt Nam"),
   style: videoStyleSchema.default("ke-chuyen"),
   targetDurationSec: z
