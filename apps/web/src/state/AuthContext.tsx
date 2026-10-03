@@ -16,6 +16,7 @@ type AuthValue = {
   session: Session | null;
   isDemo: boolean;
   signIn(email: string, password: string): Promise<string | null>;
+  sendMagicLink(email: string): Promise<string | null>;
   signOut(): Promise<void>;
 };
 
@@ -54,6 +55,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
+        });
+        return error?.message ?? null;
+      },
+      async sendMagicLink(email) {
+        if (!supabase || appConfig.demoMode) return null;
+        const redirectTo = new URL(
+          import.meta.env.BASE_URL,
+          window.location.origin,
+        ).toString();
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: redirectTo,
+            shouldCreateUser: false,
+          },
         });
         return error?.message ?? null;
       },

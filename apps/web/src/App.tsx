@@ -192,19 +192,31 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 function LoginPage() {
-  const { signIn, user, isDemo } = useAuth();
+  const { signIn, sendMagicLink, user, isDemo } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [useMagicLink, setUseMagicLink] = useState(true);
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   if (user) return <Navigate to="/" replace />;
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
-    setError(await signIn(email, password));
+    setError(null);
+    setSent(false);
+    if (useMagicLink) {
+      const nextError = await sendMagicLink(email);
+      setError(nextError);
+      setSent(!nextError);
+      setBusy(false);
+      return;
+    }
+    const nextError = await signIn(email, password);
+    setError(nextError);
     setBusy(false);
-    if (!error) navigate("/");
+    if (!nextError) navigate("/");
   }
   return (
     <div className="login-page">
@@ -253,20 +265,41 @@ function LoginPage() {
                   autoComplete="email"
                 />
               </label>
-              <label>
-                Mật khẩu
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
-                />
-              </label>
+              {!useMagicLink && (
+                <label>
+                  Mật khẩu
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                  />
+                </label>
+              )}
               {error && <Notice tone="warn">{error}</Notice>}
+              {sent && (
+                <Notice tone="success">
+                  Đã gửi liên kết đăng nhập. Vui lòng kiểm tra email và bấm
+                  liên kết để mở Studio.
+                </Notice>
+              )}
               <Button type="submit" busy={busy}>
-                Đăng nhập
+                {useMagicLink ? "Gửi liên kết đăng nhập" : "Đăng nhập"}
               </Button>
+              <button
+                className="login-method"
+                type="button"
+                onClick={() => {
+                  setUseMagicLink((value) => !value);
+                  setError(null);
+                  setSent(false);
+                }}
+              >
+                {useMagicLink
+                  ? "Đăng nhập bằng mật khẩu"
+                  : "Đăng nhập bằng liên kết email"}
+              </button>
             </form>
           )}
         </div>

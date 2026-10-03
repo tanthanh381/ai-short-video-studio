@@ -8,7 +8,7 @@ Ngày lập: 02/10/2026. Cập nhật triển khai: 03/10/2026.
 | Unit test schema, API auth, routing, provider, timestamp | `pnpm test`                                             | Đạt: 11/11 test ngày 03/10/2026                                            |
 | Build React production                                   | `pnpm build`                                            | Đạt; bundle JS 331,35 kB (gzip 102,12 kB)                                  |
 | Frontend không chứa secret                               | quét source và bundle + kiểm tra CI                     | Đạt local và GitHub Actions                                                 |
-| Đăng nhập và chặn người ngoài                            | test API 401 + middleware `allowed_users`               | Test 401 đạt; chưa kiểm chứng với Supabase thật                            |
+| Đăng nhập và chặn người ngoài                            | Supabase Auth + API 401 + `allowed_users`                | Project, user và allowlist thật đã tạo; API 401 đạt; chờ backend public    |
 | Tạo/sửa/lưu dự án                                        | chế độ mẫu local + API thật                             | Chế độ mẫu đạt; chưa kiểm chứng với Supabase thật                          |
 | Upload ảnh/audio                                         | signed upload, MIME và size check                       | Chưa kiểm chứng với Supabase thật                                          |
 | AI storyboard                                            | Claude/OpenAI adapters                                  | Chưa gọi API thật vì chưa có key/ngân sách                                 |
@@ -22,4 +22,4 @@ Ngày lập: 02/10/2026. Cập nhật triển khai: 03/10/2026.
 
 Lệnh nghiệm thu cuối `pnpm check` chạy thành công ngày 03/10/2026. GitHub Actions CI và workflow GitHub Pages cho commit tích hợp Claude/OpenAI đều chạy thành công; trang Cài đặt public đã hiển thị riêng trạng thái Claude, ChatGPT/OpenAI và FFmpeg tự host.
 
-Không đánh dấu luồng AI là “đã kiểm chứng” cho đến khi gọi dịch vụ thật. Render lõi đã được kiểm tra bằng MP4 thật; riêng bước burn-in phụ đề trong container vẫn chờ Docker production có `libass` và Noto Sans. Chưa có Supabase project riêng, Cloudflare Tunnel, Claude key và OpenAI key nên chưa thể thực hiện các phép thử production còn lại.
+Không đánh dấu luồng AI là “đã kiểm chứng” cho đến khi gọi dịch vụ thật. Render lõi đã được kiểm tra bằng MP4 thật; riêng bước burn-in phụ đề trong container vẫn chờ Docker production có `libass` và Noto Sans. Supabase project riêng, schema, RLS, bucket, Auth user và allowlist đã được tạo; Cloudflare Tunnel, Claude key và OpenAI key vẫn đang chờ cấu hình.

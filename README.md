@@ -21,7 +21,7 @@ Luồng AI thật và render production chỉ được đánh dấu đã kiểm 
 
 ## Cách sử dụng
 
-1. Đăng nhập bằng tài khoản đã được cấp quyền.
+1. Đăng nhập bằng liên kết gửi tới email đã được cấp quyền; mật khẩu vẫn là phương án dự phòng.
 2. Chọn **Tạo dự án mới**, nhập tên video và ý tưởng hoặc kịch bản.
 3. Nếu đây là kịch bản hoàn chỉnh, chọn đúng loại nội dung. Hệ thống mặc định giữ nguyên câu chữ và chỉ chia cảnh; chỉ bật viết lại khi thật sự cần.
 4. Trong Studio, chọn **Chia cảnh**. Có thể sửa lời đọc, prompt ảnh, thứ tự, thêm hoặc xóa cảnh.

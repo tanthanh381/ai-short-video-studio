@@ -1695,3 +1695,16 @@ a:focus-visible {
 .login-box form .button {
   margin-top: 4px;
 }
+.login-method {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 4px;
+  text-align: center;
+}
+.login-method:hover {
+  text-decoration: underline;
+}
