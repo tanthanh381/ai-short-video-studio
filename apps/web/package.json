@@ -1,0 +1,28 @@
+{
+  "name": "@studio/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource/be-vietnam-pro": "5.2.8",
+    "@studio/shared": "workspace:*",
+    "@supabase/supabase-js": "2.86.0",
+    "lucide-react": "0.554.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-router-dom": "7.9.6",
+    "zod": "4.1.13"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.1",
+    "vite": "7.2.4"
+  }
+}

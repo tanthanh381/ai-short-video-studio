@@ -1,0 +1,15 @@
+FROM node:24-bookworm-slim AS build
+RUN corepack enable
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
+COPY apps/api ./apps/api
+COPY packages/shared ./packages/shared
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @studio/api typecheck
+
+FROM node:24-bookworm-slim AS runtime
+RUN corepack enable
+WORKDIR /app
+COPY --from=build /app /app
+ENV NODE_ENV=production
+CMD ["pnpm", "--filter", "@studio/api", "exec", "tsx", "src/index.ts"]

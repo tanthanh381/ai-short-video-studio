@@ -1,0 +1,20 @@
+{
+  "name": "ai-short-video-studio",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "pnpm --filter @studio/web dev",
+    "dev:api": "pnpm --filter @studio/api dev",
+    "dev:worker": "pnpm --filter @studio/worker dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3",
+    "vitest": "4.0.13"
+  }
+}
