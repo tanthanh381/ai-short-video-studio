@@ -1,13 +1,13 @@
 # Biên bản kiểm thử
 
-Ngày lập: 02/10/2026
+Ngày lập: 02/10/2026. Cập nhật triển khai: 03/10/2026.
 
 | Hạng mục                                                 | Cách kiểm tra                                           | Trạng thái                                                                 |
 | -------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------- |
 | TypeScript toàn monorepo                                 | `pnpm typecheck`                                        | Đạt ngày 02/10/2026                                                        |
 | Unit test schema, API auth, routing Pages, timestamp ASS | `pnpm test`                                             | Đạt: 8/8 test                                                              |
 | Build React production                                   | `pnpm build`                                            | Đạt; bundle JS 329,69 kB (gzip 101,83 kB)                                  |
-| Frontend không chứa secret                               | quét source và bundle + kiểm tra CI                     | Đạt trên bản local; CI đã cấu hình                                         |
+| Frontend không chứa secret                               | quét source và bundle + kiểm tra CI                     | Đạt local và GitHub Actions                                                 |
 | Đăng nhập và chặn người ngoài                            | test API 401 + middleware `allowed_users`               | Test 401 đạt; chưa kiểm chứng với Supabase thật                            |
 | Tạo/sửa/lưu dự án                                        | chế độ mẫu local + API thật                             | Chế độ mẫu đạt; chưa kiểm chứng với Supabase thật                          |
 | Upload ảnh/audio                                         | signed upload, MIME và size check                       | Chưa kiểm chứng với Supabase thật                                          |
@@ -17,8 +17,8 @@ Ngày lập: 02/10/2026
 | Tải lại khi job chạy                                     | job PostgreSQL + polling                                | Chưa kiểm chứng production                                                 |
 | Thử lại job lỗi                                          | API retry, nút UI và giới hạn số lần                    | Code hoàn tất; chưa kiểm chứng production                                  |
 | Mobile                                                   | viewport 390 × 844, kiểm tra DOM và ảnh chụp            | Đạt; preview, storyboard và thiết lập cùng truy cập được; không tràn ngang |
-| GitHub Pages                                             | workflow Pages                                          | Chưa triển khai vì repository chưa có remote GitHub                        |
+| GitHub Pages                                             | workflow Pages + mở URL public và URL con `/media`      | Đạt ngày 03/10/2026; routing trực tiếp không lỗi                            |
 
-Lệnh nghiệm thu cuối `pnpm check` chạy thành công ngày 02/10/2026.
+Lệnh nghiệm thu cuối `pnpm check` chạy thành công ngày 02/10/2026. GitHub Actions CI và workflow GitHub Pages đã chạy thành công trên repository public ngày 03/10/2026.
 
 Không đánh dấu luồng AI là “đã kiểm chứng” cho đến khi gọi dịch vụ thật. Render lõi đã được kiểm tra bằng MP4 thật; riêng bước burn-in phụ đề trong container vẫn chờ Docker production có `libass` và Noto Sans. Chưa được cung cấp Supabase project, Railway project hoặc OpenAI API key nên chưa thể thực hiện các phép thử production còn lại.
