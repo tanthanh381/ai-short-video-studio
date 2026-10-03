@@ -2,6 +2,9 @@
 
 Studio tiếng Việt để sản xuất video ngắn theo luồng: nhập ý tưởng hoặc kịch bản → chia cảnh → tạo ảnh và giọng đọc → đồng bộ phụ đề từ audio thật → render MP4 → tải video.
 
+- Website: https://tanthanh381.github.io/ai-short-video-studio/
+- Source code public: https://github.com/tanthanh381/ai-short-video-studio
+
 Ứng dụng được thiết kế cho một nhóm tài khoản được cấp quyền. Bản frontend có thể công khai trên GitHub Pages, nhưng mọi thao tác dữ liệu, AI và render đều được backend kiểm tra đăng nhập.
 
 ## Trạng thái hiện tại
@@ -12,6 +15,7 @@ Studio tiếng Việt để sản xuất video ngắn theo luồng: nhập ý t�
 - Worker có adapter OpenAI, hàng đợi PostgreSQL bền vững, checkpoint theo cảnh, retry giới hạn, heartbeat và FFmpeg render MP4 H.264/AAC.
 - Migration Supabase tạo database, RLS và bucket riêng tư.
 - GitHub Actions kiểm tra source và tự động triển khai GitHub Pages.
+- Frontend mẫu đã được triển khai và xác minh URL trực tiếp, gồm cả đường dẫn con `/media`.
 
 Luồng AI thật và render production chỉ được đánh dấu đã kiểm chứng sau khi kết nối tài khoản dịch vụ, cấp API key và chạy video nghiệm thu. Xem [biên bản kiểm thử](docs/KIEM-THU.md).
 
