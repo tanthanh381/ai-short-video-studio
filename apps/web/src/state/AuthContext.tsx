@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             shouldCreateUser: false,
           },
         });
-        return error?.message ?? null;
+        return authErrorMessage(error?.message);
       },
       async sendPasswordReset(email) {
         if (!supabase || appConfig.demoMode) return null;
@@ -95,12 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo,
         });
-        return error?.message ?? null;
+        return authErrorMessage(error?.message);
       },
       async updatePassword(password) {
         if (!supabase || appConfig.demoMode) return null;
         const { error } = await supabase.auth.updateUser({ password });
-        return error?.message ?? null;
+        return authErrorMessage(error?.message);
       },
       async signOut() {
         if (supabase) await supabase.auth.signOut();

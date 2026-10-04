@@ -201,6 +201,15 @@ function LoginPage() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setInterval(
+      () => setCooldown((value) => Math.max(0, value - 1)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
   if (user) return <Navigate to="/" replace />;
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -211,6 +220,7 @@ function LoginPage() {
       const nextError = await sendPasswordReset(email);
       setError(nextError);
       setSent(!nextError);
+      if (!nextError) setCooldown(60);
       setBusy(false);
       return;
     }
@@ -218,6 +228,7 @@ function LoginPage() {
       const nextError = await sendMagicLink(email);
       setError(nextError);
       setSent(!nextError);
+      if (!nextError) setCooldown(60);
       setBusy(false);
       return;
     }
@@ -297,11 +308,15 @@ function LoginPage() {
                     : "Đã gửi liên kết đăng nhập. Vui lòng kiểm tra email và bấm liên kết để mở Studio."}
                 </Notice>
               )}
-              <Button type="submit" busy={busy}>
+              <Button type="submit" busy={busy} disabled={cooldown > 0}>
                 {resetMode
-                  ? "Gửi email đặt mật khẩu"
+                  ? cooldown > 0
+                    ? `Gửi lại sau ${cooldown}s`
+                    : "Gửi email đặt mật khẩu"
                   : useMagicLink
-                    ? "Gửi liên kết đăng nhập"
+                    ? cooldown > 0
+                      ? `Gửi lại sau ${cooldown}s`
+                      : "Gửi liên kết đăng nhập"
                     : "Đăng nhập"}
               </Button>
               {resetMode ? (
