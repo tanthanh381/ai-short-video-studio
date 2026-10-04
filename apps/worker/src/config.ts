@@ -14,6 +14,8 @@ const schema = z.object({
     z.string().min(10).optional(),
   ),
   ANTHROPIC_TEXT_MODEL: z.string().default("claude-haiku-4-5-20251001"),
+  OLLAMA_BASE_URL: z.string().url().default("http://host.docker.internal:11434"),
+  OLLAMA_MODEL: z.string().default("qwen2.5:3b"),
   OPENAI_TEXT_MODEL: z.string().default("gpt-5-mini"),
   OPENAI_IMAGE_MODEL: z.string().default("gpt-image-2.5-sunburst"),
   OPENAI_TTS_MODEL: z.string().default("gpt-4o-mini-tts"),
