@@ -174,7 +174,7 @@ export async function createFaithfulStoryboard(
       const narration = lockedScenes[index]!;
       scenes.push({
         narration,
-        imagePrompt: generated.scenes[index]!.imagePrompt,
+        imagePrompt: visualActionPrompt(narration, generated.scenes[index]!.imagePrompt),
         estimatedDurationMs: Math.min(15000, Math.max(2000, Math.round(narration.trim().split(/\s+/u).length / 2.5 * 1000))),
       });
     }
@@ -188,6 +188,18 @@ export async function createFaithfulStoryboard(
     suggestedTitle: input.title,
     suggestedDescription: input.sourceText.slice(0, 2000),
   };
+}
+
+/** Ground common physical actions when a small text model omits their objects. */
+export function visualActionPrompt(narration: string, prompt: string) {
+  const text = narration.toLocaleLowerCase("vi");
+  if (/(không|chưa|đừng)\s+(viết|ghi|tưới)/u.test(text)) return prompt;
+  if (/(^|[\s,.!?;:])(viết|ghi)(?=$|[\s,.!?;:])/u.test(text)
+    && !/(bài|chữ|nét)\s+viết/u.test(text) && /(nhật ký|ghi chép|biết ơn)/u.test(text))
+    return `Visible hands holding a pen and writing on an open paper notebook on a desk, ${prompt}`.slice(0, 2000);
+  if (/(^|[\s,.!?;:])tưới(?=$|[\s,.!?;:])/u.test(text) && /(cây|hoa)/u.test(text))
+    return `Water pouring from a small watering can onto a potted plant, ${prompt}`.slice(0, 2000);
+  return prompt;
 }
 
 export function parseStoryboard(value: unknown): StoryboardResult {

@@ -10,14 +10,17 @@ Studio tiếng Việt: đăng nhập, dán kịch bản và bấm **Tạo video*
 ## Trạng thái hiện tại
 
 - Giao diện React + TypeScript hoàn chỉnh cho máy tính và điện thoại.
-- Có chế độ 0 đồng API: khi tắt các cờ AI, người dùng vẫn sửa storyboard, tải ảnh/audio lên và xuất MP4 thật bằng FFmpeg worker local. Chế độ này không giả lập AI hay video đầu ra.
+- Luồng **một nút** đã hoạt động trên website công khai: chỉ nhập kịch bản, máy tự chia cảnh bằng Ollama, tạo ảnh ComfyUI, đọc tiếng Việt bằng macOS Linh, tạo phụ đề đúng lời gốc và ghép MP4 bằng FFmpeg. Không cần API key và không gọi API trả phí.
+- Khi máy AI chưa được kết nối, vẫn có thể lưu bản nháp, sửa storyboard, tải ảnh/audio của mình lên và ghép MP4 khi worker sẵn sàng. Chế độ mẫu được ghi rõ và không trả video giả.
 - API Express có xác thực Supabase, danh sách tài khoản được phép, signed upload/download, giới hạn file, rate limit, ngân sách ngày, idempotency và giới hạn tác vụ đồng thời.
-- Worker có adapter Claude và OpenAI, hàng đợi PostgreSQL bền vững, checkpoint theo cảnh, retry giới hạn, heartbeat và FFmpeg render MP4 H.264/AAC.
+- Worker có adapter Ollama/local và Claude/OpenAI tùy chọn, hàng đợi PostgreSQL bền vững, checkpoint từng bước và từng cảnh, retry giới hạn, heartbeat và FFmpeg render MP4 H.264/AAC.
 - Migration Supabase tạo database, RLS và bucket riêng tư.
 - GitHub Actions kiểm tra source và tự động triển khai GitHub Pages.
-- Frontend mẫu đã được triển khai và xác minh URL trực tiếp, gồm cả đường dẫn con `/media`.
+- Frontend production đã triển khai trên GitHub Pages và kết nối backend thật qua Tailscale Funnel. Studio phát MP4 đã xuất, tải file thực và làm mới quyền truy cập có thời hạn cho video riêng tư.
 
-Luồng AI thật và render production chỉ được đánh dấu đã kiểm chứng sau khi kết nối tài khoản dịch vụ, cấp API key và chạy video nghiệm thu. Xem [biên bản kiểm thử](docs/KIEM-THU.md).
+Đã chạy ba video thật từ kịch bản mới qua website công khai; kiểm tra quyền đăng nhập và chặn tài khoản ngoài danh sách, tải lại/đóng rồi mở trang khi tác vụ chạy, tiếp tục từ lỗi chia cảnh/lỗi media riêng một cảnh và giao diện điện thoại. Video cuối được tạo từ một ô và một nút, tải MP4 thực, lời đọc/phụ đề nguyên văn, 1080×1920 và 8,979 giây theo audio. Xem số liệu và bằng chứng tại [biên bản kiểm thử](docs/KIEM-THU.md).
+
+Chưa chốt toàn bộ nghiệm thu: cần hoàn tất nghe và xem trọn MP4 bằng trình phát trên máy; bước này đang bị chặn bởi màn hình Mac khóa. Ảnh local có thể xuất hiện lỗi hình và chưa bảo đảm cùng một nhân vật giữ diện mạo nhất quán giữa các cảnh. Máy Mac phải bật và các dịch vụ xử lý phải hoạt động; website vẫn mở được khi máy tắt nhưng không thể tạo video. OpenAI và Claude chưa được gọi thật, là lựa chọn mở rộng ngoài luồng mặc định.
 
 ## Cách sử dụng
 
@@ -32,7 +35,7 @@ Luồng một nút chỉ dùng **Ollama + media local**, không tự chuyển sa
 
 Sau khi khởi động lại máy Mac đã được cấu hình, nhấp đúp `scripts/Mo-Video-Studio.command` để bật các thành phần và mở website; không cần nhập lệnh hoặc sửa cấu hình. Chờ máy khởi động xong các dịch vụ trước khi tạo video.
 
-Nếu chưa có API key, vẫn có thể tạo dự án, sửa storyboard, tải ảnh/audio của mình lên và xuất MP4 thật. Nút AI được khóa và giao diện hiển thị rõ chế độ 0 đồng API; worker chỉ xử lý media người dùng tải lên.
+Không có API key vẫn dùng được luồng tự động khi Ollama, ComfyUI và máy xử lý đã kết nối. Nếu các thành phần local chưa sẵn sàng, có thể lưu bản nháp, sửa cảnh và dùng ảnh/audio tự tải lên; giao diện báo rõ phần đang thiếu kết nối.
 
 ## Kiến trúc
 
@@ -180,7 +183,7 @@ pnpm check
 pnpm --filter @studio/worker smoke:render
 ```
 
-Lệnh đầu chạy typecheck, unit test và production build. Lệnh thứ hai tạo một MP4 dọc ngắn bằng FFmpeg và kiểm tra H.264, AAC, kích thước cùng thời lượng; cần FFmpeg local. Kết quả nghiệm thu và các phần chưa thể kiểm chứng khi thiếu tài khoản/key được ghi tại [docs/KIEM-THU.md](docs/KIEM-THU.md).
+Lệnh đầu chạy typecheck, unit test và production build. Lệnh thứ hai tạo một MP4 dọc ngắn bằng FFmpeg và kiểm tra H.264, AAC, kích thước cùng thời lượng; cần FFmpeg local. Kết quả chạy thật trên website công khai và các phần chưa hoàn tất nghiệm thu được ghi tại [docs/KIEM-THU.md](docs/KIEM-THU.md).
 
 ## Phong cách nội dung tham khảo
 

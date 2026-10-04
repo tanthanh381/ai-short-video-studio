@@ -5,6 +5,7 @@ import {
   createFaithfulStoryboard,
   parseStoryboard,
   splitScript,
+  visualActionPrompt,
   type StoryboardInput,
   type StoryboardResult,
   type WordTimestamp,
@@ -239,5 +240,60 @@ describe("known script alignment against real word timestamps", () => {
       { word: "bình", start: 0, end: 0.6 },
       { word: "tĩnh", start: 0.4, end: 0.8 },
     ])).toThrow(/Timestamp/);
+  });
+});
+
+describe("visible actions grounded in the original scene", () => {
+  it.each([
+    "Buổi tối, Linh ngồi bên bàn và viết nhật ký.",
+    "Lan ghi chép lại điều đã học trong ngày.",
+    "Cô ấy viết ra ba điều biết ơn trước khi ngủ.",
+  ])("shows a physical pen, open notebook and desk for a writing action: %s", (narration) => {
+    const originalPrompt = "A Vietnamese woman in a quiet bedroom at night, warm lamp light";
+    const grounded = visualActionPrompt(narration, originalPrompt);
+    expect(grounded).toMatch(/pen/i);
+    expect(grounded).toMatch(/open.*notebook/i);
+    expect(grounded).toMatch(/desk/i);
+    expect(grounded).toContain(originalPrompt);
+  });
+
+  it.each([
+    "Sáng sớm, cô ấy tưới cây ngoài ban công.",
+    "Linh tưới hoa trong chiếc chậu nhỏ bên cửa sổ.",
+  ])("shows visible water from a watering can for watering plants: %s", (narration) => {
+    const originalPrompt = "A Vietnamese woman on a balcony, soft morning light";
+    const grounded = visualActionPrompt(narration, originalPrompt);
+    expect(grounded).toMatch(/water.*pouring/i);
+    expect(grounded).toMatch(/watering can/i);
+    expect(grounded).toMatch(/plant/i);
+    expect(grounded).toContain(originalPrompt);
+  });
+
+  it.each([
+    "Một người đi bộ trên con đường nhỏ vào buổi sáng.",
+    "Tối nay, cô ấy đọc sách dưới ánh đèn ấm áp.",
+    "Tôi thích bài viết về lòng biết ơn.",
+    "Tôi nghi ngờ trang nhật ký này.",
+  ])("keeps an unrelated visual prompt unchanged instead of inventing an action: %s", (narration) => {
+    const originalPrompt = "A quiet garden path beneath tall trees, morning sunshine";
+    expect(visualActionPrompt(narration, originalPrompt)).toBe(originalPrompt);
+  });
+
+  it("changes only the image prompt and preserves the exact original narration", async () => {
+    const script = "  Buổi tối, Linh ngồi bên bàn và viết nhật ký.\n";
+    const provider = {
+      createStoryboard: vi.fn(async (value: StoryboardInput) => ({
+        ...generatedStoryboard(value),
+        scenes: value.lockedScenes!.map(() => ({
+          narration: "Nội dung do AI thay đổi",
+          imagePrompt: "A quiet bedroom, warm lamp light",
+          estimatedDurationMs: 4000,
+        })),
+      })),
+    };
+    const result = await createFaithfulStoryboard(provider, { ...input, sourceText: script });
+    expect(result.narration).toBe(script);
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(script);
+    expect(result.scenes[0]!.imagePrompt).toMatch(/pen.*open.*notebook.*desk/i);
   });
 });
