@@ -14,6 +14,7 @@ const config: AppConfig = {
   AI_FEATURES_ENABLED: false,
   OPENAI_FEATURES_ENABLED: false,
   ANTHROPIC_FEATURES_ENABLED: false,
+  OLLAMA_FEATURES_ENABLED: false,
   RENDER_WORKER_ENABLED: false,
   NODE_ENV: "test",
 };
