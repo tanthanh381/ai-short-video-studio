@@ -15,4 +15,38 @@ describe("LocalMediaAdapter", () => {
     expect(await adapter.transcribe(new Uint8Array([5]))).toEqual([{ word: "xin", start: 0, end: 0.3 }]);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it("nhận WAV và cue nguyên văn từ audio local đã đo", async () => {
+    const text = "Xin chào Việt Nam.\n";
+    const audio = Buffer.from("RIFFabcdefghijklWAVEpcm");
+    const cues = [{ id: crypto.randomUUID(), text, startMs: 0, endMs: 1537 }];
+    const mock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ audioBase64: audio.toString("base64"), cues, durationMs: 1537 })));
+    vi.stubGlobal("fetch", mock);
+    expect(await new LocalMediaAdapter("http://localhost:8765").createSpeechAligned(text, "Linh"))
+      .toEqual({ audio: new Uint8Array(audio), cues, durationMs: 1537, contentType: "audio/wav" });
+    expect(mock.mock.calls[0]![0]).toBe("http://localhost:8765/tts-aligned");
+  });
+
+  it.each(["chữ bị nhận sai", "XIN CHÀO VIỆT NAM"])("từ chối cue không nguyên văn: %s", async (text) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      audioBase64: "UklGRmF1ZGlvbWVkaWE=", durationMs: 1000,
+      cues: [{ id: crypto.randomUUID(), text, startMs: 0, endMs: 1000 }],
+    }))));
+    await expect(new LocalMediaAdapter("http://localhost:8765").createSpeechAligned("Xin chào Việt Nam", "Linh")).rejects.toThrow("không bảo toàn");
+  });
+
+  it("từ chối cue ngoài audio hoặc chồng nhau", async () => {
+    for (const cues of [
+      [{ id: crypto.randomUUID(), text: "Xin chào", startMs: 0, endMs: 2000 }],
+      [{ id: crypto.randomUUID(), text: "Xin ", startMs: 0, endMs: 700 }, { id: crypto.randomUUID(), text: "chào", startMs: 600, endMs: 1000 }],
+    ]) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ audioBase64: "UklGRmF1ZGlvbWVkaWE=", cues, durationMs: 1000 }))));
+      await expect(new LocalMediaAdapter("http://localhost:8765").createSpeechAligned("Xin chào", "Linh")).rejects.toThrow("Timestamp");
+    }
+  });
+
+  it("báo lỗi Việt khi bridge trả payload không hợp lệ", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ cues: [] }))));
+    await expect(new LocalMediaAdapter("http://localhost:8765").createSpeechAligned("Xin chào", "Linh")).rejects.toThrow("Dịch vụ giọng đọc local");
+  });
 });

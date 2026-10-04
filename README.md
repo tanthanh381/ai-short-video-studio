@@ -30,6 +30,8 @@ Tên được đặt tự động. Mặc định video dọc 1080×1920, giọng
 
 Luồng một nút chỉ dùng **Ollama + media local**, không tự chuyển sang API trả phí khi có key. Không mất phí API nhưng vẫn dùng điện, phần cứng và dung lượng Supabase trong hạn mức tài khoản. Máy chủ phải bật, không ngủ, và chạy Docker, Ollama, ComfyUI, cầu nối media, Tailscale Funnel.
 
+Sau khi khởi động lại máy Mac đã được cấu hình, nhấp đúp `scripts/Mo-Video-Studio.command` để bật các thành phần và mở website; không cần nhập lệnh hoặc sửa cấu hình. Chờ máy khởi động xong các dịch vụ trước khi tạo video.
+
 Nếu chưa có API key, vẫn có thể tạo dự án, sửa storyboard, tải ảnh/audio của mình lên và xuất MP4 thật. Nút AI được khóa và giao diện hiển thị rõ chế độ 0 đồng API; worker chỉ xử lý media người dùng tải lên.
 
 ## Kiến trúc

@@ -55,7 +55,7 @@ def comfy_image(prompt, aspect_ratio="9:16"):
     width, height = dimensions[aspect_ratio]
     client_id = "ai-short-video-studio-local"
     graph = {
-        "3": {"class_type": "KSampler", "inputs": {"seed": int(time.time_ns() % 2**31), "steps": 8, "cfg": 7.0, "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0, "model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["5", 0]}},
+        "3": {"class_type": "KSampler", "inputs": {"seed": int(time.time_ns() % 2**31), "steps": 16, "cfg": 7.0, "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0, "model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["5", 0]}},
         "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "analog-diffusion-1.0.safetensors"}},
         "5": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
         "6": {"class_type": "CLIPTextEncode", "inputs": {"text": f"{prompt}, cinematic illustration, no text, no logo, no watermark", "clip": ["4", 1]}},

@@ -425,20 +425,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
     const paths = [input.settings.backgroundMusicPath, ...input.scenes.flatMap((scene) => [scene.imagePath, scene.audioPath])];
     if (paths.some((path) => path !== null && (!path.startsWith(prefix) || path.includes(".."))))
       return res.status(403).json({ error: "Media không thuộc dự án này" });
-    const { error } = await db
-      .from("projects")
-      .update({
-        title: input.title,
-        source_text: input.sourceText,
-        input_mode: input.inputMode,
-        hook: input.hook,
-        suggested_title: input.suggestedTitle,
-        suggested_description: input.suggestedDescription,
-        settings: input.settings,
-      })
-      .eq("id", input.id)
-      .eq("user_id", req.userId!);
-    if (error) throw error;
     const rows = input.scenes.map((scene) => ({
       id: scene.id,
       project_id: input.id,
@@ -453,29 +439,18 @@ export function createApp(config: AppConfig, db: AdminClient) {
       error_message: scene.errorMessage,
       subtitles: scene.subtitles,
     }));
-    const keepIds = rows.map((row) => row.id);
-    if (keepIds.length) {
-      const { data: occupied, error: occupiedError } = await db
-        .from("scenes")
-        .select("id,project_id")
-        .in("id", keepIds);
-      if (occupiedError) throw occupiedError;
-      if ((occupied ?? []).some((scene) => scene.project_id !== input.id))
-        return res.status(409).json({
-          error: "Một cảnh không thuộc dự án này. Vui lòng tải lại trang.",
-        });
+    const { error } = await db.rpc("save_project", {
+      p_project_id: input.id, p_user_id: req.userId,
+      p_updated_at: input.updatedAt, p_project: input, p_scenes: rows,
+    });
+    if (error) {
+      if (queueError(error, res)) return;
+      if (error.message.includes("VIDEO_STALE_PROJECT"))
+        return res.status(409).json({ error: "Dự án đã được cập nhật. Vui lòng tải lại trước khi chỉnh sửa." });
+      if (error.message.includes("VIDEO_FOREIGN_SCENE") || error.message.includes("VIDEO_FOREIGN_MEDIA"))
+        return res.status(403).json({ error: "Cảnh hoặc media không thuộc dự án này" });
+      throw error;
     }
-    if (rows.length) {
-      const { error: upsertError } = await db
-        .from("scenes")
-        .upsert(rows, { onConflict: "id" });
-      if (upsertError) throw upsertError;
-    }
-    const query = db.from("scenes").delete().eq("project_id", input.id);
-    const deleted = keepIds.length
-      ? await query.not("id", "in", `(${keepIds.join(",")})`)
-      : await query;
-    if (deleted.error) throw deleted.error;
     res.json(await loadProject(input.id, req.userId!));
   });
 

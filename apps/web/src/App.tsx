@@ -57,6 +57,7 @@ import { useAuth } from "./state/AuthContext";
 import { api, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
 import { projectIsProcessing } from "./lib/video-submission";
+import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
@@ -963,6 +964,11 @@ function StudioPage() {
   const saving = useRef<Promise<void> | null>(null);
   const locked = useRef(false);
   const previewRefreshes = useRef(new Set<string>());
+  const freshResult = useRef<VideoResult | null>(null);
+  const freshResultSignedAt = useRef(0);
+  const videoElement = useRef<HTMLVideoElement | null>(null);
+  const pendingPlayback = useRef<{ time: number; playing: boolean } | null>(null);
+  const previewRecoveryInFlight = useRef(false);
   const processing = projectIsProcessing(jobs);
   locked.current = processing || Boolean(busyAction);
   useEffect(() => {
@@ -1006,11 +1012,15 @@ function StudioPage() {
     let active = true;
     setResultLoading(true);
     void api.getResult(id)
-      .then((next) => { if (active) setResult(next); })
+      .then((next) => { if (active) { freshResult.current = next; freshResultSignedAt.current = Date.now(); setResult(next); } })
       .catch(() => { if (active && project.status === "completed") setError("Chưa tải được video hoàn chỉnh. Hãy kiểm tra kết nối rồi mở lại dự án."); })
       .finally(() => { if (active) setResultLoading(false); });
     return () => { active = false; };
   }, [id, isDemo, project?.status, processing, jobs[0]?.updatedAt]);
+  useEffect(() => {
+    if (isDemo || processing || !result) return;
+    return startSignedPreviewRefresh(() => api.getResult(id), (next) => { freshResult.current = next; freshResultSignedAt.current = Date.now(); });
+  }, [id, isDemo, processing, result?.id]);
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
   useEffect(() => {
     const path = project?.scenes[selected]?.imagePath;
@@ -1584,6 +1594,7 @@ function StudioPage() {
             >
               {result ? (
                 <video
+                  ref={videoElement}
                   key={result.id}
                   className="result-video"
                   controls
@@ -1592,13 +1603,34 @@ function StudioPage() {
                   poster={result.thumbnailUrl}
                   src={result.url}
                   aria-label="Video MP4 đã hoàn tất"
+                  onLoadedMetadata={(e) => {
+                    if (!pendingPlayback.current) return;
+                    e.currentTarget.currentTime = restoredPreviewTime(pendingPlayback.current.time, e.currentTarget.duration);
+                  }}
+                  onCanPlay={(e) => {
+                    const previous = pendingPlayback.current;
+                    pendingPlayback.current = null;
+                    if (previous?.playing) void e.currentTarget.play().catch(() => {});
+                  }}
                   onError={() => {
-                    if (previewRefreshes.current.has(result.id)) {
+                    if (previewRecoveryInFlight.current) return;
+                    if (previewRefreshes.current.has(result.url)) {
                       setError("Chưa mở được video. Hãy kiểm tra kết nối hoặc tải MP4 để xem.");
                       return;
                     }
-                    previewRefreshes.current.add(result.id);
-                    void api.getResult(id).then(setResult).catch(() => setError("Chưa mở được video. Hãy kiểm tra kết nối hoặc tải MP4 để xem."));
+                    previewRefreshes.current.add(result.url);
+                    previewRecoveryInFlight.current = true;
+                    const previous = pendingPlayback.current ?? { time: videoElement.current?.currentTime ?? 0, playing: videoElement.current ? !videoElement.current.paused : false };
+                    const cached = freshResult.current;
+                    const refreshed = cached?.id === result.id && cached.url !== result.url && signedPreviewIsFresh(freshResultSignedAt.current) ? Promise.resolve(cached) : api.getResult(id);
+                    void refreshed.then((next) => {
+                      if (!next || next.url === result.url) throw new Error("Video chưa thể phát.");
+                      pendingPlayback.current = next.id === result.id ? previous : null;
+                      freshResult.current = next;
+                      freshResultSignedAt.current = Date.now();
+                      setResult(next);
+                    }).catch(() => setError("Chưa mở được video. Hãy kiểm tra kết nối hoặc tải MP4 để xem."))
+                      .finally(() => { previewRecoveryInFlight.current = false; });
                   }}
                 />
               ) : <>{previewUrl ? (

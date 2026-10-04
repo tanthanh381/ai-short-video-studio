@@ -48,11 +48,13 @@ export class LocalMediaAdapter implements MediaProvider {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text, voice }),
     }));
-    const data = z.object({
+    const parsed = z.object({
       audioBase64: z.string().min(10),
       cues: z.array(subtitleCueSchema).min(1),
       durationMs: z.number().int().positive(),
-    }).parse(await response.json());
+    }).safeParse(await response.json());
+    if (!parsed.success) throw new Error("Dịch vụ giọng đọc local trả dữ liệu không hợp lệ; hãy thử lại");
+    const data = parsed.data;
     if (data.cues.map((cue) => cue.text).join("") !== text)
       throw new Error("Giọng đọc local không bảo toàn kịch bản; chưa lưu kết quả");
     if (data.cues.some((cue, index) => cue.endMs > data.durationMs || (index > 0 && cue.startMs < data.cues[index - 1]!.endMs)))
