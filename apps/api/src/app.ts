@@ -646,7 +646,11 @@ export function createApp(config: AppConfig, db: AdminClient) {
 
   app.use(
     (error: unknown, req: Request, res: Response, _next: NextFunction) => {
-      if (error instanceof ZodError)
+      if (error instanceof ZodError) {
+        req.log.warn(
+          { issues: error.issues.map((issue) => ({ path: issue.path, code: issue.code })) },
+          "validation_failed",
+        );
         return res.status(400).json({
           error: "Dữ liệu chưa hợp lệ",
           details: error.issues.map((i) => ({
@@ -654,6 +658,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
             message: i.message,
           })),
         });
+      }
       req.log.error({ err: error }, "request_failed");
       res.status(500).json({
         error:
