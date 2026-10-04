@@ -1098,6 +1098,15 @@ function StudioPage() {
       );
       return;
     }
+    if (
+      (type === "generate_media" || type === "render_video") &&
+      !project?.scenes.length
+    ) {
+      setError(
+        "Dự án chưa có cảnh. Hãy bấm Chia cảnh hoặc Thêm cảnh trước khi tiếp tục.",
+      );
+      return;
+    }
     const storyboardEnabled =
       project?.settings.textProvider === "anthropic"
         ? capabilities?.anthropic
@@ -1319,9 +1328,15 @@ function StudioPage() {
             variant="secondary"
             onClick={() => void runAction("generate_media")}
             busy={busyAction === "generate_media"}
-            disabled={!isDemo && !(capabilities?.openai || capabilities?.localMedia)}
+            disabled={
+              !isDemo &&
+              (!project.scenes.length ||
+                !(capabilities?.openai || capabilities?.localMedia))
+            }
             title={
-              capabilities?.openai
+              !project.scenes.length
+                ? "Hãy bấm Chia cảnh hoặc Thêm cảnh trước"
+                : capabilities?.openai
                 ? "Tạo ảnh, giọng đọc và phụ đề bằng OpenAI"
                 : capabilities?.localMedia
                   ? "Tạo ảnh, giọng đọc và phụ đề local"
@@ -1334,7 +1349,8 @@ function StudioPage() {
           <Button
             onClick={() => void runAction("render_video")}
             busy={busyAction === "render_video"}
-            disabled={!isDemo && !capabilities?.render}
+            disabled={!isDemo && (!project.scenes.length || !capabilities?.render)}
+            title={!project.scenes.length ? "Hãy tạo ít nhất một cảnh trước" : undefined}
           >
             <Video size={17} /> Xuất video
           </Button>
