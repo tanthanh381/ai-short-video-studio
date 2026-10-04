@@ -89,6 +89,9 @@ Tên biến và placeholder nằm trong [.env.example](.env.example). Không đ�
 - Dùng Supabase CLI liên kết project và áp dụng migration trong `supabase/migrations`.
 - Tạo tài khoản Auth cho chủ sở hữu và thêm đúng tài khoản đó vào `allowed_users`.
 - Giữ bucket `private-media` ở chế độ private.
+- Để dùng đăng nhập bằng mật khẩu, vào **Authentication → Users**, chọn tài khoản,
+  đặt mật khẩu hoặc dùng nút **Quên hoặc chưa có mật khẩu?** trên website. Tối
+  thiểu 8 ký tự; không dùng lại mật khẩu ngân hàng.
 
 Chủ sở hữu sản phẩm không cần tự chạy SQL; các bước migration và cấp quyền nên do kỹ thuật viên hoặc quy trình triển khai thực hiện.
 
@@ -111,7 +114,11 @@ Trong repository, vào **Settings → Secrets and variables → Actions → Vari
 
 Vào **Settings → Pages → Build and deployment**, chọn **GitHub Actions**. Mỗi lần push nhánh `main`, workflow sẽ build và publish thư mục `apps/web/dist`.
 
-Sau khi có URL Pages, cập nhật `ALLOWED_ORIGINS` của API bằng đúng origin đó và thêm URL vào Redirect URLs trong Supabase Auth.
+Sau khi có URL Pages, cập nhật `ALLOWED_ORIGINS` của API bằng đúng origin đó và
+thêm cả hai URL sau vào Redirect URLs trong Supabase Auth:
+
+- `https://tanthanh381.github.io/ai-short-video-studio/`
+- `https://tanthanh381.github.io/ai-short-video-studio/reset-password`
 
 ## Chi phí và giới hạn
 
