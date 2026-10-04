@@ -20,7 +20,7 @@ Studio tiếng Việt: đăng nhập, dán kịch bản và bấm **Tạo video*
 
 Đã chạy ba video thật từ kịch bản mới qua website công khai; kiểm tra quyền đăng nhập và chặn tài khoản ngoài danh sách, tải lại/đóng rồi mở trang khi tác vụ chạy, tiếp tục từ lỗi chia cảnh/lỗi media riêng một cảnh và giao diện điện thoại. Video cuối được tạo từ một ô và một nút, tải MP4 thực, lời đọc/phụ đề nguyên văn, 1080×1920 và 8,979 giây theo audio. Xem số liệu và bằng chứng tại [biên bản kiểm thử](docs/KIEM-THU.md).
 
-Chưa chốt toàn bộ nghiệm thu: cần hoàn tất nghe và xem trọn MP4 bằng trình phát trên máy; bước này đang bị chặn bởi màn hình Mac khóa. Ảnh local có thể xuất hiện lỗi hình và chưa bảo đảm cùng một nhân vật giữ diện mạo nhất quán giữa các cảnh. Máy Mac phải bật và các dịch vụ xử lý phải hoạt động; website vẫn mở được khi máy tắt nhưng không thể tạo video. OpenAI và Claude chưa được gọi thật, là lựa chọn mở rộng ngoài luồng mặc định.
+Đã phát trọn MP4 nghiệm thu bằng QuickTime trên Mac: hình hai cảnh, chuyển cảnh và phụ đề tiếng Việt hiển thị đến đoạn kết. Audio AAC được giải mã, đo tín hiệu và kiểm tra độc lập bằng Whisper local; việc đánh giá chất giọng vẫn phụ thuộc cảm nhận người nghe. Ảnh local có thể xuất hiện lỗi hình và chưa bảo đảm cùng một nhân vật giữ diện mạo nhất quán giữa các cảnh. Máy Mac phải bật và các dịch vụ xử lý phải hoạt động; website vẫn mở được khi máy tắt nhưng không thể tạo video. OpenAI và Claude chưa được gọi thật, là lựa chọn mở rộng ngoài luồng mặc định.
 
 ## Cách sử dụng
 

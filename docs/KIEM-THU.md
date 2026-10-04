@@ -64,7 +64,7 @@ Quét 45 file source thay đổi/mới và 5 file bundle gồm sourcemap bằng 
 
 ## Giới hạn và phần chưa xác minh
 
-- Chưa chốt nghe/xem trọn MP4 bằng trình phát native: màn hình Mac đang khóa nên không điều khiển được QuickTime. Giải mã và kiểm tra khung hình/audio không thay thế đánh giá chủ quan toàn bộ lời đọc.
+- Đã phát trọn MP4 lượt 3 bằng QuickTime sau khi mở khóa Mac. Hình hai cảnh, chuyển cảnh, phụ đề và fade-out cuối hiển thị bình thường. Audio có stream AAC, tín hiệu và Whisper kiểm tra đúng kịch bản; không tự nhận là đã đánh giá chất giọng theo cảm nhận của người nghe.
 - Lỗi chia cảnh và lỗi một cảnh media đã được thử trên UI. Fixture media dùng bản sao trong prefix riêng, không sửa dự án nghiệm thu gốc; các dữ liệu QC tạm được dọn sau đối chiếu.
 - Ảnh local có thể sai chi tiết, tay/bút, chưa bảo đảm diện mạo nhân vật nhất quán giữa cảnh. Không cam kết chất lượng tương đương mọi video tham khảo.
 - Giọng Linh là giọng hệ thống, không phải giọng diễn viên. Với audio tải lên, Whisper chỉ được chấp nhận khi khớp lời gốc; lệch chữ sẽ báo lỗi thay vì âm thầm đổi phụ đề.
