@@ -1,6 +1,6 @@
 # Chạy backend và worker trên máy riêng
 
-Phương án này giữ frontend trên GitHub Pages và chạy API/FFmpeg trên máy cá nhân, mini PC, NAS hoặc VPS có Docker. Cloudflare Tunnel cung cấp địa chỉ HTTPS công khai mà không cần mở cổng mạng.
+Phương án này giữ frontend trên GitHub Pages và chạy API/FFmpeg trên máy cá nhân, mini PC, NAS hoặc VPS có Docker. Có thể dùng Tailscale Funnel hoặc Cloudflare Tunnel để cấp địa chỉ HTTPS công khai mà không cần mở cổng mạng.
 
 ## Chuẩn bị một lần
 
@@ -8,7 +8,7 @@ Phương án này giữ frontend trên GitHub Pages và chạy API/FFmpeg trên 
 2. Tạo một project Supabase Free riêng cho ứng dụng.
 3. Chạy migration trong thư mục `supabase/migrations` theo đúng thứ tự.
 4. Tạo tài khoản đăng nhập trong Supabase Authentication và thêm `user_id` đó vào bảng `allowed_users`.
-5. Nếu có domain, tạo Cloudflare Tunnel và gắn một hostname với dịch vụ `http://api:8787`. Nếu chưa có domain, dùng frontend với `VITE_API_URL=http://localhost:8787` để gọi backend local miễn phí.
+5. Chọn một cách public API: Tailscale Funnel (không cần domain riêng), Cloudflare Tunnel, hoặc chạy frontend trên chính máy backend với `VITE_API_URL=http://localhost:8787`.
 6. API key OpenAI và Anthropic là tùy chọn. Có thể để trống cả hai và chạy chế độ local-first bằng Ollama, ComfyUI, TTS Linh của macOS và whisper.cpp.
 
 ## Cấu hình bí mật
@@ -19,7 +19,7 @@ Sao chép `.env.selfhost.example` thành `.env.selfhost`, rồi điền các gi�
 cp .env.selfhost.example .env.selfhost
 ```
 
-Đặt `ALLOWED_ORIGINS=https://tanthanh381.github.io` và điền token Tunnel nếu dùng Tunnel. Nếu chạy backend local cho frontend Pages, vẫn giữ origin GitHub Pages và đặt `VITE_API_URL=http://localhost:8787` trong biến build. Có thể để key AI trống khi dùng media local.
+Đặt `ALLOWED_ORIGINS=https://tanthanh381.github.io`. Nếu dùng Cloudflare Tunnel thì điền token Tunnel; nếu dùng Tailscale Funnel thì không cần token trong ứng dụng. Với frontend Pages, đặt `VITE_API_URL` trong biến Actions bằng hostname HTTPS public. Có thể để key AI trống khi dùng media local.
 
 ## Cài media AI local trên macOS
 
@@ -49,6 +49,18 @@ docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml ps
 ```
 
 Kiểm tra API nội bộ tại `http://127.0.0.1:8787/health`. Sau đó đặt GitHub Actions variable `VITE_API_URL` bằng hostname HTTPS của Tunnel, hoặc `http://localhost:8787` nếu chạy local, rồi triển khai lại frontend.
+
+## Kết nối public bằng Tailscale Funnel
+
+Tailscale Funnel chuyển tiếp riêng cổng API ra HTTPS; worker, ComfyUI và media server vẫn chỉ chạy trên máy local. Trên máy đã đăng nhập Tailscale và đã được quản trị viên cho phép Funnel:
+
+```bash
+tailscale up --accept-dns=false --accept-routes
+tailscale funnel --bg --https=443 http://127.0.0.1:8787
+tailscale funnel status
+```
+
+Lấy hostname HTTPS từ `tailscale funnel status`, kiểm tra `/health`, rồi đặt GitHub Actions variable `VITE_API_URL` bằng hostname đó (ví dụ `https://may-cua-ban.tailnet.ts.net`). Máy phải bật Tailscale, Docker API và worker khi sử dụng; nếu máy tắt hoặc Funnel dừng thì frontend vẫn mở được nhưng không tạo/render video.
 
 ## Dừng và cập nhật
 
