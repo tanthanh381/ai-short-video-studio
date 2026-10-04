@@ -229,6 +229,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
         ai: config.AI_FEATURES_ENABLED,
         openai: config.OPENAI_FEATURES_ENABLED,
         anthropic: config.ANTHROPIC_FEATURES_ENABLED,
+        ollama: config.OLLAMA_FEATURES_ENABLED,
         render: config.RENDER_WORKER_ENABLED,
       },
     });
@@ -251,6 +252,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
         ai: config.AI_FEATURES_ENABLED,
         openai: config.OPENAI_FEATURES_ENABLED,
         anthropic: config.ANTHROPIC_FEATURES_ENABLED,
+        ollama: config.OLLAMA_FEATURES_ENABLED,
         render: config.RENDER_WORKER_ENABLED,
       },
     });
