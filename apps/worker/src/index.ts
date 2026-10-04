@@ -4,6 +4,7 @@ import pino from "pino";
 import { projectSchema, type Project, type Scene } from "@studio/shared";
 import { getConfig } from "./config";
 import { AnthropicStoryboardAdapter } from "./anthropic";
+import { OllamaStoryboardAdapter } from "./ollama";
 import { groupWords, OpenAIAdapter } from "./openai";
 import type { StoryboardProvider } from "./providers";
 import { renderProject } from "./render";
@@ -34,6 +35,10 @@ const anthropic = config.ANTHROPIC_API_KEY
       config.ANTHROPIC_TEXT_MODEL,
     )
   : null;
+const ollama = new OllamaStoryboardAdapter(
+  config.OLLAMA_BASE_URL,
+  config.OLLAMA_MODEL,
+);
 const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
 function isoTimestamp(value: string): string {
@@ -139,12 +144,18 @@ async function removePrefix(prefix: string) {
 async function storyboard(job: JobRow, project: Project) {
   const providerName = project.settings.textProvider;
   const provider: StoryboardProvider | null =
-    providerName === "openai" ? openai : anthropic;
+    providerName === "openai"
+      ? openai
+      : providerName === "ollama"
+        ? ollama
+        : anthropic;
   if (!provider) {
     throw new Error(
       providerName === "openai"
         ? "Chưa cấu hình OpenAI cho phần kịch bản"
-        : "Chưa cấu hình Claude cho phần kịch bản",
+        : providerName === "ollama"
+          ? "Chưa kết nối Ollama hoặc chưa cài model"
+          : "Chưa cấu hình Claude cho phần kịch bản",
     );
   }
   await setProgress(job.id, 10, "Đang phân tích nội dung");
@@ -479,6 +490,7 @@ log.info(
     providers: {
       anthropicStoryboard: Boolean(anthropic),
       openaiStoryboardAndMedia: Boolean(openai),
+      ollamaStoryboard: true,
     },
   },
   "worker_started",
