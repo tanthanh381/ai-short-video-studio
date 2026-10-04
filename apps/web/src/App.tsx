@@ -789,6 +789,7 @@ function NewProjectPage() {
                 >
                   <option value="anthropic">Claude</option>
                   <option value="openai">ChatGPT / OpenAI</option>
+                  <option value="ollama">Ollama (cục bộ)</option>
                 </select>
               </Field>
               <Field label="Giọng đọc">
@@ -972,10 +973,11 @@ function StudioPage() {
     ai: boolean;
     openai: boolean;
     anthropic: boolean;
+    ollama: boolean;
     render: boolean;
   } | null>(
     isDemo
-      ? { ai: false, openai: false, anthropic: false, render: false }
+      ? { ai: false, openai: false, anthropic: false, ollama: false, render: false }
       : null,
   );
   const saveTimer = useRef<number | null>(null);
@@ -1098,7 +1100,9 @@ function StudioPage() {
     const storyboardEnabled =
       project?.settings.textProvider === "anthropic"
         ? capabilities?.anthropic
-        : capabilities?.openai;
+        : project?.settings.textProvider === "ollama"
+          ? capabilities?.ollama
+          : capabilities?.openai;
     const requestedAiEnabled =
       type === "storyboard"
         ? storyboardEnabled
@@ -1108,7 +1112,7 @@ function StudioPage() {
     if (!requestedAiEnabled) {
       setError(
         type === "storyboard"
-          ? `Chưa cấu hình ${project?.settings.textProvider === "anthropic" ? "Claude" : "OpenAI"} cho phần kịch bản.`
+          ? `Chưa cấu hình ${project?.settings.textProvider === "anthropic" ? "Claude" : project?.settings.textProvider === "ollama" ? "Ollama" : "OpenAI"} cho phần kịch bản.`
           : "Chưa cấu hình OpenAI để tạo ảnh, giọng đọc và đồng bộ phụ đề. Anh vẫn có thể tải media của mình lên.",
       );
       return;
@@ -1265,7 +1269,9 @@ function StudioPage() {
   const storyboardEnabled =
     project.settings.textProvider === "anthropic"
       ? capabilities?.anthropic
-      : capabilities?.openai;
+      : project.settings.textProvider === "ollama"
+        ? capabilities?.ollama
+        : capabilities?.openai;
   const zeroCostMode = Boolean(
     capabilities && !capabilities.ai && capabilities.render,
   );
@@ -1354,7 +1360,7 @@ function StudioPage() {
           <div className="studio-notice">
             <Notice tone="warn">
               {!storyboardEnabled
-                ? `Chưa cấu hình ${project.settings.textProvider === "anthropic" ? "Claude" : "OpenAI"}: Chia cảnh đang tắt. `
+                ? `Chưa cấu hình ${project.settings.textProvider === "anthropic" ? "Claude" : project.settings.textProvider === "ollama" ? "Ollama" : "OpenAI"}: Chia cảnh đang tắt. `
                 : ""}
               {!capabilities.openai
                 ? "Chưa cấu hình OpenAI: Tạo ảnh, giọng đọc và phụ đề AI đang tắt. "
@@ -1533,6 +1539,7 @@ function StudioPage() {
                 >
                   <option value="anthropic">Claude</option>
                   <option value="openai">ChatGPT / OpenAI</option>
+                  <option value="ollama">Ollama (cục bộ)</option>
                 </select>
               </Field>
               <p className="microcopy">
@@ -1948,6 +1955,7 @@ function SettingsPage() {
       ai: false,
       openai: false,
       anthropic: false,
+      ollama: false,
       render: false,
     },
   });
@@ -1993,6 +2001,7 @@ function SettingsPage() {
   const supabaseState = connection(settings.capabilities.supabase);
   const openaiState = connection(settings.capabilities.openai);
   const anthropicState = connection(settings.capabilities.anthropic);
+  const ollamaState = connection(settings.capabilities.ollama);
   const renderState = connection(settings.capabilities.render);
   return (
     <SimplePage
@@ -2015,6 +2024,13 @@ function SettingsPage() {
               <span>Chia cảnh và biên tập kịch bản</span>
             </div>
             <b className={anthropicState.className}>{anthropicState.label}</b>
+          </div>
+          <div className="connection-row">
+            <div>
+              <strong>Ollama</strong>
+              <span>Chia cảnh cục bộ, không gửi nội dung ra ngoài</span>
+            </div>
+            <b className={ollamaState.className}>{ollamaState.label}</b>
           </div>
           <div className="connection-row">
             <div>
