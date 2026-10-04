@@ -8,6 +8,12 @@ import {
 
 type Row = Record<string, unknown>;
 
+function isoTimestamp(value: unknown) {
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) throw new Error("Timestamp dữ liệu không hợp lệ");
+  return date.toISOString();
+}
+
 export function mapScene(row: Row): Scene {
   return {
     id: String(row.id),
@@ -41,8 +47,8 @@ export function mapProject(row: Row, sceneRows: Row[] = []): Project {
     status: row.status,
     settings: row.settings,
     scenes: sceneRows.map(mapScene).sort((a, b) => a.order - b.order),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: isoTimestamp(row.created_at),
+    updatedAt: isoTimestamp(row.updated_at),
   });
 }
 
@@ -57,7 +63,7 @@ export function mapJob(row: Row): Job {
     errorMessage: row.error_message,
     attempts: row.attempts,
     maxAttempts: row.max_attempts,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: isoTimestamp(row.created_at),
+    updatedAt: isoTimestamp(row.updated_at),
   });
 }
