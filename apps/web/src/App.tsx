@@ -1123,6 +1123,9 @@ function StudioPage() {
     project.settings.textProvider === "anthropic"
       ? capabilities?.anthropic
       : capabilities?.openai;
+  const zeroCostMode = Boolean(
+    capabilities && !capabilities.ai && capabilities.render,
+  );
   return (
     <div className="studio">
       <div className="studio-top">
@@ -1153,16 +1156,28 @@ function StudioPage() {
             onClick={() => void runAction("storyboard")}
             busy={busyAction === "storyboard"}
             disabled={!isDemo && !storyboardEnabled}
+            title={
+              storyboardEnabled
+                ? "Dùng nhà cung cấp AI đã cấu hình để chia cảnh"
+                : "Chế độ 0 đồng API: tự thêm và sửa cảnh thủ công"
+            }
           >
-            <WandSparkles size={17} /> Chia cảnh
+            <WandSparkles size={17} />
+            {storyboardEnabled ? "Chia cảnh" : "Chia cảnh (cần API)"}
           </Button>
           <Button
             variant="secondary"
             onClick={() => void runAction("generate_media")}
             busy={busyAction === "generate_media"}
             disabled={!isDemo && !capabilities?.openai}
+            title={
+              capabilities?.openai
+                ? "Tạo ảnh, giọng đọc và phụ đề bằng OpenAI"
+                : "Chế độ 0 đồng API: tải ảnh và audio của anh lên"
+            }
           >
-            <Sparkles size={17} /> Tạo media
+            <Sparkles size={17} />
+            {capabilities?.openai ? "Tạo media" : "Tạo media (cần API)"}
           </Button>
           <Button
             onClick={() => void runAction("render_video")}
@@ -1178,8 +1193,18 @@ function StudioPage() {
           <Notice tone="warn">{error}</Notice>
         </div>
       )}
+      {!isDemo && capabilities && zeroCostMode && (
+        <div className="studio-notice">
+          <Notice tone="info">
+            Đang chạy chế độ 0 đồng API: anh có thể tự viết storyboard, tải ảnh
+            và audio lên từng cảnh, sau đó xuất MP4 bằng worker FFmpeg local.
+            Không có cuộc gọi OpenAI hoặc Claude nào được tạo.
+          </Notice>
+        </div>
+      )}
       {!isDemo &&
         capabilities &&
+        !zeroCostMode &&
         (!storyboardEnabled ||
           !capabilities.openai ||
           !capabilities.render) && (
@@ -1189,7 +1214,7 @@ function StudioPage() {
                 ? `Chưa cấu hình ${project.settings.textProvider === "anthropic" ? "Claude" : "OpenAI"}: Chia cảnh đang tắt. `
                 : ""}
               {!capabilities.openai
-                ? "Chưa cấu hình OpenAI: Tạo ảnh, giọng đọc và phụ đề đang tắt. "
+                ? "Chưa cấu hình OpenAI: Tạo ảnh, giọng đọc và phụ đề AI đang tắt. "
                 : ""}
               {!capabilities.render
                 ? "Chưa cấu hình worker: Xuất MP4 đang tắt."

@@ -10,7 +10,7 @@ Studio tiếng Việt để sản xuất video ngắn theo luồng: nhập ý t�
 ## Trạng thái hiện tại
 
 - Giao diện React + TypeScript hoàn chỉnh cho máy tính và điện thoại.
-- Có chế độ mẫu để xem và sửa storyboard khi chưa cấu hình dịch vụ. Chế độ này được ghi rõ trên giao diện và không giả lập AI hay video đầu ra.
+- Có chế độ 0 đồng API: khi tắt các cờ AI, người dùng vẫn sửa storyboard, tải ảnh/audio lên và xuất MP4 thật bằng FFmpeg worker local. Chế độ này không giả lập AI hay video đầu ra.
 - API Express có xác thực Supabase, danh sách tài khoản được phép, signed upload/download, giới hạn file, rate limit, ngân sách ngày, idempotency và giới hạn tác vụ đồng thời.
 - Worker có adapter Claude và OpenAI, hàng đợi PostgreSQL bền vững, checkpoint theo cảnh, retry giới hạn, heartbeat và FFmpeg render MP4 H.264/AAC.
 - Migration Supabase tạo database, RLS và bucket riêng tư.
@@ -25,13 +25,13 @@ Luồng AI thật và render production chỉ được đánh dấu đã kiểm 
 2. Chọn **Tạo dự án mới**, nhập tên video và ý tưởng hoặc kịch bản.
 3. Nếu đây là kịch bản hoàn chỉnh, chọn đúng loại nội dung. Hệ thống mặc định giữ nguyên câu chữ và chỉ chia cảnh; chỉ bật viết lại khi thật sự cần.
 4. Trong Studio, chọn **Chia cảnh**. Có thể sửa lời đọc, prompt ảnh, thứ tự, thêm hoặc xóa cảnh.
-5. Chọn **Tạo media**. Màn hình sẽ hiện chi phí ước tính trước khi xác nhận.
+5. Nếu dùng chế độ 0 đồng API, bỏ qua **Chia cảnh** và **Tạo media**; tự thêm/sửa cảnh rồi tải ảnh và audio của anh lên từng cảnh. Nếu đã cấu hình API, chọn **Tạo media**; màn hình sẽ hiện chi phí ước tính trước khi xác nhận.
 6. Nghe thử giọng đọc, xem ảnh từng cảnh, thay ảnh/audio riêng hoặc tạo lại một cảnh nếu cần.
 7. Sửa nội dung và thời điểm phụ đề; chọn màu, nền, viền và vị trí.
 8. Nếu dùng nhạc, chỉ tải file có quyền sử dụng. Chỉnh âm lượng nhạc thấp hơn giọng đọc.
 9. Chọn **Xuất video**, theo dõi tiến độ rồi tải MP4 ở **Lịch sử xuất**.
 
-Nếu chưa có API key, vẫn có thể tạo dự án, sửa storyboard, tải ảnh/audio của mình lên và chuẩn bị cấu hình. Nút AI/render sẽ báo rõ dịch vụ chưa được kết nối.
+Nếu chưa có API key, vẫn có thể tạo dự án, sửa storyboard, tải ảnh/audio của mình lên và xuất MP4 thật. Nút AI được khóa và giao diện hiển thị rõ chế độ 0 đồng API; worker chỉ xử lý media người dùng tải lên.
 
 ## Kiến trúc
 
@@ -95,6 +95,8 @@ Chủ sở hữu sản phẩm không cần tự chạy SQL; các bước migrati
 ### 2. Máy tự host và Cloudflare Tunnel
 
 API và worker chạy bằng `docker-compose.selfhost.yml`. Chỉ API đi qua Cloudflare Tunnel; worker không có cổng public. Secret được chia theo nguyên tắc tối thiểu: API không nhận khóa AI, worker không nhận token Tunnel.
+
+Khi chưa có domain để tạo Tunnel ổn định, có thể chạy frontend GitHub Pages với `VITE_API_URL=http://localhost:8787`. Khi đó trình duyệt của anh gọi backend Docker trên chính máy đang sử dụng; không cần mua domain hoặc dịch vụ tunnel. Máy phải bật Docker khi tạo và xuất video.
 
 Hướng dẫn vận hành nằm tại [docs/TU-HOST.md](docs/TU-HOST.md). Phương án này không có phí Railway nhưng máy chạy Docker phải bật khi tạo video.
 
