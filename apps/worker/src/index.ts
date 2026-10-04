@@ -36,6 +36,14 @@ const anthropic = config.ANTHROPIC_API_KEY
   : null;
 const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
+function isoTimestamp(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("Invalid timestamp from database");
+  }
+  return parsed.toISOString();
+}
+
 type JobRow = {
   id: string;
   project_id: string;
@@ -94,8 +102,8 @@ async function getProject(id: string): Promise<Project> {
       errorMessage: s.error_message,
       subtitles: s.subtitles ?? [],
     })),
-    createdAt: project.created_at,
-    updatedAt: project.updated_at,
+    createdAt: isoTimestamp(project.created_at),
+    updatedAt: isoTimestamp(project.updated_at),
   });
 }
 async function upload(path: string, data: Uint8Array, contentType: string) {
