@@ -26,3 +26,7 @@ tmp/
 !apps/web/public/*.png
 !docs/*.png
 supabase/.temp/
+local-tools/ComfyUI/
+local-tools/comfy-venv/
+local-tools/comfy_smoke.py
+local-models/

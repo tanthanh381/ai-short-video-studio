@@ -63,7 +63,20 @@ supabase       Migration database, RLS và storage
 
 ### Ollama cục bộ
 
-Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker kết nối tới Ollama trên máy chủ qua `OLLAMA_BASE_URL` (mặc định `http://host.docker.internal:11434`) và dùng model `qwen2.5:3b`. Cài model bằng `ollama pull qwen2.5:3b`. Ollama chỉ xử lý storyboard; tạo ảnh, giọng đọc và phụ đề vẫn cần OpenAI hoặc media người dùng tải lên.
+Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker kết nối tới Ollama trên máy chủ qua `OLLAMA_BASE_URL` (mặc định `http://host.docker.internal:11434`) và dùng model `qwen2.5:3b`. Cài model bằng `ollama pull qwen2.5:3b`.
+
+### Media AI cục bộ trên macOS
+
+Đã hỗ trợ pipeline không cần API trả phí: ComfyUI + checkpoint Analog Diffusion tạo ảnh, giọng `Linh` của macOS tạo TTS tiếng Việt, và `whisper.cpp` tạo timestamp phụ đề. Mã cầu nối nằm trong `local-tools/media_server.py`; model và môi trường Python local không được commit vào repository.
+
+Khởi động ComfyUI trước, sau đó chạy cầu nối chỉ trên localhost:
+
+```bash
+local-tools/comfy-venv/bin/python local-tools/ComfyUI/main.py --cpu --listen 127.0.0.1 --port 8188
+LOCAL_MEDIA_HOST=127.0.0.1 /opt/homebrew/bin/python3.12 local-tools/media_server.py
+```
+
+Trong `.env.selfhost`, bật `LOCAL_MEDIA_FEATURES_ENABLED=true` và giữ `LOCAL_MEDIA_BASE_URL=http://host.docker.internal:8765`, rồi rebuild worker. Tạo ảnh local bằng CPU mất khoảng một phút mỗi cảnh trên máy kiểm thử; chất lượng và tốc độ phụ thuộc phần cứng. Các model local là phần mềm miễn phí nhưng vẫn chịu giấy phép riêng của từng model.
 
 Yêu cầu Node.js 24, pnpm 11.19 và FFmpeg nếu chạy worker ngoài Docker.
 

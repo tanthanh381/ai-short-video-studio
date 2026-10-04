@@ -19,3 +19,5 @@ node_modules
 *.png
 *.jpg
 *.jpeg
+local-tools
+local-models

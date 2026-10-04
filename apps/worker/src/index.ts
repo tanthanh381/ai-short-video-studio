@@ -5,6 +5,7 @@ import { projectSchema, type Project, type Scene } from "@studio/shared";
 import { getConfig } from "./config";
 import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
+import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
 import type { StoryboardProvider } from "./providers";
 import { renderProject } from "./render";
@@ -39,6 +40,7 @@ const ollama = new OllamaStoryboardAdapter(
   config.OLLAMA_BASE_URL,
   config.OLLAMA_MODEL,
 );
+const localMedia = new LocalMediaAdapter(config.LOCAL_MEDIA_BASE_URL);
 const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
 function isoTimestamp(value: string): string {
@@ -197,9 +199,10 @@ async function storyboard(job: JobRow, project: Project) {
 }
 
 async function generateMedia(job: JobRow, project: Project) {
-  if (!openai)
+  const media = openai ?? localMedia;
+  if (!media)
     throw new Error(
-      "Chưa cấu hình OpenAI để tạo ảnh, giọng đọc và đồng bộ phụ đề",
+      "Chưa cấu hình nhà cung cấp để tạo ảnh, giọng đọc và đồng bộ phụ đề",
     );
   const targetId =
     job.job_type === "regenerate_scene"
@@ -233,7 +236,7 @@ async function generateMedia(job: JobRow, project: Project) {
           Math.round((finished / scenes.length) * 85),
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
-        const image = await openai.createImage(
+        const image = await media.createImage(
           `${scene.imagePrompt}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
         );
@@ -257,7 +260,7 @@ async function generateMedia(job: JobRow, project: Project) {
           Math.round((finished / scenes.length) * 85) + 4,
           `Đang tạo giọng đọc cảnh ${scene.order + 1}`,
         );
-        audio = await openai.createSpeech(
+        audio = await media.createSpeech(
           scene.narration,
           project.settings.voice,
         );
@@ -282,7 +285,7 @@ async function generateMedia(job: JobRow, project: Project) {
         Math.round((finished / scenes.length) * 85) + 7,
         `Đang đồng bộ phụ đề cảnh ${scene.order + 1}`,
       );
-      const words = await openai.transcribe(audio);
+      const words = await media.transcribe(audio);
       const subtitles = groupWords(words);
       const actualDurationMs = Math.max(
         ...subtitles.map((c) => c.endMs),
@@ -346,8 +349,12 @@ async function generateMedia(job: JobRow, project: Project) {
     project_id: project.id,
     job_id: job.id,
     kind: "ai_media_estimate",
-    amount_usd: Number((finished * 0.06).toFixed(2)),
-    metadata: { successful_scenes: finished, total_scenes: scenes.length },
+    amount_usd: openai ? Number((finished * 0.06).toFixed(2)) : 0,
+    metadata: {
+      successful_scenes: finished,
+      total_scenes: scenes.length,
+      provider: openai ? "openai" : "local",
+    },
   });
   if (finished < scenes.length)
     throw new Error(
@@ -491,6 +498,7 @@ log.info(
       anthropicStoryboard: Boolean(anthropic),
       openaiStoryboardAndMedia: Boolean(openai),
       ollamaStoryboard: true,
+      localMedia: true,
     },
   },
   "worker_started",

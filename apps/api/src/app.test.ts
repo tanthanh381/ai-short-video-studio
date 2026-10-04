@@ -15,6 +15,7 @@ const config: AppConfig = {
   OPENAI_FEATURES_ENABLED: false,
   ANTHROPIC_FEATURES_ENABLED: false,
   OLLAMA_FEATURES_ENABLED: false,
+  LOCAL_MEDIA_FEATURES_ENABLED: false,
   RENDER_WORKER_ENABLED: false,
   NODE_ENV: "test",
 };

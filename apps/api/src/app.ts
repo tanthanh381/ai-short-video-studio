@@ -57,7 +57,7 @@ function safeName(name: string) {
     .replace(/-+/g, "-")
     .slice(-100);
 }
-function estimateCost(project: Project) {
+function estimateCost(project: Project, localMediaFree = false) {
   const imageCount = Math.max(
     project.scenes.length,
     Math.ceil(project.settings.targetDurationSec / 7),
@@ -68,13 +68,15 @@ function estimateCost(project: Project) {
   );
   const transcriptionMinutes = project.settings.targetDurationSec / 60;
   // He so cau hinh mang tinh bao thu; gia that phai doi chieu tai thoi diem su dung.
-  const estimatedUsd = Number(
-    (
-      imageCount * 0.05 +
-      (narrationCharacters / 1000) * 0.03 +
-      transcriptionMinutes * 0.01
-    ).toFixed(2),
-  );
+  const estimatedUsd = localMediaFree
+    ? 0
+    : Number(
+        (
+          imageCount * 0.05 +
+          (narrationCharacters / 1000) * 0.03 +
+          transcriptionMinutes * 0.01
+        ).toFixed(2),
+      );
   return estimateSchema.parse({
     imageCount,
     narrationCharacters,
@@ -230,6 +232,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
         openai: config.OPENAI_FEATURES_ENABLED,
         anthropic: config.ANTHROPIC_FEATURES_ENABLED,
         ollama: config.OLLAMA_FEATURES_ENABLED,
+        localMedia: config.LOCAL_MEDIA_FEATURES_ENABLED,
         render: config.RENDER_WORKER_ENABLED,
       },
     });
@@ -253,6 +256,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
         openai: config.OPENAI_FEATURES_ENABLED,
         anthropic: config.ANTHROPIC_FEATURES_ENABLED,
         ollama: config.OLLAMA_FEATURES_ENABLED,
+        localMedia: config.LOCAL_MEDIA_FEATURES_ENABLED,
         render: config.RENDER_WORKER_ENABLED,
       },
     });
@@ -390,7 +394,12 @@ export function createApp(config: AppConfig, db: AdminClient) {
     const project = await loadProject(req.params.id, req.userId!);
     if (!project)
       return res.status(404).json({ error: "Không tìm thấy dự án" });
-    res.json(estimateCost(project));
+    res.json(
+      estimateCost(
+        project,
+        config.LOCAL_MEDIA_FEATURES_ENABLED && !config.OPENAI_FEATURES_ENABLED,
+      ),
+    );
   });
   app.get("/v1/projects/:id/jobs", async (req, res) => {
     const { data, error } = await db
@@ -419,7 +428,10 @@ export function createApp(config: AppConfig, db: AdminClient) {
         error:
           "Đã đạt số tác vụ đồng thời. Vui lòng chờ tác vụ hiện tại hoàn tất.",
       });
-    const estimate = estimateCost(project);
+    const estimate = estimateCost(
+      project,
+      config.LOCAL_MEDIA_FEATURES_ENABLED && !config.OPENAI_FEATURES_ENABLED,
+    );
     const dayStart = new Date();
     dayStart.setUTCHours(0, 0, 0, 0);
     const { data: usage } = await db

@@ -12,6 +12,7 @@ export type AccountSettings = {
     openai: boolean;
     anthropic: boolean;
     ollama: boolean;
+    localMedia: boolean;
     render: boolean;
   };
 };
