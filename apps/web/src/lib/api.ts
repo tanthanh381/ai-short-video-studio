@@ -11,6 +11,7 @@ export type AccountSettings = {
     ai: boolean;
     openai: boolean;
     anthropic: boolean;
+    ollama: boolean;
     render: boolean;
   };
 };
