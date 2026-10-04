@@ -192,11 +192,12 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 function LoginPage() {
-  const { signIn, sendMagicLink, user, isDemo } = useAuth();
+  const { signIn, sendMagicLink, sendPasswordReset, user, isDemo } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [useMagicLink, setUseMagicLink] = useState(true);
+  const [useMagicLink, setUseMagicLink] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -206,6 +207,13 @@ function LoginPage() {
     setBusy(true);
     setError(null);
     setSent(false);
+    if (resetMode) {
+      const nextError = await sendPasswordReset(email);
+      setError(nextError);
+      setSent(!nextError);
+      setBusy(false);
+      return;
+    }
     if (useMagicLink) {
       const nextError = await sendMagicLink(email);
       setError(nextError);
@@ -246,8 +254,12 @@ function LoginPage() {
               <span>Studio</span>
             </div>
           </div>
-          <h1>Đăng nhập vào studio</h1>
-          <p>Không gian riêng để sản xuất video ngắn tiếng Việt.</p>
+          <h1>{resetMode ? "Đặt lại mật khẩu" : "Đăng nhập vào studio"}</h1>
+          <p>
+            {resetMode
+              ? "Nhập email được cấp quyền để nhận liên kết đặt mật khẩu."
+              : "Không gian riêng để sản xuất video ngắn tiếng Việt."}
+          </p>
           {isDemo ? (
             <Notice tone="warn">
               Chưa có cấu hình Supabase. Ứng dụng đang ở chế độ mẫu và không gọi
@@ -265,7 +277,7 @@ function LoginPage() {
                   autoComplete="email"
                 />
               </label>
-              {!useMagicLink && (
+              {!useMagicLink && !resetMode && (
                 <label>
                   Mật khẩu
                   <input
@@ -280,26 +292,142 @@ function LoginPage() {
               {error && <Notice tone="warn">{error}</Notice>}
               {sent && (
                 <Notice tone="success">
-                  Đã gửi liên kết đăng nhập. Vui lòng kiểm tra email và bấm
-                  liên kết để mở Studio.
+                  {resetMode
+                    ? "Đã gửi email đặt lại mật khẩu. Vui lòng mở email và bấm liên kết."
+                    : "Đã gửi liên kết đăng nhập. Vui lòng kiểm tra email và bấm liên kết để mở Studio."}
                 </Notice>
               )}
               <Button type="submit" busy={busy}>
-                {useMagicLink ? "Gửi liên kết đăng nhập" : "Đăng nhập"}
+                {resetMode
+                  ? "Gửi email đặt mật khẩu"
+                  : useMagicLink
+                    ? "Gửi liên kết đăng nhập"
+                    : "Đăng nhập"}
               </Button>
-              <button
-                className="login-method"
-                type="button"
-                onClick={() => {
-                  setUseMagicLink((value) => !value);
-                  setError(null);
-                  setSent(false);
-                }}
-              >
-                {useMagicLink
-                  ? "Đăng nhập bằng mật khẩu"
-                  : "Đăng nhập bằng liên kết email"}
-              </button>
+              {resetMode ? (
+                <button
+                  className="login-method"
+                  type="button"
+                  onClick={() => {
+                    setResetMode(false);
+                    setError(null);
+                    setSent(false);
+                  }}
+                >
+                  Quay lại đăng nhập
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="login-method"
+                    type="button"
+                    onClick={() => {
+                      setUseMagicLink((value) => !value);
+                      setError(null);
+                      setSent(false);
+                    }}
+                  >
+                    {useMagicLink
+                      ? "Đăng nhập bằng mật khẩu"
+                      : "Đăng nhập bằng liên kết email"}
+                  </button>
+                  {!useMagicLink && (
+                    <button
+                      className="login-method"
+                      type="button"
+                      onClick={() => {
+                        setResetMode(true);
+                        setError(null);
+                        setSent(false);
+                      }}
+                    >
+                      Quên hoặc chưa có mật khẩu?
+                    </button>
+                  )}
+                </>
+              )}
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResetPasswordPage() {
+  const { updatePassword, signOut, user, isDemo } = useAuth();
+  const navigate = useNavigate();
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    if (password.length < 8) {
+      setError("Mật khẩu phải có ít nhất 8 ký tự.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Mật khẩu xác nhận chưa khớp.");
+      return;
+    }
+    setBusy(true);
+    const nextError = await updatePassword(password);
+    setBusy(false);
+    if (nextError) {
+      setError(nextError);
+      return;
+    }
+    setDone(true);
+    await signOut();
+  }
+
+  if (isDemo || !user) {
+    return <Navigate to="/login" replace />;
+  }
+  return (
+    <div className="login-page">
+      <div className="login-art">
+        <div className="vertical-frame">
+          <div className="frame-sun" />
+          <div className="frame-caption">
+            Bảo vệ không gian
+            <br />
+            sản xuất của bạn.
+          </div>
+          <div className="sound-wave">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => <i key={n} />)}
+          </div>
+        </div>
+      </div>
+      <div className="login-panel">
+        <div className="login-box">
+          <div className="brand login-brand">
+            <div className="brand-mark"><Clapperboard size={24} /></div>
+            <div><strong>Short Video</strong><span>Studio</span></div>
+          </div>
+          <h1>Đặt mật khẩu mới</h1>
+          <p>Mật khẩu mới áp dụng cho tài khoản {user.email}.</p>
+          {done ? (
+            <>
+              <Notice tone="success">Đã cập nhật mật khẩu. Anh có thể đăng nhập lại.</Notice>
+              <Button type="button" onClick={() => navigate("/login")}>Về trang đăng nhập</Button>
+            </>
+          ) : (
+            <form onSubmit={submit}>
+              <label>
+                Mật khẩu mới
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required autoComplete="new-password" />
+              </label>
+              <label>
+                Nhập lại mật khẩu
+                <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} minLength={8} required autoComplete="new-password" />
+              </label>
+              {error && <Notice tone="warn">{error}</Notice>}
+              <Button type="submit" busy={busy}>Lưu mật khẩu</Button>
             </form>
           )}
         </div>
@@ -1976,6 +2104,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/*"
         element={
