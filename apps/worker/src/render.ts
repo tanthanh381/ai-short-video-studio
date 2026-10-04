@@ -202,7 +202,9 @@ export async function renderProject(
       .replace(/\\/g, "/")
       .replace(/:/g, "\\:")
       .replace(/'/g, "\\'");
-    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}format=yuv420p[v]`;
+    // Use the explicit `filename` option: FFmpeg 8/9 parses a quoted filename
+    // followed by `fontsdir` differently from older builds.
+    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}format=yuv420p[v]`;
     if (musicPath)
       filter += `;[1:a]volume=${project.settings.musicVolume},afade=t=out:st=${Math.max(0, total / 1000 - 1).toFixed(3)}:d=1[m];[0:a][m]amix=inputs=2:duration=first:dropout_transition=2[a]`;
     args.push(

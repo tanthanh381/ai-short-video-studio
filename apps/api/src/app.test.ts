@@ -26,6 +26,17 @@ describe("API", () => {
     expect(response.body.ok).toBe(true);
   });
 
+  it("cho phep CORS cho frontend da cau hinh", async () => {
+    const app = createApp(config, {} as never);
+    const response = await request(app)
+      .get("/health")
+      .set("Origin", "http://localhost:5173");
+    expect(response.status).toBe(200);
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173",
+    );
+  });
+
   it("chan endpoint du an khi khong dang nhap", async () => {
     const app = createApp(config, {} as never);
     const response = await request(app).get("/v1/projects");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assTime, createAss, videoSize } from "./render";
+import { assTime, createAss, renderProject, videoSize } from "./render";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
 
 describe("render helpers", () => {
@@ -50,5 +50,94 @@ describe("render helpers", () => {
     } satisfies Project;
     expect(createAss(project)).toContain("Xin chào Việt Nam");
     expect(createAss(project)).toContain("&H00FFFFFF");
+  });
+
+  it("ho tro preset vuong va escape ASS an toan", () => {
+    expect(videoSize("1:1")).toEqual({ width: 1080, height: 1080 });
+    const project = {
+      id: crypto.randomUUID(),
+      userId: crypto.randomUUID(),
+      title: "t",
+      sourceText: "x",
+      inputMode: "idea",
+      hook: "",
+      suggestedTitle: "",
+      suggestedDescription: "",
+      status: "draft",
+      settings: { ...DEFAULT_PROJECT_SETTINGS, aspectRatio: "1:1" as const },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      scenes: [
+        {
+          id: crypto.randomUUID(),
+          order: 0,
+          narration: "x",
+          imagePrompt: "x",
+          estimatedDurationMs: 1000,
+          actualDurationMs: 1000,
+          imagePath: "image",
+          audioPath: "audio",
+          thumbnailUrl: null,
+          mediaStatus: "ready" as const,
+          errorMessage: null,
+          subtitles: [
+            {
+              id: crypto.randomUUID(),
+              startMs: 0,
+              endMs: 900,
+              text: "Dấu {ngoặc}\nđúng",
+            },
+          ],
+        },
+      ],
+    } satisfies Project;
+    const ass = createAss(project);
+    expect(ass).toContain("PlayResX: 1080");
+    expect(ass).toContain("Dấu \\{ngoặc\\}\\Nđúng");
+  });
+
+  it("tu choi render neu canh thieu media", async () => {
+    const project = {
+      id: crypto.randomUUID(),
+      userId: crypto.randomUUID(),
+      title: "t",
+      sourceText: "x",
+      inputMode: "idea",
+      hook: "",
+      suggestedTitle: "",
+      suggestedDescription: "",
+      status: "draft",
+      settings: DEFAULT_PROJECT_SETTINGS,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      scenes: [
+        {
+          id: crypto.randomUUID(),
+          order: 0,
+          narration: "x",
+          imagePrompt: "x",
+          estimatedDurationMs: 1000,
+          actualDurationMs: null,
+          imagePath: null,
+          audioPath: "audio",
+          thumbnailUrl: null,
+          mediaStatus: "pending" as const,
+          errorMessage: null,
+          subtitles: [],
+        },
+      ],
+    } satisfies Project;
+    await expect(
+      renderProject(
+        {
+          FFMPEG_PATH: "ffmpeg",
+          FFPROBE_PATH: "ffprobe",
+          RENDER_TIMEOUT_MS: 1000,
+        } as never,
+        project,
+        async () => new Uint8Array(),
+        async () => undefined,
+      ),
+    ).rejects.toThrow("Cảnh 1 chưa có đủ ảnh và giọng đọc");
   });
 });

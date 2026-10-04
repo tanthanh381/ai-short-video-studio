@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createProjectSchema, subtitleCueSchema } from "./schemas";
+import {
+  createProjectSchema,
+  projectSettingsSchema,
+  subtitleCueSchema,
+} from "./schemas";
 import { DEFAULT_PROJECT_SETTINGS } from "./index";
 
 describe("schema du an", () => {
@@ -20,6 +24,28 @@ describe("schema du an", () => {
         startMs: 2000,
         endMs: 1000,
         text: "Không hợp lệ",
+      }),
+    ).toThrow();
+  });
+
+  it("giu che do 0 dong voi media upload thu cong", () => {
+    const settings = projectSettingsSchema.parse({
+      textProvider: "anthropic",
+      targetDurationSec: 30,
+      aspectRatio: "9:16",
+      allowUploads: true,
+      musicVolume: 0.12,
+    });
+    expect(settings.allowUploads).toBe(true);
+    expect(settings.musicVolume).toBe(0.12);
+  });
+
+  it("chan du an khong co y tuong", () => {
+    expect(() =>
+      createProjectSchema.parse({
+        title: "Video",
+        sourceText: "ngan",
+        settings: projectSettingsSchema.parse({}),
       }),
     ).toThrow();
   });
