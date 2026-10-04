@@ -1,1 +1,82 @@
-m«ëˆ§½©buªàºg§µÚ‘êÜ¢jh±ë•øh²Ü¦•KæÚ±î¸Ø[žé¢Šwâ•ê(º×â•æÛ­æ¤n·š‘éÜ¡×¢ëiºÛ©Š{h–)Þ²‡åzx-†{¦×^r‡^uç(uè§¦ëa…éiv+)•¬­†+&zËè¢ž›­Šznµø¥y×Ÿjém~ŠìµØ§¢‹­¦ëhºÚnµø¥y×Ÿjém~ŠìµÚ.
+name: ai-short-video-studio
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      PORT: ${PORT:-8787}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-50}
+      DAILY_BUDGET_USD: ${DAILY_BUDGET_USD:-3}
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-1}
+      AI_FEATURES_ENABLED: ${AI_FEATURES_ENABLED:-true}
+      OPENAI_FEATURES_ENABLED: ${OPENAI_FEATURES_ENABLED:-true}
+      ANTHROPIC_FEATURES_ENABLED: ${ANTHROPIC_FEATURES_ENABLED:-true}
+      OLLAMA_FEATURES_ENABLED: ${OLLAMA_FEATURES_ENABLED:-false}
+      LOCAL_MEDIA_FEATURES_ENABLED: ${LOCAL_MEDIA_FEATURES_ENABLED:-false}
+      RENDER_WORKER_ENABLED: ${RENDER_WORKER_ENABLED:-true}
+    ports:
+      - "127.0.0.1:8787:8787"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_TEXT_MODEL: ${OPENAI_TEXT_MODEL:-gpt-5-mini}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-image-2.5-sunburst}
+      OPENAI_TTS_MODEL: ${OPENAI_TTS_MODEL:-gpt-4o-mini-tts}
+      ANTHROPIC_TEXT_MODEL: ${ANTHROPIC_TEXT_MODEL:-claude-haiku-4-5-20251001}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      LOCAL_MEDIA_BASE_URL: ${LOCAL_MEDIA_BASE_URL:-http://host.docker.internal:8765}
+      WORKER_POLL_MS: ${WORKER_POLL_MS:-2000}
+      RENDER_TIMEOUT_MS: ${RENDER_TIMEOUT_MS:-900000}
+      TEMP_RETENTION_HOURS: ${TEMP_RETENTION_HOURS:-24}
+      FFMPEG_PATH: ${FFMPEG_PATH:-ffmpeg}
+      FFPROBE_PATH: ${FFPROBE_PATH:-ffprobe}
+    volumes:
+      - worker-tmp:/app/apps/worker/tmp
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    init: true
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token
+      - ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  worker-tmp:

@@ -72,6 +72,7 @@ export const sceneSchema = z.object({
 
 export const projectSettingsSchema = z.object({
   textProvider: z.enum(["anthropic", "openai", "ollama"]).default("anthropic"),
+  mediaProvider: z.enum(["local", "openai"]).default("local"),
   targetAudience: z.string().max(500).default("Người xem Việt Nam"),
   style: videoStyleSchema.default("ke-chuyen"),
   targetDurationSec: z
@@ -122,6 +123,13 @@ export const createProjectSchema = z.object({
   settings: projectSettingsSchema,
 });
 
+export const createVideoSchema = z.object({
+  sourceText: z.string().min(10).max(30000).refine((text) => text.trim().length >= 10, {
+    message: "Kịch bản cần ít nhất 10 ký tự",
+  }),
+  settings: projectSettingsSchema.partial().default({}),
+});
+
 export const updateProjectSchema = z.object({
   title: z.string().trim().min(1).max(160).optional(),
   sourceText: z.string().trim().min(1).max(30000).optional(),
@@ -143,6 +151,7 @@ export const jobSchema = z.object({
   id: z.string().uuid(),
   projectId: z.string().uuid(),
   type: z.enum([
+    "create_video",
     "storyboard",
     "generate_media",
     "regenerate_scene",

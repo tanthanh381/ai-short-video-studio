@@ -5,17 +5,23 @@ Docker worker calls this bridge through host.docker.internal.
 """
 
 import json
+import base64
+import io
 import os
+import re
+import shutil
 import subprocess
 import tempfile
 import time
 import urllib.parse
 import urllib.request
+import uuid
+import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
-HOST = os.getenv("LOCAL_MEDIA_HOST", "0.0.0.0")
+HOST = os.getenv("LOCAL_MEDIA_HOST", "127.0.0.1")
 PORT = int(os.getenv("LOCAL_MEDIA_PORT", "8765"))
 COMFY_URL = os.getenv("COMFY_URL", "http://127.0.0.1:8188")
 WHISPER_BIN = os.getenv("WHISPER_BIN", "/opt/homebrew/bin/whisper-cli")
@@ -42,13 +48,17 @@ def binary_response(handler, content_type, data):
     handler.wfile.write(data)
 
 
-def comfy_image(prompt):
+def comfy_image(prompt, aspect_ratio="9:16"):
+    dimensions = {"9:16": (432, 768), "1:1": (640, 640), "16:9": (768, 432)}
+    if aspect_ratio not in dimensions:
+        raise ValueError("Tỷ lệ ảnh không hợp lệ")
+    width, height = dimensions[aspect_ratio]
     client_id = "ai-short-video-studio-local"
     graph = {
         "3": {"class_type": "KSampler", "inputs": {"seed": int(time.time_ns() % 2**31), "steps": 8, "cfg": 7.0, "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0, "model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["5", 0]}},
         "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "analog-diffusion-1.0.safetensors"}},
-        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 768, "batch_size": 1}},
-        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": f"{prompt}, cinematic illustration, vertical composition, no text, no logo, no watermark", "clip": ["4", 1]}},
+        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": f"{prompt}, cinematic illustration, no text, no logo, no watermark", "clip": ["4", 1]}},
         "7": {"class_type": "CLIPTextEncode", "inputs": {"text": "text, watermark, logo, blurry, low quality, distorted face", "clip": ["4", 1]}},
         "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
         "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "ai-short-video-studio", "images": ["8", 0]}},
@@ -69,13 +79,71 @@ def comfy_image(prompt):
             continue
         status = result.get("status", {})
         if status.get("status_str") == "error":
-            raise RuntimeError(json.dumps(status, ensure_ascii=False))
+            raise RuntimeError("ComfyUI không tạo được ảnh; hãy kiểm tra model local")
         for output in result.get("outputs", {}).values():
             for image in output.get("images", []):
                 query = urllib.parse.urlencode(image)
                 with urllib.request.urlopen(f"{COMFY_URL}/view?{query}", timeout=60) as image_response:
                     return image_response.read()
     raise TimeoutError("ComfyUI không hoàn thành tạo ảnh trong thời gian cho phép")
+
+
+def split_speech_phrases(text):
+    """Original contiguous clauses. Timing is measured after synthesis, never guessed."""
+    if not text.strip() or len(text) > 5000:
+        raise ValueError("Lời đọc trống hoặc quá dài cho một cảnh")
+    phrases, current, count = [], "", 0
+    for token in re.findall(r"\S+\s*|\s+", text):
+        if len(token) > 240:
+            raise ValueError("Lời đọc có một từ quá dài cho phụ đề")
+        if current and len(current) + len(token) > 240:
+            phrases.append(current)
+            current, count = "", 0
+        current += token
+        count += bool(token.strip())
+        if count >= 10 or (count >= 3 and re.search(r"[,;:!?。.][\"'”’)]?\s*$", token)):
+            phrases.append(current)
+            current, count = "", 0
+    if current:
+        if not current.strip() and phrases:
+            phrases[-1] += current
+        else:
+            phrases.append(current)
+    return phrases
+
+
+def tts_aligned(text, voice):
+    # Only the installed Vietnamese voice; legacy cloud voice names map to Linh.
+    voice = "Linh"
+    phrases = split_speech_phrases(text)
+    chunks, cues, frames_total = [], [], 0
+    sample_rate = 22050
+    with tempfile.TemporaryDirectory(prefix="studio-aligned-") as workdir:
+        for index, phrase in enumerate(phrases):
+            source = Path(workdir) / f"phrase-{index}.wav"
+            subprocess.run(["say", "-v", voice, "-o", str(source),
+                            "--file-format=WAVE", "--data-format=LEI16@22050", "--", phrase],
+                           check=True, timeout=120, capture_output=True)
+            with wave.open(str(source), "rb") as audio:
+                if (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) != (sample_rate, 1, 2):
+                    raise RuntimeError("Giọng đọc local trả định dạng audio không hợp lệ")
+                frames = audio.getnframes()
+                pcm = audio.readframes(frames)
+                if frames <= 0 or len(pcm) != frames * 2:
+                    raise RuntimeError("Giọng đọc không tạo được âm thanh. Kiểm tra quyền chạy say trên máy")
+            start_ms = round(frames_total * 1000 / sample_rate)
+            frames_total += frames
+            cues.append({"id": str(uuid.uuid4()), "text": phrase,
+                         "startMs": start_ms, "endMs": round(frames_total * 1000 / sample_rate)})
+            chunks.append(pcm)
+    output = io.BytesIO()
+    with wave.open(output, "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(sample_rate)
+        audio.writeframes(b"".join(chunks))
+    return {"audioBase64": base64.b64encode(output.getvalue()).decode("ascii"),
+            "cues": cues, "durationMs": round(frames_total * 1000 / sample_rate)}
 
 
 def tts(text, voice):
@@ -123,30 +191,51 @@ def transcribe(audio):
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
-            json_response(self, 200, {"ok": True, "image": True, "tts": True, "transcribe": True})
+            try:
+                with urllib.request.urlopen(f"{COMFY_URL}/system_stats", timeout=3) as response:
+                    image_ready = response.status == 200
+            except Exception:
+                image_ready = False
+            tts_ready = bool(shutil.which("say"))
+            json_response(self, 200, {"ok": image_ready and tts_ready, "image": image_ready,
+                                    "tts": tts_ready, "alignedTts": tts_ready,
+                                    "transcribe": Path(WHISPER_MODEL).is_file() and Path(WHISPER_BIN).is_file()})
             return
         json_response(self, 404, {"error": "Không tìm thấy endpoint"})
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        body = self.rfile.read(length)
         try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > 25 * 1024 * 1024:
+                json_response(self, 413, {"error": "Dữ liệu trống hoặc vượt giới hạn 25 MB"})
+                return
+            body = self.rfile.read(length)
             if self.path == "/image":
                 payload = json.loads(body)
-                binary_response(self, "image/png", comfy_image(str(payload.get("prompt", ""))))
+                prompt = str(payload.get("prompt", ""))
+                if not prompt.strip() or len(prompt) > 3000:
+                    raise ValueError("Mô tả ảnh trống hoặc quá dài")
+                binary_response(self, "image/png", comfy_image(prompt, payload.get("aspectRatio", "9:16")))
             elif self.path == "/tts":
                 payload = json.loads(body)
                 binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "Linh"))))
+            elif self.path == "/tts-aligned":
+                payload = json.loads(body)
+                json_response(self, 200, tts_aligned(str(payload.get("text", "")), str(payload.get("voice", "Linh"))))
             elif self.path == "/transcribe":
                 json_response(self, 200, {"words": transcribe(body)})
             else:
                 json_response(self, 404, {"error": "Không tìm thấy endpoint"})
-        except Exception as error:
-            json_response(self, 500, {"error": str(error)[:500]})
+        except ValueError as error:
+            json_response(self, 400, {"error": str(error)[:200]})
+        except Exception:
+            # Never include a subprocess command (which contains the private script).
+            json_response(self, 500, {"error": "Không hoàn thành xử lý media local; kiểm tra máy và thử lại"})
 
     def log_message(self, format, *args):
         print(f"[local-media] {format % args}", flush=True)
 
 
-print(f"Local media server listening on {HOST}:{PORT}", flush=True)
-ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+if __name__ == "__main__":
+    print(f"Local media server listening on {HOST}:{PORT}", flush=True)
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

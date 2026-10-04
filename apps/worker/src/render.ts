@@ -74,7 +74,7 @@ export function createAss(project: Project) {
   return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Noto Sans,${fontSize},${assColor(style.fontColor)},${assColor(style.fontColor)},${assColor(style.outlineColor)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
 }
 
-async function durationMs(config: WorkerConfig, path: string) {
+export async function durationMs(config: WorkerConfig, path: string) {
   const { stdout } = await exec(
     config.FFPROBE_PATH,
     [
@@ -88,7 +88,10 @@ async function durationMs(config: WorkerConfig, path: string) {
     ],
     { timeout: 30_000 },
   );
-  return Math.round(Number(stdout.trim()) * 1000);
+  const duration = Number(stdout.trim());
+  if (!Number.isFinite(duration) || duration <= 0)
+    throw new Error("File audio/video không có thời lượng hợp lệ");
+  return Math.round(duration * 1000);
 }
 export async function renderProject(
   config: WorkerConfig,
@@ -101,26 +104,29 @@ export async function renderProject(
   try {
     const { width, height } = videoSize(project.settings.aspectRatio);
     const segments: string[] = [];
+    const timelineScenes: Scene[] = [];
     let done = 0;
     for (const scene of project.scenes) {
       if (!scene.imagePath || !scene.audioPath)
         throw new Error(`Cảnh ${scene.order + 1} chưa có đủ ảnh và giọng đọc`);
       const imagePath = join(workdir, `scene-${scene.order}.png`);
       const audioPath = join(workdir, `scene-${scene.order}.mp3`);
-      const segmentPath = join(workdir, `scene-${scene.order}.mp4`);
+      const segmentPath = join(workdir, `scene-${scene.order}.mkv`);
       await writeFile(imagePath, await getFile(scene.imagePath));
       await writeFile(audioPath, await getFile(scene.audioPath));
       const ms = await durationMs(config, audioPath);
       scene.actualDurationMs = ms;
-      const seconds = Math.max(0.5, ms / 1000);
+      const seconds = ms / 1000;
       const fadeOut = Math.max(0, seconds - 0.25).toFixed(3);
-      const filter = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},zoompan=z='min(zoom+0.00035,1.06)':d=1:s=${width}x${height}:fps=30,format=yuv420p,fade=t=in:st=0:d=0.25,fade=t=out:st=${fadeOut}:d=0.25[v]`;
+      const filter = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=30,format=yuv420p,fade=t=in:st=0:d=0.25,fade=t=out:st=${fadeOut}:d=0.25[v]`;
       await exec(
         config.FFMPEG_PATH,
         [
           "-y",
           "-loop",
           "1",
+          "-framerate",
+          "30",
           "-i",
           imagePath,
           "-i",
@@ -140,13 +146,9 @@ export async function renderProject(
           "-crf",
           "22",
           "-c:a",
-          "aac",
-          "-b:a",
-          "192k",
+          "pcm_s16le",
           "-ar",
           "48000",
-          "-movflags",
-          "+faststart",
           "-shortest",
           segmentPath,
         ],
@@ -155,6 +157,10 @@ export async function renderProject(
           timeout: config.RENDER_TIMEOUT_MS ?? 900_000,
         },
       );
+      // Concat starts the next scene at the encoded segment boundary (30 fps).
+      // Use that measured boundary for caption offsets, retaining true audio
+      // duration on the stored scene. No estimated target duration is used.
+      timelineScenes.push({ ...scene, actualDurationMs: await durationMs(config, segmentPath) });
       segments.push(segmentPath);
       done++;
       await onProgress(
@@ -167,7 +173,7 @@ export async function renderProject(
       concatList,
       segments.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"),
     );
-    const base = join(workdir, "base.mp4");
+    const base = join(workdir, "base.mkv");
     await exec(
       config.FFMPEG_PATH,
       [
@@ -186,7 +192,7 @@ export async function renderProject(
     );
     const total = await durationMs(config, base);
     const ass = join(workdir, "subtitles.ass");
-    await writeFile(ass, createAss(project), "utf8");
+    await writeFile(ass, createAss({ ...project, scenes: timelineScenes }), "utf8");
     const output = join(workdir, "output.mp4");
     const args = ["-y", "-i", base];
     let musicPath: string | null = null;
@@ -206,7 +212,7 @@ export async function renderProject(
     // followed by `fontsdir` differently from older builds.
     let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}format=yuv420p[v]`;
     if (musicPath)
-      filter += `;[1:a]volume=${project.settings.musicVolume},afade=t=out:st=${Math.max(0, total / 1000 - 1).toFixed(3)}:d=1[m];[0:a][m]amix=inputs=2:duration=first:dropout_transition=2[a]`;
+      filter += `;[1:a]volume=${project.settings.musicVolume},afade=t=out:st=${Math.max(0, total / 1000 - 1).toFixed(3)}:d=1[m];[0:a][m]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[a]`;
     args.push(
       "-filter_complex",
       filter,

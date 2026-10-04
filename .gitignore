@@ -30,3 +30,5 @@ local-tools/ComfyUI/
 local-tools/comfy-venv/
 local-tools/comfy_smoke.py
 local-models/
+__pycache__/
+*.pyc

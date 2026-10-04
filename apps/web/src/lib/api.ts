@@ -2,6 +2,16 @@ import type { Estimate, Job, Project } from "@studio/shared";
 import { appConfig } from "./config";
 import { demoApi } from "./demo";
 import { supabase } from "./supabase";
+import { completeVideoSubmission, videoSubmission, type VideoInput } from "./video-submission";
+
+export type VideoResult = {
+  id: string;
+  url: string;
+  thumbnailUrl: string;
+  durationMs: number;
+  width: number;
+  height: number;
+};
 
 export type AccountSettings = {
   dailyBudgetUsd: number;
@@ -44,6 +54,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  async createVideo(input: VideoInput) {
+    if (appConfig.demoMode) throw new Error("Chế độ mẫu chỉ lưu bản nháp. Tạo video cần kết nối máy xử lý thật.");
+    const submission = await videoSubmission(input);
+    const { project } = await request<{ project: Project; job: Job }>("/v1/videos", {
+      method: "POST",
+      headers: { "Idempotency-Key": submission.key },
+      body: JSON.stringify(input),
+    });
+    completeVideoSubmission(submission.storageKey);
+    return project;
+  },
+  async continueVideo(id: string) {
+    const { job } = await request<{ project: Project; job: Job }>(`/v1/projects/${id}/continue`, { method: "POST" });
+    return job;
+  },
+  async getResult(id: string): Promise<VideoResult | null> {
+    if (appConfig.demoMode) return null;
+    const response = await request<{ export: null | Omit<VideoResult, "url"> & { videoUrl: string; downloadUrl: string; createdAt: string }; expiresIn: number }>(`/v1/projects/${id}/result`);
+    return response.export ? { ...response.export, url: response.export.videoUrl } : null;
+  },
   listProjects: () =>
     appConfig.demoMode
       ? demoApi.listProjects()

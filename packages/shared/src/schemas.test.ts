@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   createProjectSchema,
+  createVideoSchema,
   projectSettingsSchema,
   subtitleCueSchema,
 } from "./schemas";
 import { DEFAULT_PROJECT_SETTINGS } from "./index";
 
 describe("schema du an", () => {
+  it("one-click accepts only script and preserves original whitespace and diacritics", () => {
+    const script = "  Một ngày mới.\nHãy sống chậm lại.  ";
+    expect(createVideoSchema.parse({ sourceText: script }).sourceText).toBe(script);
+    expect(createVideoSchema.parse({ sourceText: script }).settings).toEqual({});
+    expect(() => createVideoSchema.parse({ sourceText: "          " })).toThrow();
+  });
   it("chap nhan du an hop le", () => {
     const parsed = createProjectSchema.parse({
       title: "Một phút sống chậm",

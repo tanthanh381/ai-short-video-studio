@@ -1,4 +1,8 @@
-import { readFile, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
 import { projectSchema, type Project, type Scene } from "@studio/shared";
@@ -7,7 +11,8 @@ import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
-import type { StoryboardProvider } from "./providers";
+import { alignKnownText, createFaithfulStoryboard, type MediaProvider, type StoryboardProvider } from "./providers";
+import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 
 const config = getConfig();
@@ -22,6 +27,7 @@ const log = pino({
 });
 const db = createClient(config.SUPABASE_URL, config.SUPABASE_SECRET_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
+  global: { fetch: (input, init) => fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(30_000) }) },
 });
 const openai = config.OPENAI_API_KEY
   ? new OpenAIAdapter(config.OPENAI_API_KEY, {
@@ -56,6 +62,7 @@ type JobRow = {
   project_id: string;
   user_id: string;
   job_type:
+    | "create_video"
     | "storyboard"
     | "generate_media"
     | "regenerate_scene"
@@ -63,13 +70,52 @@ type JobRow = {
   payload: Record<string, unknown>;
   attempts: number;
   max_attempts: number;
+  deadline?: number;
 };
 
 async function setProgress(id: string, progress: number, stage: string) {
-  await db
+  const { error } = await db
     .from("jobs")
     .update({ progress, stage, heartbeat_at: new Date().toISOString() })
     .eq("id", id);
+  if (error) throw error;
+}
+
+async function updateProject(id: string, values: Record<string, unknown>) {
+  const { error } = await db.from("projects").update(values).eq("id", id);
+  if (error) throw error;
+}
+
+async function updateScene(id: string, values: Record<string, unknown>) {
+  const { error } = await db.from("scenes").update(values).eq("id", id);
+  if (error) throw error;
+}
+
+function checkDeadline(job: JobRow) {
+  if (job.deadline && Date.now() > job.deadline)
+    throw new Error("Tác vụ vượt thời gian xử lý cho phép. Các cảnh đã hoàn thành được giữ lại; hãy bấm Tiếp tục.");
+}
+
+async function progress(job: JobRow, value: number, stage: string) {
+  checkDeadline(job);
+  const mapped = job.job_type === "create_video"
+    ? Math.min(74, Math.round(20 + value * 0.54))
+    : value;
+  await setProgress(job.id, mapped, stage);
+}
+
+const exec = promisify(execFile);
+async function probeAudioDuration(audio: Uint8Array) {
+  const directory = await mkdtemp(join(tmpdir(), "studio-probe-"));
+  try {
+    const path = join(directory, "audio");
+    await writeFile(path, audio);
+    const { stdout } = await exec(config.FFPROBE_PATH, ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path], { timeout: 30_000 });
+    const result = Math.round(Number(stdout.trim()) * 1000);
+    if (!Number.isFinite(result) || result < 100 || result > 180_000)
+      throw new Error("Thời lượng audio cảnh không hợp lệ");
+    return result;
+  } finally { await rm(directory, { recursive: true, force: true }); }
 }
 async function getProject(id: string): Promise<Project> {
   const { data: project, error } = await db
@@ -160,8 +206,8 @@ async function storyboard(job: JobRow, project: Project) {
           : "Chưa cấu hình Claude cho phần kịch bản",
     );
   }
-  await setProgress(job.id, 10, "Đang phân tích nội dung");
-  const result = await provider.createStoryboard({
+  await setProgress(job.id, job.job_type === "create_video" ? 3 : 10, "Đang phân tích nội dung");
+  const result = await createFaithfulStoryboard(provider, {
     title: project.title,
     sourceText: project.sourceText,
     inputMode: project.inputMode,
@@ -171,9 +217,8 @@ async function storyboard(job: JobRow, project: Project) {
     duration: project.settings.targetDurationSec,
     visualStyle: project.settings.visualStyle,
   });
-  await setProgress(job.id, 70, "Đang lưu storyboard");
-  await removePrefix(`${project.userId}/${project.id}/generated`);
-  await db.from("scenes").delete().eq("project_id", project.id);
+  checkDeadline(job);
+  await setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard");
   const rows = result.scenes.map((scene, index) => ({
     project_id: project.id,
     scene_order: index,
@@ -183,23 +228,19 @@ async function storyboard(job: JobRow, project: Project) {
     media_status: "pending",
     subtitles: [],
   }));
-  if (rows.length) {
-    const { error } = await db.from("scenes").insert(rows);
-    if (error) throw error;
-  }
-  await db
-    .from("projects")
-    .update({
-      hook: result.hook,
-      suggested_title: result.suggestedTitle,
-      suggested_description: result.suggestedDescription,
-      status: "draft",
-    })
-    .eq("id", project.id);
+  const { error: saveError } = await db.rpc("replace_storyboard", {
+    p_project_id: project.id, p_user_id: project.userId, p_scenes: rows,
+    p_hook: result.hook, p_suggested_title: result.suggestedTitle,
+    p_suggested_description: result.suggestedDescription,
+    p_status: job.job_type === "create_video" ? "queued" : "draft",
+  });
+  if (saveError) throw saveError;
+  try { await removePrefix(`${project.userId}/${project.id}/generated`); }
+  catch { log.warn({ projectId: project.id, jobId: job.id }, "unused_media_cleanup_failed"); }
 }
 
 async function generateMedia(job: JobRow, project: Project) {
-  const media = openai ?? localMedia;
+  const media: MediaProvider | null = project.settings.mediaProvider === "openai" ? openai : localMedia;
   if (!media)
     throw new Error(
       "Chưa cấu hình nhà cung cấp để tạo ảnh, giọng đọc và đồng bộ phụ đề",
@@ -215,24 +256,34 @@ async function generateMedia(job: JobRow, project: Project) {
     throw new Error(
       targetId ? "Không tìm thấy cảnh cần tạo lại" : "Dự án chưa có cảnh",
     );
-  await db
-    .from("projects")
-    .update({ status: "generating_media" })
-    .eq("id", project.id);
+  await updateProject(project.id, { status: "generating_media" });
   let finished = 0;
+  let newlyGenerated = 0;
   for (const scene of scenes) {
+    checkDeadline(job);
     try {
-      await db
-        .from("scenes")
-        .update({ media_status: "processing", error_message: null })
-        .eq("id", scene.id);
-      const forceRegenerate = Boolean(targetId) && job.attempts === 1;
-      let imagePath = forceRegenerate ? null : scene.imagePath;
-      let audioPath = forceRegenerate ? null : scene.audioPath;
+      if (targetId && !job.payload.regeneration) {
+        job.payload = { ...job.payload, regeneration: { imagePath: scene.imagePath, audioPath: scene.audioPath } };
+        const { error: checkpointError } = await db.from("jobs").update({ payload: job.payload }).eq("id", job.id);
+        if (checkpointError) throw checkpointError;
+      }
+      const previous = job.payload.regeneration as { imagePath: string | null; audioPath: string | null } | undefined;
+      const regenerateImage = Boolean(targetId) && scene.imagePath === previous?.imagePath;
+      const regenerateAudio = Boolean(targetId) && scene.audioPath === previous?.audioPath;
+      if (!regenerateImage && !regenerateAudio && sceneMediaReady(scene, project.settings.subtitle.enabled)) {
+        finished++;
+        await progress(job, Math.round((finished / scenes.length) * 100), `Đã giữ media cảnh ${scene.order + 1}`);
+        continue;
+      }
+      await updateScene(scene.id, { media_status: "processing", error_message: null });
+      let imagePath = regenerateImage ? null : scene.imagePath;
+      let audioPath = regenerateAudio ? null : scene.audioPath;
       let audio: Uint8Array;
+      let subtitles = regenerateAudio ? [] : scene.subtitles;
+      let actualDurationMs = regenerateAudio ? null : scene.actualDurationMs;
       if (!imagePath) {
-        await setProgress(
-          job.id,
+        await progress(
+          job,
           Math.round((finished / scenes.length) * 85),
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
@@ -242,69 +293,51 @@ async function generateMedia(job: JobRow, project: Project) {
         );
         imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
         await upload(imagePath, image, "image/png");
-        await db
-          .from("scenes")
-          .update({ image_path: imagePath })
-          .eq("id", scene.id);
-        if (
-          forceRegenerate &&
-          scene.imagePath?.startsWith(
-            `${project.userId}/${project.id}/generated/`,
-          )
-        )
-          await db.storage.from("private-media").remove([scene.imagePath]);
+        await updateScene(scene.id, { image_path: imagePath });
       }
       if (!audioPath) {
-        await setProgress(
-          job.id,
+        await progress(
+          job,
           Math.round((finished / scenes.length) * 85) + 4,
           `Đang tạo giọng đọc cảnh ${scene.order + 1}`,
         );
-        audio = await media.createSpeech(
-          scene.narration,
-          project.settings.voice,
-        );
-        audioPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.mp3`;
-        await upload(audioPath, audio, "audio/mpeg");
-        await db
-          .from("scenes")
-          .update({ audio_path: audioPath })
-          .eq("id", scene.id);
-        if (
-          forceRegenerate &&
-          scene.audioPath?.startsWith(
-            `${project.userId}/${project.id}/generated/`,
-          )
-        )
-          await db.storage.from("private-media").remove([scene.audioPath]);
+        const aligned = media.createSpeechAligned
+          ? await media.createSpeechAligned(scene.narration, project.settings.voice)
+          : null;
+        audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice);
+        subtitles = aligned?.cues ?? [];
+        actualDurationMs = aligned?.durationMs ?? await probeAudioDuration(audio);
+        const extension = aligned?.contentType === "audio/wav" ? "wav" : "mp3";
+        audioPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.${extension}`;
+        await upload(audioPath, audio, aligned?.contentType ?? "audio/mpeg");
+        // Save measured timing together with audio so retries do not transcribe
+        // already aligned speech or regenerate a successful scene.
+        await updateScene(scene.id, { audio_path: audioPath, subtitles, actual_duration_ms: actualDurationMs });
       } else {
         audio = await download(audioPath);
+        actualDurationMs = await probeAudioDuration(audio);
       }
-      await setProgress(
-        job.id,
+      await progress(
+        job,
         Math.round((finished / scenes.length) * 85) + 7,
         `Đang đồng bộ phụ đề cảnh ${scene.order + 1}`,
       );
-      const words = await media.transcribe(audio);
-      const subtitles = groupWords(words);
-      const actualDurationMs = Math.max(
-        ...subtitles.map((c) => c.endMs),
-        scene.estimatedDurationMs,
-      );
-      await db
-        .from("scenes")
-        .update({
+      if (!subtitles.length && project.settings.subtitle.enabled) {
+        const words = await media.transcribe(audio);
+        subtitles = groupWords(alignKnownText(scene.narration, words));
+      }
+      checkDeadline(job);
+      await updateScene(scene.id, {
           image_path: imagePath,
           audio_path: audioPath,
           subtitles,
           actual_duration_ms: actualDurationMs,
           media_status: "ready",
           error_message: null,
-        })
-        .eq("id", scene.id);
+        });
       if (targetId) {
         const generatedPrefix = `${project.userId}/${project.id}/generated/`;
-        const replacedPaths = [scene.imagePath, scene.audioPath].filter(
+        const replacedPaths = [previous?.imagePath, previous?.audioPath].filter(
           (path): path is string =>
             Boolean(path) &&
             path!.startsWith(generatedPrefix) &&
@@ -323,16 +356,14 @@ async function generateMedia(job: JobRow, project: Project) {
         }
       }
       finished++;
+      newlyGenerated++;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Không thể tạo media";
-      await db
-        .from("scenes")
-        .update({
+      await updateScene(scene.id, {
           media_status: "failed",
           error_message: message.slice(0, 500),
-        })
-        .eq("id", scene.id);
+        });
       log.error(
         { jobId: job.id, sceneId: scene.id, err: message },
         "scene_media_failed",
@@ -340,22 +371,20 @@ async function generateMedia(job: JobRow, project: Project) {
     }
   }
   if (finished === 0) throw new Error("Tất cả các cảnh đều tạo media lỗi");
-  await db
-    .from("projects")
-    .update({ status: finished === scenes.length ? "draft" : "failed" })
-    .eq("id", project.id);
-  await db.from("usage_events").insert({
+  await updateProject(project.id, { status: finished === scenes.length ? job.job_type === "create_video" ? "queued" : "draft" : "failed" });
+  const { error: usageError } = await db.from("usage_events").insert({
     user_id: project.userId,
     project_id: project.id,
     job_id: job.id,
     kind: "ai_media_estimate",
-    amount_usd: openai ? Number((finished * 0.06).toFixed(2)) : 0,
+    amount_usd: project.settings.mediaProvider === "openai" ? Number((newlyGenerated * 0.06).toFixed(2)) : 0,
     metadata: {
       successful_scenes: finished,
       total_scenes: scenes.length,
-      provider: openai ? "openai" : "local",
+      provider: project.settings.mediaProvider,
     },
   });
+  if (usageError) throw usageError;
   if (finished < scenes.length)
     throw new Error(
       `${scenes.length - finished} cảnh tạo media lỗi; các cảnh thành công đã được giữ lại`,
@@ -363,15 +392,27 @@ async function generateMedia(job: JobRow, project: Project) {
 }
 
 async function render(job: JobRow, project: Project) {
-  await db
-    .from("projects")
-    .update({ status: "rendering" })
-    .eq("id", project.id);
+  checkDeadline(job);
+  // If a crash happened after upload/export commit, reuse the real export.
+  const { data: existing, error: exportReadError } = await db.from("exports")
+    .select("storage_path,thumbnail_path").eq("job_id", job.id).maybeSingle();
+  if (exportReadError) throw exportReadError;
+  if (existing) {
+    // Confirm both objects still exist before reporting completion.
+    await download(existing.storage_path);
+    await download(existing.thumbnail_path);
+    await updateProject(project.id, { status: "completed" });
+    return;
+  }
+  await updateProject(project.id, { status: "rendering" });
   const result = await renderProject(
     config,
     project,
     download,
-    (value, stage) => setProgress(job.id, value, stage),
+    (value, stage) => {
+      checkDeadline(job);
+      return setProgress(job.id, job.job_type === "create_video" ? Math.min(99, 76 + Math.round(value * 0.23)) : value, stage);
+    },
   );
   try {
     const outputPath = `${project.userId}/${project.id}/exports/${job.id}.mp4`;
@@ -386,7 +427,7 @@ async function render(job: JobRow, project: Project) {
       new Uint8Array(await readFile(result.thumbnail)),
       "image/jpeg",
     );
-    await db.from("exports").upsert(
+    const { error: exportError } = await db.from("exports").upsert(
       {
         project_id: project.id,
         job_id: job.id,
@@ -399,15 +440,10 @@ async function render(job: JobRow, project: Project) {
       },
       { onConflict: "job_id" },
     );
+    if (exportError) throw exportError;
     for (const scene of project.scenes)
-      await db
-        .from("scenes")
-        .update({ actual_duration_ms: scene.actualDurationMs })
-        .eq("id", scene.id);
-    await db
-      .from("projects")
-      .update({ status: "completed" })
-      .eq("id", project.id);
+      await updateScene(scene.id, { actual_duration_ms: scene.actualDurationMs });
+    await updateProject(project.id, { status: "completed" });
   } finally {
     await rm(result.workdir, { recursive: true, force: true });
   }
@@ -415,7 +451,22 @@ async function render(job: JobRow, project: Project) {
 
 async function run(job: JobRow) {
   const project = await getProject(job.project_id);
-  if (job.job_type === "storyboard") await storyboard(job, project);
+  if (job.job_type === "create_video") {
+    if (project.settings.textProvider !== "ollama" || project.settings.mediaProvider !== "local")
+      throw new Error("Tạo video tự động chỉ dùng Ollama và media local để tránh phát sinh phí.");
+    await runVideoPipeline(job.payload, {
+      getProject: () => getProject(job.project_id),
+      storyboard: (current) => storyboard(job, current),
+      media: (current) => generateMedia(job, current),
+      render: (current) => render(job, current),
+      progress: (value, stage) => { checkDeadline(job); return setProgress(job.id, value, stage); },
+      checkpoint: async (value) => {
+        job.payload = { ...job.payload, pipeline: value };
+        const { error } = await db.from("jobs").update({ payload: job.payload, heartbeat_at: new Date().toISOString() }).eq("id", job.id);
+        if (error) throw error;
+      },
+    });
+  } else if (job.job_type === "storyboard") await storyboard(job, project);
   else if (
     job.job_type === "generate_media" ||
     job.job_type === "regenerate_scene"
@@ -425,7 +476,7 @@ async function run(job: JobRow) {
 }
 async function finish(job: JobRow, error?: unknown) {
   if (!error) {
-    await db
+    const { error: updateError } = await db
       .from("jobs")
       .update({
         status: "completed",
@@ -436,17 +487,17 @@ async function finish(job: JobRow, error?: unknown) {
         locked_at: null,
       })
       .eq("id", job.id);
+    if (updateError) throw updateError;
     return;
   }
   const message = error instanceof Error ? error.message : "Tác vụ gặp lỗi";
   const retry = job.attempts < job.max_attempts;
   const delaySeconds = Math.min(60, Math.pow(2, job.attempts) * 5);
-  await db
+  const { error: updateError } = await db
     .from("jobs")
     .update({
       status: retry ? "queued" : "failed",
-      progress: retry ? 0 : 99,
-      stage: retry ? `Sẽ thử lại sau ${delaySeconds} giây` : "Tác vụ thất bại",
+      stage: retry ? `Sẽ thử lại bước lỗi sau ${delaySeconds} giây` : "Tác vụ thất bại",
       error_message: message.slice(0, 800),
       next_attempt_at: new Date(Date.now() + delaySeconds * 1000).toISOString(),
       locked_by: null,
@@ -454,11 +505,9 @@ async function finish(job: JobRow, error?: unknown) {
       finished_at: retry ? null : new Date().toISOString(),
     })
     .eq("id", job.id);
+  if (updateError) throw updateError;
   if (!retry)
-    await db
-      .from("projects")
-      .update({ status: "failed" })
-      .eq("id", job.project_id);
+    await updateProject(job.project_id, { status: "failed" });
   log.error({ jobId: job.id, err: message, retry }, "job_failed");
 }
 
@@ -474,14 +523,22 @@ async function poll() {
     ? (data[0] as JobRow | undefined)
     : (data as JobRow | null);
   if (!job) return;
+  job.deadline = Date.now() + 90 * 60_000;
   log.info({ jobId: job.id, type: job.job_type }, "job_started");
+  const heartbeat = setInterval(() => {
+    void db.from("jobs").update({ heartbeat_at: new Date().toISOString() })
+      .eq("id", job.id).eq("status", "running").eq("locked_by", workerId)
+      .then(({ error: heartbeatError }) => {
+        if (heartbeatError) log.warn({ jobId: job.id }, "heartbeat_failed");
+      });
+  }, 30_000);
   try {
     await run(job);
     await finish(job);
     log.info({ jobId: job.id }, "job_completed");
   } catch (error) {
     await finish(job, error);
-  }
+  } finally { clearInterval(heartbeat); }
 }
 
 let stopping = false;
@@ -504,7 +561,8 @@ log.info(
   "worker_started",
 );
 while (!stopping) {
-  await poll();
+  try { await poll(); }
+  catch (error) { log.error({ err: error instanceof Error ? error.message : "unknown" }, "worker_poll_failed"); }
   await new Promise((resolve) => setTimeout(resolve, config.WORKER_POLL_MS));
 }
 log.info("worker_stopped");

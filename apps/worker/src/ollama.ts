@@ -18,19 +18,20 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
       method: "POST",
+      signal: AbortSignal.timeout(240_000),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         model: this.model,
         stream: false,
         format: storyboardJsonSchema,
-        options: { temperature: 0.2 },
+        options: { temperature: 0.2, num_ctx: 8192, num_predict: 4096 },
         system: buildStoryboardInstruction(input),
-        prompt: `Tên video: ${input.title}\nNội dung:\n${input.sourceText}`,
+        prompt: JSON.stringify({ title: input.title, storyContext: input.sourceText, lockedScenes: input.lockedScenes }),
       }),
     });
     const body = (await response.json().catch(() => ({}))) as OllamaResponse;
     if (!response.ok)
-      throw new Error(`Ollama trả lỗi ${response.status}: ${body.error ?? "không rõ nguyên nhân"}`);
+      throw new Error(`Ollama trả lỗi ${response.status}. Kiểm tra máy đang bật và model đã được cài`);
     if (!body.response) throw new Error("Ollama không trả về storyboard");
     return parseStoryboard(body.response);
   }

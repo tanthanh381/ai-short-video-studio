@@ -54,8 +54,9 @@ import {
   type Scene,
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
-import { api } from "./lib/api";
+import { api, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
+import { projectIsProcessing } from "./lib/video-submission";
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
@@ -165,8 +166,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         {isDemo && (
           <div className="demo-bar">
             <strong>Đang xem chế độ mẫu.</strong> Anh có thể tạo và sửa
-            storyboard trên máy này; tạo AI và xuất MP4 cần kết nối Supabase,
-            máy render và API key.
+            storyboard trên máy này; tạo video cần kết nối máy xử lý thật.
           </div>
         )}
         {children}
@@ -485,8 +485,7 @@ function DashboardPage() {
         <div>
           <h1>Hôm nay mình kể câu chuyện gì?</h1>
           <p>
-            Bắt đầu từ ý tưởng, hoàn thiện từng cảnh và xuất video khi đã sẵn
-            sàng.
+            Dán kịch bản, bấm Tạo video và nhận bản MP4 hoàn chỉnh.
           </p>
         </div>
         <Button onClick={() => navigate("/new")}>
@@ -605,30 +604,48 @@ function Field({
 
 function NewProjectPage() {
   const navigate = useNavigate();
+  const { isDemo } = useAuth();
   const [busy, setBusy] = useState(false);
-  const [inputMode, setInputMode] = useState<"idea" | "full-script">("idea");
-  const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [sourceText, setSourceText] = useState("");
   const [settings, setSettings] = useState<ProjectSettings>(
-    DEFAULT_PROJECT_SETTINGS,
+    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local" },
   );
   const [advanced, setAdvanced] = useState(false);
+  const submitting = useRef(false);
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
+    setError(null);
+    try {
+      const project = await api.createVideo({ sourceText, settings });
+      navigate(`/studio/${project.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chưa thể bắt đầu tạo video. Hãy thử lại.");
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  }
+  async function saveDraft() {
+    if (submitting.current || sourceText.trim().length < 10) return;
+    submitting.current = true;
+    setBusy(true);
+    setError(null);
     try {
       const project = await api.createProject({
-        title,
+        title: sourceText.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới",
         sourceText,
-        inputMode,
-        settings: {
-          ...settings,
-          rewriteFullScript:
-            inputMode === "full-script" ? settings.rewriteFullScript : false,
-        },
+        inputMode: "full-script",
+        settings,
       });
       navigate(`/studio/${project.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể lưu bản nháp.");
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -639,58 +656,41 @@ function NewProjectPage() {
       </button>
       <div className="page-heading">
         <div>
-          <h1>Tạo dự án mới</h1>
-          <p>
-            Thông tin này giúp studio chia cảnh đúng nhịp và đúng người xem.
-          </p>
+          <h1>Kịch bản của anh, video hoàn chỉnh.</h1>
+          <p>Studio tự chia cảnh, tạo ảnh, đọc tiếng Việt, đồng bộ phụ đề và ghép video.</p>
         </div>
       </div>
       <form className="creation-form" onSubmit={submit}>
         <section>
-          <h2>Nội dung</h2>
-          <Field label="Tên video">
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ví dụ: Ba điều nên buông bỏ"
-              required
-              maxLength={160}
-            />
-          </Field>
-          <div className="segmented">
-            <button
-              type="button"
-              className={inputMode === "idea" ? "active" : ""}
-              onClick={() => setInputMode("idea")}
-            >
-              Tôi có ý tưởng
-            </button>
-            <button
-              type="button"
-              className={inputMode === "full-script" ? "active" : ""}
-              onClick={() => setInputMode("full-script")}
-            >
-              Tôi có kịch bản hoàn chỉnh
-            </button>
-          </div>
           <Field
-            label={inputMode === "idea" ? "Ý tưởng" : "Kịch bản hoàn chỉnh"}
-            hint={
-              inputMode === "full-script"
-                ? "Mặc định studio giữ nguyên lời và chỉ chia cảnh."
-                : "Nêu thông điệp chính, tình huống hoặc điều muốn người xem ghi nhớ."
-            }
+            label="Kịch bản"
+            hint="Giữ nguyên câu chữ và dấu tiếng Việt. Thời lượng video theo giọng đọc thực tế."
           >
             <textarea
               value={sourceText}
               onChange={(e) => setSourceText(e.target.value)}
               required
               minLength={10}
-              rows={7}
-              placeholder="Nhập nội dung bằng tiếng Việt…"
+              maxLength={30000}
+              rows={10}
+              disabled={busy}
+              placeholder="Dán toàn bộ lời đọc cho video vào đây…"
             />
           </Field>
-          {inputMode === "full-script" && (
+          <div className="creation-defaults">
+            <span><Video size={15} /> Video dọc 1080 × 1920</span>
+            <span><Mic2 size={15} /> Giọng tiếng Việt</span>
+            <span><Subtitles size={15} /> Phụ đề rõ nét</span>
+          </div>
+          {error && <Notice tone="warn">{error}</Notice>}
+          {isDemo && <Notice tone="warn">Chế độ mẫu chỉ lưu và chỉnh kịch bản. Tạo MP4 cần kết nối máy xử lý.</Notice>}
+        </section>
+        <section>
+          <button className="advanced-toggle" type="button" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>
+            Tùy chọn video {advanced ? <ChevronUp /> : <ChevronDown />}
+          </button>
+        </section>
+        <section hidden={!advanced}>
             <label className="check">
               <input
                 type="checkbox"
@@ -702,11 +702,10 @@ function NewProjectPage() {
                   }))
                 }
               />
-              <span>Cho phép AI viết lại câu chữ</span>
+              <span>Cho phép viết lại kịch bản trước khi tạo video</span>
             </label>
-          )}
         </section>
-        <section>
+        <section hidden={!advanced}>
           <h2>Định dạng video</h2>
           <div className="form-grid">
             <Field label="Đối tượng người xem">
@@ -733,7 +732,7 @@ function NewProjectPage() {
                 <option value="meo-cuoc-song">Mẹo cuộc sống</option>
               </select>
             </Field>
-            <Field label="Thời lượng mục tiêu">
+            <Field label="Nhịp chia cảnh" hint="Chỉ tham khảo khi chia cảnh. Thời lượng xuất luôn theo audio thực tế.">
               <select
                 value={settings.targetDurationSec}
                 onChange={(e) =>
@@ -766,32 +765,8 @@ function NewProjectPage() {
             </Field>
           </div>
         </section>
-        <section>
-          <button
-            className="advanced-toggle"
-            type="button"
-            onClick={() => setAdvanced(!advanced)}
-          >
-            Tùy chọn nâng cao {advanced ? <ChevronUp /> : <ChevronDown />}
-          </button>
-          {advanced && (
+        <section hidden={!advanced}>
             <div className="form-grid advanced-panel">
-              <Field label="AI chia cảnh và viết kịch bản">
-                <select
-                  value={settings.textProvider}
-                  onChange={(e) =>
-                    setSettings((s) => ({
-                      ...s,
-                      textProvider: e.target
-                        .value as ProjectSettings["textProvider"],
-                    }))
-                  }
-                >
-                  <option value="anthropic">Claude</option>
-                  <option value="openai">ChatGPT / OpenAI</option>
-                  <option value="ollama">Ollama (cục bộ)</option>
-                </select>
-              </Field>
               <Field label="Giọng đọc">
                 <select
                   value={settings.voice}
@@ -799,9 +774,7 @@ function NewProjectPage() {
                     setSettings((s) => ({ ...s, voice: e.target.value }))
                   }
                 >
-                  <option value="alloy">Ấm, trung tính</option>
-                  <option value="nova">Sáng, tự nhiên</option>
-                  <option value="onyx">Trầm, điềm tĩnh</option>
+                  <option value="alloy">Giọng tiếng Việt trên máy</option>
                 </select>
               </Field>
               <Field label="Phong cách hình ảnh">
@@ -826,16 +799,16 @@ function NewProjectPage() {
                 <span>Cho phép dùng ảnh tự tải lên</span>
               </label>
             </div>
-          )}
         </section>
         <div className="form-actions">
-          <Button type="button" variant="ghost" onClick={() => navigate(-1)}>
-            Hủy
+          <Button type="button" variant="ghost" disabled={busy || sourceText.trim().length < 10} onClick={() => void saveDraft()}>
+            <Save size={17} /> Lưu bản nháp
           </Button>
-          <Button type="submit" busy={busy}>
-            <Clapperboard size={18} /> Tạo dự án
+          <Button type="submit" busy={busy} disabled={isDemo}>
+            <Clapperboard size={18} /> Tạo video
           </Button>
         </div>
+        <p className="creation-footnote">Xử lý trên máy đã kết nối, không gọi API trả phí. Máy cần bật trong lúc tạo video.</p>
       </form>
     </div>
   );
@@ -964,11 +937,15 @@ function StudioPage() {
   const { isDemo } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [selected, setSelected] = useState(0);
+  const [sourceDraft, setSourceDraft] = useState("");
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [saved, setSaved] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [result, setResult] = useState<VideoResult | null>(null);
+  const [resultLoading, setResultLoading] = useState(false);
   const [capabilities, setCapabilities] = useState<{
     ai: boolean;
     openai: boolean;
@@ -982,6 +959,12 @@ function StudioPage() {
       : null,
   );
   const saveTimer = useRef<number | null>(null);
+  const pendingEdits = useRef<Project | null>(null);
+  const saving = useRef<Promise<void> | null>(null);
+  const locked = useRef(false);
+  const previewRefreshes = useRef(new Set<string>());
+  const processing = projectIsProcessing(jobs);
+  locked.current = processing || Boolean(busyAction);
   useEffect(() => {
     void Promise.all([
       api.getProject(id),
@@ -990,6 +973,7 @@ function StudioPage() {
     ])
       .then(([p, j, account]) => {
         setProject(p);
+        setSourceDraft(p.sourceText);
         setJobs(j);
         if (account) setCapabilities(account.capabilities);
       })
@@ -998,21 +982,36 @@ function StudioPage() {
       );
   }, [id, isDemo]);
   useEffect(() => {
-    if (
-      isDemo ||
-      !jobs.some((j) => j.status === "queued" || j.status === "running")
-    )
-      return;
+    if (isDemo || !processing) return;
+    let refreshing = false;
+    let active = true;
     const timer = window.setInterval(() => {
-      void Promise.all([api.getJobs(id), api.getProject(id)]).then(
-        ([nextJobs, nextProject]) => {
+      if (refreshing) return;
+      refreshing = true;
+      void Promise.all([api.getJobs(id), api.getProject(id)])
+        .then(([nextJobs, nextProject]) => {
+          if (!active) return;
           setJobs(nextJobs);
           setProject(nextProject);
-        },
-      );
+          setSourceDraft(nextProject.sourceText);
+          setError(null);
+        })
+        .catch(() => active && setError("Mất kết nối tạm thời. Tác vụ vẫn được lưu; studio sẽ tiếp tục cập nhật khi kết nối trở lại."))
+        .finally(() => { refreshing = false; });
     }, 2500);
-    return () => clearInterval(timer);
-  }, [id, isDemo, jobs]);
+    return () => { active = false; clearInterval(timer); };
+  }, [id, isDemo, processing]);
+  useEffect(() => {
+    if (isDemo || !project || processing) return;
+    let active = true;
+    setResultLoading(true);
+    void api.getResult(id)
+      .then((next) => { if (active) setResult(next); })
+      .catch(() => { if (active && project.status === "completed") setError("Chưa tải được video hoàn chỉnh. Hãy kiểm tra kết nối rồi mở lại dự án."); })
+      .finally(() => { if (active) setResultLoading(false); });
+    return () => { active = false; };
+  }, [id, isDemo, project?.status, processing, jobs[0]?.updatedAt]);
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
   useEffect(() => {
     const path = project?.scenes[selected]?.imagePath;
     if (!path || isDemo) {
@@ -1029,23 +1028,84 @@ function StudioPage() {
     };
   }, [id, isDemo, project?.scenes, selected]);
   function change(next: Project) {
+    if (locked.current) return;
     setProject(next);
     setSaved(false);
+    pendingEdits.current = next;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(
-      () =>
-        void api
-          .updateProject(next)
-          .then(setProject)
-          .then(() => setSaved(true)),
-      700,
-    );
+    saveTimer.current = window.setTimeout(() => void flushEdits().catch(() => {}), 700);
+  }
+  async function flushEdits() {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (saving.current) {
+      await saving.current;
+      if (pendingEdits.current) return flushEdits();
+      return;
+    }
+    const write = async () => {
+      while (pendingEdits.current) {
+        const next = pendingEdits.current;
+        pendingEdits.current = null;
+        try {
+          const updated = await api.updateProject(next);
+          if (!pendingEdits.current) { setProject(updated); setSaved(true); }
+        } catch (e) {
+          pendingEdits.current ??= next;
+          setSaved(false);
+          setError(e instanceof Error ? e.message : "Chưa lưu được chỉnh sửa. Hãy thử lại trước khi tạo video.");
+          throw e;
+        }
+      }
+    };
+    saving.current = write();
+    try { await saving.current; } finally { saving.current = null; }
+  }
+  async function createVideo() {
+    if (locked.current) return;
+    if (isDemo) { setError("Chế độ mẫu chỉ lưu bản nháp. Tạo MP4 cần kết nối máy xử lý thật."); return; }
+    locked.current = true;
+    setBusyAction("create_video");
+    setError(null);
+    try {
+      await flushEdits();
+      const job = await api.continueVideo(id);
+      setJobs((current) => [job, ...current.filter((item) => item.id !== job.id)]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể bắt đầu tạo video.");
+    } finally { setBusyAction(null); }
+  }
+  async function downloadResult() {
+    if (!result) return;
+    setBusyAction("download");
+    try {
+      const { url } = await api.exportDownload(result.id);
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Chưa tải được file MP4. Hãy thử lại.");
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = `${project?.title ?? "video"}.mp4`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải video.");
+    } finally { setBusyAction(null); }
   }
   function updateScene(index: number, scene: Scene) {
     if (!project) return;
     const scenes = [...project.scenes];
-    scenes[index] = scene;
-    change({ ...project, scenes });
+    const previous = scenes[index];
+    const narrationChanged = previous?.narration !== scene.narration;
+    const imageChanged = previous?.imagePrompt !== scene.imagePrompt;
+    scenes[index] = {
+      ...scene,
+      ...(narrationChanged ? { audioPath: null, actualDurationMs: null, subtitles: [], mediaStatus: "pending" as const } : {}),
+      ...(imageChanged ? { imagePath: null, mediaStatus: "pending" as const } : {}),
+    };
+    change({ ...project, scenes, status: "draft" });
   }
   function moveScene(index: number, direction: -1 | 1) {
     if (!project) return;
@@ -1090,6 +1150,7 @@ function StudioPage() {
   async function runAction(
     type: "storyboard" | "generate_media" | "render_video",
   ) {
+    if (locked.current) return;
     if (isDemo) {
       setError(
         type === "storyboard"
@@ -1132,11 +1193,13 @@ function StudioPage() {
       return;
     }
     setBusyAction(type);
+    locked.current = true;
     setError(null);
     try {
+      await flushEdits();
       if (type === "generate_media") {
         const estimate = await api.estimate(id);
-        const accepted = window.confirm(
+        const accepted = estimate.estimatedUsd === 0 || window.confirm(
           `Ước tính chi phí tạo media: ${estimate.estimatedUsd.toFixed(2)} USD cho ${estimate.imageCount} ảnh. Đây là ước tính, chi phí thực tế do nhà cung cấp tính. Tiếp tục?`,
         );
         if (!accepted) return;
@@ -1155,6 +1218,7 @@ function StudioPage() {
     kind: "image" | "audio",
   ) {
     if (!project) return;
+    if (locked.current) return;
     if (isDemo) {
       setError(
         "Tải media để render cần kết nối kho lưu trữ. Chế độ mẫu không giữ file cá nhân.",
@@ -1162,17 +1226,24 @@ function StudioPage() {
       return;
     }
     setBusyAction(`upload-${index}-${kind}`);
+    locked.current = true;
     setError(null);
     try {
       const path = await api.uploadMedia(id, file, kind);
       const scene = project.scenes[index];
       if (!scene) return;
-      updateScene(index, {
+      const updatedScene: Scene = {
         ...scene,
         ...(kind === "image" ? { imagePath: path } : { audioPath: path }),
+        ...(kind === "audio" ? { actualDurationMs: null, subtitles: [] } : {}),
         mediaStatus: "pending",
         errorMessage: null,
-      });
+      };
+      const next = { ...project, scenes: project.scenes.map((item, sceneIndex) => sceneIndex === index ? updatedScene : item), status: "draft" as const };
+      setProject(next);
+      pendingEdits.current = next;
+      setSaved(false);
+      await flushEdits();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tải file");
     } finally {
@@ -1184,14 +1255,17 @@ function StudioPage() {
       setError("Tạo lại cảnh cần kết nối OpenAI và worker thật.");
       return;
     }
-    if (!capabilities?.openai) {
-      setError("Tạo lại cảnh cần cấu hình OpenAI trên worker.");
+    if (locked.current) return;
+    if (!(capabilities?.openai || capabilities?.localMedia)) {
+      setError("Máy tạo ảnh và giọng đọc chưa được kết nối.");
       return;
     }
     setBusyAction(`regenerate-${sceneId}`);
+    locked.current = true;
     try {
+      await flushEdits();
       const estimate = await api.estimate(id);
-      if (
+      if (estimate.estimatedUsd > 0 &&
         !window.confirm(
           `Tạo lại riêng cảnh này có thể phát sinh khoảng ${(estimate.estimatedUsd / Math.max(1, estimate.imageCount)).toFixed(2)} USD. Tiếp tục?`,
         )
@@ -1219,17 +1293,23 @@ function StudioPage() {
   }
   async function uploadMusic(file: File) {
     if (!project) return;
+    if (locked.current) return;
     if (isDemo) {
       setError("Tải nhạc cần kết nối kho lưu trữ.");
       return;
     }
     setBusyAction("music");
+    locked.current = true;
     try {
       const path = await api.uploadMedia(id, file, "music");
-      change({
+      const next = {
         ...project,
         settings: { ...project.settings, backgroundMusicPath: path },
-      });
+      };
+      setProject(next);
+      pendingEdits.current = next;
+      setSaved(false);
+      await flushEdits();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tải nhạc");
     } finally {
@@ -1237,10 +1317,16 @@ function StudioPage() {
     }
   }
   async function retry(jobId: string) {
+    if (locked.current) return;
+    locked.current = true;
     setBusyAction(`retry-${jobId}`);
     setError(null);
     try {
-      const job = await api.retryJob(jobId);
+      await flushEdits();
+      const failed = jobs.find((item) => item.id === jobId);
+      const job = failed?.type === "create_video"
+        ? await api.continueVideo(id)
+        : await api.retryJob(jobId);
       setJobs((current) => [
         job,
         ...current.filter((item) => item.id !== job.id),
@@ -1295,6 +1381,8 @@ function StudioPage() {
           <input
             className="studio-title"
             value={project.title}
+            aria-label="Tên video"
+            disabled={processing || Boolean(busyAction)}
             onChange={(e) => change({ ...project, title: e.target.value })}
           />
           <span className="save-state">
@@ -1310,11 +1398,20 @@ function StudioPage() {
           </span>
         </div>
         <div className="studio-actions">
+          <Button onClick={() => void createVideo()} busy={busyAction === "create_video"} disabled={processing || Boolean(busyAction) || sourceDraft.trim().length < 10}>
+            <Video size={17} /> {failedJob ? "Tiếp tục tạo video" : "Tạo video"}
+          </Button>
+          <Button variant="secondary" aria-expanded={optionsOpen} onClick={() => setOptionsOpen(!optionsOpen)}>
+            <Settings size={17} /> Tùy chọn
+          </Button>
+          <details className="manual-actions">
+            <summary>Chỉnh từng bước <ChevronDown size={15} /></summary>
+            <div>
           <Button
             variant="secondary"
             onClick={() => void runAction("storyboard")}
             busy={busyAction === "storyboard"}
-            disabled={!isDemo && !storyboardEnabled}
+            disabled={processing || Boolean(busyAction) || (!isDemo && !storyboardEnabled)}
             title={
               storyboardEnabled
                 ? "Dùng nhà cung cấp AI đã cấu hình để chia cảnh"
@@ -1322,16 +1419,16 @@ function StudioPage() {
             }
           >
             <WandSparkles size={17} />
-            {storyboardEnabled ? "Chia cảnh" : "Chia cảnh (cần API)"}
+            Chia cảnh
           </Button>
           <Button
             variant="secondary"
             onClick={() => void runAction("generate_media")}
             busy={busyAction === "generate_media"}
             disabled={
-              !isDemo &&
+              processing || Boolean(busyAction) || (!isDemo &&
               (!project.scenes.length ||
-                !(capabilities?.openai || capabilities?.localMedia))
+                !(capabilities?.openai || capabilities?.localMedia)))
             }
             title={
               !project.scenes.length
@@ -1344,16 +1441,18 @@ function StudioPage() {
             }
           >
             <Sparkles size={17} />
-            {capabilities?.openai || capabilities?.localMedia ? "Tạo media" : "Tạo media (cần API/local)"}
+            Tạo media
           </Button>
           <Button
             onClick={() => void runAction("render_video")}
             busy={busyAction === "render_video"}
-            disabled={!isDemo && (!project.scenes.length || !capabilities?.render)}
+            disabled={processing || Boolean(busyAction) || (!isDemo && (!project.scenes.length || !capabilities?.render))}
             title={!project.scenes.length ? "Hãy tạo ít nhất một cảnh trước" : undefined}
           >
             <Video size={17} /> Xuất video
           </Button>
+            </div>
+          </details>
         </div>
       </div>
       {error && (
@@ -1379,19 +1478,19 @@ function StudioPage() {
           <div className="studio-notice">
             <Notice tone="warn">
               {!storyboardEnabled
-                ? `Chưa cấu hình ${project.settings.textProvider === "anthropic" ? "Claude" : project.settings.textProvider === "ollama" ? "Ollama" : "OpenAI"}: Chia cảnh đang tắt. `
+                ? "Máy chia cảnh chưa được kết nối. "
                 : ""}
               {!capabilities.openai && !capabilities.localMedia
-                ? "Chưa cấu hình OpenAI hoặc media local: Tạo ảnh, giọng đọc và phụ đề đang tắt. "
+                ? "Máy tạo ảnh và giọng đọc chưa được kết nối. "
                 : ""}
               {!capabilities.render
-                ? "Chưa cấu hình worker: Xuất MP4 đang tắt."
+                ? "Máy ghép video chưa được kết nối."
                 : ""}
             </Notice>
           </div>
         )}
       {activeJob && (
-        <div className="job-progress">
+        <div className="job-progress" role="status" aria-live="polite">
           <div>
             <strong>{activeJob.stage}</strong>
             <span>{activeJob.progress}%</span>
@@ -1399,6 +1498,7 @@ function StudioPage() {
           <div className="progress-track">
             <i style={{ width: `${activeJob.progress}%` }} />
           </div>
+          <p className="processing-hint">Có thể đóng hoặc tải lại trang. Studio sẽ tiếp tục theo dõi tác vụ đã lưu.</p>
         </div>
       )}
       {failedJob && !activeJob && (
@@ -1415,11 +1515,11 @@ function StudioPage() {
             busy={busyAction === `retry-${failedJob.id}`}
             onClick={() => void retry(failedJob.id)}
           >
-            <RefreshCw size={16} /> Thử lại
+            <RefreshCw size={16} /> Tiếp tục từ bước lỗi
           </Button>
         </div>
       )}
-      <div className="studio-grid">
+      <div className={`studio-grid ${optionsOpen ? "" : "studio-basic"}`}>
         <section className="scene-panel">
           <div className="panel-heading">
             <div>
@@ -1428,17 +1528,31 @@ function StudioPage() {
                 {project.scenes.length} cảnh · {formatDuration(totalMs)}
               </span>
             </div>
-            <button onClick={addScene}>
+            <button onClick={addScene} disabled={processing || Boolean(busyAction)}>
               <Plus size={17} /> Thêm cảnh
             </button>
           </div>
+          <fieldset className="scene-editor" disabled={processing || Boolean(busyAction)}>
+            <details className="source-editor">
+              <summary>Kịch bản đầy đủ <ChevronDown size={16} /></summary>
+              <label className="field">
+                <span>Lời đọc gốc</span>
+                <textarea value={sourceDraft} rows={7} maxLength={30000} onChange={(e) => setSourceDraft(e.target.value)} onBlur={() => {
+                  if (sourceDraft === project.sourceText) return;
+                  if (sourceDraft.trim().length < 10) { setError("Kịch bản cần ít nhất 10 ký tự. Nội dung cũ vẫn được giữ."); return; }
+                  setSelected(0);
+                  setResult(null);
+                  change({ ...project, sourceText: sourceDraft, inputMode: "full-script", scenes: [], status: "draft" });
+                }} />
+                <small>Sửa kịch bản sẽ chia lại cảnh khi bấm Tạo video. Mặc định giữ nguyên lời.</small>
+              </label>
+            </details>
           {project.scenes.length === 0 ? (
             <div className="empty-scenes">
               <BookOpenText />
               <h3>Chưa có cảnh</h3>
               <p>
-                Chọn “Chia cảnh” khi đã kết nối AI, hoặc thêm cảnh để soạn thủ
-                công.
+                {processing ? "Studio đang chia kịch bản thành các cảnh. Cảnh thật sẽ xuất hiện khi bước này hoàn tất." : "Bấm Tạo video để studio tự thực hiện, hoặc thêm cảnh để soạn thủ công."}
               </p>
               <Button variant="secondary" onClick={addScene}>
                 <Plus size={17} /> Thêm cảnh đầu tiên
@@ -1461,13 +1575,33 @@ function StudioPage() {
               ))}
             </div>
           )}
+          </fieldset>
         </section>
         <section className="preview-panel">
           <div className="preview-stage">
             <div
               className={`video-preview ratio-${project.settings.aspectRatio.replace(":", "-")}`}
             >
-              {previewUrl ? (
+              {result ? (
+                <video
+                  key={result.id}
+                  className="result-video"
+                  controls
+                  playsInline
+                  preload="metadata"
+                  poster={result.thumbnailUrl}
+                  src={result.url}
+                  aria-label="Video MP4 đã hoàn tất"
+                  onError={() => {
+                    if (previewRefreshes.current.has(result.id)) {
+                      setError("Chưa mở được video. Hãy kiểm tra kết nối hoặc tải MP4 để xem.");
+                      return;
+                    }
+                    previewRefreshes.current.add(result.id);
+                    void api.getResult(id).then(setResult).catch(() => setError("Chưa mở được video. Hãy kiểm tra kết nối hoặc tải MP4 để xem."));
+                  }}
+                />
+              ) : <>{previewUrl ? (
                 <img
                   className="preview-image"
                   src={previewUrl}
@@ -1491,20 +1625,18 @@ function StudioPage() {
                   {activeScene.narration.slice(0, 70)}
                 </div>
               )}
-              <button className="preview-play" aria-label="Phát xem trước">
+              {activeScene?.audioPath && <button className="preview-play" aria-label="Nghe lời đọc cảnh đang chọn" onClick={() => void playNarration()}>
                 <Play fill="currentColor" />
-              </button>
+              </button>}
+              </>}
             </div>
           </div>
           <div className="transport">
-            <button>
-              <Play size={18} />
-            </button>
-            <span>00:00</span>
-            <div className="scrubber">
-              <i />
+            <div>
+              <strong>{result ? project.status === "completed" && !processing && saved ? "MP4 hoàn chỉnh" : "Bản MP4 đã xuất trước đó" : resultLoading ? "Đang mở kết quả…" : "Ảnh minh họa cảnh"}</strong>
+              <span>{result ? `${formatDuration(result.durationMs)} · ${result.width} × ${result.height}` : activeScene ? `Cảnh ${selected + 1}/${project.scenes.length} · ${formatDuration(totalMs)}` : "Video sẽ xuất hiện sau khi ghép xong."}</span>
             </div>
-            <span>{formatDuration(totalMs)}</span>
+            {result && <Button onClick={() => void downloadResult()} busy={busyAction === "download"}><Download size={17} /> {project.status === "completed" && !processing && saved ? "Tải MP4" : "Tải bản trước"}</Button>}
           </div>
           <div className="timeline">
             <div className="timeline-label">
@@ -1533,11 +1665,11 @@ function StudioPage() {
             </div>
           </div>
         </section>
-        <aside className="settings-panel">
+        <aside className="settings-panel" hidden={!optionsOpen}>
           <div className="panel-heading">
             <h2>Thiết lập</h2>
           </div>
-          <div className="settings-scroll">
+          <fieldset className="settings-scroll" disabled={processing || Boolean(busyAction)}>
             <div className="setting-group">
               <h3>
                 <Sparkles /> AI kịch bản
@@ -1562,9 +1694,17 @@ function StudioPage() {
                 </select>
               </Field>
               <p className="microcopy">
-                Chỉ áp dụng khi bấm “Chia cảnh”. Ảnh, giọng đọc và phụ đề dùng
-                OpenAI.
+                Chọn máy xử lý kịch bản. Tạo video tự động mặc định dùng máy đã kết nối.
               </p>
+            </div>
+            <div className="setting-group">
+              <h3><Image /> Hình ảnh và giọng đọc</h3>
+              <Field label="Cách tạo media">
+                <select value={project.settings.mediaProvider} onChange={(e) => change({ ...project, settings: { ...project.settings, mediaProvider: e.target.value as ProjectSettings["mediaProvider"] } })}>
+                  <option value="local">Máy đã kết nối — không tốn phí API</option>
+                  <option value="openai">OpenAI — có phí API</option>
+                </select>
+              </Field>
             </div>
             <div className="setting-group">
               <h3>
@@ -1580,9 +1720,11 @@ function StudioPage() {
                     })
                   }
                 >
-                  <option value="alloy">Ấm, trung tính</option>
-                  <option value="nova">Sáng, tự nhiên</option>
-                  <option value="onyx">Trầm, điềm tĩnh</option>
+                  {project.settings.mediaProvider === "local" ? <option value={project.settings.voice}>Giọng tiếng Việt trên máy</option> : <>
+                    <option value="alloy">Ấm, trung tính</option>
+                    <option value="nova">Sáng, tự nhiên</option>
+                    <option value="onyx">Trầm, điềm tĩnh</option>
+                  </>}
                 </select>
               </Field>
               <Button
@@ -1592,12 +1734,13 @@ function StudioPage() {
               >
                 <Play size={16} /> Nghe thử
               </Button>
-              <p className="microcopy">Giọng đọc được tạo bởi AI.</p>
+              <p className="microcopy">Giọng đọc tổng hợp từ kịch bản của anh.</p>
             </div>
             <div className="setting-group">
               <h3>
                 <Subtitles /> Phụ đề
               </h3>
+              <p className="microcopy">Lấy đúng chữ từ kịch bản và thời điểm từ giọng đọc thực tế.</p>
               <label className="toggle">
                 <input
                   type="checkbox"
@@ -1816,7 +1959,7 @@ function StudioPage() {
                 Preset dọc xuất ở 1080 × 1920, H.264 + AAC.
               </p>
             </details>
-          </div>
+          </fieldset>
         </aside>
       </div>
     </div>

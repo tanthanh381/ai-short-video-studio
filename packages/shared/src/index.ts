@@ -2,6 +2,7 @@ export * from "./schemas";
 
 export const DEFAULT_PROJECT_SETTINGS = {
   textProvider: "anthropic" as const,
+  mediaProvider: "local" as const,
   targetAudience: "Người xem Việt Nam",
   style: "ke-chuyen" as const,
   targetDurationSec: 60 as const,

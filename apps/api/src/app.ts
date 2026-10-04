@@ -11,8 +11,11 @@ import pinoHttp from "pino-http";
 import { z, ZodError } from "zod";
 import {
   createProjectSchema,
+  createVideoSchema,
+  DEFAULT_PROJECT_SETTINGS,
   estimateSchema,
   projectSchema,
+  projectSettingsSchema,
   type Project,
 } from "@studio/shared";
 import type { AppConfig } from "./config";
@@ -84,6 +87,10 @@ function estimateCost(project: Project, localMediaFree = false) {
     estimatedUsd,
     note: "Ước tính tham khảo; giá thực tế do nhà cung cấp AI tính theo model và chất lượng đã chọn.",
   });
+}
+
+function autoTitle(source: string) {
+  return source.trim().split(/\r?\n/)[0]!.slice(0, 120) || "Video của tôi";
 }
 
 export function createApp(config: AppConfig, db: AdminClient) {
@@ -171,6 +178,46 @@ export function createApp(config: AppConfig, db: AdminClient) {
       .order("scene_order");
     if (sceneError) throw sceneError;
     return mapProject(project, scenes ?? []);
+  }
+
+  async function activeProjectJob(projectId: string, userId: string) {
+    const { data, error } = await db.from("jobs").select("id")
+      .eq("project_id", projectId).eq("user_id", userId)
+      .in("status", ["queued", "running"]).limit(1);
+    if (error) throw error;
+    return Boolean(data?.length);
+  }
+
+  function oneClickUnavailable(settings: Project["settings"]) {
+    if (settings.textProvider !== "ollama" || settings.mediaProvider !== "local")
+      return "Chế độ Tạo video tự động chỉ dùng Ollama và media trên máy, không gọi dịch vụ trả phí.";
+    if (!config.OLLAMA_FEATURES_ENABLED)
+      return "Chưa kết nối Ollama. Hãy bật Ollama trên máy tạo video.";
+    if (!config.LOCAL_MEDIA_FEATURES_ENABLED)
+      return "Chưa kết nối dịch vụ tạo ảnh và giọng đọc trên máy.";
+    if (!config.RENDER_WORKER_ENABLED)
+      return "Chưa kết nối máy xử lý video. Hãy bật worker trên máy.";
+    return null;
+  }
+
+  function queueError(error: { message: string }, res: Response) {
+    if (error.message.includes("VIDEO_CONCURRENCY_LIMIT")) {
+      res.status(429).json({ error: "Đã có video đang xử lý. Vui lòng chờ hoặc mở dự án hiện tại để theo dõi." });
+      return true;
+    }
+    if (error.message.includes("VIDEO_PROJECT_NOT_FOUND")) {
+      res.status(404).json({ error: "Không tìm thấy dự án" });
+      return true;
+    }
+    if (error.message.includes("VIDEO_NO_PIPELINE")) {
+      res.status(409).json({ error: "Dự án này chưa có tác vụ tạo video tự động. Hãy dùng các bước chỉnh sửa trong Studio." });
+      return true;
+    }
+    if (error.message.includes("VIDEO_ACTIVE_PROJECT_JOB")) {
+      res.status(409).json({ error: "Dự án đang xử lý một tác vụ khác. Vui lòng chờ tác vụ đó hoàn tất." });
+      return true;
+    }
+    return false;
   }
 
   async function removeProjectMedia(userId: string, projectId: string) {
@@ -279,6 +326,84 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.status(201).json(mapProject(data));
   });
 
+  app.post("/v1/videos", async (req, res) => {
+    const input = createVideoSchema.parse(req.body);
+    const settings = projectSettingsSchema.parse({
+      ...DEFAULT_PROJECT_SETTINGS,
+      textProvider: "ollama",
+      mediaProvider: "local",
+      voice: "vi-VN",
+      ...input.settings,
+    });
+    const unavailable = oneClickUnavailable(settings);
+    if (unavailable) return res.status(503).json({ error: unavailable });
+    if (settings.backgroundMusicPath)
+      return res.status(400).json({ error: "Hãy tải nhạc riêng trong Studio sau khi dự án được tạo." });
+    const suppliedKey = req.headers["idempotency-key"];
+    const key = suppliedKey === undefined
+      ? crypto.createHash("sha256").update(JSON.stringify(input)).digest("hex")
+      : z.string().min(8).max(160).regex(/^[a-zA-Z0-9:._-]+$/).parse(suppliedKey);
+    const { data, error } = await db.rpc("enqueue_video", {
+      p_user_id: req.userId,
+      p_idempotency_key: `create-video:${key}`,
+      p_source_text: input.sourceText,
+      p_title: autoTitle(input.sourceText),
+      p_settings: settings,
+      p_max_concurrent: req.maxConcurrentJobs,
+    });
+    if (error) {
+      if (queueError(error, res)) return;
+      throw error;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new Error("Không thể tạo tác vụ video");
+    res.status(202).json({ project: await loadProject(row.project_id, req.userId!), job: mapJob(row) });
+  });
+
+  app.post("/v1/projects/:id/continue", async (req, res) => {
+    const project = await loadProject(req.params.id, req.userId!);
+    if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
+    const unavailable = oneClickUnavailable(project.settings);
+    if (unavailable) return res.status(503).json({ error: unavailable });
+    const { data, error } = await db.rpc("continue_video", {
+      p_user_id: req.userId,
+      p_project_id: project.id,
+      p_max_concurrent: req.maxConcurrentJobs,
+    });
+    if (error) {
+      if (queueError(error, res)) return;
+      throw error;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new Error("Không thể khôi phục tác vụ video");
+    res.status(202).json({ project: await loadProject(project.id, req.userId!), job: mapJob(row) });
+  });
+
+  app.get("/v1/projects/:id/result", async (req, res) => {
+    const project = await loadProject(req.params.id, req.userId!);
+    if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
+    const { data: row, error } = await db.from("exports").select("*")
+      .eq("project_id", project.id).eq("status", "completed")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    if (!row) return res.json({ export: null, expiresIn: 300 });
+    const bucket = db.storage.from("private-media");
+    const [video, download, thumbnail] = await Promise.all([
+      bucket.createSignedUrl(row.storage_path, 300),
+      bucket.createSignedUrl(row.storage_path, 300, { download: true }),
+      bucket.createSignedUrl(row.thumbnail_path, 300),
+    ]);
+    for (const signed of [video, download, thumbnail]) if (signed.error) throw signed.error;
+    res.json({
+      export: {
+        id: row.id, videoUrl: video.data!.signedUrl,
+        downloadUrl: download.data!.signedUrl, thumbnailUrl: thumbnail.data!.signedUrl,
+        durationMs: row.duration_ms, width: row.width, height: row.height, createdAt: row.created_at,
+      },
+      expiresIn: 300,
+    });
+  });
+
   app.get("/v1/projects/:id", async (req, res) => {
     const project = await loadProject(req.params.id, req.userId!);
     if (!project)
@@ -290,6 +415,16 @@ export function createApp(config: AppConfig, db: AdminClient) {
     const input = projectSchema.parse(req.body);
     if (input.id !== req.params.id || input.userId !== req.userId)
       return res.status(403).json({ error: "Không có quyền sửa dự án này" });
+    const existing = await loadProject(input.id, req.userId!);
+    if (!existing) return res.status(404).json({ error: "Không tìm thấy dự án" });
+    if (await activeProjectJob(input.id, req.userId!))
+      return res.status(409).json({ error: "Video đang xử lý. Các chỉnh sửa tạm khóa để giữ đúng kịch bản và media; hãy chờ hoàn tất." });
+    if (input.updatedAt !== existing.updatedAt)
+      return res.status(409).json({ error: "Dự án đã được cập nhật. Vui lòng tải lại trước khi chỉnh sửa." });
+    const prefix = `${req.userId}/${input.id}/`;
+    const paths = [input.settings.backgroundMusicPath, ...input.scenes.flatMap((scene) => [scene.imagePath, scene.audioPath])];
+    if (paths.some((path) => path !== null && (!path.startsWith(prefix) || path.includes(".."))))
+      return res.status(403).json({ error: "Media không thuộc dự án này" });
     const { error } = await db
       .from("projects")
       .update({
@@ -337,8 +472,10 @@ export function createApp(config: AppConfig, db: AdminClient) {
       if (upsertError) throw upsertError;
     }
     const query = db.from("scenes").delete().eq("project_id", input.id);
-    if (keepIds.length) await query.not("id", "in", `(${keepIds.join(",")})`);
-    else await query;
+    const deleted = keepIds.length
+      ? await query.not("id", "in", `(${keepIds.join(",")})`)
+      : await query;
+    if (deleted.error) throw deleted.error;
     res.json(await loadProject(input.id, req.userId!));
   });
 
@@ -397,7 +534,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.json(
       estimateCost(
         project,
-        config.LOCAL_MEDIA_FEATURES_ENABLED && !config.OPENAI_FEATURES_ENABLED,
+        project.settings.mediaProvider === "local" && config.LOCAL_MEDIA_FEATURES_ENABLED,
       ),
     );
   });
@@ -444,7 +581,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       });
     const estimate = estimateCost(
       project,
-      config.LOCAL_MEDIA_FEATURES_ENABLED && !config.OPENAI_FEATURES_ENABLED,
+      project.settings.mediaProvider === "local" && config.LOCAL_MEDIA_FEATURES_ENABLED,
     );
     const dayStart = new Date();
     dayStart.setUTCHours(0, 0, 0, 0);
@@ -502,12 +639,37 @@ export function createApp(config: AppConfig, db: AdminClient) {
   });
 
   app.post("/v1/jobs/:id/retry", async (req, res) => {
+    const { data: previous, error: previousError } = await db.from("jobs").select("*")
+      .eq("id", req.params.id).eq("user_id", req.userId!).maybeSingle();
+    if (previousError) throw previousError;
+    if (!previous || previous.status !== "failed")
+      return res.status(409).json({ error: "Chỉ có thể thử lại tác vụ đang lỗi" });
+    if (previous.job_type === "create_video") {
+      const project = await loadProject(previous.project_id, req.userId!);
+      if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
+      const unavailable = oneClickUnavailable(project.settings);
+      if (unavailable) return res.status(503).json({ error: unavailable });
+      const { data: resumed, error: resumeError } = await db.rpc("continue_video", {
+        p_user_id: req.userId, p_project_id: project.id, p_max_concurrent: req.maxConcurrentJobs,
+      });
+      if (resumeError) {
+        if (queueError(resumeError, res)) return;
+        throw resumeError;
+      }
+      const row = Array.isArray(resumed) ? resumed[0] : resumed;
+      if (!row) throw new Error("Không thể tiếp tục tạo video");
+      return res.json(mapJob(row));
+    }
+    const { count: active, error: activeError } = await db.from("jobs").select("id", { count: "exact", head: true })
+      .eq("user_id", req.userId!).in("status", ["queued", "running"]);
+    if (activeError) throw activeError;
+    if ((active ?? 0) >= req.maxConcurrentJobs!)
+      return res.status(429).json({ error: "Đã đạt số tác vụ đồng thời. Vui lòng chờ tác vụ hiện tại hoàn tất." });
     const { data, error } = await db
       .from("jobs")
       .update({
         status: "queued",
         attempts: 0,
-        progress: 0,
         stage: "Đã xếp hàng lại",
         error_message: null,
         next_attempt_at: new Date().toISOString(),

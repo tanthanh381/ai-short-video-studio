@@ -23,6 +23,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Kiem tra phu de local theo mau audio that
+        run: python3 -m unittest discover -s local-tools -p 'test_*.py'
       - run: pnpm build
       - name: Kiem tra khong lo secret trong bundle
         run: |

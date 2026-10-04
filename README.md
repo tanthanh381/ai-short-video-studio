@@ -1,6 +1,6 @@
 # AI Short Video Studio
 
-Studio tiếng Việt để sản xuất video ngắn theo luồng: nhập ý tưởng hoặc kịch bản → chia cảnh → tạo ảnh và giọng đọc → đồng bộ phụ đề từ audio thật → render MP4 → tải video.
+Studio tiếng Việt: đăng nhập, dán kịch bản và bấm **Tạo video**. Máy tự chia cảnh, tạo ảnh và giọng đọc, đồng bộ phụ đề, ghép MP4 rồi hiển thị xem trước và tải xuống.
 
 - Website: https://tanthanh381.github.io/ai-short-video-studio/
 - Source code public: https://github.com/tanthanh381/ai-short-video-studio
@@ -21,15 +21,14 @@ Luồng AI thật và render production chỉ được đánh dấu đã kiểm 
 
 ## Cách sử dụng
 
-1. Đăng nhập bằng liên kết gửi tới email đã được cấp quyền; mật khẩu vẫn là phương án dự phòng.
-2. Chọn **Tạo dự án mới**, nhập tên video và ý tưởng hoặc kịch bản.
-3. Nếu đây là kịch bản hoàn chỉnh, chọn đúng loại nội dung. Hệ thống mặc định giữ nguyên câu chữ và chỉ chia cảnh; chỉ bật viết lại khi thật sự cần.
-4. Trong Studio, chọn **Chia cảnh**. Có thể sửa lời đọc, prompt ảnh, thứ tự, thêm hoặc xóa cảnh.
-5. Nếu dùng chế độ 0 đồng API, bỏ qua **Chia cảnh** và **Tạo media**; tự thêm/sửa cảnh rồi tải ảnh và audio của anh lên từng cảnh. Nếu đã cấu hình API, chọn **Tạo media**; màn hình sẽ hiện chi phí ước tính trước khi xác nhận.
-6. Nghe thử giọng đọc, xem ảnh từng cảnh, thay ảnh/audio riêng hoặc tạo lại một cảnh nếu cần.
-7. Sửa nội dung và thời điểm phụ đề; chọn màu, nền, viền và vị trí.
-8. Nếu dùng nhạc, chỉ tải file có quyền sử dụng. Chỉnh âm lượng nhạc thấp hơn giọng đọc.
-9. Chọn **Xuất video**, theo dõi tiến độ rồi tải MP4 ở **Lịch sử xuất**.
+1. Đăng nhập bằng email được cấp quyền và mật khẩu.
+2. Chọn **Tạo video mới**, dán kịch bản vào ô duy nhất, bấm **Tạo video**.
+3. Chờ xử lý; có thể tải lại hoặc mở lại dự án để theo dõi tiếp. Khi có lỗi, bấm **Tiếp tục**; cảnh đã thành công được giữ lại.
+4. Khi hoàn thành, xem video trong Studio và bấm **Tải MP4**. Bản xuất cũng được lưu tại **Lịch sử xuất**.
+
+Tên được đặt tự động. Mặc định video dọc 1080×1920, giọng Linh, phụ đề tiếng Việt và không nhạc. Giọng, tỷ lệ, nhạc và các bước chỉnh tay nằm trong phần thu gọn. Không tự viết lại kịch bản; khi không bật viết lại, nối lời đọc các cảnh khôi phục đúng nguyên văn đầu vào.
+
+Luồng một nút chỉ dùng **Ollama + media local**, không tự chuyển sang API trả phí khi có key. Không mất phí API nhưng vẫn dùng điện, phần cứng và dung lượng Supabase trong hạn mức tài khoản. Máy chủ phải bật, không ngủ, và chạy Docker, Ollama, ComfyUI, cầu nối media, Tailscale Funnel.
 
 Nếu chưa có API key, vẫn có thể tạo dự án, sửa storyboard, tải ảnh/audio của mình lên và xuất MP4 thật. Nút AI được khóa và giao diện hiển thị rõ chế độ 0 đồng API; worker chỉ xử lý media người dùng tải lên.
 
@@ -41,8 +40,8 @@ Nếu chưa có API key, vẫn có thể tạo dự án, sửa storyboard, tải
 | Backend     | Node.js, Express, Docker, Tailscale Funnel/Cloudflare Tunnel | Giữ secret, kiểm tra quyền, cấp signed URL, tạo job |
 | Dữ liệu     | Supabase Auth, PostgreSQL, private Storage | Đăng nhập, metadata, hàng đợi bền vững và media     |
 | Worker      | Node.js, FFmpeg, Noto Sans, Docker         | Gọi AI, checkpoint từng cảnh và render video        |
-| AI văn bản  | Claude hoặc OpenAI                         | Chia cảnh và biên tập storyboard theo từng dự án    |
-| AI media    | OpenAI                                     | Ảnh, TTS tiếng Việt và word timestamp               |
+| AI văn bản  | Ollama (mặc định), Claude/OpenAI tùy chọn  | Prompt hình ảnh theo cảnh; lời gốc được khóa bằng code |
+| AI media    | ComfyUI + macOS Linh (mặc định)            | Ảnh local, giọng đọc; phụ đề từ audio PCM đo thật     |
 
 Frontend không chứa secret. Worker render là một service riêng có CPU, dung lượng tạm và thời gian chạy phù hợp; GitHub Actions không được dùng làm hàng đợi video.
 
@@ -67,7 +66,7 @@ Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker 
 
 ### Media AI cục bộ trên macOS
 
-Đã hỗ trợ pipeline không cần API trả phí: ComfyUI + checkpoint Analog Diffusion tạo ảnh, giọng `Linh` của macOS tạo TTS tiếng Việt, và `whisper.cpp` tạo timestamp phụ đề. Mã cầu nối nằm trong `local-tools/media_server.py`; model và môi trường Python local không được commit vào repository.
+Pipeline không cần API trả phí: ComfyUI + checkpoint Analog Diffusion tạo ảnh, giọng `Linh` của macOS tạo TTS tiếng Việt. Mỗi cụm lời gốc được tổng hợp thành WAV; timestamp phụ đề là vị trí nối audio tính từ số mẫu PCM thực, không phải chia thời gian theo ký tự. Nhờ vậy chữ không bị Whisper nhận sai. Với audio tự tải lên, Whisper chỉ được chấp nhận khi chữ khớp kịch bản; nếu không, tác vụ dừng và yêu cầu chỉnh phụ đề hoặc tạo lại giọng local. Mã cầu nối nằm trong `local-tools/media_server.py`; model và môi trường Python local không được commit vào repository.
 
 Khởi động ComfyUI trước, sau đó chạy cầu nối chỉ trên localhost:
 
