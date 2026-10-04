@@ -38,7 +38,7 @@ Nếu chưa có API key, vẫn có thể tạo dự án, sửa storyboard, tải
 | Thành phần  | Công nghệ                                  | Vai trò                                             |
 | ----------- | ------------------------------------------ | --------------------------------------------------- |
 | Frontend    | React, TypeScript, Vite, GitHub Pages      | Studio, xem trước, chỉnh sửa và theo dõi job        |
-| Backend     | Node.js, Express, Docker, Cloudflare Tunnel | Giữ secret, kiểm tra quyền, cấp signed URL, tạo job |
+| Backend     | Node.js, Express, Docker, Tailscale Funnel/Cloudflare Tunnel | Giữ secret, kiểm tra quyền, cấp signed URL, tạo job |
 | Dữ liệu     | Supabase Auth, PostgreSQL, private Storage | Đăng nhập, metadata, hàng đợi bền vững và media     |
 | Worker      | Node.js, FFmpeg, Noto Sans, Docker         | Gọi AI, checkpoint từng cảnh và render video        |
 | AI văn bản  | Claude hoặc OpenAI                         | Chia cảnh và biên tập storyboard theo từng dự án    |
@@ -112,9 +112,18 @@ Tên biến và placeholder nằm trong [.env.example](.env.example). Không đ�
 
 Chủ sở hữu sản phẩm không cần tự chạy SQL; các bước migration và cấp quyền nên do kỹ thuật viên hoặc quy trình triển khai thực hiện.
 
-### 2. Máy tự host và Cloudflare Tunnel
+### 2. Máy tự host và kết nối HTTPS public
 
-API và worker chạy bằng `docker-compose.selfhost.yml`. Chỉ API đi qua Cloudflare Tunnel; worker không có cổng public. Secret được chia theo nguyên tắc tối thiểu: API không nhận khóa AI, worker không nhận token Tunnel.
+API và worker chạy bằng `docker-compose.selfhost.yml`. Chỉ API đi qua Tailscale Funnel hoặc Cloudflare Tunnel; worker không có cổng public. Secret được chia theo nguyên tắc tối thiểu: API không nhận khóa AI, worker không nhận token Tunnel.
+
+Nếu đã cài Tailscale, có thể dùng Funnel miễn phí thay cho Cloudflare:
+
+```bash
+tailscale funnel --bg --https=443 http://127.0.0.1:8787
+tailscale funnel status
+```
+
+Đặt `VITE_API_URL` trong GitHub Actions bằng hostname HTTPS mà Funnel hiển thị. Hướng dẫn đầy đủ nằm tại [docs/TU-HOST.md](docs/TU-HOST.md).
 
 Khi chưa có domain để tạo Tunnel ổn định, có thể chạy frontend GitHub Pages với `VITE_API_URL=http://localhost:8787`. Khi đó trình duyệt của anh gọi backend Docker trên chính máy đang sử dụng; không cần mua domain hoặc dịch vụ tunnel. Máy phải bật Docker khi tạo và xuất video.
 
@@ -126,7 +135,7 @@ Trong repository, vào **Settings → Secrets and variables → Actions → Vari
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `VITE_API_URL` là hostname HTTPS của Cloudflare Tunnel
+- `VITE_API_URL` là hostname HTTPS của Tailscale Funnel hoặc Cloudflare Tunnel
 - `VITE_DEMO_MODE=false`
 
 Vào **Settings → Pages → Build and deployment**, chọn **GitHub Actions**. Mỗi lần push nhánh `main`, workflow sẽ build và publish thư mục `apps/web/dist`.
