@@ -25,8 +25,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
   });
-  const body = (await response.json().catch(() => ({}))) as { error?: string };
-  if (!response.ok) throw new Error(body.error ?? "Không thể kết nối máy chủ");
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    details?: Array<{ path?: string; message?: string }>;
+  };
+  if (!response.ok) {
+    const detail = body.details
+      ?.map((item) => [item.path, item.message].filter(Boolean).join(": "))
+      .filter(Boolean)
+      .join("; ");
+    throw new Error(
+      detail ? `${body.error ?? "Dữ liệu không hợp lệ"}: ${detail}` : body.error ?? "Không thể kết nối máy chủ",
+    );
+  }
   return body as T;
 }
 
