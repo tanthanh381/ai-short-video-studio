@@ -61,6 +61,10 @@ supabase       Migration database, RLS và storage
 
 ## Chạy local cho kỹ thuật viên
 
+### Ollama cục bộ
+
+Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker kết nối tới Ollama trên máy chủ qua `OLLAMA_BASE_URL` (mặc định `http://host.docker.internal:11434`) và dùng model `qwen2.5:3b`. Cài model bằng `ollama pull qwen2.5:3b`. Ollama chỉ xử lý storyboard; tạo ảnh, giọng đọc và phụ đề vẫn cần OpenAI hoặc media người dùng tải lên.
+
 Yêu cầu Node.js 24, pnpm 11.19 và FFmpeg nếu chạy worker ngoài Docker.
 
 ```bash
