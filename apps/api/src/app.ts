@@ -418,6 +418,20 @@ export function createApp(config: AppConfig, db: AdminClient) {
     const project = await loadProject(req.params.id, req.userId!);
     if (!project)
       return res.status(404).json({ error: "Không tìm thấy dự án" });
+    if (
+      ["generate_media", "render_video"].includes(input.type) &&
+      project.scenes.length === 0
+    ) {
+      return res.status(409).json({
+        error:
+          "Dự án chưa có cảnh. Hãy bấm Chia cảnh hoặc Thêm cảnh trước khi tiếp tục.",
+      });
+    }
+    if (input.type === "regenerate_scene") {
+      const sceneId = String(input.payload.sceneId ?? "");
+      if (!project.scenes.some((scene) => scene.id === sceneId))
+        return res.status(404).json({ error: "Không tìm thấy cảnh cần tạo lại" });
+    }
     const { count } = await db
       .from("jobs")
       .select("id", { count: "exact", head: true })
