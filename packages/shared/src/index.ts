@@ -12,7 +12,7 @@ export const DEFAULT_PROJECT_SETTINGS = {
   aspectRatio: "9:16" as const,
   voice: "alloy",
   localModels: { storyboard: null, image: null, tts: null, transcribe: null },
-  visualStyle: "Minh họa điện ảnh, ấm áp, gần gũi",
+  visualStyle: "Ảnh điện ảnh chân thực, ánh sáng tự nhiên, nhân vật Việt Nam",
   allowUploads: true,
   backgroundMusicPath: null,
   musicVolume: 0.12,

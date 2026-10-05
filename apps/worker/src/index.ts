@@ -11,7 +11,7 @@ import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
-import { alignKnownText, cleanScriptForNarration, createFaithfulStoryboard, type MediaProvider, type StoryboardProvider } from "./providers";
+import { alignKnownText, cleanScriptForNarration, createFaithfulStoryboard, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
@@ -220,12 +220,15 @@ async function storyboard(job: JobRow, project: Project) {
     model: project.settings.localModels.storyboard,
   });
   checkDeadline(job);
+  const cast = provider.describeCast
+    ? await provider.describeCast({ title: project.title, sourceText: cleanScriptForNarration(project.sourceText), model: project.settings.localModels.storyboard })
+    : "";
   await setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard");
   const rows = result.scenes.map((scene, index) => ({
     project_id: project.id,
     scene_order: index,
     narration: scene.narration,
-    image_prompt: scene.imagePrompt,
+    image_prompt: withCast(cast, scene.imagePrompt),
     estimated_duration_ms: scene.estimatedDurationMs,
     media_status: "pending",
     subtitles: [],
@@ -295,7 +298,7 @@ async function generateMedia(job: JobRow, project: Project) {
         const image = await media.createImage(
           `${scene.imagePrompt}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
-          project.settings.localModels,
+          { ...project.settings.localModels, seed: imageSeedFor(project.id), style: imageStyleFor(project.settings.visualStyle) },
         );
         imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
         await upload(imagePath, image, "image/png");
