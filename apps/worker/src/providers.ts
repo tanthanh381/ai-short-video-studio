@@ -34,6 +34,8 @@ export type StoryboardInput = {
   lockedScenes?: string[];
   /** Model Ollama chọn cho dự án; bỏ trống để dùng model mặc định của máy. */
   model?: string | null;
+  /** Lần thử lại (0 = lần đầu); adapter có thể tăng nhẹ độ ngẫu nhiên để thoát kết quả hỏng. */
+  attempt?: number;
 };
 
 export interface StoryboardProvider {
@@ -161,6 +163,26 @@ export function alignKnownText(text: string, timestamps: WordTimestamp[]): WordT
   });
 }
 
+const BATCH_ATTEMPTS = 3;
+
+/** Small local models sometimes return an unusable batch; retry that batch instead of failing the whole video. */
+async function createLockedBatch(provider: StoryboardProvider, input: StoryboardInput, lockedScenes: string[]) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < BATCH_ATTEMPTS; attempt++) {
+    try {
+      const generated = await provider.createStoryboard({ ...input, lockedScenes, attempt });
+      if (generated.scenes.length !== lockedScenes.length)
+        throw new Error("AI trả sai số cảnh. Kịch bản gốc được giữ nguyên; hãy thử lại chia cảnh");
+      return generated;
+    } catch (error) {
+      lastError = error;
+      const retryable = error instanceof Error && /không hợp lệ|sai số cảnh|chưa tạo được prompt/u.test(error.message);
+      if (!retryable) throw error;
+    }
+  }
+  throw lastError;
+}
+
 export async function createFaithfulStoryboard(
   provider: StoryboardProvider,
   input: StoryboardInput,
@@ -172,9 +194,7 @@ export async function createFaithfulStoryboard(
   // Small batches fit the installed local model without truncating long scripts.
   for (let offset = 0; offset < slices.length; offset += 6) {
     const lockedScenes = slices.slice(offset, offset + 6);
-    const generated = await provider.createStoryboard({ ...input, lockedScenes });
-    if (generated.scenes.length !== lockedScenes.length)
-      throw new Error("AI trả sai số cảnh. Kịch bản gốc được giữ nguyên; hãy thử lại chia cảnh");
+    const generated = await createLockedBatch(provider, input, lockedScenes);
     for (let index = 0; index < lockedScenes.length; index++) {
       const narration = lockedScenes[index]!;
       scenes.push({

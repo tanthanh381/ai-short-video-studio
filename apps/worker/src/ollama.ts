@@ -29,7 +29,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
             items: { type: "object", additionalProperties: false, required: ["imagePrompt"],
               properties: { imagePrompt: { type: "string" } } } } },
         } : storyboardJsonSchema,
-        options: { temperature: 0.2, num_ctx: 8192, num_predict: 4096 },
+        options: { temperature: Math.min(0.2 + 0.3 * (input.attempt ?? 0), 0.8), num_ctx: 8192, num_predict: 4096 },
         system: buildStoryboardInstruction(input),
         prompt: JSON.stringify({ title: input.title, storyContext: input.sourceText, lockedScenes: input.lockedScenes }),
       }),

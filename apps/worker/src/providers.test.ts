@@ -126,6 +126,31 @@ describe("locked full-script storyboard", () => {
     expect(provider.createStoryboard.mock.calls[0]![0].lockedScenes).toEqual(splitScript(script));
   });
 
+  it("retries only the unusable batch with a higher temperature hint instead of failing the video", async () => {
+    const script = "Một người đang đứng nhìn mưa rơi ngoài cửa sổ buổi sáng.";
+    const attempts: Array<number | undefined> = [];
+    const provider = {
+      createStoryboard: vi.fn(async (value: StoryboardInput) => {
+        attempts.push(value.attempt);
+        if (attempts.length < 3) throw new Error("AI trả dữ liệu cảnh không hợp lệ. Kịch bản gốc vẫn được giữ lại; hãy thử lại");
+        return generatedStoryboard(value);
+      }),
+    };
+    const result = await createFaithfulStoryboard(provider, { ...input, sourceText: script });
+    expect(attempts).toEqual([0, 1, 2]);
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(script);
+  });
+
+  it("gives up after three unusable answers and never retries unrelated errors", async () => {
+    const script = "Một người đang đứng nhìn mưa rơi ngoài cửa sổ buổi sáng.";
+    const bad = { createStoryboard: vi.fn(async () => { throw new Error("AI trả dữ liệu cảnh không hợp lệ."); }) };
+    await expect(createFaithfulStoryboard(bad, { ...input, sourceText: script })).rejects.toThrow(/không hợp lệ/);
+    expect(bad.createStoryboard).toHaveBeenCalledTimes(3);
+    const down = { createStoryboard: vi.fn(async () => { throw new Error("Ollama trả lỗi 500. Kiểm tra máy đang bật"); }) };
+    await expect(createFaithfulStoryboard(down, { ...input, sourceText: script })).rejects.toThrow(/Ollama trả lỗi/);
+    expect(down.createStoryboard).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps every slice in order across more than one local-model batch", async () => {
     const script = Array.from(
       { length: 14 },
@@ -150,7 +175,7 @@ describe("locked full-script storyboard", () => {
       }),
     };
     await expect(createFaithfulStoryboard(provider, input)).rejects.toThrow(/sai số cảnh/);
-    expect(provider.createStoryboard).toHaveBeenCalledTimes(1);
+    expect(provider.createStoryboard).toHaveBeenCalledTimes(3); // bounded retries, then fail closed
   });
 
   it("does not return a partial storyboard if a later batch is invalid", async () => {
@@ -163,12 +188,12 @@ describe("locked full-script storyboard", () => {
       createStoryboard: vi.fn(async (value: StoryboardInput) => {
         const generated = generatedStoryboard(value);
         calls++;
-        if (calls === 2) generated.scenes.pop();
+        if (calls >= 2) generated.scenes.pop(); // every attempt for the second batch is wrong
         return generated;
       }),
     };
     await expect(createFaithfulStoryboard(provider, { ...input, sourceText: script })).rejects.toThrow(/sai số cảnh/);
-    expect(provider.createStoryboard).toHaveBeenCalledTimes(2);
+    expect(provider.createStoryboard).toHaveBeenCalledTimes(1 + 3);
   });
 
   it("delegates rewriting only when the user explicitly enables it", async () => {
