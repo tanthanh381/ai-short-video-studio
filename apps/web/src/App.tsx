@@ -634,8 +634,9 @@ function VoicePreview({ voice, engine, disabled }: { voice: string; engine: stri
       audio.current = player;
       player.onended = () => setState("idle");
       player.onpause = () => setState("idle");
+      player.onerror = () => { setState("idle"); setError("Không phát được bản nghe thử"); };
+      setState("playing"); // the button must not stay on "loading" if the browser delays playback
       await player.play();
-      setState("playing");
     } catch (e) {
       setState("idle");
       setError(e instanceof Error ? e.message : "Chưa nghe thử được giọng đọc");

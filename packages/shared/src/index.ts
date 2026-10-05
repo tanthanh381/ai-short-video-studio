@@ -1,5 +1,6 @@
 export * from "./schemas";
 export * from "./voices";
+export * from "./script";
 
 export const DEFAULT_PROJECT_SETTINGS = {
   textProvider: "anthropic" as const,

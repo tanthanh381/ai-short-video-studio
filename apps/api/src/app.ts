@@ -10,6 +10,7 @@ import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { z, ZodError } from "zod";
 import {
+  cleanScriptForNarration,
   createProjectSchema,
   createVideoSchema,
   DEFAULT_PROJECT_SETTINGS,
@@ -91,7 +92,9 @@ function estimateCost(project: Project, localMediaFree = false) {
 }
 
 function autoTitle(source: string) {
-  return source.trim().split(/\r?\n/)[0]!.slice(0, 120) || "Video của tôi";
+  let text = source;
+  try { text = cleanScriptForNarration(source); } catch { /* only labels: fall back to the raw first line */ }
+  return text.trim().split(/\r?\n/)[0]!.slice(0, 120) || "Video của tôi";
 }
 
 export function createApp(config: AppConfig, db: AdminClient) {

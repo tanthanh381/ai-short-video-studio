@@ -192,4 +192,21 @@ describe("local model selection API", () => {
     expect((await request(f.app).get("/v1/local-models")).status).toBe(401);
     expect((await request(f.app).post("/v1/voice-preview").send({ voice: "co-trang" })).status).toBe(401);
   });
+
+  it("names the project from the cleaned script, not from a timing label", async () => {
+    const f = fixture();
+    const labelled = "**[0–5s | Hook]**\nTrăng treo đầu núi, kiếm khách một mình bước giữa sương khuya.\n\n**[5–15s]**\nHắn không mang theo vàng bạc.";
+    const response = await request(f.app).post("/v1/videos").set("Authorization", "Bearer test").send({ sourceText: labelled });
+    expect(response.status).toBe(202);
+    const args = f.rpc.mock.calls[0]![1];
+    expect(args.p_title).toBe("Trăng treo đầu núi, kiếm khách một mình bước giữa sương khuya.");
+    expect(args.p_source_text).toBe(labelled); // the author's text is stored untouched
+  });
+
+  it("falls back to the raw first line when the script is only labels", async () => {
+    const f = fixture();
+    const response = await request(f.app).post("/v1/videos").set("Authorization", "Bearer test").send({ sourceText: "**[0–5s | Hook]**\n[5–15s]" });
+    expect(response.status).toBe(202);
+    expect(f.rpc.mock.calls[0]![1].p_title).toBe("**[0–5s | Hook]**");
+  });
 });
