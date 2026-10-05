@@ -20,12 +20,12 @@ describe("LocalMediaAdapter", () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ words: [{ word: "xin", start: 0, end: 0.3 }] })));
     vi.stubGlobal("fetch", fetchMock);
     const adapter = new LocalMediaAdapter("http://localhost:8765");
-    const models = { image: "sdxl-turbo", tts: "piper", transcribe: "ggml-base" };
+    const models = { image: "sdxl-turbo", tts: "piper", transcribe: "ggml-base", preset: "quality" as const };
     await adapter.createImage("cảnh", "9:16", models);
     await adapter.createSpeech("xin chào", "co-trang", models);
     await adapter.transcribe(new Uint8Array([5]), models);
     const calls = fetchMock.mock.calls as unknown as Array<[string, { body?: unknown }]>;
-    expect(JSON.parse(String(calls[0]![1].body))).toMatchObject({ model: "sdxl-turbo" });
+    expect(JSON.parse(String(calls[0]![1].body))).toMatchObject({ model: "sdxl-turbo", preset: "quality" });
     expect(JSON.parse(String(calls[1]![1].body))).toMatchObject({ engine: "piper", voice: "co-trang" });
     expect(calls[2]![0]).toBe("http://localhost:8765/transcribe?model=ggml-base");
     vi.unstubAllGlobals();

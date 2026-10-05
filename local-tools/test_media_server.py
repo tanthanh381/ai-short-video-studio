@@ -8,6 +8,7 @@ assertions catch character-based or estimated-duration captions.
 import base64
 import importlib.util
 import io
+import json
 import re
 import subprocess
 import unittest
@@ -190,6 +191,24 @@ class LocalSpeechCaptionTests(unittest.TestCase):
                     self.media.local_image("Cô gái cầm sách", "9:16")
             command = [str(item) for item in process.call_args.args[0]]
             self.assertIn("anatomically correct hands", command[2])
+
+    def test_image_preset_forwards_quality_steps_to_warm_server(self):
+        class ImageResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b"PNG"
+
+        with patch.object(self.media, "image_server_state", return_value="ready"), \
+             patch.object(self.media.urllib.request, "urlopen", return_value=ImageResponse()) as request:
+            self.assertEqual(self.media.local_image("Young woman holding a book", "9:16", preset="quality"), b"PNG")
+        payload = json.loads(request.call_args.args[0].data)
+        self.assertEqual(payload["preset"], "quality")
+        self.assertEqual(payload["steps"], 8)
 
     def test_unknown_image_and_whisper_models_are_rejected(self):
         with self.assertRaises(ValueError):

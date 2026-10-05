@@ -90,7 +90,13 @@ def clean_image_prompt(prompt):
 
 # Native portrait/landscape sizes (multiples of 64): no square crop, so nothing is cut or upscaled much.
 IMAGE_SIZES = {"9:16": (576, 1024), "1:1": (704, 704), "16:9": (1024, 576)}
-IMAGE_STEPS = int(os.getenv("IMAGE_STEPS", "4"))
+IMAGE_PRESET = os.getenv("IMAGE_PRESET", "balanced")
+IMAGE_PRESETS = {
+    "fast": {"steps": 2, "cfg": 1.1},
+    "balanced": {"steps": 4, "cfg": 1.25},
+    "quality": {"steps": 8, "cfg": 1.5},
+}
+IMAGE_STEPS_OVERRIDE = os.getenv("IMAGE_STEPS")
 VIENEU_STEPS = int(os.getenv("VIENEU_STEPS", "16"))
 TTS_BREAK_WORDS = int(os.getenv("TTS_BREAK_WORDS", "18"))
 IMAGE_STYLES = {
@@ -111,7 +117,7 @@ HUMAN_PROMPT_RE = re.compile(
 )
 
 
-def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo"):
+def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo", preset=None):
     """SDXL-Turbo (MLX, Apple GPU) from the local AI toolkit, generated at the video's native aspect."""
     if aspect_ratio not in IMAGE_SIZES:
         raise ValueError("Tỷ lệ ảnh không hợp lệ")
@@ -121,6 +127,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     if seed is not None:
         seed = int(seed) % (2**31)
     width, height = IMAGE_SIZES[aspect_ratio]
+    selected_preset = preset if preset in IMAGE_PRESETS else IMAGE_PRESET
+    preset_options = IMAGE_PRESETS.get(selected_preset, IMAGE_PRESETS["balanced"])
     # Style words first: if the text encoder's 77-token limit forces trimming, the scene detail goes, not the style.
     clean = clean_image_prompt(prompt)
     anatomy = "anatomically correct hands, natural body proportions, complete limbs, realistic facial features" if IMAGE_ANATOMY_GUARD and HUMAN_PROMPT_RE.search(clean) else ""
@@ -138,7 +146,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
             break
         time.sleep(5)
     if state == "ready":  # model kept loaded in memory: seconds per image
-        request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps({"prompt": styled, "model": model, "seed": seed, "steps": IMAGE_STEPS,
+        request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps({"prompt": styled, "model": model, "seed": seed, "steps": int(IMAGE_STEPS_OVERRIDE or preset_options["steps"]), "preset": selected_preset,
                                                                       "width": width, "height": height,
                                                                       "negativePrompt": IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else ""}).encode(),
                                          headers={"Content-Type": "application/json"})
@@ -384,7 +392,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not prompt.strip() or len(prompt) > 3000:
                     raise ValueError("Mô tả ảnh trống hoặc quá dài")
                 binary_response(self, "image/png", local_image(prompt, payload.get("aspectRatio", "9:16"), payload.get("model"),
-                                                              payload.get("seed"), payload.get("style") or "photo"))
+                                                              payload.get("seed"), payload.get("style") or "photo", payload.get("preset")))
             elif self.path == "/tts":
                 payload = json.loads(body)
                 binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "Linh")), payload.get("engine")))

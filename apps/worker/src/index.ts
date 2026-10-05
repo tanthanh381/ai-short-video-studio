@@ -64,10 +64,25 @@ async function probeJson(url: string): Promise<boolean> {
   }
 }
 
+async function probeRender(): Promise<boolean> {
+  try {
+    const { stdout } = await exec(config.FFMPEG_PATH, ["-hide_banner", "-filters"], {
+      timeout: 5_000,
+      maxBuffer: 2_000_000,
+    });
+    // The default product path burns Vietnamese ASS subtitles into every
+    // export, so an FFmpeg binary without libass is not render-ready.
+    return /\bsubtitles\b/.test(stdout);
+  } catch {
+    return false;
+  }
+}
+
 async function workerHealth() {
-  const [ollamaReady, mediaReady] = await Promise.all([
+  const [ollamaReady, mediaReady, renderReady] = await Promise.all([
     probeJson(`${config.OLLAMA_BASE_URL.replace(/\/$/, "")}/api/tags`),
     probeJson(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/models`),
+    probeRender(),
   ]);
   const configured = (available: boolean, ready: boolean, name: string): HealthItem => ({
     state: available ? (ready ? "healthy" : "offline") : "offline",
@@ -81,7 +96,12 @@ async function workerHealth() {
     checkedAt: new Date().toISOString(),
     services: {
       worker: { state: "healthy" as const, detail: "Worker đang chạy và sẵn sàng nhận job" },
-      render: { state: "healthy" as const, detail: "Worker đã sẵn sàng cho FFmpeg" },
+      render: {
+        state: renderReady ? "healthy" as const : "offline" as const,
+        detail: renderReady
+          ? "FFmpeg và bộ lọc phụ đề đã sẵn sàng"
+          : "FFmpeg thiếu bộ lọc subtitles/libass; chưa thể render phụ đề",
+      },
       openai: { state: openai ? "configured" as const : "offline" as const, detail: openai ? "Đã có API key; chưa gọi thử để tránh phát sinh phí" : "Chưa có API key" },
       anthropic: { state: anthropic ? "configured" as const : "offline" as const, detail: anthropic ? "Đã có API key; chưa gọi thử để tránh phát sinh phí" : "Chưa có API key" },
       ollama: configured(true, ollamaReady, "Ollama"),
@@ -358,7 +378,7 @@ async function generateMedia(job: JobRow, project: Project) {
         const image = await media.createImage(
           `${scene.imagePrompt}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
-          { ...project.settings.localModels, seed: imageSeedFor(project.id), style: imageStyleFor(project.settings.visualStyle) },
+          { ...project.settings.localModels, seed: imageSeedFor(project.id), style: imageStyleFor(project.settings.visualStyle), preset: project.settings.generationPreset },
         );
         imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
         await upload(imagePath, image, "image/png");

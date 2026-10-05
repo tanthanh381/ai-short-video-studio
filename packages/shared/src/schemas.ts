@@ -8,6 +8,7 @@ export const videoStyleSchema = z.enum([
 ]);
 
 export const aspectRatioSchema = z.enum(["9:16", "1:1", "16:9"]);
+export const generationPresetSchema = z.enum(["fast", "balanced", "quality"]);
 export const projectStatusSchema = z.enum([
   "draft",
   "generating_media",
@@ -100,6 +101,7 @@ export const projectSettingsSchema = z.object({
     .union([z.literal(30), z.literal(60), z.literal(90)])
     .default(60),
   aspectRatio: aspectRatioSchema.default("9:16"),
+  generationPreset: generationPresetSchema.default("balanced"),
   voice: z.string().default("alloy"),
   localModels: localModelsSchema.default(DEFAULT_LOCAL_MODELS),
   visualStyle: z.string().max(500).default("Ảnh điện ảnh chân thực, ánh sáng tự nhiên, nhân vật Việt Nam"),

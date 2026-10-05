@@ -23,7 +23,7 @@ export class LocalMediaAdapter implements MediaProvider {
         method: "POST",
         signal: AbortSignal.timeout(900_000),
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt, aspectRatio, model: models.image ?? undefined, seed: models.seed ?? undefined, style: models.style }),
+        body: JSON.stringify({ prompt, aspectRatio, model: models.image ?? undefined, seed: models.seed ?? undefined, style: models.style, preset: models.preset }),
       }),
     );
     return new Uint8Array(await response.arrayBuffer());

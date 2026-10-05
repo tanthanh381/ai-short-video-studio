@@ -38,8 +38,10 @@ HOST = os.getenv("IMAGE_SERVER_HOST", "127.0.0.1")
 PORT = int(os.getenv("IMAGE_SERVER_PORT", "5002"))
 # Four steps is the balanced default for short-video throughput. Set IMAGE_STEPS=6
 # or 8 when a slower, cleaner still is more important than turnaround time.
-STEPS = int(os.getenv("IMAGE_STEPS", "4"))
-CFG_WEIGHT = float(os.getenv("IMAGE_CFG_WEIGHT", "1.25"))
+PRESET = os.getenv("IMAGE_PRESET", "balanced")
+PRESETS = {"fast": {"steps": 2, "cfg": 1.1}, "balanced": {"steps": 4, "cfg": 1.25}, "quality": {"steps": 8, "cfg": 1.5}}
+STEPS = int(os.getenv("IMAGE_STEPS", str(PRESETS.get(PRESET, PRESETS["balanced"])["steps"])))
+CFG_WEIGHT = float(os.getenv("IMAGE_CFG_WEIGHT", str(PRESETS.get(PRESET, PRESETS["balanced"])["cfg"])))
 NEGATIVE_PROMPT = os.getenv(
     "IMAGE_NEGATIVE_PROMPT",
     "deformed face, asymmetrical face, bad anatomy, malformed hands, extra fingers, fused fingers, missing fingers, "
@@ -94,14 +96,15 @@ def fit_clip_tokens(sd, prompt):
     return " ".join(words)
 
 
-def render(sd, prompt, seed, steps=None, width=512, height=512, negative_prompt=NEGATIVE_PROMPT):
+def render(sd, prompt, seed, steps=None, width=512, height=512, negative_prompt=NEGATIVE_PROMPT, cfg_weight=None):
     prompt = fit_clip_tokens(sd, ascii_prompt(prompt))
     if not prompt:
         raise ValueError("empty prompt")
     latent = (height // 8, width // 8)
-    cfg_weight = CFG_WEIGHT if negative_prompt.strip() else 0.0
-    latents = sd.generate_latents(prompt, n_images=1, cfg_weight=cfg_weight, num_steps=steps or STEPS,
-                                  negative_text=negative_prompt if cfg_weight > 1 else "",
+    selected_cfg = CFG_WEIGHT if cfg_weight is None else float(cfg_weight)
+    selected_cfg = selected_cfg if negative_prompt.strip() else 0.0
+    latents = sd.generate_latents(prompt, n_images=1, cfg_weight=selected_cfg, num_steps=steps or STEPS,
+                                  negative_text=negative_prompt if selected_cfg > 1 else "",
                                   latent_size=latent,
                                   seed=seed if seed is not None else random.randrange(2**31))
     for x_t in latents:
@@ -151,8 +154,13 @@ class Handler(BaseHTTPRequestHandler):
             if not prompt or len(prompt) > 3000:
                 raise ValueError("bad prompt")
             options = {}
+            preset = str(body.get("preset") or PRESET)
+            preset_options = PRESETS.get(preset, PRESETS["balanced"])
             if body.get("steps") is not None:
                 options["steps"] = max(1, min(int(body["steps"]), 8))
+            else:
+                options["steps"] = preset_options["steps"]
+            options["cfg_weight"] = preset_options["cfg"]
             for key in ("width", "height"):
                 if body.get(key) is not None:
                     value = int(body[key])

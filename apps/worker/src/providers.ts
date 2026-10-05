@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { cleanScriptForNarration } from "@studio/shared";
 import type { Scene } from "@studio/shared";
+import type { generationPresetSchema } from "@studio/shared";
 
 export { cleanScriptForNarration };
 
@@ -55,6 +56,7 @@ export type MediaModelOptions = {
   /** Same seed for every scene of a project keeps the recurring character recognisable. */
   seed?: number | null;
   style?: "photo" | "illustration";
+  preset?: z.infer<typeof generationPresetSchema>;
 };
 
 export interface MediaProvider {

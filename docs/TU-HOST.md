@@ -40,6 +40,8 @@ LOCAL_MEDIA_BASE_URL=http://host.docker.internal:8765
 LOCAL_MEDIA_FEATURES_ENABLED=true
 ```
 
+Trong màn hình tạo video, preset ảnh local có ba mức: **Fast** (2 bước SDXL-Turbo, ưu tiên tốc độ), **Balanced** (4 bước, mặc định) và **Quality** (8 bước, ưu tiên chi tiết khuôn mặt/tay). Có thể đặt `IMAGE_PRESET=balanced` làm mặc định cho máy; lựa chọn trong từng dự án được truyền an toàn tới media bridge và không gọi API trả phí.
+
 Cầu nối chỉ bind localhost; worker Docker truy cập qua `host.docker.internal`, không công khai endpoint media.
 
 ## Khởi động

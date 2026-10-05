@@ -10,6 +10,7 @@ export const DEFAULT_PROJECT_SETTINGS = {
   style: "ke-chuyen" as const,
   targetDurationSec: 60 as const,
   aspectRatio: "9:16" as const,
+  generationPreset: "balanced" as const,
   voice: "alloy",
   localModels: { storyboard: null, image: null, tts: null, transcribe: null },
   visualStyle: "Ảnh điện ảnh chân thực, ánh sáng tự nhiên, nhân vật Việt Nam",

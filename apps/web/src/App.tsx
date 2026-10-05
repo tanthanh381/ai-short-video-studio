@@ -931,6 +931,21 @@ function NewProjectPage() {
                 <option>16:9</option>
               </select>
             </Field>
+            <Field label="Preset tạo video" hint="Fast ưu tiên tốc độ; Quality dùng nhiều bước SDXL hơn để giảm lỗi khuôn mặt và tay.">
+              <select
+                value={settings.generationPreset ?? "balanced"}
+                onChange={(e) =>
+                  setSettings((s) => ({
+                    ...s,
+                    generationPreset: e.target.value as ProjectSettings["generationPreset"],
+                  }))
+                }
+              >
+                <option value="fast">Fast — nhanh nhất</option>
+                <option value="balanced">Balanced — khuyên dùng</option>
+                <option value="quality">Quality — chất lượng cao</option>
+              </select>
+            </Field>
           </div>
         </section>
         <section hidden={!advanced}>
@@ -2196,6 +2211,24 @@ function StudioPage() {
               <p className="microcopy">
                 Preset dọc xuất ở 1080 × 1920, H.264 + AAC.
               </p>
+              <Field label="Preset tạo ảnh local" hint="Fast: 2 bước · Balanced: 4 bước · Quality: 8 bước SDXL-Turbo.">
+                <select
+                  value={project.settings.generationPreset ?? "balanced"}
+                  onChange={(e) =>
+                    change({
+                      ...project,
+                      settings: {
+                        ...project.settings,
+                        generationPreset: e.target.value as ProjectSettings["generationPreset"],
+                      },
+                    })
+                  }
+                >
+                  <option value="fast">Fast — nhanh nhất</option>
+                  <option value="balanced">Balanced — khuyên dùng</option>
+                  <option value="quality">Quality — chất lượng cao</option>
+                </select>
+              </Field>
             </details>
           </fieldset>
         </aside>
@@ -2450,7 +2483,9 @@ function SettingsPage() {
   }
 
   const serviceState = (id: ServiceId, fallbackEnabled: boolean) => {
-    const status = settings.serviceStatuses[id];
+    // Older API deployments may not return the live status map yet. Keep the
+    // settings screen usable while the user upgrades the backend.
+    const status = settings.serviceStatuses?.[id];
     const meta = {
       healthy: { className: "on", label: "Hoạt động" },
       configured: { className: "configured", label: "Đã cấu hình" },
