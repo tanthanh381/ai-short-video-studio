@@ -4,6 +4,8 @@ const configSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SECRET_KEY: z.string().min(10),
   ALLOWED_ORIGINS: z.string().default("http://localhost:5173"),
+  OLLAMA_BASE_URL: z.string().url().default("http://host.docker.internal:11434"),
+  WORKER_HEALTH_URL: z.string().url().default("http://worker:8790"),
   PORT: z.coerce.number().int().positive().default(8787),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(50),
   DAILY_BUDGET_USD: z.coerce.number().min(0).default(3),
