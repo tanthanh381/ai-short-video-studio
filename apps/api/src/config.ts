@@ -28,6 +28,7 @@ const configSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  LOCAL_MEDIA_BASE_URL: z.string().url().default("http://host.docker.internal:8765"),
   RENDER_WORKER_ENABLED: z
     .enum(["true", "false"])
     .default("false")

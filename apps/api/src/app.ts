@@ -17,6 +17,7 @@ import {
   projectSchema,
   projectSettingsSchema,
   type Project,
+  voiceSample,
 } from "@studio/shared";
 import type { AppConfig } from "./config";
 import type { AdminClient } from "./db";
@@ -283,6 +284,50 @@ export function createApp(config: AppConfig, db: AdminClient) {
         render: config.RENDER_WORKER_ENABLED,
       },
     });
+  });
+
+  app.get("/v1/local-models", async (_req, res) => {
+    const empty = { models: [], default: null };
+    const unavailable = { available: false, storyboard: empty, image: empty, tts: empty, transcribe: empty };
+    if (!config.LOCAL_MEDIA_FEATURES_ENABLED) return res.json(unavailable);
+    try {
+      const response = await fetch(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/models`, {
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) return res.json(unavailable);
+      res.json(await response.json());
+    } catch {
+      res.json(unavailable); // máy tạo video chưa sẵn sàng; giao diện dùng mặc định
+    }
+  });
+
+  const voicePreviews = new Map<string, Buffer>(); // ≤ 10 giọng × vài engine, câu mẫu cố định
+  app.post("/v1/voice-preview", async (req, res) => {
+    const input = z
+      .object({ voice: z.string().max(40), engine: z.string().regex(/^[a-z0-9-]{1,20}$/u).nullish() })
+      .parse(req.body);
+    const sample = voiceSample(input.voice);
+    if (!sample) return res.status(400).json({ error: "Giọng đọc không hợp lệ" });
+    if (!config.LOCAL_MEDIA_FEATURES_ENABLED)
+      return res.status(503).json({ error: "Chưa kết nối dịch vụ giọng đọc trên máy." });
+    const cacheKey = `${input.voice}|${input.engine ?? ""}`;
+    let audio = voicePreviews.get(cacheKey);
+    if (!audio) {
+      try {
+        const response = await fetch(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/tts`, {
+          method: "POST",
+          signal: AbortSignal.timeout(60_000),
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: sample, voice: input.voice, engine: input.engine ?? undefined }),
+        });
+        if (!response.ok) return res.status(502).json({ error: "Dịch vụ giọng đọc trên máy chưa tạo được bản nghe thử." });
+        audio = Buffer.from(await response.arrayBuffer());
+      } catch {
+        return res.status(503).json({ error: "Không kết nối được dịch vụ giọng đọc. Hãy kiểm tra máy tạo video." });
+      }
+      voicePreviews.set(cacheKey, audio);
+    }
+    res.type("audio/mpeg").send(audio);
   });
 
   app.put("/v1/settings", async (req, res) => {

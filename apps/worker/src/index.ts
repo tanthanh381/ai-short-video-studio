@@ -216,6 +216,7 @@ async function storyboard(job: JobRow, project: Project) {
     style: project.settings.style,
     duration: project.settings.targetDurationSec,
     visualStyle: project.settings.visualStyle,
+    model: project.settings.localModels.storyboard,
   });
   checkDeadline(job);
   await setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard");
@@ -290,6 +291,7 @@ async function generateMedia(job: JobRow, project: Project) {
         const image = await media.createImage(
           `${scene.imagePrompt}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
+          project.settings.localModels,
         );
         imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
         await upload(imagePath, image, "image/png");
@@ -302,9 +304,9 @@ async function generateMedia(job: JobRow, project: Project) {
           `Đang tạo giọng đọc cảnh ${scene.order + 1}`,
         );
         const aligned = media.createSpeechAligned
-          ? await media.createSpeechAligned(scene.narration, project.settings.voice)
+          ? await media.createSpeechAligned(scene.narration, project.settings.voice, project.settings.localModels)
           : null;
-        audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice);
+        audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice, project.settings.localModels);
         subtitles = aligned?.cues ?? [];
         actualDurationMs = aligned?.durationMs ?? await probeAudioDuration(audio);
         const extension = aligned?.contentType === "audio/wav" ? "wav" : "mp3";
@@ -323,7 +325,7 @@ async function generateMedia(job: JobRow, project: Project) {
         `Đang đồng bộ phụ đề cảnh ${scene.order + 1}`,
       );
       if (!subtitles.length && project.settings.subtitle.enabled) {
-        const words = await media.transcribe(audio);
+        const words = await media.transcribe(audio, project.settings.localModels);
         subtitles = groupWords(alignKnownText(scene.narration, words));
       }
       checkDeadline(job);

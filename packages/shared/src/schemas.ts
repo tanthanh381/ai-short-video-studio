@@ -70,6 +70,27 @@ export const sceneSchema = z.object({
   subtitles: z.array(subtitleCueSchema).default([]),
 });
 
+const localModelName = z
+  .string()
+  .regex(/^[\w.:/-]{1,100}$/u, "Tên model không hợp lệ")
+  .nullable()
+  .default(null);
+
+/** Model AI chạy trên máy theo từng tác vụ; null = dùng mặc định của máy. */
+export const localModelsSchema = z.object({
+  storyboard: localModelName,
+  image: localModelName,
+  tts: localModelName,
+  transcribe: localModelName,
+});
+export type LocalModels = z.infer<typeof localModelsSchema>;
+export const DEFAULT_LOCAL_MODELS: LocalModels = {
+  storyboard: null,
+  image: null,
+  tts: null,
+  transcribe: null,
+};
+
 export const projectSettingsSchema = z.object({
   textProvider: z.enum(["anthropic", "openai", "ollama"]).default("anthropic"),
   mediaProvider: z.enum(["local", "openai"]).default("local"),
@@ -80,6 +101,7 @@ export const projectSettingsSchema = z.object({
     .default(60),
   aspectRatio: aspectRatioSchema.default("9:16"),
   voice: z.string().default("alloy"),
+  localModels: localModelsSchema.default(DEFAULT_LOCAL_MODELS),
   visualStyle: z.string().max(500).default("Minh họa điện ảnh, ấm áp, gần gũi"),
   allowUploads: z.boolean().default(true),
   backgroundMusicPath: z.string().nullable().default(null),

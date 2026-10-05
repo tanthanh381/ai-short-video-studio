@@ -1,4 +1,4 @@
-import type { Estimate, Job, Project } from "@studio/shared";
+import type { Estimate, Job, LocalModelCatalog, Project } from "@studio/shared";
 import { appConfig } from "./config";
 import { demoApi } from "./demo";
 import { supabase } from "./supabase";
@@ -53,7 +53,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+async function voicePreviewBlob(voice: string, engine: string | null): Promise<Blob> {
+  const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+  const response = await fetch(`${appConfig.apiUrl}/v1/voice-preview`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ voice, engine }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Chưa nghe thử được giọng đọc");
+  }
+  return response.blob();
+}
+
 export const api = {
+  voicePreview: voicePreviewBlob,
   async createVideo(input: VideoInput) {
     if (appConfig.demoMode) throw new Error("Chế độ mẫu chỉ lưu bản nháp. Tạo video cần kết nối máy xử lý thật.");
     const submission = await videoSubmission(input);
@@ -111,6 +126,7 @@ export const api = {
       ? demoApi.getJobs(id)
       : request<Job[]>(`/v1/projects/${id}/jobs`),
   getSettings: () => request<AccountSettings>("/v1/settings"),
+  getLocalModels: () => request<LocalModelCatalog>("/v1/local-models"),
   updateSettings: (
     input: Pick<AccountSettings, "dailyBudgetUsd" | "maxConcurrentJobs">,
   ) =>

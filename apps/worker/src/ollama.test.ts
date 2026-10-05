@@ -158,4 +158,18 @@ describe("Ollama locked visual-prompt response", () => {
     await expect(new OllamaStoryboardAdapter("http://localhost:11434").createStoryboard(lockedInput))
       .rejects.toThrow("Ollama trả lỗi 503. Kiểm tra máy đang bật và model đã được cài");
   });
+
+  it("dùng model Ollama do dự án chọn thay cho model mặc định", async () => {
+    const mock = vi.fn(async () => new Response(JSON.stringify({ response: JSON.stringify({
+      hook: "H", narration: "N", scenes: [{ narration: "Cảnh.", imagePrompt: "P", estimatedDurationMs: 3000 }],
+      suggestedTitle: "T", suggestedDescription: "D" }) })));
+    vi.stubGlobal("fetch", mock);
+    const input: StoryboardInput = { title: "t", sourceText: "Nội dung đủ dài để kiểm thử.", inputMode: "idea", rewrite: false,
+      audience: "a", style: "ke-chuyen", duration: 30, visualStyle: "v" };
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen2.5:3b");
+    await adapter.createStoryboard({ ...input, model: "llama3.2:3b" });
+    await adapter.createStoryboard({ ...input, model: null });
+    const models = (mock.mock.calls as unknown as Array<[string, { body: string }]>).map((call) => JSON.parse(call[1].body).model);
+    expect(models).toEqual(["llama3.2:3b", "qwen2.5:3b"]);
+  });
 });

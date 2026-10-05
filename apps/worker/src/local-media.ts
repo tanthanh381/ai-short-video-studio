@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { subtitleCueSchema } from "@studio/shared";
-import type { MediaProvider, WordTimestamp } from "./providers";
+import type { MediaModelOptions, MediaProvider, WordTimestamp } from "./providers";
 
 async function checked(response: Response) {
   if (!response.ok) {
@@ -17,36 +17,36 @@ export class LocalMediaAdapter implements MediaProvider {
     return `${this.baseUrl.replace(/\/$/, "")}${path}`;
   }
 
-  async createImage(prompt: string, aspectRatio: string): Promise<Uint8Array> {
+  async createImage(prompt: string, aspectRatio: string, models: MediaModelOptions = {}): Promise<Uint8Array> {
     const response = await checked(
       await fetch(this.url("/image"), {
         method: "POST",
         signal: AbortSignal.timeout(900_000),
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt, aspectRatio }),
+        body: JSON.stringify({ prompt, aspectRatio, model: models.image ?? undefined }),
       }),
     );
     return new Uint8Array(await response.arrayBuffer());
   }
 
-  async createSpeech(text: string, voice: string): Promise<Uint8Array> {
+  async createSpeech(text: string, voice: string, models: MediaModelOptions = {}): Promise<Uint8Array> {
     const response = await checked(
       await fetch(this.url("/tts"), {
         method: "POST",
         signal: AbortSignal.timeout(120_000),
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text, voice }),
+        body: JSON.stringify({ text, voice, engine: models.tts ?? undefined }),
       }),
     );
     return new Uint8Array(await response.arrayBuffer());
   }
 
-  async createSpeechAligned(text: string, voice: string) {
+  async createSpeechAligned(text: string, voice: string, models: MediaModelOptions = {}) {
     const response = await checked(await fetch(this.url("/tts-aligned"), {
       method: "POST",
       signal: AbortSignal.timeout(240_000),
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, voice }),
+      body: JSON.stringify({ text, voice, engine: models.tts ?? undefined }),
     }));
     const parsed = z.object({
       audioBase64: z.string().min(10),
@@ -62,9 +62,9 @@ export class LocalMediaAdapter implements MediaProvider {
     return { audio: new Uint8Array(Buffer.from(data.audioBase64, "base64")), cues: data.cues, durationMs: data.durationMs, contentType: "audio/wav" as const };
   }
 
-  async transcribe(audio: Uint8Array): Promise<WordTimestamp[]> {
+  async transcribe(audio: Uint8Array, models: MediaModelOptions = {}): Promise<WordTimestamp[]> {
     const response = await checked(
-      await fetch(this.url("/transcribe"), {
+      await fetch(this.url(`/transcribe${models.transcribe ? `?model=${encodeURIComponent(models.transcribe)}` : ""}`), {
         method: "POST",
         signal: AbortSignal.timeout(900_000),
         headers: { "content-type": "audio/mpeg" },

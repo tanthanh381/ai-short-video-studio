@@ -13,7 +13,7 @@ const config: AppConfig = {
   DAILY_BUDGET_USD: 0, MAX_CONCURRENT_JOBS: 1, AI_FEATURES_ENABLED: false,
   OPENAI_FEATURES_ENABLED: true, ANTHROPIC_FEATURES_ENABLED: true,
   OLLAMA_FEATURES_ENABLED: true, LOCAL_MEDIA_FEATURES_ENABLED: true,
-  RENDER_WORKER_ENABLED: true, NODE_ENV: "test",
+  LOCAL_MEDIA_BASE_URL: "http://media.test:8765", RENDER_WORKER_ENABLED: true, NODE_ENV: "test",
 };
 
 function fixture(options: { allowed?: boolean; busy?: boolean; rpcError?: string; owner?: string } = {}) {
@@ -126,5 +126,70 @@ describe("one-click video API", () => {
     const response = await request(f.app).get(`/v1/projects/${projectId}/result`).set("Authorization", "Bearer test");
     expect(response.status).toBe(404);
     expect(f.signed).not.toHaveBeenCalled();
+  });
+});
+
+describe("local model selection API", () => {
+  const catalog = {
+    available: true,
+    storyboard: { models: [{ id: "qwen2.5:3b", label: "qwen2.5:3b" }], default: "qwen2.5:3b" },
+    image: { models: [{ id: "sdxl-turbo", label: "SDXL-Turbo" }], default: "sdxl-turbo" },
+    tts: { models: [{ id: "vieneu", label: "VieNeu" }], default: "vieneu" },
+    transcribe: { models: [], default: null },
+  };
+
+  it("stores per-task model choices in the project settings", async () => {
+    const f = fixture();
+    const response = await request(f.app).post("/v1/videos").set("Authorization", "Bearer test")
+      .send({ sourceText: script, settings: { textProvider: "ollama", mediaProvider: "local", localModels: { storyboard: "qwen2.5:3b", tts: "piper" } } });
+    expect(response.status).toBe(202);
+    expect((f.rpc.mock.calls[0]![1].p_settings as { localModels: unknown }).localModels).toEqual({ storyboard: "qwen2.5:3b", image: null, tts: "piper", transcribe: null });
+  });
+
+  it("rejects model names that could smuggle other values", async () => {
+    const f = fixture();
+    const response = await request(f.app).post("/v1/videos").set("Authorization", "Bearer test")
+      .send({ sourceText: script, settings: { textProvider: "ollama", mediaProvider: "local", localModels: { image: "x; rm -rf /" } } });
+    expect(response.status).toBe(400);
+    expect(f.rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns the installed model catalog and degrades to unavailable when the machine is off", async () => {
+    const f = fixture();
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(catalog))).mockRejectedValueOnce(new Error("down"));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const ok = await request(f.app).get("/v1/local-models").set("Authorization", "Bearer test");
+      expect(ok.body.storyboard.models[0].id).toBe("qwen2.5:3b");
+      expect(fetchMock.mock.calls[0]![0]).toBe("http://media.test:8765/models");
+      const down = await request(f.app).get("/v1/local-models").set("Authorization", "Bearer test");
+      expect(down.status).toBe(200);
+      expect(down.body.available).toBe(false);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("previews voices with a fixed sample, rejects unknown voices and caches the audio", async () => {
+    const f = fixture();
+    const fetchMock = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "audio/mpeg" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const bad = await request(f.app).post("/v1/voice-preview").set("Authorization", "Bearer test").send({ voice: "../etc/passwd" });
+      expect(bad.status).toBe(400);
+      expect(fetchMock).not.toHaveBeenCalled();
+      const first = await request(f.app).post("/v1/voice-preview").set("Authorization", "Bearer test").send({ voice: "co-trang" });
+      expect(first.status).toBe(200);
+      expect(first.headers["content-type"]).toContain("audio/mpeg");
+      const sent = JSON.parse((fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body);
+      expect(sent.voice).toBe("co-trang");
+      expect(sent.text).toContain("kiếm khách");
+      await request(f.app).post("/v1/voice-preview").set("Authorization", "Bearer test").send({ voice: "co-trang" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("requires login for model catalog and previews", async () => {
+    const f = fixture();
+    expect((await request(f.app).get("/v1/local-models")).status).toBe(401);
+    expect((await request(f.app).post("/v1/voice-preview").send({ voice: "co-trang" })).status).toBe(401);
   });
 });

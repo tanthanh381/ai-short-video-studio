@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -23,12 +24,39 @@ from pathlib import Path
 
 HOST = os.getenv("LOCAL_MEDIA_HOST", "127.0.0.1")
 PORT = int(os.getenv("LOCAL_MEDIA_PORT", "8765"))
-COMFY_URL = os.getenv("COMFY_URL", "http://127.0.0.1:8188")
-WHISPER_BIN = os.getenv("WHISPER_BIN", "/opt/homebrew/bin/whisper-cli")
-WHISPER_MODEL = os.getenv(
-    "WHISPER_MODEL",
-    str(Path(__file__).parent.parent / "local-models/whisper/ggml-small.bin"),
-)
+LOCAL_AI_ROOT = Path(os.getenv(
+    "LOCAL_AI_ROOT",
+    "/Users/tanthanh381/Documents/Codex/2026-10-04/referenced-chatgpt-conversation-this-is-an/work/local-ai",
+))
+IMAGE_SCRIPT = Path(os.getenv("IMAGE_SCRIPT", str(LOCAL_AI_ROOT / "bin/generate-image.sh")))
+IMAGE_SERVER_URL = os.getenv("IMAGE_SERVER_URL", "http://127.0.0.1:5002")
+IMAGE_TIMEOUT_S = int(os.getenv("IMAGE_TIMEOUT_S", "900"))
+WHISPER_URL = os.getenv("WHISPER_URL", "http://127.0.0.1:8080")
+VIENEU_URL = os.getenv("VIENEU_URL", "http://127.0.0.1:5001")
+PIPER_URL = os.getenv("PIPER_URL", "http://127.0.0.1:5000")
+VIENEU_VOICE = os.getenv("VIENEU_VOICE", "Đức Trí")
+# Voice presets selectable on the website. Keep ids in sync with packages/shared/src/voices.ts.
+# (VieNeu preset voice, speed). "giong-linh" is the macOS Linh voice.
+VOICE_PRESETS = {
+    "doc-truyen": ("Đức Trí", 1.0),
+    "co-trang": ("Anh Khôi", 0.88),
+    "co-trang-nu": ("Mỹ Duyên", 0.9),
+    "triet-ly": ("Minh Quân", 0.85),
+    "tam-su": ("Trúc Ly", 0.92),
+    "tin-tuc": ("Hữu Quân", 1.05),
+    "tin-tuc-nu": ("Ái Hân", 1.05),
+    "thuyet-minh": ("Mạnh Dũng", 1.0),
+    "nang-dong": ("Xuân Tiên", 1.12),
+}
+# Ordered preference; the macOS "say" Linh voice is the last-resort fallback.
+TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu,piper,say").split(",") if e]
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/ggml-base.bin"))
+# Image models the toolkit has installed (id -> label). image_server.py serves them.
+IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo (MLX, nhanh)"}
+TTS_ENGINE_LABELS = {"vieneu": "VieNeu (giọng theo thể loại)", "piper": "Piper (giọng Việt nhẹ)", "say": "Giọng Linh (macOS)"}
+SAMPLE_RATE = 22050
+IMAGE_LOCK = threading.Lock()  # one MLX/Metal job at a time on a 16 GB machine
 
 
 def json_response(handler, status, value):
@@ -48,44 +76,22 @@ def binary_response(handler, content_type, data):
     handler.wfile.write(data)
 
 
-def comfy_image(prompt, aspect_ratio="9:16"):
-    dimensions = {"9:16": (432, 768), "1:1": (640, 640), "16:9": (768, 432)}
-    if aspect_ratio not in dimensions:
+def local_image(prompt, aspect_ratio="9:16", model=None):
+    """SDXL-Turbo (MLX, Apple GPU) from the local AI toolkit. The renderer crops to the video frame."""
+    if aspect_ratio not in ("9:16", "1:1", "16:9"):
         raise ValueError("Tỷ lệ ảnh không hợp lệ")
-    width, height = dimensions[aspect_ratio]
-    client_id = "ai-short-video-studio-local"
-    graph = {
-        "3": {"class_type": "KSampler", "inputs": {"seed": int(time.time_ns() % 2**31), "steps": 16, "cfg": 7.0, "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0, "model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["5", 0]}},
-        "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "analog-diffusion-1.0.safetensors"}},
-        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
-        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": f"{prompt}, cinematic illustration, no text, no logo, no watermark", "clip": ["4", 1]}},
-        "7": {"class_type": "CLIPTextEncode", "inputs": {"text": "text, watermark, logo, blurry, low quality, distorted face", "clip": ["4", 1]}},
-        "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
-        "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "ai-short-video-studio", "images": ["8", 0]}},
-    }
-    request = urllib.request.Request(
-        f"{COMFY_URL}/prompt",
-        data=json.dumps({"prompt": graph, "client_id": client_id}).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        prompt_id = json.load(response)["prompt_id"]
-    for _ in range(240):
-        time.sleep(2)
-        with urllib.request.urlopen(f"{COMFY_URL}/history/{urllib.parse.quote(prompt_id)}", timeout=30) as response:
-            history = json.load(response)
-        result = history.get(prompt_id)
-        if not result:
-            continue
-        status = result.get("status", {})
-        if status.get("status_str") == "error":
-            raise RuntimeError("ComfyUI không tạo được ảnh; hãy kiểm tra model local")
-        for output in result.get("outputs", {}).values():
-            for image in output.get("images", []):
-                query = urllib.parse.urlencode(image)
-                with urllib.request.urlopen(f"{COMFY_URL}/view?{query}", timeout=60) as image_response:
-                    return image_response.read()
-    raise TimeoutError("ComfyUI không hoàn thành tạo ảnh trong thời gian cho phép")
+    check_choice("ảnh", model, IMAGE_MODELS)
+    styled = f"{prompt}, cinematic illustration, no text, no logo, no watermark"
+    if service_up(IMAGE_SERVER_URL):  # model kept loaded in memory: seconds per image
+        request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps({"prompt": styled, "model": model}).encode(),
+                                         headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
+            return response.read()
+    with IMAGE_LOCK, tempfile.TemporaryDirectory(prefix="studio-image-") as workdir:
+        target = Path(workdir) / "image.png"
+        subprocess.run(["/bin/zsh", str(IMAGE_SCRIPT), styled, str(target)],
+                       check=True, timeout=IMAGE_TIMEOUT_S, capture_output=True)
+        return target.read_bytes()
 
 
 def split_speech_phrases(text):
@@ -112,25 +118,64 @@ def split_speech_phrases(text):
     return phrases
 
 
-def tts_aligned(text, voice):
-    # Only the installed Vietnamese voice; legacy cloud voice names map to Linh.
-    voice = "Linh"
+def _http_wav(url, payload):
+    request = urllib.request.Request(
+        f"{url}/v1/audio/speech", data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=180) as response:
+        return response.read()
+
+
+def _to_pcm22050(source):
+    """Any audio file -> mono 16-bit PCM at SAMPLE_RATE, so phrases concatenate with exact timing."""
+    target = source.with_suffix(".pcm.wav")
+    subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(source),
+                    "-ac", "1", "-ar", str(SAMPLE_RATE), "-sample_fmt", "s16", str(target)],
+                   check=True, timeout=120, capture_output=True)
+    return target
+
+
+def synth_phrase(phrase, workdir, index, voice, engine=None):
+    last_error = None
+    engines = TTS_ENGINES
+    if engine:  # explicit engine chosen on the website; no silent fallback to another voice
+        engines = [check_choice("giọng đọc", engine, TTS_ENGINE_LABELS)]
+    elif voice == "giong-linh":  # explicit choice of the macOS voice
+        engines = ["say"]
+    vieneu_voice, vieneu_speed = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0))
+    for engine in engines:
+        source = Path(workdir) / f"phrase-{index}-{engine}.wav"
+        try:
+            if engine == "vieneu":
+                source.write_bytes(_http_wav(VIENEU_URL, {"input": phrase, "voice": vieneu_voice, "speed": vieneu_speed, "steps": 16}))
+            elif engine == "piper":
+                source.write_bytes(_http_wav(PIPER_URL, {"input": phrase}))
+            elif engine == "say":
+                subprocess.run(["say", "-v", "Linh", "-o", str(source), "--file-format=WAVE",
+                                f"--data-format=LEI16@{SAMPLE_RATE}", "--", phrase],
+                               check=True, timeout=120, capture_output=True)
+            else:
+                continue
+            return _to_pcm22050(source)
+        except Exception as error:  # try the next engine
+            last_error = error
+    raise RuntimeError("Không engine giọng đọc local nào hoạt động") from last_error
+
+
+def tts_aligned(text, voice, engine=None):
     phrases = split_speech_phrases(text)
     chunks, cues, frames_total = [], [], 0
-    sample_rate = 22050
+    sample_rate = SAMPLE_RATE
     with tempfile.TemporaryDirectory(prefix="studio-aligned-") as workdir:
         for index, phrase in enumerate(phrases):
-            source = Path(workdir) / f"phrase-{index}.wav"
-            subprocess.run(["say", "-v", voice, "-o", str(source),
-                            "--file-format=WAVE", "--data-format=LEI16@22050", "--", phrase],
-                           check=True, timeout=120, capture_output=True)
+            source = synth_phrase(phrase, workdir, index, voice, engine)
             with wave.open(str(source), "rb") as audio:
                 if (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) != (sample_rate, 1, 2):
                     raise RuntimeError("Giọng đọc local trả định dạng audio không hợp lệ")
                 frames = audio.getnframes()
                 pcm = audio.readframes(frames)
                 if frames <= 0 or len(pcm) != frames * 2:
-                    raise RuntimeError("Giọng đọc không tạo được âm thanh. Kiểm tra quyền chạy say trên máy")
+                    raise RuntimeError("Giọng đọc không tạo được âm thanh")
             start_ms = round(frames_total * 1000 / sample_rate)
             frames_total += frames
             cues.append({"id": str(uuid.uuid4()), "text": phrase,
@@ -146,60 +191,111 @@ def tts_aligned(text, voice):
             "cues": cues, "durationMs": round(frames_total * 1000 / sample_rate)}
 
 
-def tts(text, voice):
+def tts(text, voice, engine=None):
     with tempfile.TemporaryDirectory(prefix="studio-tts-") as workdir:
-        source = Path(workdir) / "voice.aiff"
+        source = synth_phrase(text, workdir, 0, voice, engine)
         target = Path(workdir) / "voice.mp3"
-        subprocess.run(["say", "-v", voice or "Linh", "-o", str(source), text], check=True, timeout=120)
         subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(source), "-codec:a", "libmp3lame", "-q:a", "4", str(target)], check=True, timeout=120)
         return target.read_bytes()
 
 
-def transcribe(audio):
-    with tempfile.TemporaryDirectory(prefix="studio-whisper-") as workdir:
-        source = Path(workdir) / "audio.mp3"
-        prefix = Path(workdir) / "result"
-        source.write_bytes(audio)
-        subprocess.run([WHISPER_BIN, "-m", WHISPER_MODEL, "-f", str(source), "-l", "vi", "-oj", "-ojf", "-of", str(prefix), "--no-prints"], check=True, timeout=600)
-        result = json.loads((prefix.with_suffix(".json")).read_text())
-        words = []
-        for segment in result.get("transcription", []):
-            current = None
-            for token in segment.get("tokens", []):
-                raw_text = str(token.get("text", ""))
-                text = raw_text.strip()
-                offsets = token.get("offsets", {})
-                if not text or text.startswith("[") or offsets.get("to", 0) <= offsets.get("from", 0):
-                    continue
-                start = offsets["from"] / 1000
-                end = offsets["to"] / 1000
-                if current and raw_text[:1].isspace():
-                    words.append(current)
-                    current = None
-                if current:
-                    current["word"] += text
-                    current["end"] = end
-                else:
-                    current = {"word": text, "start": start, "end": end}
-            if current:
+def transcribe(audio, model=None):
+    """whisper.cpp server (word timestamps). Sub-word pieces are merged into whole words."""
+    check_choice("Whisper", model, [Path(WHISPER_MODEL).stem])  # the server has exactly one model loaded
+    boundary = uuid.uuid4().hex
+    fields = {"response_format": "verbose_json", "language": "vi", "temperature": "0"}
+    parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode() for k, v in fields.items()]
+    parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.mp3"\r\n'
+                  "Content-Type: application/octet-stream\r\n\r\n").encode())
+    body = b"".join(parts) + audio + f"\r\n--{boundary}--\r\n".encode()
+    request = urllib.request.Request(f"{WHISPER_URL}/inference", data=body,
+                                     headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(request, timeout=600) as response:
+        result = json.load(response)
+    words = []
+    for segment in result.get("segments", []):
+        current = None
+        for piece in segment.get("words", []):
+            raw = str(piece.get("word", ""))
+            text = raw.strip()
+            start, end = float(piece.get("start", 0)), float(piece.get("end", 0))
+            if not text or text.startswith("["):
+                continue
+            end = max(end, start + 0.01)  # zero-length sub-word pieces still belong to the word
+            if current and raw[:1].isspace():
                 words.append(current)
-        if not words:
-            raise RuntimeError("Whisper không nhận được timestamp từ audio")
-        return words
+                current = None
+            if current:
+                current["word"] += text
+                current["end"] = end
+            else:
+                current = {"word": text, "start": start, "end": end}
+        if current:
+            words.append(current)
+    if not words:
+        raise RuntimeError("Whisper không nhận được timestamp từ audio")
+    return words
+
+
+def service_up(url, path="/health"):
+    try:
+        with urllib.request.urlopen(f"{url}{path}", timeout=3) as response:
+            return response.status == 200
+    except Exception:
+        return False
+
+
+def model_catalog():
+    """What the website can offer per task. Anything not installed/running is left out."""
+    tags = []
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=3) as response:
+            tags = [m["name"] for m in json.load(response).get("models", [])]
+    except Exception:
+        pass
+    default_llm = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+    whisper_id = Path(WHISPER_MODEL).stem
+    whisper_ready = service_up(WHISPER_URL, "/") and Path(WHISPER_MODEL).is_file()
+    available_engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL),
+                         "say": bool(shutil.which("say"))}
+    return {
+        "available": True,
+        "storyboard": {"models": [{"id": t, "label": t} for t in tags],
+                       "default": default_llm if default_llm in tags else (tags[0] if tags else None)},
+        "image": {"models": [{"id": i, "label": l} for i, l in IMAGE_MODELS.items()],
+                  "default": next(iter(IMAGE_MODELS))},
+        "tts": {"models": [{"id": e, "label": TTS_ENGINE_LABELS[e]} for e in TTS_ENGINES
+                           if available_engines.get(e)],
+                "default": next((e for e in TTS_ENGINES if available_engines.get(e)), None)},
+        "transcribe": {"models": [{"id": whisper_id, "label": f"Whisper {whisper_id.replace('ggml-', '')}"}]
+                       if whisper_ready else [],
+                       "default": whisper_id if whisper_ready else None},
+    }
+
+
+def check_choice(kind, value, allowed):
+    """None/empty = default. Anything else must be an installed option."""
+    if value in (None, ""):
+        return None
+    if value not in allowed:
+        raise ValueError(f"Model {kind} không khả dụng trên máy: {str(value)[:60]}")
+    return value
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
-            try:
-                with urllib.request.urlopen(f"{COMFY_URL}/system_stats", timeout=3) as response:
-                    image_ready = response.status == 200
-            except Exception:
-                image_ready = False
-            tts_ready = bool(shutil.which("say"))
+            image_ready = service_up(IMAGE_SERVER_URL) or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
+            engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL),
+                       "say": bool(shutil.which("say"))}
+            tts_ready = any(engines.get(e) for e in TTS_ENGINES)
+            transcribe_ready = service_up(WHISPER_URL, "/")
             json_response(self, 200, {"ok": image_ready and tts_ready, "image": image_ready,
-                                    "tts": tts_ready, "alignedTts": tts_ready,
-                                    "transcribe": Path(WHISPER_MODEL).is_file() and Path(WHISPER_BIN).is_file()})
+                                    "tts": tts_ready, "alignedTts": tts_ready, "ttsEngines": engines,
+                                    "transcribe": transcribe_ready})
+            return
+        if self.path == "/models":
+            json_response(self, 200, model_catalog())
             return
         json_response(self, 404, {"error": "Không tìm thấy endpoint"})
 
@@ -215,15 +311,15 @@ class Handler(BaseHTTPRequestHandler):
                 prompt = str(payload.get("prompt", ""))
                 if not prompt.strip() or len(prompt) > 3000:
                     raise ValueError("Mô tả ảnh trống hoặc quá dài")
-                binary_response(self, "image/png", comfy_image(prompt, payload.get("aspectRatio", "9:16")))
+                binary_response(self, "image/png", local_image(prompt, payload.get("aspectRatio", "9:16"), payload.get("model")))
             elif self.path == "/tts":
                 payload = json.loads(body)
-                binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "Linh"))))
+                binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "Linh")), payload.get("engine")))
             elif self.path == "/tts-aligned":
                 payload = json.loads(body)
-                json_response(self, 200, tts_aligned(str(payload.get("text", "")), str(payload.get("voice", "Linh"))))
-            elif self.path == "/transcribe":
-                json_response(self, 200, {"words": transcribe(body)})
+                json_response(self, 200, tts_aligned(str(payload.get("text", "")), str(payload.get("voice", "Linh")), payload.get("engine")))
+            elif self.path.split("?")[0] == "/transcribe":
+                json_response(self, 200, {"words": transcribe(body, urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("model", [None])[0])})
             else:
                 json_response(self, 404, {"error": "Không tìm thấy endpoint"})
         except ValueError as error:

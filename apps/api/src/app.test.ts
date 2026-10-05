@@ -16,6 +16,7 @@ const config: AppConfig = {
   ANTHROPIC_FEATURES_ENABLED: false,
   OLLAMA_FEATURES_ENABLED: false,
   LOCAL_MEDIA_FEATURES_ENABLED: false,
+  LOCAL_MEDIA_BASE_URL: "http://localhost:8765",
   RENDER_WORKER_ENABLED: false,
   NODE_ENV: "test",
 };

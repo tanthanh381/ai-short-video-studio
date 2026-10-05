@@ -48,7 +48,13 @@ import {
   DEFAULT_PROJECT_SETTINGS,
   formatDuration,
   humanStatus,
+  isVoicePreset,
+  voiceHint,
+  DEFAULT_VOICE_PRESET,
+  VOICE_PRESETS,
   type Job,
+  type LocalModelCatalog,
+  type LocalModels,
   type Project,
   type ProjectSettings,
   type Scene,
@@ -603,6 +609,96 @@ function Field({
   );
 }
 
+
+const previewUrls = new Map<string, string>();
+
+function VoicePreview({ voice, engine, disabled }: { voice: string; engine: string | null; disabled?: boolean }) {
+  const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => () => { audio.current?.pause(); }, []);
+  useEffect(() => { audio.current?.pause(); setState("idle"); setError(null); }, [voice, engine]);
+  async function toggle() {
+    if (state === "playing") { audio.current?.pause(); setState("idle"); return; }
+    setError(null);
+    setState("loading");
+    try {
+      const key = `${voice}|${engine ?? ""}`;
+      let url = previewUrls.get(key);
+      if (!url) {
+        url = URL.createObjectURL(await api.voicePreview(voice, engine));
+        previewUrls.set(key, url);
+      }
+      audio.current?.pause();
+      const player = new Audio(url);
+      audio.current = player;
+      player.onended = () => setState("idle");
+      player.onpause = () => setState("idle");
+      await player.play();
+      setState("playing");
+    } catch (e) {
+      setState("idle");
+      setError(e instanceof Error ? e.message : "Chưa nghe thử được giọng đọc");
+    }
+  }
+  return (
+    <div className="voice-preview">
+      <Button type="button" variant="ghost" disabled={disabled || state === "loading"} onClick={() => void toggle()}>
+        {state === "playing" ? <><Pause size={16} /> Dừng</> : <><Play size={16} /> {state === "loading" ? "Đang tạo..." : "Nghe thử giọng"}</>}
+      </Button>
+      {error && <small role="alert">{error}</small>}
+    </div>
+  );
+}
+
+function useLocalModels(disabled: boolean) {
+  const [catalog, setCatalog] = useState<LocalModelCatalog | null>(null);
+  useEffect(() => {
+    if (disabled) return;
+    let active = true;
+    api.getLocalModels().then((value) => active && setCatalog(value)).catch(() => undefined);
+    return () => { active = false; };
+  }, [disabled]);
+  return catalog;
+}
+
+const LOCAL_MODEL_TASKS: Array<{ key: keyof LocalModels; label: string }> = [
+  { key: "storyboard", label: "Chia cảnh & prompt ảnh (Ollama)" },
+  { key: "image", label: "Tạo ảnh" },
+  { key: "tts", label: "Giọng đọc (engine)" },
+  { key: "transcribe", label: "Đồng bộ phụ đề (Whisper)" },
+];
+
+function LocalModelPicker({ value, onChange, catalog }: {
+  value: LocalModels;
+  onChange(next: LocalModels): void;
+  catalog: LocalModelCatalog | null;
+}) {
+  return (
+    <>
+      {LOCAL_MODEL_TASKS.map(({ key, label }) => {
+        const entry = catalog?.[key];
+        const models = entry?.models ?? [];
+        const current = value[key];
+        const defaultLabel = models.find((model) => model.id === entry?.default)?.label;
+        return (
+          <Field key={key} label={label} {...(catalog && !catalog.available ? { hint: "Chưa đọc được danh sách từ máy tạo video" } : {})}>
+            <select
+              value={current ?? ""}
+              disabled={!catalog?.available}
+              onChange={(e) => onChange({ ...value, [key]: e.target.value || null })}
+            >
+              <option value="">{defaultLabel ? `Mặc định — ${defaultLabel}` : "Mặc định của máy"}</option>
+              {current && !models.some((model) => model.id === current) && <option value={current}>{current} (không còn trên máy)</option>}
+              {models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+            </select>
+          </Field>
+        );
+      })}
+    </>
+  );
+}
+
 function NewProjectPage() {
   const navigate = useNavigate();
   const { isDemo } = useAuth();
@@ -610,9 +706,10 @@ function NewProjectPage() {
   const [error, setError] = useState<string | null>(null);
   const [sourceText, setSourceText] = useState("");
   const [settings, setSettings] = useState<ProjectSettings>(
-    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local" },
+    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET },
   );
   const [advanced, setAdvanced] = useState(false);
+  const localModels = useLocalModels(isDemo || !advanced);
   const submitting = useRef(false);
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -768,16 +865,24 @@ function NewProjectPage() {
         </section>
         <section hidden={!advanced}>
             <div className="form-grid advanced-panel">
-              <Field label="Giọng đọc">
+              <Field label="Giọng đọc theo nội dung" hint={voiceHint(settings.voice)}>
                 <select
                   value={settings.voice}
                   onChange={(e) =>
                     setSettings((s) => ({ ...s, voice: e.target.value }))
                   }
                 >
-                  <option value="alloy">Giọng tiếng Việt trên máy</option>
+                  {VOICE_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>{preset.label}</option>
+                  ))}
                 </select>
               </Field>
+              <VoicePreview voice={settings.voice} engine={settings.localModels.tts} disabled={isDemo} />
+              <LocalModelPicker
+                catalog={localModels}
+                value={settings.localModels}
+                onChange={(next) => setSettings((s) => ({ ...s, localModels: next }))}
+              />
               <Field label="Phong cách hình ảnh">
                 <input
                   value={settings.visualStyle}
@@ -936,6 +1041,7 @@ function StudioPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { isDemo } = useAuth();
+  const localModels = useLocalModels(isDemo);
   const [project, setProject] = useState<Project | null>(null);
   const [selected, setSelected] = useState(0);
   const [sourceDraft, setSourceDraft] = useState("");
@@ -1752,21 +1858,40 @@ function StudioPage() {
                     })
                   }
                 >
-                  {project.settings.mediaProvider === "local" ? <option value={project.settings.voice}>Giọng tiếng Việt trên máy</option> : <>
+                  {project.settings.mediaProvider === "local" ? <>
+                    {!isVoicePreset(project.settings.voice) && <option value={project.settings.voice}>Giọng tiếng Việt trên máy</option>}
+                    {VOICE_PRESETS.map((preset) => (
+                      <option key={preset.id} value={preset.id}>{preset.label}</option>
+                    ))}
+                  </> : <>
                     <option value="alloy">Ấm, trung tính</option>
                     <option value="nova">Sáng, tự nhiên</option>
                     <option value="onyx">Trầm, điềm tĩnh</option>
                   </>}
                 </select>
               </Field>
+              {project.settings.mediaProvider === "local" && (
+                <>
+                  <VoicePreview voice={project.settings.voice} engine={project.settings.localModels.tts} disabled={isDemo} />
+                  <LocalModelPicker
+                    catalog={localModels}
+                    value={project.settings.localModels}
+                    onChange={(next) => change({ ...project, settings: { ...project.settings, localModels: next } })}
+                  />
+                </>
+              )}
               <Button
                 variant="ghost"
                 disabled={isDemo || !activeScene?.audioPath}
                 onClick={() => void playNarration()}
               >
-                <Play size={16} /> Nghe thử
+                <Play size={16} /> Nghe cảnh đang chọn
               </Button>
-              <p className="microcopy">Giọng đọc tổng hợp từ kịch bản của anh.</p>
+              <p className="microcopy">
+                {project.settings.mediaProvider === "local" && voiceHint(project.settings.voice)
+                  ? `${voiceHint(project.settings.voice)}. Cảnh đã có giọng đọc giữ nguyên; giọng mới áp dụng cho cảnh tạo mới.`
+                  : "Giọng đọc tổng hợp từ kịch bản của anh."}
+              </p>
             </div>
             <div className="setting-group">
               <h3>

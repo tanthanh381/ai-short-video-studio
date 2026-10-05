@@ -1836,3 +1836,6 @@ a:focus-visible {
 .login-method:hover {
   text-decoration: underline;
 }
+
+.voice-preview{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.voice-preview small{color:var(--danger,#b42318)}

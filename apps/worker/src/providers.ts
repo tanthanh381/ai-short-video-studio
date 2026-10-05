@@ -32,22 +32,27 @@ export type StoryboardInput = {
   duration: number;
   visualStyle: string;
   lockedScenes?: string[];
+  /** Model Ollama chọn cho dự án; bỏ trống để dùng model mặc định của máy. */
+  model?: string | null;
 };
 
 export interface StoryboardProvider {
   createStoryboard(input: StoryboardInput): Promise<StoryboardResult>;
 }
 
+/** Lựa chọn model local theo tác vụ; adapter không hỗ trợ sẽ bỏ qua. */
+export type MediaModelOptions = { image?: string | null; tts?: string | null; transcribe?: string | null };
+
 export interface MediaProvider {
-  createImage(prompt: string, aspectRatio: string): Promise<Uint8Array>;
-  createSpeech(text: string, voice: string): Promise<Uint8Array>;
-  createSpeechAligned?(text: string, voice: string): Promise<{
+  createImage(prompt: string, aspectRatio: string, models?: MediaModelOptions): Promise<Uint8Array>;
+  createSpeech(text: string, voice: string, models?: MediaModelOptions): Promise<Uint8Array>;
+  createSpeechAligned?(text: string, voice: string, models?: MediaModelOptions): Promise<{
     audio: Uint8Array;
     cues: Scene["subtitles"];
     durationMs: number;
     contentType?: "audio/wav" | "audio/mpeg";
   }>;
-  transcribe(audio: Uint8Array): Promise<WordTimestamp[]>;
+  transcribe(audio: Uint8Array, models?: MediaModelOptions): Promise<WordTimestamp[]>;
 }
 
 export interface AIProvider extends StoryboardProvider, MediaProvider {}

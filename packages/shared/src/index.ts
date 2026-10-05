@@ -1,4 +1,5 @@
 export * from "./schemas";
+export * from "./voices";
 
 export const DEFAULT_PROJECT_SETTINGS = {
   textProvider: "anthropic" as const,
@@ -8,6 +9,7 @@ export const DEFAULT_PROJECT_SETTINGS = {
   targetDurationSec: 60 as const,
   aspectRatio: "9:16" as const,
   voice: "alloy",
+  localModels: { storyboard: null, image: null, tts: null, transcribe: null },
   visualStyle: "Minh họa điện ảnh, ấm áp, gần gũi",
   allowUploads: true,
   backgroundMusicPath: null,
@@ -45,3 +47,13 @@ export function formatDuration(ms: number): string {
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
+
+/** Danh sách model local khả dụng, do cầu nối media trên máy báo về. */
+export type LocalModelOption = { id: string; label: string };
+export type LocalModelCatalog = {
+  available: boolean;
+  storyboard: { models: LocalModelOption[]; default: string | null };
+  image: { models: LocalModelOption[]; default: string | null };
+  tts: { models: LocalModelOption[]; default: string | null };
+  transcribe: { models: LocalModelOption[]; default: string | null };
+};

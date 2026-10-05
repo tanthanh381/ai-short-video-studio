@@ -21,7 +21,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
       signal: AbortSignal.timeout(240_000),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model: this.model,
+        model: input.model || this.model,
         stream: false,
         format: input.lockedScenes ? {
           type: "object", additionalProperties: false, required: ["scenes"],
