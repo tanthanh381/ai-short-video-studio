@@ -36,14 +36,14 @@ jobs:
             git apply --reverse --check scripts/audit/2026-10-05.patch
           fi
           git diff --check
-      - name: Pin patched versions within existing major releases
+      - name: Pin patched dependency versions
         run: |
           python3 - <<'PY'
           import json
           from pathlib import Path
           changes = {
             'package.json': {'devDependencies': {'vitest': '4.1.11'}},
-            'apps/web/package.json': {'dependencies': {'react-router-dom': '7.18.0'}, 'devDependencies': {'vite': '7.3.5'}},
+            'apps/web/package.json': {'dependencies': {'react-router-dom': '7.18.2'}, 'devDependencies': {'vite': '7.3.5'}},
             'apps/api/package.json': {'dependencies': {'express-rate-limit': '8.2.2'}},
           }
           for name, sections in changes.items():
@@ -55,7 +55,7 @@ jobs:
           path = Path('pnpm-workspace.yaml')
           text = path.read_text()
           if '\noverrides:' not in text:
-            path.write_text(text + '\noverrides:\n  ip-address: 10.7.1\n  vite: 7.3.5\n')
+            path.write_text(text + '\noverrides:\n  ip-address: 10.7.1\n  vite: 7.3.5\n  "vite>esbuild": 0.28.1\n')
           PY
           pnpm install --no-frozen-lockfile
       - name: Typecheck
