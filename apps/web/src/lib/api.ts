@@ -1,4 +1,4 @@
-import type { Estimate, Job, LocalModelCatalog, Project } from "@studio/shared";
+import type { Estimate, Job, LocalModelCatalog, Project, RegenerationComponent } from "@studio/shared";
 import { appConfig } from "./config";
 import { demoApi } from "./demo";
 import { supabase } from "./supabase";
@@ -143,10 +143,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ type, payload }),
     }),
-  regenerateScene: (id: string, sceneId: string) =>
+  regenerateScene: (id: string, sceneId: string, component: RegenerationComponent = "all") =>
     request<Job>(`/v1/projects/${id}/jobs`, {
       method: "POST",
-      body: JSON.stringify({ type: "regenerate_scene", payload: { sceneId } }),
+      body: JSON.stringify({ type: "regenerate_scene", payload: { sceneId, component } }),
     }),
   estimate: (id: string) => request<Estimate>(`/v1/projects/${id}/estimate`),
   retryJob: (id: string) =>

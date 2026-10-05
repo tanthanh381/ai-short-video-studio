@@ -1839,3 +1839,9 @@ a:focus-visible {
 
 .voice-preview{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
 .voice-preview small{color:var(--danger,#b42318)}
+
+/* Targeted media repair stays usable within narrow mobile cards. */
+.scene-repair { margin: 8px 0; font-size: 12px; }
+.scene-repair summary { cursor: pointer; }
+.scene-repair-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.scene-repair-actions button { max-width: 100%; padding: 6px 8px; font: inherit; }

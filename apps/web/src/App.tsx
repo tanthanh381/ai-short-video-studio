@@ -58,6 +58,7 @@ import {
   type Project,
   type ProjectSettings,
   type Scene,
+  type RegenerationComponent,
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
 import { api, type VideoResult } from "./lib/api";
@@ -938,7 +939,7 @@ function SceneCard({
   onDelete(): void;
   onMove(direction: -1 | 1): void;
   onUpload(file: File, kind: "image" | "audio"): void;
-  onRegenerate(): void;
+  onRegenerate(component?: RegenerationComponent): void;
 }) {
   return (
     <article
@@ -957,6 +958,17 @@ function SceneCard({
           value={scene.imagePrompt}
           onChange={(e) => onChange({ ...scene, imagePrompt: e.target.value })}
         />
+        <details className="scene-repair" onClick={(e) => e.stopPropagation()}>
+          <summary>Sửa riêng thành phần</summary>
+          <div className="scene-repair-actions">
+            <button type="button" disabled={!scene.audioPath || !scene.actualDurationMs}
+              onClick={() => onRegenerate("image")}>Tạo lại ảnh</button>
+            <button type="button" disabled={!scene.imagePath}
+              onClick={() => onRegenerate("audio")}>Tạo lại giọng và phụ đề</button>
+            <button type="button" disabled={!scene.imagePath || !scene.audioPath}
+              onClick={() => onRegenerate("subtitles")}>Đồng bộ lại phụ đề</button>
+          </div>
+        </details>
         <div className="scene-foot">
           <span>
             {formatDuration(
@@ -1367,7 +1379,7 @@ function StudioPage() {
       setBusyAction(null);
     }
   }
-  async function regenerate(sceneId: string) {
+  async function regenerate(sceneId: string, component: RegenerationComponent = "all") {
     if (isDemo) {
       setError("Tạo lại cảnh cần kết nối OpenAI và worker thật.");
       return;
@@ -1388,7 +1400,7 @@ function StudioPage() {
         )
       )
         return;
-      const job = await api.regenerateScene(id, sceneId);
+      const job = await api.regenerateScene(id, sceneId, component);
       setJobs((current) => [job, ...current]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tạo lại cảnh");
@@ -1687,7 +1699,7 @@ function StudioPage() {
                   onDelete={() => deleteScene(index)}
                   onMove={(dir) => moveScene(index, dir)}
                   onUpload={(file, kind) => void uploadScene(index, file, kind)}
-                  onRegenerate={() => void regenerate(scene.id)}
+                  onRegenerate={(component) => void regenerate(scene.id, component)}
                 />
               ))}
             </div>
