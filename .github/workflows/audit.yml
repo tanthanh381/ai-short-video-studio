@@ -1,0 +1,101 @@
+name: Product audit evidence
+
+on:
+  push:
+    branches: ['audit/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Record source revision
+        run: |
+          mkdir -p audit-artifacts
+          git rev-parse HEAD > audit-artifacts/revision.txt
+          git archive --format=tar HEAD -o audit-artifacts/source.tar
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: set -o pipefail; pnpm typecheck 2>&1 | tee audit-artifacts/typecheck.log
+      - name: Unit and integration tests
+        id: tests
+        continue-on-error: true
+        run: set -o pipefail; pnpm test 2>&1 | tee audit-artifacts/tests.log
+      - name: Local media tests
+        id: python
+        continue-on-error: true
+        run: set -o pipefail; python3 -m unittest discover -s local-tools -p 'test_*.py' 2>&1 | tee audit-artifacts/python.log
+      - name: Build
+        id: build
+        continue-on-error: true
+        run: set -o pipefail; pnpm build 2>&1 | tee audit-artifacts/build.log
+      - name: Dependency advisory snapshot
+        continue-on-error: true
+        run: pnpm audit --json > audit-artifacts/dependency-audit.json
+      - name: Install isolated browser tooling
+        run: |
+          npm install --prefix /tmp/studio-audit-browser --no-save playwright@1.56.1
+          /tmp/studio-audit-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Read-only public website smoke test
+        continue-on-error: true
+        run: |
+          node --input-type=module <<'JS'
+          import { createRequire } from 'node:module';
+          import { writeFile } from 'node:fs/promises';
+          const require = createRequire('/tmp/studio-audit-browser/package.json');
+          const { chromium } = require('playwright');
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage({viewport:{width:1440,height:1000}});
+          const result = {timestamp:new Date().toISOString(),scope:'Public logged-out routes only; no authenticated generation tested',errors:[],responses:[],routes:[]};
+          page.on('pageerror', e => result.errors.push(String(e)));
+          page.on('response', r => { const u = new URL(r.url()); result.responses.push({url:u.origin+u.pathname,status:r.status()}); });
+          const base = 'https://tanthanh381.github.io/ai-short-video-studio/';
+          try {
+            for (const [name,path] of [['home',''],['new','new'],['reset','reset-password']]) {
+              const response = await page.goto(base+path,{waitUntil:'networkidle',timeout:45000});
+              await page.waitForTimeout(1500);
+              result.routes.push({name,url:page.url(),status:response?.status(),title:await page.title(),text:(await page.locator('body').innerText()).slice(0,16000)});
+              await page.screenshot({path:`audit-artifacts/live-${name}.png`,fullPage:true});
+            }
+            await page.setViewportSize({width:390,height:844});
+            await page.goto(base,{waitUntil:'networkidle',timeout:45000});
+            result.mobile = {horizontalOverflow:await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),text:(await page.locator('body').innerText()).slice(0,12000)};
+            await page.screenshot({path:'audit-artifacts/live-mobile.png',fullPage:true});
+          } catch(e) {result.errors.push(String(e));}
+          finally {await writeFile('audit-artifacts/live-smoke.json',JSON.stringify(result,null,2));await browser.close();}
+          console.log(JSON.stringify(result,null,2));
+          JS
+      - name: Record outcomes
+        if: always()
+        run: |
+          printf '%s\n' 'typecheck=${{ steps.typecheck.outcome }}' 'tests=${{ steps.tests.outcome }}' 'python=${{ steps.python.outcome }}' 'build=${{ steps.build.outcome }}' > audit-artifacts/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: product-audit-${{ github.sha }}
+          path: audit-artifacts/
+          retention-days: 7
+      - name: Enforce baseline checks
+        if: always()
+        run: |
+          test '${{ steps.typecheck.outcome }}' = success
+          test '${{ steps.tests.outcome }}' = success
+          test '${{ steps.python.outcome }}' = success
+          test '${{ steps.build.outcome }}' = success
