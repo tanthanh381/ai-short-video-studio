@@ -1,10 +1,15 @@
-name: Verify component repair
+name: Component repair regression
 on:
   push:
     branches: ['audit/2026-10-05-product-hardening']
-    paths: ['.github/workflows/component-fix.yml']
+    paths: ['.github/workflows/component-fix.yml', 'scripts/audit/regeneration-browser.mjs', 'apps/**', 'packages/**']
+  pull_request:
+    paths: ['.github/workflows/component-fix.yml', 'scripts/audit/regeneration-browser.mjs', 'apps/**', 'packages/**']
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: component-repair-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -16,6 +21,8 @@ jobs:
       VITE_DEMO_MODE: 'false'
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0
@@ -23,17 +30,13 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Apply scoped component repair
-        run: |
-          mkdir -p component-artifacts
-          python3 scripts/audit/apply-component-fix.py
-          git diff --check
+      - run: mkdir -p component-artifacts && git rev-parse HEAD > component-artifacts/revision.txt
       - run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: set -o pipefail; pnpm typecheck 2>&1 | tee component-artifacts/typecheck.log
-      - name: All TypeScript regression tests
+      - name: TypeScript regressions
         run: set -o pipefail; pnpm test 2>&1 | tee component-artifacts/tests.log
-      - name: Local media regression tests
+      - name: Local media regressions
         run: set -o pipefail; python3 -m unittest discover -s local-tools -p 'test_*.py' 2>&1 | tee component-artifacts/python.log
       - name: Build
         run: set -o pipefail; pnpm build 2>&1 | tee component-artifacts/build.log
@@ -43,25 +46,11 @@ jobs:
         run: |
           npm install --prefix /tmp/component-browser --no-save playwright@1.56.1
           /tmp/component-browser/node_modules/.bin/playwright install --with-deps chromium
-      - name: Repair controls browser integration with mocked auth and API
+      - name: Browser UI integration with mocked auth and API
         run: |
           pnpm --filter @studio/web exec vite preview --host 127.0.0.1 --port 4173 > /tmp/component-preview.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173/ai-short-video-studio/ > /dev/null && break || sleep 1; done
           node scripts/audit/regeneration-browser.mjs
-      - name: Commit only verified source changes to the audit branch
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add packages/shared/src/index.ts packages/shared/src/regeneration.ts packages/shared/src/regeneration.test.ts
-          git add apps/worker/src/index.ts apps/worker/src/regeneration.ts apps/worker/src/regeneration.test.ts
-          git add apps/api/src/app.ts apps/api/src/regeneration.test.ts
-          git add apps/web/src/App.tsx apps/web/src/lib/api.ts apps/web/src/lib/regeneration.test.ts apps/web/src/styles.css
-          git diff --cached --check
-          git commit -m 'fix(video): regenerate individual components and preserve successful assets'
-          git push origin HEAD:audit/2026-10-05-product-hardening
-          git rev-parse HEAD > component-artifacts/revision.txt
-          git show --format=fuller HEAD > component-artifacts/changes.patch
-          git archive --format=tar HEAD -o component-artifacts/source.tar
       - uses: actions/upload-artifact@v4
         if: always()
         with:
