@@ -1,0 +1,38 @@
+name: QA access preflight
+on:
+  push:
+    branches: ['qa/2026-10-05-authenticated']
+    paths: ['.github/workflows/qa-preflight.yml']
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Check configured credentials without printing values
+        env:
+          STUDIO_QA_EMAIL: ${{ secrets.STUDIO_QA_EMAIL }}
+          STUDIO_QA_PASSWORD: ${{ secrets.STUDIO_QA_PASSWORD }}
+        run: |
+          mkdir -p qa-artifacts
+          node --input-type=module <<'JS'
+          import {writeFile} from 'node:fs/promises';
+          const result={emailSecretConfigured:Boolean(process.env.STUDIO_QA_EMAIL),passwordSecretConfigured:Boolean(process.env.STUDIO_QA_PASSWORD),authenticated:false};
+          try {const response=await fetch('https://tanthanh381.github.io/ai-short-video-studio/',{signal:AbortSignal.timeout(20000)});result.websiteHttp=response.status;}
+          catch {result.websiteHttp=null;result.connectionError=true;}
+          await writeFile('qa-artifacts/preflight.json',JSON.stringify(result,null,2));
+          console.log(JSON.stringify(result));
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-preflight-${{ github.run_id }}
+          path: qa-artifacts/
+          retention-days: 7
