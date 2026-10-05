@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Project, Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
+import { buildAudioMixFilter, validateCaptionTiming } from "./render-quality";
 
 const exec = promisify(execFile);
 export type RenderFiles = {
@@ -100,6 +101,9 @@ export async function renderProject(
   onProgress: (value: number, stage: string) => Promise<void>,
 ): Promise<RenderFiles> {
   if (!project.scenes.length) throw new Error("Dự án chưa có cảnh");
+  const orders = project.scenes.map((scene) => scene.order);
+  if (orders.some((order) => !Number.isInteger(order) || order < 0) || new Set(orders).size !== orders.length)
+    throw new Error("Scene orders must be unique non-negative integers");
   const workdir = await mkdtemp(join(tmpdir(), "short-video-"));
   try {
     const { width, height } = videoSize(project.settings.aspectRatio);
@@ -115,10 +119,11 @@ export async function renderProject(
       await writeFile(imagePath, await getFile(scene.imagePath));
       await writeFile(audioPath, await getFile(scene.audioPath));
       const ms = await durationMs(config, audioPath);
+      if (project.settings.subtitle.enabled) validateCaptionTiming(scene, ms);
       scene.actualDurationMs = ms;
       const seconds = ms / 1000;
-      const fadeOut = Math.max(0, seconds - 0.25).toFixed(3);
-      const filter = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=30,format=yuv420p,fade=t=in:st=0:d=0.25,fade=t=out:st=${fadeOut}:d=0.25[v]`;
+      // Straight cuts preserve measured timing and avoid a black opening/boundaries.
+      const filter = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=30,format=yuv420p[v]`;
       await exec(
         config.FFMPEG_PATH,
         [
@@ -211,15 +216,14 @@ export async function renderProject(
     // Use the explicit `filename` option: FFmpeg 8/9 parses a quoted filename
     // followed by `fontsdir` differently from older builds.
     let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}format=yuv420p[v]`;
-    if (musicPath)
-      filter += `;[1:a]volume=${project.settings.musicVolume},afade=t=out:st=${Math.max(0, total / 1000 - 1).toFixed(3)}:d=1[m];[0:a][m]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[a]`;
+    filter += `;${buildAudioMixFilter(Boolean(musicPath), project.settings.musicVolume, total)}`;
     args.push(
       "-filter_complex",
       filter,
       "-map",
       "[v]",
       "-map",
-      musicPath ? "[a]" : "0:a:0",
+      "[a]",
       "-c:v",
       "libx264",
       "-preset",
@@ -249,7 +253,7 @@ export async function renderProject(
       [
         "-y",
         "-ss",
-        "0.5",
+        Math.min(0.5, total / 2000).toFixed(3),
         "-i",
         output,
         "-frames:v",

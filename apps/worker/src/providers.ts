@@ -43,10 +43,19 @@ export type StoryboardInput = {
 
 export interface StoryboardProvider {
   createStoryboard(input: StoryboardInput): Promise<StoryboardResult>;
+  /** One English description of the main character/setting, reused in every scene prompt for consistency. */
+  describeCast?(input: { title: string; sourceText: string; model?: string | null }): Promise<string>;
 }
 
 /** Lựa chọn model local theo tác vụ; adapter không hỗ trợ sẽ bỏ qua. */
-export type MediaModelOptions = { image?: string | null; tts?: string | null; transcribe?: string | null };
+export type MediaModelOptions = {
+  image?: string | null;
+  tts?: string | null;
+  transcribe?: string | null;
+  /** Same seed for every scene of a project keeps the recurring character recognisable. */
+  seed?: number | null;
+  style?: "photo" | "illustration";
+};
 
 export interface MediaProvider {
   createImage(prompt: string, aspectRatio: string, models?: MediaModelOptions): Promise<Uint8Array>;
@@ -253,4 +262,27 @@ export function parseStoryboard(value: unknown): StoryboardResult {
   } catch {
     throw new Error("AI trả dữ liệu cảnh không hợp lệ. Kịch bản gốc vẫn được giữ lại; hãy thử lại");
   }
+}
+
+
+/** Stable 31-bit seed per project: all scenes share it so the same character keeps the same look. */
+export function imageSeedFor(projectId: string): number {
+  let hash = 2166136261;
+  for (const char of projectId) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
+  return hash % 2 ** 31;
+}
+
+/** Photographic by default; painted/cartoon looks only when the author's visual style asks for them. */
+export function imageStyleFor(visualStyle: string): "photo" | "illustration" {
+  return /minh họa|hoạt hình|tranh|vẽ|anime|cartoon|illustration|watercolor|màu nước|3d/iu.test(visualStyle)
+    ? "illustration"
+    : "photo";
+}
+
+/** Put the shared character description first so every scene prompt names the same person. */
+export function withCast(cast: string, prompt: string): string {
+  const base = prompt.trim();
+  const description = cast.trim().replace(/[.\s]+$/u, "");
+  if (!description || base.toLowerCase().includes(description.toLowerCase().slice(0, 40))) return base.slice(0, 2000);
+  return `${description}. ${base}`.slice(0, 2000);
 }

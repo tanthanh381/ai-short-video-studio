@@ -11,9 +11,10 @@ import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
-import { alignKnownText, cleanScriptForNarration, createFaithfulStoryboard, type MediaProvider, type StoryboardProvider } from "./providers";
+import { alignKnownText, cleanScriptForNarration, createFaithfulStoryboard, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
+import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
 
 const config = getConfig();
 const log = pino({
@@ -219,12 +220,15 @@ async function storyboard(job: JobRow, project: Project) {
     model: project.settings.localModels.storyboard,
   });
   checkDeadline(job);
+  const cast = provider.describeCast
+    ? await provider.describeCast({ title: project.title, sourceText: cleanScriptForNarration(project.sourceText), model: project.settings.localModels.storyboard })
+    : "";
   await setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard");
   const rows = result.scenes.map((scene, index) => ({
     project_id: project.id,
     scene_order: index,
     narration: scene.narration,
-    image_prompt: scene.imagePrompt,
+    image_prompt: withCast(cast, scene.imagePrompt),
     estimated_duration_ms: scene.estimatedDurationMs,
     media_status: "pending",
     subtitles: [],
@@ -268,10 +272,13 @@ async function generateMedia(job: JobRow, project: Project) {
         const { error: checkpointError } = await db.from("jobs").update({ payload: job.payload }).eq("id", job.id);
         if (checkpointError) throw checkpointError;
       }
-      const previous = job.payload.regeneration as { imagePath: string | null; audioPath: string | null } | undefined;
-      const regenerateImage = Boolean(targetId) && scene.imagePath === previous?.imagePath;
-      const regenerateAudio = Boolean(targetId) && scene.audioPath === previous?.audioPath;
-      if (!regenerateImage && !regenerateAudio && sceneMediaReady(scene, project.settings.subtitle.enabled)) {
+      const previous = job.payload.regeneration as RegenerationCheckpoint | undefined;
+      const plan = targetId
+        ? regenerationPlan(scene, job.payload.component, previous!, project.settings.subtitle.enabled)
+        : { image: false, audio: false, subtitles: false };
+      const regenerateImage = plan.image;
+      const regenerateAudio = plan.audio;
+      if (!regenerateImage && !regenerateAudio && !plan.subtitles && sceneMediaReady(scene, project.settings.subtitle.enabled)) {
         finished++;
         await progress(job, Math.round((finished / scenes.length) * 100), `Đã giữ media cảnh ${scene.order + 1}`);
         continue;
@@ -280,7 +287,7 @@ async function generateMedia(job: JobRow, project: Project) {
       let imagePath = regenerateImage ? null : scene.imagePath;
       let audioPath = regenerateAudio ? null : scene.audioPath;
       let audio: Uint8Array;
-      let subtitles = regenerateAudio ? [] : scene.subtitles;
+      let subtitles = regenerateAudio || plan.subtitles ? [] : scene.subtitles;
       let actualDurationMs = regenerateAudio ? null : scene.actualDurationMs;
       if (!imagePath) {
         await progress(
@@ -291,7 +298,7 @@ async function generateMedia(job: JobRow, project: Project) {
         const image = await media.createImage(
           `${scene.imagePrompt}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
-          project.settings.localModels,
+          { ...project.settings.localModels, seed: imageSeedFor(project.id), style: imageStyleFor(project.settings.visualStyle) },
         );
         imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
         await upload(imagePath, image, "image/png");
@@ -338,6 +345,11 @@ async function generateMedia(job: JobRow, project: Project) {
           error_message: null,
         });
       if (targetId) {
+        if (plan.subtitles) {
+          job.payload = { ...job.payload, regeneration: { ...previous, subtitlesCompleted: true } };
+          const { error: checkpointError } = await db.from("jobs").update({ payload: job.payload }).eq("id", job.id);
+          if (checkpointError) throw checkpointError;
+        }
         const generatedPrefix = `${project.userId}/${project.id}/generated/`;
         const replacedPaths = [previous?.imagePath, previous?.audioPath].filter(
           (path): path is string =>

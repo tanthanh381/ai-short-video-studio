@@ -1,0 +1,59 @@
+name: Component repair regression
+on:
+  push:
+    branches: ['audit/2026-10-05-product-hardening']
+    paths: ['.github/workflows/component-fix.yml', 'scripts/audit/regeneration-browser.mjs', 'apps/**', 'packages/**']
+  pull_request:
+    paths: ['.github/workflows/component-fix.yml', 'scripts/audit/regeneration-browser.mjs', 'apps/**', 'packages/**']
+permissions:
+  contents: read
+concurrency:
+  group: component-repair-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_SUPABASE_URL: https://qa-auth.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: public-audit-placeholder
+      VITE_API_URL: https://qa-api.invalid
+      VITE_DEMO_MODE: 'false'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: mkdir -p component-artifacts && git rev-parse HEAD > component-artifacts/revision.txt
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: set -o pipefail; pnpm typecheck 2>&1 | tee component-artifacts/typecheck.log
+      - name: TypeScript regressions
+        run: set -o pipefail; pnpm test 2>&1 | tee component-artifacts/tests.log
+      - name: Local media regressions
+        run: set -o pipefail; python3 -m unittest discover -s local-tools -p 'test_*.py' 2>&1 | tee component-artifacts/python.log
+      - name: Build
+        run: set -o pipefail; pnpm build 2>&1 | tee component-artifacts/build.log
+      - name: Dependency check
+        run: pnpm audit --json > component-artifacts/dependency-audit.json
+      - name: Install isolated browser
+        run: |
+          npm install --prefix /tmp/component-browser --no-save playwright@1.56.1
+          /tmp/component-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Browser UI integration with mocked auth and API
+        run: |
+          pnpm --filter @studio/web exec vite preview --host 127.0.0.1 --port 4173 > /tmp/component-preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173/ai-short-video-studio/ > /dev/null && break || sleep 1; done
+          node scripts/audit/regeneration-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: component-repair-${{ github.run_id }}
+          path: component-artifacts/
+          retention-days: 7

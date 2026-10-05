@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "scope": "Prepared inputs only. No authenticated AI video was generated during the audit. Technical renderer fixtures are not these benchmarks.",
+  "requiredAverageScore": 80,
+  "requiredHookScore": 8,
+  "criteria": ["hook", "script", "visual", "voice", "subtitle", "editing", "audio", "emotion", "retention", "shareability"],
+  "defaults": {"textProvider": "ollama", "mediaProvider": "local", "targetDurationSec": 30, "aspectRatio": "9:16", "voice": "doc-truyen"},
+  "cases": [
+    {
+      "id": "B01", "topic": "Triết lý", "hook": "Bạn không cần thắng mọi cuộc tranh cãi.",
+      "sourceText": "Bạn không cần thắng mọi cuộc tranh cãi. Có lần, tôi dành cả buổi tối để chứng minh mình đúng. Tin nhắn cuối cùng đã gửi, nhưng lòng vẫn chẳng nhẹ hơn. Sáng hôm sau, việc cần làm vẫn nằm đó. Người tôi muốn thay đổi vẫn sống như cũ. Chỉ có tôi mất một đêm bình yên. Từ đó, trước khi đáp trả, tôi hỏi mình: chuyện này cần một câu trả lời, hay cần một khoảng lặng? Có những điều đáng bảo vệ. Nhưng không phải điều gì cũng đáng đánh đổi bằng sự bình thản. Hôm nay, hãy chọn một việc nằm trong tay bạn và làm nó tốt hơn. Đôi khi, bước tiến lớn nhất là thôi kéo người khác về phía mình.",
+      "reviewFocus": "Giọng trầm nhưng không đều đều; hình minh họa phải theo diễn biến tranh cãi, khoảng lặng, hành động.", "scores": null
+    },
+    {
+      "id": "B02", "topic": "Motivation", "hook": "Bạn đang đợi một ngày không tồn tại.",
+      "sourceText": "Bạn đang đợi một ngày không tồn tại. Ngày đủ rảnh, đủ giỏi, đủ tự tin để bắt đầu. Tôi từng để đôi giày chạy bộ cạnh cửa suốt một tháng. Mỗi tối đều hứa: sáng mai. Một hôm, tôi không đặt mục tiêu chạy năm cây số nữa. Tôi chỉ mang giày và bước xuống sân. Chuyến đi đầu tiên ngắn đến mức chẳng đáng khoe. Nhưng tối ấy, đôi giày không còn là một lời hứa. Nó trở thành bằng chứng rằng tôi đã làm điều mình nói. Hãy thu nhỏ bước đầu tiên đến mức bạn có thể thực hiện hôm nay. Không cần một màn lột xác. Chỉ cần đừng bỏ lỡ bước nhỏ đang nằm ngay trước mặt.",
+      "reviewFocus": "Hành động tiến triển qua từng cảnh, không dùng lặp chân dung động viên chung chung.", "scores": null
+    },
+    {
+      "id": "B03", "topic": "Storytelling", "hook": "Tờ giấy trong túi áo làm anh bật khóc.",
+      "sourceText": "Tờ giấy trong túi áo làm anh bật khóc. Sau ngày bố mất, Minh mang chiếc áo cũ đến tiệm sửa. Người thợ tìm thấy một mảnh giấy gấp tư, chữ đã nhòe ở mép. Trên đó không phải lời dặn cuối cùng. Chỉ là danh sách mua hàng: gạo, thuốc, và món bánh Minh thích. Dòng cuối có thêm hai chữ: gọi con. Anh nhớ ra hôm ấy mình đã tắt máy vì đang bận. Mảnh giấy không thể đổi lại một cuộc gọi. Nhưng nó thay đổi cuộc gọi anh thực hiện tối hôm đó. Minh gọi cho mẹ, không để báo một việc gì. Anh chỉ hỏi mẹ đã ăn cơm chưa, rồi ở lại nghe hết câu trả lời.",
+      "reviewFocus": "Truyện hư cấu; kiểm tra tính nhất quán nhân vật và tránh tạo chữ AI sai trên tờ giấy.", "scores": null
+    },
+    {
+      "id": "B04", "topic": "Kiến thức", "hook": "Bạn nhớ đường về mà quên điều vừa học?",
+      "sourceText": "Bạn nhớ đường về mà quên điều vừa học? Thử đổi cách ôn bài hôm nay. Chọn một ý nhỏ từ cuốn sách đang đọc. Gấp sách lại, rồi giải thích ý đó bằng lời của mình. Chỗ nào nói chưa rõ, đánh dấu lại để kiểm tra, thay vì lướt qua và tưởng rằng đã hiểu. Tiếp theo, nghĩ ra một ví dụ gắn với công việc hoặc cuộc sống của bạn. Cuối cùng, viết một câu hỏi để tự trả lời vào lần ôn sau. Đây không phải cuộc thi nhớ được bao nhiêu trang. Mục tiêu là biết điều mình vừa học có nghĩa gì và dùng nó ở đâu. Bắt đầu với một ý đủ nhỏ để bạn thực sự giải thích được.",
+      "reviewFocus": "Các bước phải dễ theo dõi; không tự thêm số liệu hay tuyên bố khoa học chưa kiểm chứng.", "scores": null
+    },
+    {
+      "id": "B05", "topic": "Công nghệ", "hook": "Một câu trả lời trôi chảy vẫn có thể sai.",
+      "sourceText": "Một câu trả lời trôi chảy vẫn có thể sai. Khi thử một công cụ AI mới, tôi nhờ nó tóm tắt một tài liệu đã đọc. Bản tóm tắt rất thuyết phục, cho đến khi tôi tìm lại một con số trong bản gốc. Con số ấy không hề có ở đó. Từ hôm đó, tôi chia công việc thành hai bước. Trước hết, dùng AI để tạo bản nháp hoặc gợi ý hướng tìm hiểu. Sau đó, quay lại tài liệu gốc để kiểm tra những chi tiết quan trọng. Câu hỏi hữu ích không chỉ là: câu trả lời nghe có hợp lý không? Mà còn là: tôi có thể đối chiếu nó ở đâu? Tiện lợi là một lý do để dùng công cụ, không phải lý do để bỏ qua việc kiểm tra.",
+      "reviewFocus": "Giao diện, biểu tượng và màn hình không có chữ méo; không bịa tên công cụ hay nguồn dẫn.", "scores": null
+    },
+    {
+      "id": "B06", "topic": "Tài chính", "hook": "Lương tăng, vì sao ví vẫn trống?",
+      "sourceText": "Lương tăng, vì sao ví vẫn trống? Trong câu chuyện này, An vừa được tăng lương. Anh đổi điện thoại, đăng ký thêm vài dịch vụ, rồi tự thưởng những bữa ăn đắt hơn. Cuối tháng, số tiền còn lại chẳng khác trước. An mở lịch sử chi tiêu và đánh dấu từng khoản mình đã quên. Anh không xóa hết niềm vui khỏi cuộc sống. Anh chỉ chọn một mức dành cho sở thích, một mức cho nhu cầu, và phần muốn giữ lại. Lần đầu tiên, anh nhìn thấy mình đang lựa chọn điều gì. Trước khi tìm cách kiếm thêm, hãy thử nhìn rõ tiền đang đi đâu. Đây là một câu chuyện về thói quen chi tiêu, không phải lời hứa làm giàu.",
+      "reviewFocus": "Không thêm lời khuyên đầu tư cá nhân, mức lợi nhuận hay con số tài chính không có trong kịch bản.", "scores": null
+    },
+    {
+      "id": "B07", "topic": "Psychology", "hook": "Một tin nhắn chưa trả lời nói lên điều gì?",
+      "sourceText": "Một tin nhắn chưa trả lời nói lên điều gì? Mai nhìn màn hình rồi tự hỏi có phải mình đã làm người bạn khó chịu. Cô đọc lại từng câu, nghĩ ra cả một cuộc tranh cãi chưa từng diễn ra. Đến tối, người bạn gọi lại. Điện thoại hết pin, còn cô ấy phải xử lý một việc gia đình. Câu chuyện trong đầu Mai không phải câu chuyện đã xảy ra. Lần sau, Mai thử viết ra hai dòng: điều mình biết, và điều mình đang đoán. Chỉ một khoảng cách nhỏ ấy đã giúp cô lựa chọn lời hỏi thăm thay vì lời trách móc. Không phải mọi khoảng im lặng đều có cùng một ý nghĩa. Hãy để sự thật có cơ hội xuất hiện trước kết luận.",
+      "reviewFocus": "Tình huống hư cấu, không chẩn đoán sức khỏe tâm thần; giọng cần thể hiện chuyển biến cảm xúc.", "scores": null
+    },
+    {
+      "id": "B08", "topic": "Cybersecurity", "hook": "Tin nhắn càng giục, bạn càng nên chậm lại.",
+      "sourceText": "Tin nhắn càng giục, bạn càng nên chậm lại. Một tối, Huy nhận được lời nhờ chuyển tiền từ tài khoản mang tên người quen. Tin nhắn nói đang có việc gấp, đừng gọi, chỉ cần chuyển ngay. Huy đã mở ứng dụng ngân hàng. Nhưng trước khi xác nhận, anh gọi đến số điện thoại mình vẫn lưu từ trước. Người bạn bắt máy và nói không hề nhờ chuyển tiền. Chỉ một cuộc gọi đã thay đổi quyết định của Huy. Trong tình huống khẩn cấp, việc kiểm tra không có nghĩa là bạn thiếu quan tâm. Đó là cách bảo vệ cả mình lẫn người đang được nhắc tên. Hãy xác minh bằng kênh bạn đã biết, thay vì chỉ tin điều vừa xuất hiện trên màn hình.",
+      "reviewFocus": "Ví dụ hư cấu; không hiển thị dữ liệu cá nhân, tài khoản thật hoặc hướng dẫn lừa đảo.", "scores": null
+    },
+    {
+      "id": "B09", "topic": "Productivity", "hook": "Cả ngày bận rộn, việc quan trọng vẫn chưa xong.",
+      "sourceText": "Cả ngày bận rộn, việc quan trọng vẫn chưa xong. Tôi từng bắt đầu buổi sáng bằng một danh sách dài và kết thúc bằng cảm giác mình chạy vòng tròn. Hôm sau, tôi thử viết một câu trước khi mở hộp thư: nếu hôm nay chỉ hoàn thành được một việc, đó sẽ là việc gì? Tôi chia việc ấy thành một bước nhỏ, tắt thông báo trong một khoảng ngắn và bắt đầu. Không phải mọi cuộc họp đều biến mất. Không phải ngày nào cũng diễn ra đúng kế hoạch. Nhưng ít nhất, việc quan trọng đã có chỗ của nó trước khi những việc khác tràn vào. Đừng chỉ hỏi hôm nay mình làm được bao nhiêu việc. Hãy hỏi việc nào thực sự cần được tiến thêm một bước.",
+      "reviewFocus": "Nhịp dựng có chuyển trạng thái bận rộn sang tập trung; tránh lặp cảnh người ngồi máy tính.", "scores": null
+    },
+    {
+      "id": "B10", "topic": "Mystery", "hook": "Đêm nào căn nhà trống cũng sáng đèn.",
+      "sourceText": "Đêm nào căn nhà trống cũng sáng đèn. Người trong ngõ bảo chủ nhà đã chuyển đi từ lâu. Linh bắt đầu để ý: đúng chín giờ, ô cửa tầng hai sáng lên. Không tiếng bước chân, không bóng người. Một tối mưa, cô gặp người phụ nữ lớn tuổi mở cổng. Cô lấy hết can đảm hỏi về ngọn đèn. Bà mỉm cười, chỉ vào chiếc hẹn giờ cạnh ổ điện. Trước khi chuyển nhà, con trai bà đã lắp nó để mỗi lần bà quay về lấy đồ, căn phòng không tối. Bí ẩn của cả con ngõ hóa ra là một sự quan tâm rất bình thường. Có những câu chuyện trở nên đáng sợ chỉ vì ta chưa nghe đến đoạn cuối.",
+      "reviewFocus": "Truyện hư cấu; cần không khí bí ẩn và cú giải thích rõ, không dựng thành sự kiện có thật.", "scores": null
+    }
+  ]
+}

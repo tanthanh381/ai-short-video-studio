@@ -88,13 +88,27 @@ def clean_image_prompt(prompt):
     return text
 
 
-def local_image(prompt, aspect_ratio="9:16", model=None):
-    """SDXL-Turbo (MLX, Apple GPU) from the local AI toolkit. The renderer crops to the video frame."""
-    if aspect_ratio not in ("9:16", "1:1", "16:9"):
+# Native portrait/landscape sizes (multiples of 64): no square crop, so nothing is cut or upscaled much.
+IMAGE_SIZES = {"9:16": (576, 1024), "1:1": (704, 704), "16:9": (1024, 576)}
+IMAGE_STEPS = int(os.getenv("IMAGE_STEPS", "4"))
+IMAGE_STYLES = {
+    "photo": "cinematic photo, natural skin, detailed face, sharp focus, soft film lighting",
+    "illustration": "cinematic illustration, detailed, soft painterly lighting",
+}
+
+
+def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo"):
+    """SDXL-Turbo (MLX, Apple GPU) from the local AI toolkit, generated at the video's native aspect."""
+    if aspect_ratio not in IMAGE_SIZES:
         raise ValueError("Tỷ lệ ảnh không hợp lệ")
     check_choice("ảnh", model, IMAGE_MODELS)
-    # Style words first: if the text encoder's 77-token limit forces trimming, the scene detail goes, not "no text".
-    styled = f"cinematic illustration, no text, no logo, no watermark, {clean_image_prompt(prompt)}"
+    if style not in IMAGE_STYLES:
+        raise ValueError("Phong cách ảnh không hợp lệ")
+    if seed is not None:
+        seed = int(seed) % (2**31)
+    width, height = IMAGE_SIZES[aspect_ratio]
+    # Style words first: if the text encoder's 77-token limit forces trimming, the scene detail goes, not the style.
+    styled = f"{IMAGE_STYLES[style]}, no text, no logo, no watermark, {clean_image_prompt(prompt)}"
     # The server may still be importing/loading the model (minutes). Wait for it rather than loading a
     # second 7 GB copy through the one-shot script, which only runs if the server never comes up.
     deadline, down_since = time.time() + IMAGE_TIMEOUT_S, None
@@ -107,7 +121,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None):
             break
         time.sleep(5)
     if state == "ready":  # model kept loaded in memory: seconds per image
-        request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps({"prompt": styled, "model": model}).encode(),
+        request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps({"prompt": styled, "model": model, "seed": seed, "steps": IMAGE_STEPS,
+                                                                      "width": width, "height": height}).encode(),
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
             return response.read()
@@ -347,7 +362,8 @@ class Handler(BaseHTTPRequestHandler):
                 prompt = str(payload.get("prompt", ""))
                 if not prompt.strip() or len(prompt) > 3000:
                     raise ValueError("Mô tả ảnh trống hoặc quá dài")
-                binary_response(self, "image/png", local_image(prompt, payload.get("aspectRatio", "9:16"), payload.get("model")))
+                binary_response(self, "image/png", local_image(prompt, payload.get("aspectRatio", "9:16"), payload.get("model"),
+                                                              payload.get("seed"), payload.get("style") or "photo"))
             elif self.path == "/tts":
                 payload = json.loads(body)
                 binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "Linh")), payload.get("engine")))

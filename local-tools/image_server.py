@@ -61,9 +61,9 @@ def model_thread():
         print(f"[image] load failed: {error}", flush=True)
         return
     while True:
-        prompt, seed, future = JOBS.get()
+        prompt, seed, options, future = JOBS.get()
         try:
-            future.set_result(render(sd, prompt, seed))
+            future.set_result(render(sd, prompt, seed, **options))
         except Exception as error:  # reported to the waiting request
             future.set_exception(error)
 
@@ -85,11 +85,13 @@ def fit_clip_tokens(sd, prompt):
     return " ".join(words)
 
 
-def render(sd, prompt, seed):
+def render(sd, prompt, seed, steps=None, width=512, height=512):
     prompt = fit_clip_tokens(sd, ascii_prompt(prompt))
     if not prompt:
         raise ValueError("empty prompt")
-    latents = sd.generate_latents(prompt, n_images=1, cfg_weight=0.0, num_steps=STEPS,
+    latent = (height // 8, width // 8)
+    latents = sd.generate_latents(prompt, n_images=1, cfg_weight=0.0, num_steps=steps or STEPS,
+                                  latent_size=latent,
                                   seed=seed if seed is not None else random.randrange(2**31))
     for x_t in latents:
         mx.eval(x_t)
@@ -101,9 +103,9 @@ def render(sd, prompt, seed):
     return buffer.getvalue()
 
 
-def generate(prompt, seed=None):
+def generate(prompt, seed=None, **options):
     future = Future()
-    JOBS.put((prompt, seed, future))
+    JOBS.put((prompt, seed, options, future))
     return future.result(timeout=900)
 
 
@@ -137,7 +139,16 @@ class Handler(BaseHTTPRequestHandler):
             prompt = str(body.get("prompt", "")).strip()
             if not prompt or len(prompt) > 3000:
                 raise ValueError("bad prompt")
-            self._send(200, "image/png", generate(prompt, body.get("seed")))
+            options = {}
+            if body.get("steps") is not None:
+                options["steps"] = max(1, min(int(body["steps"]), 8))
+            for key in ("width", "height"):
+                if body.get(key) is not None:
+                    value = int(body[key])
+                    if value % 64 or not 384 <= value <= 1024:
+                        raise ValueError(f"bad {key}")
+                    options[key] = value
+            self._send(200, "image/png", generate(prompt, body.get("seed"), **options))
         except ValueError as error:
             print(f"[image] bad request: {error}", flush=True)
             self._send(400, "application/json", b'{"error":"bad request"}')

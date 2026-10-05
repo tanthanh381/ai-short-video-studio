@@ -102,7 +102,7 @@ export const projectSettingsSchema = z.object({
   aspectRatio: aspectRatioSchema.default("9:16"),
   voice: z.string().default("alloy"),
   localModels: localModelsSchema.default(DEFAULT_LOCAL_MODELS),
-  visualStyle: z.string().max(500).default("Minh họa điện ảnh, ấm áp, gần gũi"),
+  visualStyle: z.string().max(500).default("Ảnh điện ảnh chân thực, ánh sáng tự nhiên, nhân vật Việt Nam"),
   allowUploads: z.boolean().default(true),
   backgroundMusicPath: z.string().nullable().default(null),
   musicVolume: z.number().min(0).max(0.5).default(0.12),

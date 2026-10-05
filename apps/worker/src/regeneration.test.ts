@@ -1,0 +1,22 @@
+import { describe, expect, it } from "vitest";
+import { sceneSchema } from "@studio/shared";
+import { regenerationPlan } from "./regeneration";
+const scene = sceneSchema.parse({id:"c84187c5-33ad-4c80-a6f3-b925ca4aee31",order:0,narration:"Test narration",imagePrompt:"Test image",estimatedDurationMs:5000,actualDurationMs:5000,imagePath:"old.png",audioPath:"old.wav",mediaStatus:"ready",subtitles:[{id:"3b968fb5-a00d-4b9d-8bd5-638598d9ef4d",startMs:0,endMs:4000,text:"Test narration"}]});
+const previous={imagePath:scene.imagePath,audioPath:scene.audioPath};
+describe("component regeneration planning", () => {
+ it("image repair never regenerates voice or captions", () => expect(regenerationPlan(scene,"image",previous,true)).toEqual({image:true,audio:false,subtitles:false}));
+ it("voice repair keeps image", () => expect(regenerationPlan(scene,"audio",previous,true)).toEqual({image:false,audio:true,subtitles:false}));
+ it("subtitle repair keeps both media assets", () => expect(regenerationPlan(scene,"subtitles",previous,true)).toEqual({image:false,audio:false,subtitles:true}));
+ it("preserves legacy all behavior", () => expect(regenerationPlan(scene,undefined,previous,true)).toEqual({image:true,audio:true,subtitles:false}));
+ it("retry preserves a successful regenerated image", () => expect(regenerationPlan({...scene,imagePath:"new.png"},"image",previous,true)).toEqual({image:false,audio:false,subtitles:false}));
+ it("retry preserves a successful regenerated voice", () => expect(regenerationPlan({...scene,audioPath:"new.wav"},"audio",previous,true)).toEqual({image:false,audio:false,subtitles:false}));
+ it("retry all only recreates the unfinished asset", () => expect(regenerationPlan({...scene,imagePath:"new.png"},"all",previous,true)).toEqual({image:false,audio:true,subtitles:false}));
+ it("retry does not transcribe after subtitle checkpoint", () => expect(regenerationPlan(scene,"subtitles",{...previous,subtitlesCompleted:true},true).subtitles).toBe(false));
+ it.each(["audio","subtitles"])("missing image stops unrequested repair for %s", c => expect(() => regenerationPlan({...scene,imagePath:null},c,previous,true)).toThrow());
+ it("missing voice stops image-only repair", () => expect(() => regenerationPlan({...scene,audioPath:null},"image",previous,true)).toThrow());
+ it("missing captions stop image-only repair when required", () => expect(() => regenerationPlan({...scene,subtitles:[]},"image",previous,true)).toThrow());
+ it("disabled captions do not block image repair", () => expect(regenerationPlan({...scene,subtitles:[]},"image",previous,false).image).toBe(true));
+ it("cannot transcribe missing voice", () => expect(() => regenerationPlan({...scene,audioPath:null},"subtitles",previous,true)).toThrow());
+ it("does not regenerate disabled subtitles", () => expect(() => regenerationPlan(scene,"subtitles",previous,false)).toThrow());
+ it("rejects unsupported component", () => expect(() => regenerationPlan(scene,"invalid",previous,true)).toThrow());
+});
