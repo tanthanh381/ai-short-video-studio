@@ -1,0 +1,153 @@
+name: Verify audit corrections
+on:
+  push:
+    branches: [audit/2026-10-05-quality-reliability]
+    paths: ['scripts/audit/2026-10-05.patch', '.github/workflows/audit-upgrade.yml']
+permissions:
+  contents: write
+concurrency:
+  group: audit-corrections
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/audit/2026-10-05-quality-reliability'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_API_URL: ${{ vars.VITE_API_URL }}
+      VITE_DEMO_MODE: 'false'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Apply reviewed, scoped patch
+        run: |
+          mkdir -p audit-artifacts
+          if git apply --check scripts/audit/2026-10-05.patch; then
+            git apply scripts/audit/2026-10-05.patch
+          else
+            git apply --reverse --check scripts/audit/2026-10-05.patch
+          fi
+          git diff --check
+      - name: Pin patched versions within existing major releases
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          changes = {
+            'package.json': {'devDependencies': {'vitest': '4.1.11'}},
+            'apps/web/package.json': {'dependencies': {'react-router-dom': '7.18.0'}, 'devDependencies': {'vite': '7.3.5'}},
+            'apps/api/package.json': {'dependencies': {'express-rate-limit': '8.2.2'}},
+          }
+          for name, sections in changes.items():
+            path = Path(name)
+            data = json.loads(path.read_text())
+            for section, values in sections.items():
+              data[section].update(values)
+            path.write_text(json.dumps(data, indent=2) + '\n')
+          path = Path('pnpm-workspace.yaml')
+          text = path.read_text()
+          if '\noverrides:' not in text:
+            path.write_text(text + '\noverrides:\n  ip-address: 10.7.1\n  vite: 7.3.5\n')
+          PY
+          pnpm install --no-frozen-lockfile
+      - name: Typecheck
+        run: set -o pipefail; pnpm typecheck 2>&1 | tee audit-artifacts/typecheck.log
+      - name: Regression tests
+        run: set -o pipefail; pnpm test 2>&1 | tee audit-artifacts/tests.log
+      - name: Local media tests
+        run: set -o pipefail; python3 -m unittest discover -s local-tools -p 'test_*.py' 2>&1 | tee audit-artifacts/python.log
+      - name: Build
+        run: set -o pipefail; pnpm build 2>&1 | tee audit-artifacts/build.log
+      - name: Dependency security gate
+        run: pnpm audit --json > audit-artifacts/dependency-audit.json
+      - name: Install media and browser test tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg fonts-noto-core
+          npm install --prefix /tmp/studio-audit-browser --no-save playwright@1.56.1
+          /tmp/studio-audit-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Real FFmpeg render integration test (synthetic assets, not AI benchmark)
+        run: |
+          set -o pipefail
+          pnpm --filter @studio/worker smoke:render 2>&1 | tee audit-artifacts/render.log
+          cp apps/worker/tmp/render-smoke/smoke-output.mp4 audit-artifacts/renderer-fixture.mp4
+          cp apps/worker/tmp/render-smoke/smoke-thumbnail.jpg audit-artifacts/renderer-thumbnail.jpg
+      - name: Browser regression for patched login and protected routes
+        run: |
+          pnpm --filter @studio/web exec vite preview --host 127.0.0.1 --port 4173 > /tmp/studio-preview.log 2>&1 &
+          node --input-type=module <<'JS'
+          import {createRequire} from 'node:module';
+          import {writeFile} from 'node:fs/promises';
+          import assert from 'node:assert/strict';
+          const require = createRequire('/tmp/studio-audit-browser/package.json');
+          const {chromium} = require('playwright');
+          const browser = await chromium.launch();
+          const page = await browser.newPage({viewport:{width:390,height:844}});
+          const results={scope:'Logged-out browser and read-only API checks; no authenticated AI benchmark',checks:[],errors:[]};
+          page.on('pageerror',e=>results.errors.push(String(e)));
+          const base='http://127.0.0.1:4173/ai-short-video-studio/';
+          try {
+            for(let i=0;i<30;i++){try{if((await fetch(base)).ok)break;}catch{}await new Promise(r=>setTimeout(r,500));}
+            await page.goto(base,{waitUntil:'networkidle'});
+            const email=page.locator('input[type=email]');
+            await email.waitFor();
+            const box=await email.boundingBox();
+            assert(box && box.y>=0 && box.y+box.height<844,'Email must be visible without scrolling on mobile');
+            assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+            results.checks.push({name:'mobile-email-above-fold',passed:true,box});
+            await page.screenshot({path:'audit-artifacts/patched-mobile.png',fullPage:true});
+            await email.fill('invalid-address');
+            assert.equal(await email.evaluate(el=>el.validity.valid),false);
+            results.checks.push({name:'invalid-email-html-validation',passed:true});
+            await page.reload({waitUntil:'networkidle'});
+            await page.locator('input[type=email]').waitFor();
+            results.checks.push({name:'login-refresh',passed:true});
+            await page.goto(base+'new',{waitUntil:'networkidle'});
+            await page.locator('input[type=password]').waitFor();
+            assert(page.url().endsWith('/login'));
+            results.checks.push({name:'protected-route-logged-out',passed:true});
+            await page.setViewportSize({width:1440,height:1000});
+            await page.goto(base,{waitUntil:'networkidle'});
+            await page.screenshot({path:'audit-artifacts/patched-desktop.png',fullPage:true});
+            assert.equal(results.errors.length,0);
+            results.checks.push({name:'no-page-exceptions',passed:true});
+            if(process.env.VITE_API_URL){
+              const api=process.env.VITE_API_URL.replace(/\/$/,'');
+              for(const path of ['/health','/v1/projects']){
+                try {
+                  const r=await fetch(api+path,{signal:AbortSignal.timeout(15000)});
+                  results.checks.push({name:'live-read-only'+path,status:r.status(),expected:path==='/health'?200:401});
+                } catch(e){results.checks.push({name:'live-read-only'+path,status:'UNREACHABLE',error:String(e)});}
+              }
+            }
+          } catch(e){results.errors.push(String(e));process.exitCode=1;}
+          finally {await writeFile('audit-artifacts/browser-regression.json',JSON.stringify(results,null,2));await browser.close();}
+          console.log(JSON.stringify(results,null,2));
+          JS
+      - name: Commit verified corrections to the audit branch only
+        run: |
+          git diff --check
+          git add apps/api/src/app.ts apps/api/src/cost-estimate.test.ts apps/web/src/main.tsx apps/web/src/login-responsive.css apps/worker/src/render.ts apps/worker/src/render-quality.ts apps/worker/src/render-quality.test.ts package.json apps/api/package.json apps/web/package.json pnpm-workspace.yaml pnpm-lock.yaml
+          git diff --cached > audit-artifacts/verified-changes.patch
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'fix(audit): harden dependencies, duck audio, validate captions and repair mobile login'
+            git push origin HEAD:refs/heads/audit/2026-10-05-quality-reliability
+          fi
+          git rev-parse HEAD > audit-artifacts/revision.txt
+          git archive --format=tar HEAD -o audit-artifacts/source.tar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verified-audit-${{ github.run_id }}
+          path: audit-artifacts/
+          retention-days: 7
