@@ -9,7 +9,7 @@ const now = "2026-10-04T10:00:00.000Z";
 const script = "  Hãy dành một phút để lắng nghe chính mình.\nNgày mới bắt đầu.  ";
 const config: AppConfig = {
   SUPABASE_URL: "https://example.supabase.co", SUPABASE_SECRET_KEY: "test-secret-key-long",
-  ALLOWED_ORIGINS: "http://localhost:5173", PORT: 8787, MAX_UPLOAD_MB: 50,
+  ALLOWED_ORIGINS: "http://localhost:5173", OLLAMA_BASE_URL: "http://ollama.test:11434", WORKER_HEALTH_URL: "http://worker.test:8790", PORT: 8787, MAX_UPLOAD_MB: 50,
   DAILY_BUDGET_USD: 0, MAX_CONCURRENT_JOBS: 1, AI_FEATURES_ENABLED: false,
   OPENAI_FEATURES_ENABLED: true, ANTHROPIC_FEATURES_ENABLED: true,
   OLLAMA_FEATURES_ENABLED: true, LOCAL_MEDIA_FEATURES_ENABLED: true,

@@ -56,6 +56,12 @@ const accountSettingsSchema = z.object({
   maxConcurrentJobs: z.number().int().min(1).max(5),
 });
 
+type ServiceState = "healthy" | "configured" | "offline" | "disabled" | "unknown";
+type ServiceStatus = { state: ServiceState; detail: string; checkedAt: string };
+type WorkerHealthPayload = {
+  services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia", { state: ServiceState; detail: string }>>;
+};
+
 function safeName(name: string) {
   return name
     .normalize("NFKD")
@@ -103,6 +109,61 @@ export function createApp(config: AppConfig, db: AdminClient) {
   const allowedOrigins = config.ALLOWED_ORIGINS.split(",")
     .map((x) => x.trim())
     .filter(Boolean);
+  let serviceStatusCache: { expiresAt: number; value: Record<string, ServiceStatus> } | null = null;
+
+  async function probe(url: string) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(2_500) });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function collectServiceStatuses() {
+    if (serviceStatusCache && serviceStatusCache.expiresAt > Date.now()) return serviceStatusCache.value;
+    const checkedAt = new Date().toISOString();
+    const shouldCheckWorker = config.RENDER_WORKER_ENABLED || config.OPENAI_FEATURES_ENABLED || config.ANTHROPIC_FEATURES_ENABLED || config.OLLAMA_FEATURES_ENABLED || config.LOCAL_MEDIA_FEATURES_ENABLED;
+    const [workerResponse, ollamaReady, mediaReady] = await Promise.all([
+      shouldCheckWorker
+        ? fetch(`${config.WORKER_HEALTH_URL.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(2_500) })
+        .then(async (response) => response.ok ? await response.json() as WorkerHealthPayload : null)
+        .catch(() => null)
+        : Promise.resolve(null),
+      config.OLLAMA_FEATURES_ENABLED ? probe(`${config.OLLAMA_BASE_URL.replace(/\/$/, "")}/api/tags`) : Promise.resolve(false),
+      config.LOCAL_MEDIA_FEATURES_ENABLED ? probe(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/models`) : Promise.resolve(false),
+    ]);
+    const workerService = workerResponse?.services?.worker;
+    const renderService = workerResponse?.services?.render;
+    const workerUnavailable = !workerService;
+    const status = (state: ServiceState, detail: string): ServiceStatus => ({ state, detail, checkedAt });
+    const fromWorker = (key: keyof NonNullable<WorkerHealthPayload["services"]>, fallback: ServiceStatus) => {
+      const item = workerResponse?.services?.[key];
+      return item ? status(item.state, item.detail) : fallback;
+    };
+    const value: Record<string, ServiceStatus> = {
+      api: status("healthy", "API đã phản hồi yêu cầu này"),
+      supabase: status("healthy", "Đã xác thực tài khoản và truy cập được dữ liệu"),
+      worker: workerUnavailable
+        ? status(config.RENDER_WORKER_ENABLED ? "offline" : "disabled", config.RENDER_WORKER_ENABLED ? "Không kết nối được worker" : "Worker render đang tắt")
+        : status(workerService.state, workerService.detail),
+      render: renderService
+        ? status(renderService.state, renderService.detail)
+        : status(config.RENDER_WORKER_ENABLED ? "offline" : "disabled", config.RENDER_WORKER_ENABLED ? "Chưa nhận được tín hiệu từ worker" : "Tính năng render đang tắt"),
+      ollama: status(
+        config.OLLAMA_FEATURES_ENABLED ? (ollamaReady ? "healthy" : "offline") : "disabled",
+        config.OLLAMA_FEATURES_ENABLED ? (ollamaReady ? "Ollama đang phản hồi /api/tags" : "Không kết nối được Ollama") : "Tính năng Ollama đang tắt",
+      ),
+      localMedia: status(
+        config.LOCAL_MEDIA_FEATURES_ENABLED ? (mediaReady ? "healthy" : "offline") : "disabled",
+        config.LOCAL_MEDIA_FEATURES_ENABLED ? (mediaReady ? "Media server đang phản hồi /models" : "Không kết nối được media server") : "Tính năng media local đang tắt",
+      ),
+      openai: fromWorker("openai", status(config.OPENAI_FEATURES_ENABLED ? "unknown" : "disabled", config.OPENAI_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng OpenAI đang tắt")),
+      anthropic: fromWorker("anthropic", status(config.ANTHROPIC_FEATURES_ENABLED ? "unknown" : "disabled", config.ANTHROPIC_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng Claude đang tắt")),
+    };
+    serviceStatusCache = { expiresAt: Date.now() + 5_000, value };
+    return value;
+  }
   app.disable("x-powered-by");
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(
@@ -274,7 +335,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.json(projects);
   });
 
-  app.get("/v1/settings", (req, res) => {
+  app.get("/v1/settings", async (req, res) => {
     res.json({
       dailyBudgetUsd: req.dailyBudgetUsd,
       maxConcurrentJobs: req.maxConcurrentJobs,
@@ -287,6 +348,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
         localMedia: config.LOCAL_MEDIA_FEATURES_ENABLED,
         render: config.RENDER_WORKER_ENABLED,
       },
+      serviceStatuses: await collectServiceStatuses(),
     });
   });
 
@@ -355,6 +417,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
         localMedia: config.LOCAL_MEDIA_FEATURES_ENABLED,
         render: config.RENDER_WORKER_ENABLED,
       },
+      serviceStatuses: await collectServiceStatuses(),
     });
   });
 

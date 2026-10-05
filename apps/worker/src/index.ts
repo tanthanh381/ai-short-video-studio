@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createServer } from "node:http";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,6 +51,58 @@ const ollama = new OllamaStoryboardAdapter(
 );
 const localMedia = new LocalMediaAdapter(config.LOCAL_MEDIA_BASE_URL);
 const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
+
+type HealthState = "healthy" | "configured" | "offline";
+type HealthItem = { state: HealthState; detail: string };
+
+async function probeJson(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(2_500) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function workerHealth() {
+  const [ollamaReady, mediaReady] = await Promise.all([
+    probeJson(`${config.OLLAMA_BASE_URL.replace(/\/$/, "")}/api/tags`),
+    probeJson(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/models`),
+  ]);
+  const configured = (available: boolean, ready: boolean, name: string): HealthItem => ({
+    state: available ? (ready ? "healthy" : "offline") : "offline",
+    detail: available
+      ? ready ? `${name} đang phản hồi` : `${name} chưa phản hồi`
+      : `Chưa cấu hình ${name}`,
+  });
+  return {
+    ok: true,
+    workerId,
+    checkedAt: new Date().toISOString(),
+    services: {
+      worker: { state: "healthy" as const, detail: "Worker đang chạy và sẵn sàng nhận job" },
+      render: { state: "healthy" as const, detail: "Worker đã sẵn sàng cho FFmpeg" },
+      openai: { state: openai ? "configured" as const : "offline" as const, detail: openai ? "Đã có API key; chưa gọi thử để tránh phát sinh phí" : "Chưa có API key" },
+      anthropic: { state: anthropic ? "configured" as const : "offline" as const, detail: anthropic ? "Đã có API key; chưa gọi thử để tránh phát sinh phí" : "Chưa có API key" },
+      ollama: configured(true, ollamaReady, "Ollama"),
+      localMedia: configured(true, mediaReady, "Media local"),
+    } satisfies Record<string, HealthItem>,
+  };
+}
+
+const healthServer = createServer(async (request, response) => {
+  if (request.url !== "/health") {
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: "Not found" }));
+    return;
+  }
+  const payload = await workerHealth();
+  response.writeHead(200, { "content-type": "application/json" });
+  response.end(JSON.stringify(payload));
+});
+healthServer.listen(config.WORKER_HEALTH_PORT, config.WORKER_HEALTH_HOST, () => {
+  log.info({ port: config.WORKER_HEALTH_PORT }, "worker_health_started");
+});
 
 function isoTimestamp(value: string): string {
   const parsed = new Date(value);
@@ -565,9 +618,11 @@ async function poll() {
 let stopping = false;
 process.on("SIGTERM", () => {
   stopping = true;
+  healthServer.close();
 });
 process.on("SIGINT", () => {
   stopping = true;
+  healthServer.close();
 });
 log.info(
   {

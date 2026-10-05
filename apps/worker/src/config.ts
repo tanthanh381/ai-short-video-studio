@@ -23,6 +23,8 @@ const schema = z.object({
   OPENAI_IMAGE_MODEL: z.string().default("gpt-image-2.5-sunburst"),
   OPENAI_TTS_MODEL: z.string().default("gpt-4o-mini-tts"),
   WORKER_POLL_MS: z.coerce.number().int().min(500).default(2000),
+  WORKER_HEALTH_HOST: z.string().default("0.0.0.0"),
+  WORKER_HEALTH_PORT: z.coerce.number().int().positive().default(8790),
   RENDER_TIMEOUT_MS: z.coerce.number().int().min(30_000).default(900_000),
   TEMP_RETENTION_HOURS: z.coerce.number().positive().default(24),
   FFMPEG_PATH: z.string().default("ffmpeg"),

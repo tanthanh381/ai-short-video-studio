@@ -61,7 +61,7 @@ import {
   type RegenerationComponent,
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
-import { api, type VideoResult } from "./lib/api";
+import { api, type ServiceId, type ServiceStatus, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
 import { projectIsProcessing } from "./lib/video-submission";
 import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
@@ -2379,6 +2379,16 @@ function ExportsPage() {
 
 function SettingsPage() {
   const { isDemo } = useAuth();
+  const defaultServiceStatuses: Record<ServiceId, ServiceStatus> = {
+    api: { state: isDemo ? "disabled" : "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
+    supabase: { state: isDemo ? "disabled" : "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
+    openai: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
+    anthropic: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
+    ollama: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
+    localMedia: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
+    worker: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
+    render: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
+  };
   const [settings, setSettings] = useState({
     dailyBudgetUsd: 3,
     maxConcurrentJobs: 1,
@@ -2391,16 +2401,28 @@ function SettingsPage() {
       localMedia: false,
       render: false,
     },
+    serviceStatuses: defaultServiceStatuses,
   });
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  async function refreshSettings() {
+    if (isDemo) return;
+    setRefreshing(true);
+    setMessage(null);
+    try {
+      setSettings(await api.getSettings());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Không thể kiểm tra trạng thái dịch vụ");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     if (isDemo) return;
-    void api
-      .getSettings()
-      .then(setSettings)
-      .catch((error: Error) => setMessage(error.message));
+    void refreshSettings();
   }, [isDemo]);
 
   async function saveSettings() {
@@ -2427,16 +2449,25 @@ function SettingsPage() {
     }
   }
 
-  const connection = (enabled: boolean) => ({
-    className: enabled ? "on" : "off",
-    label: enabled ? "Đã kết nối" : "Chưa cấu hình",
-  });
-  const supabaseState = connection(settings.capabilities.supabase);
-  const openaiState = connection(settings.capabilities.openai);
-  const anthropicState = connection(settings.capabilities.anthropic);
-  const ollamaState = connection(settings.capabilities.ollama);
-  const localMediaState = connection(settings.capabilities.localMedia);
-  const renderState = connection(settings.capabilities.render);
+  const serviceState = (id: ServiceId, fallbackEnabled: boolean) => {
+    const status = settings.serviceStatuses[id];
+    const meta = {
+      healthy: { className: "on", label: "Hoạt động" },
+      configured: { className: "configured", label: "Đã cấu hình" },
+      offline: { className: "off", label: "Mất kết nối" },
+      disabled: { className: "off", label: "Đang tắt" },
+      unknown: { className: "unknown", label: fallbackEnabled ? "Chưa kiểm tra" : "Chưa cấu hình" },
+    }[status?.state ?? (fallbackEnabled ? "unknown" : "disabled")];
+    return { ...meta, detail: status?.detail ?? "Chưa có dữ liệu kiểm tra" };
+  };
+  const apiState = serviceState("api", true);
+  const supabaseState = serviceState("supabase", settings.capabilities.supabase);
+  const openaiState = serviceState("openai", settings.capabilities.openai);
+  const anthropicState = serviceState("anthropic", settings.capabilities.anthropic);
+  const ollamaState = serviceState("ollama", settings.capabilities.ollama);
+  const localMediaState = serviceState("localMedia", settings.capabilities.localMedia);
+  const workerState = serviceState("worker", settings.capabilities.render);
+  const renderState = serviceState("render", settings.capabilities.render);
   return (
     <SimplePage
       title="Cài đặt"
@@ -2444,48 +2475,77 @@ function SettingsPage() {
     >
       <div className="settings-page-grid">
         <section>
-          <h2>Kết nối dịch vụ</h2>
+          <div className="section-heading-row">
+            <div>
+              <h2>Kết nối dịch vụ</h2>
+              <p>Trạng thái được kiểm tra từ backend và worker.</p>
+            </div>
+            <button
+              className="button button-ghost"
+              type="button"
+              onClick={() => void refreshSettings()}
+              disabled={isDemo || refreshing}
+              aria-busy={refreshing}
+            >
+              <RefreshCw size={14} className={refreshing ? "spin" : undefined} />
+              {refreshing ? "Đang kiểm tra" : "Kiểm tra lại"}
+            </button>
+          </div>
+          <div className="connection-row">
+            <div>
+              <strong>Backend API</strong>
+              <span>Máy chủ đang phục vụ website</span>
+            </div>
+            <b className={apiState.className} title={apiState.detail}>{apiState.label}</b>
+          </div>
           <div className="connection-row">
             <div>
               <strong>Supabase</strong>
               <span>Đăng nhập, dữ liệu và media</span>
             </div>
-            <b className={supabaseState.className}>{supabaseState.label}</b>
+            <b className={supabaseState.className} title={supabaseState.detail}>{supabaseState.label}</b>
           </div>
           <div className="connection-row">
             <div>
               <strong>Claude</strong>
               <span>Chia cảnh và biên tập kịch bản</span>
             </div>
-            <b className={anthropicState.className}>{anthropicState.label}</b>
+            <b className={anthropicState.className} title={anthropicState.detail}>{anthropicState.label}</b>
           </div>
           <div className="connection-row">
             <div>
               <strong>Ollama</strong>
               <span>Chia cảnh cục bộ, không gửi nội dung ra ngoài</span>
             </div>
-            <b className={ollamaState.className}>{ollamaState.label}</b>
+            <b className={ollamaState.className} title={ollamaState.detail}>{ollamaState.label}</b>
           </div>
           <div className="connection-row">
             <div>
               <strong>ChatGPT / OpenAI</strong>
               <span>Kịch bản, hình ảnh, giọng đọc và đồng bộ phụ đề</span>
             </div>
-            <b className={openaiState.className}>{openaiState.label}</b>
+            <b className={openaiState.className} title={openaiState.detail}>{openaiState.label}</b>
           </div>
           <div className="connection-row">
             <div>
               <strong>Media local</strong>
               <span>SDXL-Turbo MLX, VieNeu/Piper/Linh và Whisper trên máy này</span>
             </div>
-            <b className={localMediaState.className}>{localMediaState.label}</b>
+            <b className={localMediaState.className} title={localMediaState.detail}>{localMediaState.label}</b>
           </div>
           <div className="connection-row">
             <div>
               <strong>Worker render</strong>
               <span>FFmpeg trên máy tự host</span>
             </div>
-            <b className={renderState.className}>{renderState.label}</b>
+            <b className={workerState.className} title={workerState.detail}>{workerState.label}</b>
+          </div>
+          <div className="connection-row">
+            <div>
+              <strong>Render / FFmpeg</strong>
+              <span>Ghép và xuất MP4</span>
+            </div>
+            <b className={renderState.className} title={renderState.detail}>{renderState.label}</b>
           </div>
         </section>
         <section>

@@ -13,6 +13,10 @@ export type VideoResult = {
   height: number;
 };
 
+export type ServiceState = "healthy" | "configured" | "offline" | "disabled" | "unknown";
+export type ServiceId = "api" | "supabase" | "openai" | "anthropic" | "ollama" | "localMedia" | "worker" | "render";
+export type ServiceStatus = { state: ServiceState; detail: string; checkedAt: string };
+
 export type AccountSettings = {
   dailyBudgetUsd: number;
   maxConcurrentJobs: number;
@@ -25,6 +29,7 @@ export type AccountSettings = {
     localMedia: boolean;
     render: boolean;
   };
+  serviceStatuses: Record<ServiceId, ServiceStatus>;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

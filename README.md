@@ -17,6 +17,7 @@ Studio tiếng Việt: đăng nhập, dán kịch bản và bấm **Tạo video*
 - Migration Supabase tạo database, RLS và bucket riêng tư.
 - GitHub Actions kiểm tra source và tự động triển khai GitHub Pages.
 - Frontend production đã triển khai trên GitHub Pages và kết nối backend thật qua Tailscale Funnel. Studio phát MP4 đã xuất, tải file thực và làm mới quyền truy cập có thời hạn cho video riêng tư.
+- Trang **Cài đặt** hiển thị trạng thái thật của từng lớp kết nối: Backend API và Supabase được xác nhận qua request hiện tại; worker, Ollama và media local được probe; OpenAI/Claude chỉ báo **Đã cấu hình** khi worker có API key, không gọi thử để tránh phát sinh phí. Có thể bấm **Kiểm tra lại** sau khi bật/tắt dịch vụ.
 
 Đã chạy ba video thật từ kịch bản mới qua website công khai; kiểm tra quyền đăng nhập và chặn tài khoản ngoài danh sách, tải lại/đóng rồi mở trang khi tác vụ chạy, tiếp tục từ lỗi chia cảnh/lỗi media riêng một cảnh và giao diện điện thoại. Video cuối được tạo từ một ô và một nút, tải MP4 thực, lời đọc/phụ đề nguyên văn, 1080×1920 và 8,979 giây theo audio. Xem số liệu và bằng chứng tại [biên bản kiểm thử](docs/KIEM-THU.md).
 

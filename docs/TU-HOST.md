@@ -51,6 +51,8 @@ docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml ps
 
 Kiểm tra API nội bộ tại `http://127.0.0.1:8787/health`. Sau đó đặt GitHub Actions variable `VITE_API_URL` bằng hostname HTTPS của Tunnel, hoặc `http://localhost:8787` nếu chạy local, rồi triển khai lại frontend.
 
+Trong **Cài đặt**, nút **Kiểm tra lại** gọi `GET /v1/settings` để kiểm tra Backend API, quyền Supabase, worker render, Ollama và media server. Worker cung cấp health endpoint nội bộ tại `http://worker:8790/health`; không cần publish cổng này ra Internet. OpenAI/Claude chỉ được kiểm tra sự tồn tại của API key, không gọi API provider để tránh phát sinh chi phí. Nếu vừa sửa `.env.selfhost`, hãy rebuild/restart compose trước khi kiểm tra lại.
+
 ## Kết nối public bằng Tailscale Funnel
 
 Tailscale Funnel chuyển tiếp riêng cổng API ra HTTPS; worker, ComfyUI và media server vẫn chỉ chạy trên máy local. Trên máy đã đăng nhập Tailscale và đã được quản trị viên cho phép Funnel:
