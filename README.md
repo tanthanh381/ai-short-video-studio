@@ -10,7 +10,7 @@ Studio tiếng Việt: đăng nhập, dán kịch bản và bấm **Tạo video*
 ## Trạng thái hiện tại
 
 - Giao diện React + TypeScript hoàn chỉnh cho máy tính và điện thoại.
-- Luồng **một nút** đã hoạt động trên website công khai: chỉ nhập kịch bản, máy tự chia cảnh bằng Ollama, tạo ảnh ComfyUI, đọc tiếng Việt bằng macOS Linh, tạo phụ đề đúng lời gốc và ghép MP4 bằng FFmpeg. Không cần API key và không gọi API trả phí.
+- Luồng **một nút** đã hoạt động trên website công khai: chỉ nhập kịch bản, máy tự chia cảnh bằng Ollama, tạo ảnh SDXL-Turbo qua MLX, đọc tiếng Việt bằng VieNeu/Piper hoặc macOS Linh, tạo phụ đề đúng lời gốc và ghép MP4 bằng FFmpeg. Không cần API key và không gọi API trả phí.
 - Khi máy AI chưa được kết nối, vẫn có thể lưu bản nháp, sửa storyboard, tải ảnh/audio của mình lên và ghép MP4 khi worker sẵn sàng. Chế độ mẫu được ghi rõ và không trả video giả.
 - API Express có xác thực Supabase, danh sách tài khoản được phép, signed upload/download, giới hạn file, rate limit, ngân sách ngày, idempotency và giới hạn tác vụ đồng thời.
 - Worker có adapter Ollama/local và Claude/OpenAI tùy chọn, hàng đợi PostgreSQL bền vững, checkpoint từng bước và từng cảnh, retry giới hạn, heartbeat và FFmpeg render MP4 H.264/AAC.
@@ -31,11 +31,11 @@ Studio tiếng Việt: đăng nhập, dán kịch bản và bấm **Tạo video*
 
 Tên được đặt tự động. Mặc định video dọc 1080×1920, giọng Linh, phụ đề tiếng Việt và không nhạc. Giọng, tỷ lệ, nhạc và các bước chỉnh tay nằm trong phần thu gọn. Không tự viết lại kịch bản; khi không bật viết lại, nối lời đọc các cảnh khôi phục đúng nguyên văn đầu vào.
 
-Luồng một nút chỉ dùng **Ollama + media local**, không tự chuyển sang API trả phí khi có key. Không mất phí API nhưng vẫn dùng điện, phần cứng và dung lượng Supabase trong hạn mức tài khoản. Máy chủ phải bật, không ngủ, và chạy Docker, Ollama, ComfyUI, cầu nối media, Tailscale Funnel.
+Luồng một nút chỉ dùng **Ollama + media local**, không tự chuyển sang API trả phí khi có key. Không mất phí API nhưng vẫn dùng điện, phần cứng và dung lượng Supabase trong hạn mức tài khoản. Máy chủ phải bật, không ngủ, và chạy Docker, Ollama, image server MLX, cầu nối media, Tailscale Funnel.
 
 Sau khi khởi động lại máy Mac đã được cấu hình, nhấp đúp `scripts/Mo-Video-Studio.command` để bật các thành phần và mở website; không cần nhập lệnh hoặc sửa cấu hình. Chờ máy khởi động xong các dịch vụ trước khi tạo video.
 
-Không có API key vẫn dùng được luồng tự động khi Ollama, ComfyUI và máy xử lý đã kết nối. Nếu các thành phần local chưa sẵn sàng, có thể lưu bản nháp, sửa cảnh và dùng ảnh/audio tự tải lên; giao diện báo rõ phần đang thiếu kết nối.
+Không có API key vẫn dùng được luồng tự động khi Ollama, image server MLX và máy xử lý đã kết nối. Nếu các thành phần local chưa sẵn sàng, có thể lưu bản nháp, sửa cảnh và dùng ảnh/audio tự tải lên; giao diện báo rõ phần đang thiếu kết nối.
 
 ## Kiến trúc
 
@@ -46,7 +46,7 @@ Không có API key vẫn dùng được luồng tự động khi Ollama, ComfyUI
 | Dữ liệu     | Supabase Auth, PostgreSQL, private Storage | Đăng nhập, metadata, hàng đợi bền vững và media     |
 | Worker      | Node.js, FFmpeg, Noto Sans, Docker         | Gọi AI, checkpoint từng cảnh và render video        |
 | AI văn bản  | Ollama (mặc định), Claude/OpenAI tùy chọn  | Prompt hình ảnh theo cảnh; lời gốc được khóa bằng code |
-| AI media    | ComfyUI + macOS Linh (mặc định)            | Ảnh local, giọng đọc; phụ đề từ audio PCM đo thật     |
+| AI media    | SDXL-Turbo MLX + VieNeu/Piper/macOS Linh    | Ảnh local, giọng đọc; phụ đề từ audio PCM đo thật     |
 
 Frontend không chứa secret. Worker render là một service riêng có CPU, dung lượng tạm và thời gian chạy phù hợp; GitHub Actions không được dùng làm hàng đợi video.
 
@@ -67,20 +67,21 @@ supabase       Migration database, RLS và storage
 
 ### Ollama cục bộ
 
-Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker kết nối tới Ollama trên máy chủ qua `OLLAMA_BASE_URL` (mặc định `http://host.docker.internal:11434`) và dùng model `qwen2.5:3b`. Cài model bằng `ollama pull qwen2.5:3b`.
+Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker kết nối tới Ollama trên máy chủ qua `OLLAMA_BASE_URL` (mặc định `http://host.docker.internal:11434`) và dùng model `qwen2.5:3b`. Cài model bằng `ollama pull qwen2.5:3b`. Để ưu tiên chất lượng khi máy đủ RAM, có thể đặt `OLLAMA_MODEL` thành model instruction lớn hơn đã cài trên máy; `OLLAMA_NUM_CTX=8192` và các tham số sampling ổn định giúp JSON storyboard và prompt ảnh ít lặp, ít bị cắt.
 
 ### Media AI cục bộ trên macOS
 
-Pipeline không cần API trả phí: ComfyUI + checkpoint Analog Diffusion tạo ảnh, giọng `Linh` của macOS tạo TTS tiếng Việt. Mỗi cụm lời gốc được tổng hợp thành WAV; timestamp phụ đề là vị trí nối audio tính từ số mẫu PCM thực, không phải chia thời gian theo ký tự. Nhờ vậy chữ không bị Whisper nhận sai. Với audio tự tải lên, Whisper chỉ được chấp nhận khi chữ khớp kịch bản; nếu không, tác vụ dừng và yêu cầu chỉnh phụ đề hoặc tạo lại giọng local. Mã cầu nối nằm trong `local-tools/media_server.py`; model và môi trường Python local không được commit vào repository.
+Pipeline không cần API trả phí: image server SDXL-Turbo chạy qua MLX tạo ảnh, VieNeu/Piper hoặc giọng `Linh` của macOS tạo TTS tiếng Việt. Mỗi cụm lời gốc được tổng hợp thành WAV; timestamp phụ đề là vị trí nối audio tính từ số mẫu PCM thực, không phải chia thời gian theo ký tự. Nhờ vậy chữ không bị Whisper nhận sai. Với audio tự tải lên, Whisper chỉ được chấp nhận khi chữ khớp kịch bản; nếu không, tác vụ dừng và yêu cầu chỉnh phụ đề hoặc tạo lại giọng local. Mã cầu nối nằm trong `local-tools/media_server.py`; model và môi trường Python local không được commit vào repository.
 
-Khởi động ComfyUI trước, sau đó chạy cầu nối chỉ trên localhost:
+Khởi động image server MLX trước, sau đó chạy cầu nối chỉ trên localhost:
 
 ```bash
-local-tools/comfy-venv/bin/python local-tools/ComfyUI/main.py --cpu --listen 127.0.0.1 --port 8188
+export LOCAL_AI_ROOT="$HOME/Developer/local-ai"
+"$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
 LOCAL_MEDIA_HOST=127.0.0.1 /opt/homebrew/bin/python3.12 local-tools/media_server.py
 ```
 
-Trong `.env.selfhost`, bật `LOCAL_MEDIA_FEATURES_ENABLED=true` và giữ `LOCAL_MEDIA_BASE_URL=http://host.docker.internal:8765`, rồi rebuild worker. Tạo ảnh local bằng CPU mất khoảng một phút mỗi cảnh trên máy kiểm thử; chất lượng và tốc độ phụ thuộc phần cứng. Các model local là phần mềm miễn phí nhưng vẫn chịu giấy phép riêng của từng model.
+Trong `.env.selfhost`, bật `LOCAL_MEDIA_FEATURES_ENABLED=true` và giữ `LOCAL_MEDIA_BASE_URL=http://host.docker.internal:8765`, rồi rebuild worker. Script khởi động đặt SDXL-Turbo 4 bước, `TTS_BREAK_WORDS=18` và `VIENEU_STEPS=16` để ưu tiên tốc độ; chạy `IMAGE_STEPS=6 scripts/Mo-Video-Studio.command` hoặc `IMAGE_STEPS=8 ...` nếu ưu tiên chi tiết. Anatomy guard và negative prompt mặc định bật để giảm mặt/tay/cơ thể méo; `IMAGE_CFG_WEIGHT=1.25` tăng khả năng tuân thủ negative prompt, còn đặt `IMAGE_CFG_WEIGHT=0` nếu cần tốc độ tối đa. TTS vẫn giữ timestamp chính xác. Chất lượng và tốc độ phụ thuộc phần cứng. Các model local là phần mềm/model có giấy phép riêng.
 
 Yêu cầu Node.js 24, pnpm 11.19 và FFmpeg nếu chạy worker ngoài Docker.
 

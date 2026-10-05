@@ -91,10 +91,24 @@ def clean_image_prompt(prompt):
 # Native portrait/landscape sizes (multiples of 64): no square crop, so nothing is cut or upscaled much.
 IMAGE_SIZES = {"9:16": (576, 1024), "1:1": (704, 704), "16:9": (1024, 576)}
 IMAGE_STEPS = int(os.getenv("IMAGE_STEPS", "4"))
+VIENEU_STEPS = int(os.getenv("VIENEU_STEPS", "16"))
+TTS_BREAK_WORDS = int(os.getenv("TTS_BREAK_WORDS", "18"))
 IMAGE_STYLES = {
     "photo": "cinematic photo, natural skin, detailed face, sharp focus, soft film lighting",
     "illustration": "cinematic illustration, detailed, soft painterly lighting",
 }
+IMAGE_ANATOMY_GUARD = os.getenv("IMAGE_ANATOMY_GUARD", "true").lower() not in {"0", "false", "no"}
+IMAGE_NEGATIVE_PROMPT = os.getenv(
+    "IMAGE_NEGATIVE_PROMPT",
+    "deformed face, asymmetrical face, bad anatomy, malformed hands, extra fingers, fused fingers, missing fingers, "
+    "extra limbs, duplicated person, warped body, broken arms, broken legs, unnatural eyes, blurry face, low detail, "
+    "cropped head, cut off hands, text, logo, watermark",
+)
+HUMAN_PROMPT_RE = re.compile(
+    r"\b(person|people|human|portrait|woman|man|girl|boy|child|face|hands?|character|"
+    r"nguoi|nhan vat|co gai|cau be|be trai|be gai|phu nu|dan ong|khuon mat|ban tay)\b",
+    re.I,
+)
 
 
 def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo"):
@@ -108,7 +122,10 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         seed = int(seed) % (2**31)
     width, height = IMAGE_SIZES[aspect_ratio]
     # Style words first: if the text encoder's 77-token limit forces trimming, the scene detail goes, not the style.
-    styled = f"{IMAGE_STYLES[style]}, no text, no logo, no watermark, {clean_image_prompt(prompt)}"
+    clean = clean_image_prompt(prompt)
+    anatomy = "anatomically correct hands, natural body proportions, complete limbs, realistic facial features" if IMAGE_ANATOMY_GUARD and HUMAN_PROMPT_RE.search(clean) else ""
+    anatomy_prefix = f", {anatomy}" if anatomy else ""
+    styled = f"{IMAGE_STYLES[style]}{anatomy_prefix}, {clean}, no text, no logo, no watermark"
     # The server may still be importing/loading the model (minutes). Wait for it rather than loading a
     # second 7 GB copy through the one-shot script, which only runs if the server never comes up.
     deadline, down_since = time.time() + IMAGE_TIMEOUT_S, None
@@ -122,7 +139,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         time.sleep(5)
     if state == "ready":  # model kept loaded in memory: seconds per image
         request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps({"prompt": styled, "model": model, "seed": seed, "steps": IMAGE_STEPS,
-                                                                      "width": width, "height": height}).encode(),
+                                                                      "width": width, "height": height,
+                                                                      "negativePrompt": IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else ""}).encode(),
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
             return response.read()
@@ -146,7 +164,7 @@ def split_speech_phrases(text):
             current, count = "", 0
         current += token
         count += bool(token.strip())
-        if count >= 10 or (count >= 3 and re.search(r"[,;:!?。.][\"'”’)]?\s*$", token)):
+        if count >= TTS_BREAK_WORDS or (count >= 8 and re.search(r"[,;:!?。.][\"'”’)]?\s*$", token)):
             phrases.append(current)
             current, count = "", 0
     if current:
@@ -174,41 +192,43 @@ def _to_pcm22050(source):
     return target
 
 
-def synth_phrase(phrase, workdir, index, voice, engine=None):
-    last_error = None
-    engines = TTS_ENGINES
-    if engine:  # explicit engine chosen on the website; no silent fallback to another voice
-        engines = [check_choice("giọng đọc", engine, TTS_ENGINE_LABELS)]
-    elif voice == "giong-linh":  # explicit choice of the macOS voice
-        engines = ["say"]
+def select_tts_engine(voice, engine=None):
+    """Select once per job so a long narration never changes voice halfway through."""
+    if engine:
+        return check_choice("giọng đọc", engine, TTS_ENGINE_LABELS)
+    if voice == "giong-linh":
+        return "say"
+    for candidate in TTS_ENGINES:
+        if candidate == "say" or service_up({"vieneu": VIENEU_URL, "piper": PIPER_URL}.get(candidate, ""), "/health"):
+            return candidate
+    raise RuntimeError("Không engine giọng đọc local nào sẵn sàng")
+
+
+def synth_phrase(phrase, workdir, index, voice, engine):
     vieneu_voice, vieneu_speed = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0))
-    for engine in engines:
-        source = Path(workdir) / f"phrase-{index}-{engine}.wav"
-        try:
-            if engine == "vieneu":
-                source.write_bytes(_http_wav(VIENEU_URL, {"input": phrase, "voice": vieneu_voice, "speed": vieneu_speed, "steps": 16}))
-            elif engine == "piper":
-                source.write_bytes(_http_wav(PIPER_URL, {"input": phrase}))
-            elif engine == "say":
-                subprocess.run(["say", "-v", "Linh", "-o", str(source), "--file-format=WAVE",
-                                f"--data-format=LEI16@{SAMPLE_RATE}", "--", phrase],
-                               check=True, timeout=120, capture_output=True)
-            else:
-                continue
-            # "say" already writes mono 16-bit PCM at SAMPLE_RATE; only network engines need converting.
-            return source if engine == "say" else _to_pcm22050(source)
-        except Exception as error:  # try the next engine
-            last_error = error
-    raise RuntimeError("Không engine giọng đọc local nào hoạt động") from last_error
+    source = Path(workdir) / f"phrase-{index}-{engine}.wav"
+    if engine == "vieneu":
+        source.write_bytes(_http_wav(VIENEU_URL, {"input": phrase, "voice": vieneu_voice, "speed": vieneu_speed, "steps": VIENEU_STEPS}))
+    elif engine == "piper":
+        source.write_bytes(_http_wav(PIPER_URL, {"input": phrase}))
+    elif engine == "say":
+        subprocess.run(["say", "-v", "Linh", "-o", str(source), "--file-format=WAVE",
+                        f"--data-format=LEI16@{SAMPLE_RATE}", "--", phrase],
+                       check=True, timeout=120, capture_output=True)
+    else:
+        raise RuntimeError("Engine giọng đọc local không được hỗ trợ")
+    # "say" already writes mono 16-bit PCM at SAMPLE_RATE; only network engines need converting.
+    return source if engine == "say" else _to_pcm22050(source)
 
 
 def tts_aligned(text, voice, engine=None):
     phrases = split_speech_phrases(text)
+    selected_engine = select_tts_engine(voice, engine)
     chunks, cues, frames_total = [], [], 0
     sample_rate = SAMPLE_RATE
     with tempfile.TemporaryDirectory(prefix="studio-aligned-") as workdir:
         for index, phrase in enumerate(phrases):
-            source = synth_phrase(phrase, workdir, index, voice, engine)
+            source = synth_phrase(phrase, workdir, index, voice, selected_engine)
             with wave.open(str(source), "rb") as audio:
                 if (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) != (sample_rate, 1, 2):
                     raise RuntimeError("Giọng đọc local trả định dạng audio không hợp lệ")
@@ -232,8 +252,9 @@ def tts_aligned(text, voice, engine=None):
 
 
 def tts(text, voice, engine=None):
+    selected_engine = select_tts_engine(voice, engine)
     with tempfile.TemporaryDirectory(prefix="studio-tts-") as workdir:
-        source = synth_phrase(text, workdir, 0, voice, engine)
+        source = synth_phrase(text, workdir, 0, voice, selected_engine)
         target = Path(workdir) / "voice.mp3"
         subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(source), "-codec:a", "libmp3lame", "-q:a", "4", str(target)], check=True, timeout=120)
         return target.read_bytes()
