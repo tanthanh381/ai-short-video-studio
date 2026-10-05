@@ -156,7 +156,8 @@ def synth_phrase(phrase, workdir, index, voice, engine=None):
                                check=True, timeout=120, capture_output=True)
             else:
                 continue
-            return _to_pcm22050(source)
+            # "say" already writes mono 16-bit PCM at SAMPLE_RATE; only network engines need converting.
+            return source if engine == "say" else _to_pcm22050(source)
         except Exception as error:  # try the next engine
             last_error = error
     raise RuntimeError("Không engine giọng đọc local nào hoạt động") from last_error

@@ -73,6 +73,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.media = load_media_server()
+        cls.media.TTS_ENGINES = ["say"]  # deterministic: never reach for local network services in tests
 
     def test_phrase_split_preserves_original_unicode_and_every_character(self):
         script = (
@@ -124,6 +125,43 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         with patch.object(self.media.subprocess, "run", side_effect=processes):
             with self.assertRaises((RuntimeError, ValueError)):
                 self.media.tts_aligned("Không được báo thành công với audio rỗng.", "Linh")
+
+    def test_voice_preset_selects_vieneu_voice_and_speed_and_converts_to_pcm(self):
+        sent = []
+
+        def fake_http(url, payload):
+            sent.append((url, payload))
+            return b"RIFF-fake-network-audio"
+
+        def fake_run(command, **kwargs):
+            command = [str(item) for item in command]
+            self.assertEqual(Path(command[0]).name, "ffmpeg")
+            with wave.open(command[-1], "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(22050)
+                audio.writeframes(b"\x80\x01" * 11025)
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.object(self.media, "TTS_ENGINES", ["vieneu", "say"]), \
+             patch.object(self.media, "_http_wav", side_effect=fake_http), \
+             patch.object(self.media.subprocess, "run", side_effect=fake_run):
+            result = self.media.tts_aligned("Trăng treo đầu núi.", "co-trang")
+        self.assertEqual(sent[0][1]["voice"], "Anh Khôi")
+        self.assertEqual(sent[0][1]["speed"], 0.88)
+        self.assertEqual(result["durationMs"], 500)
+
+    def test_unknown_engine_is_rejected_instead_of_silently_falling_back(self):
+        with patch.object(self.media.subprocess, "run") as process:
+            with self.assertRaises(ValueError):
+                self.media.tts_aligned("Xin chào các bạn.", "Linh", "khong-co")
+            process.assert_not_called()
+
+    def test_unknown_image_and_whisper_models_are_rejected(self):
+        with self.assertRaises(ValueError):
+            self.media.local_image("cảnh", "9:16", "model-la")
+        with self.assertRaises(ValueError):
+            self.media.transcribe(b"audio", "model-la")
 
     def test_whitespace_only_text_never_calls_a_synthesizer(self):
         with patch.object(self.media.subprocess, "run") as process:
