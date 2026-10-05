@@ -62,14 +62,14 @@ function safeName(name: string) {
     .replace(/-+/g, "-")
     .slice(-100);
 }
-function estimateCost(project: Project, localMediaFree = false) {
+export function estimateCost(project: Project, localMediaFree = false) {
   const imageCount = Math.max(
     project.scenes.length,
     Math.ceil(project.settings.targetDurationSec / 7),
   );
   const narrationCharacters = project.scenes.reduce(
     (sum, scene) => sum + scene.narration.length,
-    project.sourceText.length,
+    project.scenes.length ? 0 : project.sourceText.length,
   );
   const transcriptionMinutes = project.settings.targetDurationSec / 60;
   // He so cau hinh mang tinh bao thu; gia that phai doi chieu tai thoi diem su dung.
