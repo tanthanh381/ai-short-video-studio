@@ -144,6 +144,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0)
 
         with patch.object(self.media, "TTS_ENGINES", ["vieneu", "say"]), \
+             patch.object(self.media, "service_up", return_value=True), \
              patch.object(self.media, "_http_wav", side_effect=fake_http), \
              patch.object(self.media.subprocess, "run", side_effect=fake_run):
             result = self.media.tts_aligned("Trăng treo đầu núi.", "co-trang")
@@ -163,6 +164,32 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(self.media.clean_image_prompt("Đôi bàn tay buông bỏ, ánh sáng ấm"), "Doi ban tay buong bo, anh sang am")
         with self.assertRaises(ValueError):
             self.media.clean_image_prompt("Không chữ, không logo, không watermark.")
+
+    def test_image_quality_guard_is_enabled_for_human_prompts(self):
+        with patch.object(self.media, "image_server_state", return_value="down"), \
+             patch.object(self.media, "IMAGE_TIMEOUT_S", 0), \
+             patch.object(self.media.subprocess, "run") as process:
+            process.return_value = subprocess.CompletedProcess([], 0)
+            with patch.object(self.media.Path, "read_bytes", return_value=b"PNG"):
+                with patch.object(self.media.tempfile, "TemporaryDirectory") as temp:
+                    temp.return_value.__enter__.return_value = Path("/tmp/studio-image-test")
+                    temp.return_value.__exit__.return_value = False
+                    self.media.local_image("Young woman holding a book", "9:16")
+            command = [str(item) for item in process.call_args.args[0]]
+            self.assertIn("anatomically correct hands", command[2])
+
+    def test_image_quality_guard_handles_vietnamese_human_prompts(self):
+        with patch.object(self.media, "image_server_state", return_value="down"), \
+             patch.object(self.media, "IMAGE_TIMEOUT_S", 0), \
+             patch.object(self.media.subprocess, "run") as process:
+            process.return_value = subprocess.CompletedProcess([], 0)
+            with patch.object(self.media.Path, "read_bytes", return_value=b"PNG"):
+                with patch.object(self.media.tempfile, "TemporaryDirectory") as temp:
+                    temp.return_value.__enter__.return_value = Path("/tmp/studio-image-test")
+                    temp.return_value.__exit__.return_value = False
+                    self.media.local_image("Cô gái cầm sách", "9:16")
+            command = [str(item) for item in process.call_args.args[0]]
+            self.assertIn("anatomically correct hands", command[2])
 
     def test_unknown_image_and_whisper_models_are_rejected(self):
         with self.assertRaises(ValueError):

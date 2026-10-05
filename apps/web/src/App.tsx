@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type ReactNode } from "react";
 import {
   ArrowLeft,
   BookOpenText,
@@ -81,7 +81,11 @@ function Notice({
   tone?: "info" | "warn" | "success";
 }) {
   return (
-    <div className={`notice notice-${tone}`}>
+    <div
+      className={`notice notice-${tone}`}
+      role={tone === "warn" ? "alert" : "status"}
+      aria-live={tone === "warn" ? "assertive" : "polite"}
+    >
       <CircleAlert size={18} /> <span>{children}</span>
     </div>
   );
@@ -91,6 +95,7 @@ function Button({
   children,
   variant = "primary",
   busy,
+  type = "button",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -98,9 +103,11 @@ function Button({
 }) {
   return (
     <button
+      type={type}
       className={`button button-${variant}`}
       {...props}
       disabled={props.disabled || busy}
+      aria-busy={busy || undefined}
     >
       {busy ? <LoaderCircle className="spin" size={17} /> : null}
       {children}
@@ -111,6 +118,16 @@ function Button({
 function AppShell({ children }: { children: React.ReactNode }) {
   const { isDemo, signOut, user } = useAuth();
   const [mobileNav, setMobileNav] = useState(false);
+  const displayName =
+    (typeof user?.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()) ||
+    user?.email?.split("@")[0] ||
+    "Bạn";
+  const initials = displayName
+    .split(/\s+/u)
+    .filter(Boolean)
+    .slice(-2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "SV";
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileNav ? "is-open" : ""}`}>
@@ -146,9 +163,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <div className="sidebar-bottom">
           {isDemo && <div className="demo-chip">Chế độ mẫu</div>}
           <div className="user-row">
-            <div className="avatar">NT</div>
+            <div className="avatar" aria-hidden="true">{initials}</div>
             <div>
-              <strong>Nguyễn Tấn Thành</strong>
+              <strong>{displayName}</strong>
               <span>{user?.email}</span>
             </div>
           </div>
@@ -463,15 +480,23 @@ function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyProject, setBusyProject] = useState<string | null>(null);
   const navigate = useNavigate();
-  useEffect(() => {
-    void api
-      .listProjects()
-      .then(setProjects)
-      .finally(() => setLoading(false));
-  }, []);
+  async function loadProjects() {
+    setLoading(true);
+    setError(null);
+    try {
+      setProjects(await api.listProjects());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải danh sách dự án.");
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { void loadProjects(); }, []);
   const filtered = projects.filter((p) =>
-    p.title.toLowerCase().includes(query.toLowerCase()),
+    `${p.title} ${p.hook} ${p.sourceText}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
   async function remove(id: string) {
     if (
@@ -480,12 +505,28 @@ function DashboardPage() {
       )
     )
       return;
-    await api.deleteProject(id);
-    setProjects((p) => p.filter((x) => x.id !== id));
+    setBusyProject(id);
+    setError(null);
+    try {
+      await api.deleteProject(id);
+      setProjects((p) => p.filter((x) => x.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể xóa dự án. Hãy thử lại.");
+    } finally {
+      setBusyProject(null);
+    }
   }
   async function duplicate(id: string) {
-    const project = await api.duplicateProject(id);
-    setProjects((p) => [project, ...p]);
+    setBusyProject(id);
+    setError(null);
+    try {
+      const project = await api.duplicateProject(id);
+      setProjects((p) => [project, ...p]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể nhân bản dự án. Hãy thử lại.");
+    } finally {
+      setBusyProject(null);
+    }
   }
   return (
     <div className="page dashboard">
@@ -504,6 +545,7 @@ function DashboardPage() {
         <div className="search">
           <Search size={18} />
           <input
+            aria-label="Tìm kiếm dự án"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Tìm theo tên video…"
@@ -521,6 +563,14 @@ function DashboardPage() {
           </span>
         </div>
       </div>
+      {error && (
+        <div className="dashboard-feedback">
+          <Notice tone="warn">
+            <span>{error}</span>
+            <Button variant="ghost" onClick={() => void loadProjects()}>Thử lại</Button>
+          </Notice>
+        </div>
+      )}
       {loading ? (
         <div className="empty">
           <LoaderCircle className="spin" /> Đang mở danh sách…
@@ -528,8 +578,9 @@ function DashboardPage() {
       ) : filtered.length === 0 ? (
         <div className="empty">
           <FolderOpen size={42} />
-          <h2>Chưa có dự án phù hợp</h2>
-          <p>Tạo video mới hoặc thử từ khóa khác.</p>
+          <h2>{projects.length ? "Không tìm thấy dự án" : "Bắt đầu với video đầu tiên"}</h2>
+          <p>{projects.length ? "Thử tên video, chủ đề hoặc từ khóa khác." : "Dán kịch bản của bạn và để Studio tạo storyboard, hình ảnh, giọng đọc và MP4."}</p>
+          <Button onClick={() => navigate("/new")}><Plus size={17} /> Tạo video mới</Button>
         </div>
       ) : (
         <div className="project-list">
@@ -538,6 +589,14 @@ function DashboardPage() {
               className="project-row"
               key={project.id}
               onClick={() => navigate(`/studio/${project.id}`)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  navigate(`/studio/${project.id}`);
+                }
+              }}
+              role="link"
+              tabIndex={0}
             >
               <div className={`project-thumb thumb-${index % 3}`}>
                 <span>{project.settings.aspectRatio}</span>
@@ -570,15 +629,18 @@ function DashboardPage() {
               <div className="row-actions" onClick={(e) => e.stopPropagation()}>
                 <button
                   title="Nhân bản"
+                  aria-label={`Nhân bản ${project.title}`}
+                  disabled={busyProject === project.id}
                   onClick={() => void duplicate(project.id)}
                 >
                   <Copy size={18} />
                 </button>
-                <button title="Xóa" onClick={() => void remove(project.id)}>
+                <button title="Xóa" aria-label={`Xóa ${project.title}`} disabled={busyProject === project.id} onClick={() => void remove(project.id)}>
                   <Trash2 size={18} />
                 </button>
                 <button
                   title="Mở dự án"
+                  aria-label={`Mở ${project.title}`}
                   onClick={() => navigate(`/studio/${project.id}`)}
                 >
                   <MoreHorizontal size={19} />
@@ -713,6 +775,7 @@ function NewProjectPage() {
   const [advanced, setAdvanced] = useState(false);
   const localModels = useLocalModels(isDemo || !advanced);
   const submitting = useRef(false);
+  const wordCount = sourceText.trim() ? sourceText.trim().split(/\s+/u).length : 0;
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (submitting.current) return;
@@ -767,6 +830,7 @@ function NewProjectPage() {
             hint="Giữ nguyên câu chữ và dấu tiếng Việt. Thời lượng video theo giọng đọc thực tế."
           >
             <textarea
+              aria-label="Nội dung kịch bản"
               value={sourceText}
               onChange={(e) => setSourceText(e.target.value)}
               required
@@ -776,6 +840,10 @@ function NewProjectPage() {
               disabled={busy}
               placeholder="Dán toàn bộ lời đọc cho video vào đây…"
             />
+            <div className="script-meta" aria-live="polite">
+              <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>
+              <span>{wordCount.toLocaleString("vi-VN")} từ</span>
+            </div>
           </Field>
           <div className="creation-defaults">
             <span><Video size={15} /> Video dọc 1080 × 1920</span>
@@ -2139,6 +2207,8 @@ function StudioPage() {
 function MediaPage() {
   const { isDemo } = useAuth();
   const [kind, setKind] = useState<"all" | "image" | "audio">("all");
+  const [loading, setLoading] = useState(!isDemo);
+  const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<
     Array<{
       id: string;
@@ -2147,9 +2217,19 @@ function MediaPage() {
       url: string;
     }>
   >([]);
-  useEffect(() => {
-    if (!isDemo) void api.listMedia().then(setItems);
-  }, [isDemo]);
+  async function loadMedia() {
+    if (isDemo) return;
+    setLoading(true);
+    setError(null);
+    try {
+      setItems(await api.listMedia());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải thư viện media.");
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { void loadMedia(); }, [isDemo]);
   const shown = items.filter((item) => kind === "all" || item.kind === kind);
   return (
     <SimplePage
@@ -2176,7 +2256,10 @@ function MediaPage() {
           Giọng đọc
         </button>
       </div>
-      {shown.length ? (
+      {error && <div className="dashboard-feedback"><Notice tone="warn"><span>{error}</span><Button variant="ghost" onClick={() => void loadMedia()}>Thử lại</Button></Notice></div>}
+      {loading ? (
+        <div className="empty"><LoaderCircle className="spin" /><h2>Đang tải thư viện</h2><p>Đang lấy các ảnh và audio đã lưu của bạn.</p></div>
+      ) : shown.length ? (
         <div className="media-grid">
           {shown.map((item) => (
             <article key={item.id}>
@@ -2221,22 +2304,39 @@ function ExportsPage() {
     }>
   >([]);
   const [loading, setLoading] = useState(!isDemo);
-  useEffect(() => {
+  const [error, setError] = useState<string | null>(null);
+  const [busyExport, setBusyExport] = useState<string | null>(null);
+  async function loadExports() {
     if (isDemo) return;
-    void api
-      .listExports()
-      .then(setItems)
-      .finally(() => setLoading(false));
-  }, [isDemo]);
+    setLoading(true);
+    setError(null);
+    try {
+      setItems(await api.listExports());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải lịch sử xuất video.");
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { void loadExports(); }, [isDemo]);
   async function downloadExport(exportId: string) {
-    const { url } = await api.exportDownload(exportId);
-    window.location.assign(url);
+    setBusyExport(exportId);
+    setError(null);
+    try {
+      const { url } = await api.exportDownload(exportId);
+      window.location.assign(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải MP4. Hãy thử lại.");
+    } finally {
+      setBusyExport(null);
+    }
   }
   return (
     <SimplePage
       title="Lịch sử xuất video"
       subtitle="Theo dõi các bản MP4 đã render và tải lại khi cần."
     >
+      {error && <div className="dashboard-feedback"><Notice tone="warn"><span>{error}</span><Button variant="ghost" onClick={() => void loadExports()}>Thử lại</Button></Notice></div>}
       {loading ? (
         <div className="empty">
           <LoaderCircle className="spin" /> Đang tải lịch sử…
@@ -2256,7 +2356,7 @@ function ExportsPage() {
                   {item.height} ·{" "}
                   {new Date(item.createdAt).toLocaleDateString("vi-VN")}
                 </p>
-                <Button onClick={() => void downloadExport(item.id)}>
+                <Button busy={busyExport === item.id} onClick={() => void downloadExport(item.id)}>
                   <Download size={17} /> Tải MP4
                 </Button>
               </div>
@@ -2376,7 +2476,7 @@ function SettingsPage() {
           <div className="connection-row">
             <div>
               <strong>Media local</strong>
-              <span>ComfyUI, TTS Linh và Whisper trên máy này</span>
+              <span>SDXL-Turbo MLX, VieNeu/Piper/Linh và Whisper trên máy này</span>
             </div>
             <b className={localMediaState.className}>{localMediaState.label}</b>
           </div>
@@ -2472,9 +2572,37 @@ function NotFound() {
   );
 }
 
+class AppErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    console.error("studio_render_error", error, info.componentStack);
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div className="center-page error-recovery" role="alert">
+        <CircleAlert size={42} />
+        <h1>Studio cần được tải lại</h1>
+        <p>Đã xảy ra lỗi hiển thị tạm thời. Dữ liệu đã lưu vẫn được giữ nguyên.</p>
+        <Button onClick={() => window.location.reload()}>Tải lại trang</Button>
+      </div>
+    );
+  }
+}
+
 export function App() {
   return (
-    <Routes>
+    <AppErrorBoundary>
+      <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
@@ -2493,6 +2621,7 @@ export function App() {
           </Protected>
         }
       />
-    </Routes>
+      </Routes>
+    </AppErrorBoundary>
   );
 }

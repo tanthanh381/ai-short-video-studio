@@ -13,6 +13,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
   constructor(
     private readonly baseUrl: string,
     private readonly model = "qwen2.5:3b",
+    private readonly tuning: { numCtx?: number; keepAlive?: string } = {},
   ) {}
 
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {
@@ -23,14 +24,20 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
       body: JSON.stringify({
         model: input.model || this.model,
         stream: false,
-        keep_alive: "30s", // free the RAM before the image model needs it
+        keep_alive: this.tuning.keepAlive ?? "30s", // free RAM before the image model needs it
         format: input.lockedScenes ? {
           type: "object", additionalProperties: false, required: ["scenes"],
           properties: { scenes: { type: "array", minItems: input.lockedScenes.length, maxItems: input.lockedScenes.length,
             items: { type: "object", additionalProperties: false, required: ["imagePrompt"],
               properties: { imagePrompt: { type: "string" } } } } },
         } : storyboardJsonSchema,
-        options: { temperature: Math.min(0.2 + 0.3 * (input.attempt ?? 0), 0.8), num_ctx: 8192, num_predict: 4096 },
+        options: {
+          temperature: Math.min(0.18 + 0.22 * (input.attempt ?? 0), 0.72),
+          top_p: 0.88,
+          repeat_penalty: 1.08,
+          num_ctx: this.tuning.numCtx ?? 8192,
+          num_predict: input.lockedScenes ? 900 : 4096,
+        },
         system: buildStoryboardInstruction(input),
         prompt: JSON.stringify({ title: input.title, storyContext: input.sourceText, lockedScenes: input.lockedScenes }),
       }),
@@ -67,9 +74,9 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
         body: JSON.stringify({
           model: input.model || this.model,
           stream: false,
-          keep_alive: "30s",
+          keep_alive: this.tuning.keepAlive ?? "30s",
           format: { type: "object", additionalProperties: false, required: ["character"], properties: { character: { type: "string" } } },
-          options: { temperature: 0.2, num_ctx: 4096, num_predict: 200 },
+          options: { temperature: 0.12, top_p: 0.85, repeat_penalty: 1.08, num_ctx: Math.min(this.tuning.numCtx ?? 8192, 4096), num_predict: 140 },
           system:
             "You prepare a recurring character for an image generator. Read the Vietnamese script and describe the ONE main person " +
             "(invent a fitting protagonist if none is named) in ENGLISH, 18-30 words, as a single noun phrase: gender, age, " +

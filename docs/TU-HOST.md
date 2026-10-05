@@ -9,7 +9,7 @@ Phương án này giữ frontend trên GitHub Pages và chạy API/FFmpeg trên 
 3. Chạy migration trong thư mục `supabase/migrations` theo đúng thứ tự.
 4. Tạo tài khoản đăng nhập trong Supabase Authentication và thêm `user_id` đó vào bảng `allowed_users`.
 5. Chọn một cách public API: Tailscale Funnel (không cần domain riêng), Cloudflare Tunnel, hoặc chạy frontend trên chính máy backend với `VITE_API_URL=http://localhost:8787`.
-6. API key OpenAI và Anthropic là tùy chọn. Có thể để trống cả hai và chạy chế độ local-first bằng Ollama, ComfyUI, TTS Linh của macOS và whisper.cpp.
+6. API key OpenAI và Anthropic là tùy chọn. Có thể để trống cả hai và chạy chế độ local-first bằng Ollama, image server SDXL-Turbo/MLX, VieNeu/Piper hoặc TTS Linh của macOS và whisper.cpp.
 
 ## Cấu hình bí mật
 
@@ -23,12 +23,13 @@ cp .env.selfhost.example .env.selfhost
 
 ## Cài media AI local trên macOS
 
-Máy kiểm thử đã cài Python 3.12, ComfyUI, checkpoint Analog Diffusion và model Whisper small trong các thư mục bị `.gitignore`. Đây là phần mềm/model có thể dùng miễn phí; không phát sinh API charge, nhưng thời gian tạo ảnh phụ thuộc phần cứng.
+Máy kiểm thử đã cài Python 3.12, MLX Stable Diffusion với cache SDXL-Turbo và model Whisper trong các thư mục bị `.gitignore`. VieNeu/Piper cung cấp giọng tiếng Việt local. Image server bật anatomy guard + negative prompt để hạn chế mặt, tay và cơ thể biến dạng; dùng `IMAGE_CFG_WEIGHT=0` nếu ưu tiên tốc độ tối đa hơn chất lượng. Đây là phần mềm/model có thể dùng miễn phí; không phát sinh API charge, nhưng thời gian tạo ảnh phụ thuộc phần cứng.
 
-Khởi động hai tiến trình local trước khi bật worker Docker:
+Khởi động các tiến trình local trước khi bật worker Docker:
 
 ```bash
-local-tools/comfy-venv/bin/python local-tools/ComfyUI/main.py --cpu --listen 127.0.0.1 --port 8188
+export LOCAL_AI_ROOT="$HOME/Developer/local-ai"
+"$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
 LOCAL_MEDIA_HOST=127.0.0.1 /opt/homebrew/bin/python3.12 local-tools/media_server.py
 ```
 

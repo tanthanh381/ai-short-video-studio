@@ -46,6 +46,7 @@ const anthropic = config.ANTHROPIC_API_KEY
 const ollama = new OllamaStoryboardAdapter(
   config.OLLAMA_BASE_URL,
   config.OLLAMA_MODEL,
+  { numCtx: config.OLLAMA_NUM_CTX, keepAlive: config.OLLAMA_KEEP_ALIVE },
 );
 const localMedia = new LocalMediaAdapter(config.LOCAL_MEDIA_BASE_URL);
 const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
@@ -208,9 +209,10 @@ async function storyboard(job: JobRow, project: Project) {
     );
   }
   await setProgress(job.id, job.job_type === "create_video" ? 3 : 10, "Đang phân tích nội dung");
-  const result = await createFaithfulStoryboard(provider, {
+  const sourceText = cleanScriptForNarration(project.sourceText);
+  const storyboardInput = {
     title: project.title,
-    sourceText: cleanScriptForNarration(project.sourceText),
+    sourceText,
     inputMode: project.inputMode,
     rewrite: project.settings.rewriteFullScript,
     audience: project.settings.targetAudience,
@@ -218,11 +220,16 @@ async function storyboard(job: JobRow, project: Project) {
     duration: project.settings.targetDurationSec,
     visualStyle: project.settings.visualStyle,
     model: project.settings.localModels.storyboard,
-  });
+  } as const;
+  // Cast extraction is independent of scene splitting; overlap the two Ollama
+  // requests so the consistency guard does not add a full model round-trip.
+  const [result, cast] = await Promise.all([
+    createFaithfulStoryboard(provider, storyboardInput),
+    provider.describeCast
+      ? provider.describeCast({ title: project.title, sourceText, model: project.settings.localModels.storyboard })
+      : Promise.resolve(""),
+  ]);
   checkDeadline(job);
-  const cast = provider.describeCast
-    ? await provider.describeCast({ title: project.title, sourceText: cleanScriptForNarration(project.sourceText), model: project.settings.localModels.storyboard })
-    : "";
   await setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard");
   const rows = result.scenes.map((scene, index) => ({
     project_id: project.id,

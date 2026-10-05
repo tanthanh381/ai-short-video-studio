@@ -24,6 +24,13 @@ const input = {
 };
 
 describe("storyboard provider contract", () => {
+  it("đưa yêu cầu hook, nhịp cảnh và ngôn ngữ camera vào prompt local", () => {
+    const instruction = buildStoryboardInstruction(input);
+    expect(instruction).toContain("shot size");
+    expect(instruction).toContain("tạo tò mò");
+    expect(instruction).toContain("ánh sáng tự nhiên");
+  });
+
   it("giữ nguyên kịch bản hoàn chỉnh khi không cho phép viết lại", () => {
     expect(buildStoryboardInstruction(input)).toContain(
       "Giữ nguyên nội dung và câu chữ",

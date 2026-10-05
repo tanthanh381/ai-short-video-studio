@@ -36,7 +36,16 @@ from stable_diffusion import StableDiffusionXL  # noqa: E402
 
 HOST = os.getenv("IMAGE_SERVER_HOST", "127.0.0.1")
 PORT = int(os.getenv("IMAGE_SERVER_PORT", "5002"))
-STEPS = int(os.getenv("IMAGE_STEPS", "2"))
+# Four steps is the balanced default for short-video throughput. Set IMAGE_STEPS=6
+# or 8 when a slower, cleaner still is more important than turnaround time.
+STEPS = int(os.getenv("IMAGE_STEPS", "4"))
+CFG_WEIGHT = float(os.getenv("IMAGE_CFG_WEIGHT", "1.25"))
+NEGATIVE_PROMPT = os.getenv(
+    "IMAGE_NEGATIVE_PROMPT",
+    "deformed face, asymmetrical face, bad anatomy, malformed hands, extra fingers, fused fingers, missing fingers, "
+    "extra limbs, duplicated person, warped body, broken arms, broken legs, unnatural eyes, blurry face, low detail, "
+    "cropped head, cut off hands, text, logo, watermark",
+)
 
 LOCK = threading.Lock()
 STATE = {"sd": None, "error": None}
@@ -85,12 +94,14 @@ def fit_clip_tokens(sd, prompt):
     return " ".join(words)
 
 
-def render(sd, prompt, seed, steps=None, width=512, height=512):
+def render(sd, prompt, seed, steps=None, width=512, height=512, negative_prompt=NEGATIVE_PROMPT):
     prompt = fit_clip_tokens(sd, ascii_prompt(prompt))
     if not prompt:
         raise ValueError("empty prompt")
     latent = (height // 8, width // 8)
-    latents = sd.generate_latents(prompt, n_images=1, cfg_weight=0.0, num_steps=steps or STEPS,
+    cfg_weight = CFG_WEIGHT if negative_prompt.strip() else 0.0
+    latents = sd.generate_latents(prompt, n_images=1, cfg_weight=cfg_weight, num_steps=steps or STEPS,
+                                  negative_text=negative_prompt if cfg_weight > 1 else "",
                                   latent_size=latent,
                                   seed=seed if seed is not None else random.randrange(2**31))
     for x_t in latents:
@@ -148,6 +159,7 @@ class Handler(BaseHTTPRequestHandler):
                     if value % 64 or not 384 <= value <= 1024:
                         raise ValueError(f"bad {key}")
                     options[key] = value
+            options["negative_prompt"] = str(body.get("negativePrompt", NEGATIVE_PROMPT)).strip()[:1200]
             self._send(200, "image/png", generate(prompt, body.get("seed"), **options))
         except ValueError as error:
             print(f"[image] bad request: {error}", flush=True)
