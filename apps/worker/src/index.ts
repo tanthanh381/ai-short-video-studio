@@ -11,7 +11,7 @@ import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
-import { alignKnownText, createFaithfulStoryboard, type MediaProvider, type StoryboardProvider } from "./providers";
+import { alignKnownText, cleanScriptForNarration, createFaithfulStoryboard, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 
@@ -209,7 +209,7 @@ async function storyboard(job: JobRow, project: Project) {
   await setProgress(job.id, job.job_type === "create_video" ? 3 : 10, "Đang phân tích nội dung");
   const result = await createFaithfulStoryboard(provider, {
     title: project.title,
-    sourceText: project.sourceText,
+    sourceText: cleanScriptForNarration(project.sourceText),
     inputMode: project.inputMode,
     rewrite: project.settings.rewriteFullScript,
     audience: project.settings.targetAudience,

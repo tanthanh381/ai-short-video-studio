@@ -14,6 +14,8 @@ import subprocess
 import tempfile
 import threading
 import time
+import unicodedata
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -26,7 +28,7 @@ HOST = os.getenv("LOCAL_MEDIA_HOST", "127.0.0.1")
 PORT = int(os.getenv("LOCAL_MEDIA_PORT", "8765"))
 LOCAL_AI_ROOT = Path(os.getenv(
     "LOCAL_AI_ROOT",
-    "/Users/tanthanh381/Documents/Codex/2026-10-04/referenced-chatgpt-conversation-this-is-an/work/local-ai",
+    str(Path.home() / "Developer" / "local-ai"),
 ))
 IMAGE_SCRIPT = Path(os.getenv("IMAGE_SCRIPT", str(LOCAL_AI_ROOT / "bin/generate-image.sh")))
 IMAGE_SERVER_URL = os.getenv("IMAGE_SERVER_URL", "http://127.0.0.1:5002")
@@ -76,13 +78,35 @@ def binary_response(handler, content_type, data):
     handler.wfile.write(data)
 
 
+def clean_image_prompt(prompt):
+    """SDXL's CLIP vocabulary is English: drop the Vietnamese safety suffix and strip any other diacritics."""
+    prompt = prompt.replace("Không chữ, không logo, không watermark.", "")
+    text = unicodedata.normalize("NFKD", prompt.replace("đ", "d").replace("Đ", "D"))
+    text = re.sub(r"\s+", " ", text.encode("ascii", "ignore").decode()).strip(" .,")
+    if not text:
+        raise ValueError("Mô tả ảnh cần có nội dung tiếng Anh")
+    return text
+
+
 def local_image(prompt, aspect_ratio="9:16", model=None):
     """SDXL-Turbo (MLX, Apple GPU) from the local AI toolkit. The renderer crops to the video frame."""
     if aspect_ratio not in ("9:16", "1:1", "16:9"):
         raise ValueError("Tỷ lệ ảnh không hợp lệ")
     check_choice("ảnh", model, IMAGE_MODELS)
-    styled = f"{prompt}, cinematic illustration, no text, no logo, no watermark"
-    if service_up(IMAGE_SERVER_URL):  # model kept loaded in memory: seconds per image
+    # Style words first: if the text encoder's 77-token limit forces trimming, the scene detail goes, not "no text".
+    styled = f"cinematic illustration, no text, no logo, no watermark, {clean_image_prompt(prompt)}"
+    # The server may still be importing/loading the model (minutes). Wait for it rather than loading a
+    # second 7 GB copy through the one-shot script, which only runs if the server never comes up.
+    deadline, down_since = time.time() + IMAGE_TIMEOUT_S, None
+    while True:
+        state = image_server_state()
+        if state == "ready":
+            break
+        down_since = (down_since or time.time()) if state == "down" else None
+        if (down_since and time.time() - down_since > 180) or time.time() > deadline:
+            break
+        time.sleep(5)
+    if state == "ready":  # model kept loaded in memory: seconds per image
         request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps({"prompt": styled, "model": model}).encode(),
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
@@ -238,6 +262,17 @@ def transcribe(audio, model=None):
     return words
 
 
+def image_server_state():
+    """ready = model loaded; loading = server up but model not ready (503); down = not running."""
+    try:
+        with urllib.request.urlopen(f"{IMAGE_SERVER_URL}/health", timeout=3):
+            return "ready"
+    except urllib.error.HTTPError:
+        return "loading"
+    except Exception:
+        return "down"
+
+
 def service_up(url, path="/health"):
     try:
         with urllib.request.urlopen(f"{url}{path}", timeout=3) as response:
@@ -286,7 +321,7 @@ def check_choice(kind, value, allowed):
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
-            image_ready = service_up(IMAGE_SERVER_URL) or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
+            image_ready = image_server_state() != "down" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
             engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL),
                        "say": bool(shutil.which("say"))}
             tts_ready = any(engines.get(e) for e in TTS_ENGINES)

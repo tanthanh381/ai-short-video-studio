@@ -14,7 +14,7 @@ fi
 if ! curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
   nohup ollama serve >tmp/local-services/ollama.log 2>&1 &
 fi
-LOCAL_AI_ROOT=${LOCAL_AI_ROOT:-"/Users/tanthanh381/Documents/Codex/2026-10-04/referenced-chatgpt-conversation-this-is-an/work/local-ai"}
+LOCAL_AI_ROOT=${LOCAL_AI_ROOT:-"$HOME/Developer/local-ai"}
 start_if_down() { # url name command...
   local url=$1 name=$2; shift 2
   curl -fsS "$url" >/dev/null 2>&1 || nohup "$@" >"tmp/local-services/$name.log" 2>&1 &

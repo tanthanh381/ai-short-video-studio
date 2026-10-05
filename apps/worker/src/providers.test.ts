@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  cleanScriptForNarration,
   alignKnownText,
   buildStoryboardInstruction,
   createFaithfulStoryboard,
@@ -124,6 +125,30 @@ describe("locked full-script storyboard", () => {
     expect(result.suggestedDescription).toBe(script);
     expect(result.scenes[0]!.imagePrompt).toContain("reading a book");
     expect(provider.createStoryboard.mock.calls[0]![0].lockedScenes).toEqual(splitScript(script));
+  });
+
+  it("keeps the verbatim script when a requested rewrite comes back unusable", async () => {
+    const script = "Một người đang đứng nhìn mưa rơi ngoài cửa sổ buổi sáng.";
+    const calls: Array<string[] | undefined> = [];
+    const provider = {
+      createStoryboard: vi.fn(async (value: StoryboardInput) => {
+        calls.push(value.lockedScenes);
+        if (!value.lockedScenes) throw new Error("AI trả dữ liệu cảnh không hợp lệ. Kịch bản gốc vẫn được giữ lại; hãy thử lại");
+        return generatedStoryboard(value);
+      }),
+    };
+    const result = await createFaithfulStoryboard(provider, { ...input, sourceText: script, rewrite: true });
+    expect(calls[0]).toBeUndefined(); // free-form rewrite tried exactly once
+    expect(calls[1]).toEqual(splitScript(script)); // then the verbatim slices
+    expect(result.narration).toBe(script);
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(script);
+  });
+
+  it("does not hide infrastructure errors behind the rewrite fallback", async () => {
+    const provider = { createStoryboard: vi.fn(async () => { throw new Error("Ollama trả lỗi 500. Kiểm tra máy đang bật"); }) };
+    await expect(createFaithfulStoryboard(provider, { ...input, sourceText: "Một câu đủ dài để kiểm thử lỗi.", rewrite: true }))
+      .rejects.toThrow(/Ollama trả lỗi/);
+    expect(provider.createStoryboard).toHaveBeenCalledTimes(1);
   });
 
   it("retries only the unusable batch with a higher temperature hint instead of failing the video", async () => {
@@ -320,5 +345,43 @@ describe("visible actions grounded in the original scene", () => {
     expect(result.narration).toBe(script);
     expect(result.scenes.map((scene) => scene.narration).join("")).toBe(script);
     expect(result.scenes[0]!.imagePrompt).toMatch(/pen.*open.*notebook.*desk/i);
+  });
+});
+
+describe("production labels are not spoken", () => {
+  it("removes timing, section and field labels but keeps every spoken word", () => {
+    const script =
+      "**[0–5s | Hook]**  \nCó những thứ… càng cố giữ, chúng ta càng đau.\n\n" +
+      "**[5–15s]**  \nMột người đã muốn rời đi,  \nmột mối quan hệ đã không còn như trước.\n\n" +
+      "[53–60s | Ending]\nBuông bỏ không phải là quên.\n\n" +
+      "**Text cuối màn hình:**  \n“Thứ nên ở lại sẽ không cần bạn phải níu giữ.”";
+    expect(cleanScriptForNarration(script)).toBe(
+      "Có những thứ… càng cố giữ, chúng ta càng đau.\n\n" +
+      "Một người đã muốn rời đi,\nmột mối quan hệ đã không còn như trước.\n\n" +
+      "Buông bỏ không phải là quên.\n\n" +
+      "“Thứ nên ở lại sẽ không cần bạn phải níu giữ.”",
+    );
+  });
+
+  it("leaves ordinary text, numbers and brackets alone", () => {
+    const text = "Năm 2024, tôi đọc [1] một cuốn sách 15–20 trang và thấy 100% bình yên.\nCảnh đẹp thật.";
+    expect(cleanScriptForNarration(text)).toBe(text);
+  });
+
+  it("strips Markdown emphasis markers and headings", () => {
+    expect(cleanScriptForNarration("## Mở bài\nHãy **thật** chậm.")).toBe("Mở bài\nHãy thật chậm.");
+  });
+
+  it("rejects a script that is only labels", () => {
+    expect(() => cleanScriptForNarration("**[0–5s | Hook]**\n[5–15s]")).toThrow(/chỉ gồm nhãn/);
+  });
+
+  it("cleans a real pasted script so no label survives into any scene", () => {
+    const script = "**[0–5s | Hook]**  \nCó những thứ… càng cố giữ, chúng ta càng đau.\n\n**[5–15s]**  \nMột người đã muốn rời đi,  \nmột mối quan hệ đã không còn như trước,  \nhay một chuyện đã xảy ra… mà dù nghĩ lại cả ngàn lần, ta cũng chẳng thể thay đổi.\n\n**[15–27s]**  \nChúng ta thường nghĩ buông bỏ là thua cuộc.  \nNhưng thật ra…  \nbuông bỏ không phải là từ bỏ điều mình từng trân trọng.\n\nĐó là chấp nhận rằng có những thứ  \nđã hoàn thành vai trò của nó trong cuộc đời mình.\n\n**[27–40s]**  \nChiếc lá không trách cành cây khi phải rơi xuống.  \nDòng sông cũng không níu giữ một giọt nước đã trôi qua.\n\nChỉ có con người…  \nthường ôm quá khứ thật lâu,  \nrồi tự hỏi tại sao mình mãi không thể bình yên.\n\n**[40–53s]**  \nCó những cánh cửa đóng lại  \nkhông phải để trừng phạt bạn.\n\nMà để bạn thôi đứng trước một nơi  \nvốn đã không còn dành cho mình.\n\n**[53–60s | Ending]**  \nĐến một lúc nào đó bạn sẽ hiểu:\n\nBuông bỏ không phải là quên.\n\nMà là khi nhớ lại…  \ntrái tim mình không còn đau nữa.\n\n**Text cuối màn hình:**  \n“Thứ nên ở lại sẽ không cần bạn phải níu giữ.”";
+    const cleaned = cleanScriptForNarration(script);
+    expect(cleaned).not.toMatch(/\[\d|\*\*|Hook\]|Ending\]|Text cuối màn hình/u);
+    expect(cleaned.startsWith("Có những thứ… càng cố giữ")).toBe(true);
+    expect(cleaned.endsWith("níu giữ.”")).toBe(true);
+    expect(splitScript(cleaned).join("")).toBe(cleaned);
   });
 });

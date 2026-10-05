@@ -157,6 +157,13 @@ class LocalSpeechCaptionTests(unittest.TestCase):
                 self.media.tts_aligned("Xin chào các bạn.", "Linh", "khong-co")
             process.assert_not_called()
 
+    def test_image_prompt_drops_vietnamese_suffix_and_diacritics(self):
+        prompt = "Young woman writing in a notebook, warm light. Không chữ, không logo, không watermark."
+        self.assertEqual(self.media.clean_image_prompt(prompt), "Young woman writing in a notebook, warm light")
+        self.assertEqual(self.media.clean_image_prompt("Đôi bàn tay buông bỏ, ánh sáng ấm"), "Doi ban tay buong bo, anh sang am")
+        with self.assertRaises(ValueError):
+            self.media.clean_image_prompt("Không chữ, không logo, không watermark.")
+
     def test_unknown_image_and_whisper_models_are_rejected(self):
         with self.assertRaises(ValueError):
             self.media.local_image("cảnh", "9:16", "model-la")

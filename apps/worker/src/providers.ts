@@ -104,7 +104,32 @@ export function buildStoryboardInstruction(input: StoryboardInput) {
     input.inputMode === "full-script" && !input.rewrite
       ? "Giữ nguyên nội dung và câu chữ của kịch bản, chỉ chia cảnh."
       : "Có thể biên tập câu chữ để tăng nhịp kể.";
-  return `Bạn là biên tập viên video ngắn tiếng Việt. Tạo storyboard ${input.duration} giây cho đối tượng: ${input.audience}. Phong cách: ${input.style}. ${editingRule} Mỗi cảnh 4-9 giây. Prompt ảnh không chứa chữ, logo hay thương hiệu; phong cách hình: ${input.visualStyle}. Tổng narration phải khớp nội dung các cảnh.`;
+  return `Bạn là biên tập viên video ngắn tiếng Việt. Tạo storyboard ${input.duration} giây cho đối tượng: ${input.audience}. Phong cách: ${input.style}. ${editingRule} Mỗi cảnh 4-9 giây. Prompt ảnh (imagePrompt) viết bằng TIẾNG ANH, 25-45 từ, mô tả chủ thể đang làm gì, bối cảnh và ánh sáng; không chứa chữ, logo hay thương hiệu; phong cách hình: ${input.visualStyle}. Tổng narration phải khớp nội dung các cảnh.`;
+}
+
+const TIMING_LABEL = /\*{0,2}\[\s*\d+(?:[.,]\d+)?\s*(?:s|giây)?\s*[–—-]\s*\d+(?:[.,]\d+)?\s*(?:s|giây)?\s*(?:[|,/][^\]\n]{0,60})?\]\*{0,2}/giu;
+const SECTION_LABEL = /\*{0,2}\[\s*(?:hook|cta|ending|intro|outro|mở đầu|kết(?: bài)?|cảnh\s*\d+|scene\s*\d+)\b[^\]\n]{0,60}\]\*{0,2}/giu;
+/** A whole line that only names a production field, e.g. "**Text cuối màn hình:**"; the text after it is kept. */
+const FIELD_LINE = /^[ \t]*[*_#]*[ \t]*(?:text[^:\n]{0,40}|phụ đề[^:\n]{0,30}|lời (?:dẫn|đọc)|voice ?over|cảnh\s*\d+[^:\n]{0,30}|hook|cta)[ \t]*[:：][ \t]*[*_]*[ \t]*$/gimu;
+
+/**
+ * Remove production markup that is not meant to be spoken or shown as captions: timing/section labels
+ * such as "**[0–5s | Hook]**", field-name lines such as "**Text cuối màn hình:**" and Markdown emphasis.
+ * Every word of the actual script is kept as written.
+ */
+export function cleanScriptForNarration(text: string): string {
+  const cleaned = text
+    .replace(TIMING_LABEL, "")
+    .replace(SECTION_LABEL, "")
+    .replace(FIELD_LINE, "")
+    .replace(/^[ \t]*#{1,6}[ \t]+/gmu, "")
+    .replace(/\*\*|__/gu, "")
+    .replace(/[ \t]+\n/gu, "\n")
+    .replace(/\n[ \t]+/gu, "\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+  if (!cleaned) throw new Error("Kịch bản chỉ gồm nhãn thời gian hoặc ghi chú, không có lời đọc");
+  return cleaned;
 }
 
 /** Contiguous slices, not an LLM rewrite: joining them restores the input exactly. */
@@ -165,6 +190,10 @@ export function alignKnownText(text: string, timestamps: WordTimestamp[]): WordT
 
 const BATCH_ATTEMPTS = 3;
 
+function isUnusableModelAnswer(error: unknown) {
+  return error instanceof Error && /không hợp lệ|sai số cảnh|chưa tạo được prompt/u.test(error.message);
+}
+
 /** Small local models sometimes return an unusable batch; retry that batch instead of failing the whole video. */
 async function createLockedBatch(provider: StoryboardProvider, input: StoryboardInput, lockedScenes: string[]) {
   let lastError: unknown;
@@ -176,8 +205,7 @@ async function createLockedBatch(provider: StoryboardProvider, input: Storyboard
       return generated;
     } catch (error) {
       lastError = error;
-      const retryable = error instanceof Error && /không hợp lệ|sai số cảnh|chưa tạo được prompt/u.test(error.message);
-      if (!retryable) throw error;
+      if (!isUnusableModelAnswer(error)) throw error;
     }
   }
   throw lastError;
@@ -187,8 +215,21 @@ export async function createFaithfulStoryboard(
   provider: StoryboardProvider,
   input: StoryboardInput,
 ): Promise<StoryboardResult> {
-  if (input.inputMode !== "full-script" || input.rewrite)
-    return provider.createStoryboard(input);
+  if (input.inputMode !== "full-script") {
+    // An idea has no script to preserve, so a free-form answer is the only option: retry, then fail closed.
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try { return await provider.createStoryboard({ ...input, attempt }); }
+      catch (error) { lastError = error; if (!isUnusableModelAnswer(error)) throw error; }
+    }
+    throw lastError;
+  }
+  if (input.rewrite) {
+    // A small local model often cannot rewrite a whole script in one JSON answer (runs on until truncated).
+    // Try once; if the answer is unusable, keep the author's script verbatim rather than failing the video.
+    try { return await provider.createStoryboard(input); }
+    catch (error) { if (!isUnusableModelAnswer(error)) throw error; }
+  }
   const slices = splitScript(input.sourceText);
   const scenes: StoryboardResult["scenes"] = [];
   // Small batches fit the installed local model without truncating long scripts.
