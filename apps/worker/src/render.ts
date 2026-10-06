@@ -22,6 +22,11 @@ export function videoSize(ratio: string) {
       ? { width: 1080, height: 1080 }
       : { width: 1080, height: 1920 };
 }
+
+/** Faster presets reduce encode latency without changing resolution or CRF. */
+export function videoEncoderPreset(preset?: string) {
+  return preset === "fast" ? "veryfast" : preset === "quality" ? "medium" : "faster";
+}
 export function assTime(ms: number) {
   const cs = Math.max(0, Math.round(ms / 10));
   const h = Math.floor(cs / 360000);
@@ -107,6 +112,7 @@ export async function renderProject(
   const workdir = await mkdtemp(join(tmpdir(), "short-video-"));
   try {
     const { width, height } = videoSize(project.settings.aspectRatio);
+    const encoderPreset = videoEncoderPreset(project.settings.generationPreset);
     const segments: string[] = [];
     const timelineScenes: Scene[] = [];
     let done = 0;
@@ -147,7 +153,7 @@ export async function renderProject(
           "-c:v",
           "libx264",
           "-preset",
-          "medium",
+          encoderPreset,
           "-crf",
           "22",
           "-c:a",
@@ -227,7 +233,7 @@ export async function renderProject(
       "-c:v",
       "libx264",
       "-preset",
-      "medium",
+      encoderPreset,
       "-crf",
       "21",
       "-c:a",

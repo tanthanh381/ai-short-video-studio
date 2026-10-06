@@ -75,6 +75,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
     def setUpClass(cls):
         cls.media = load_media_server()
         cls.media.TTS_ENGINES = ["say"]  # deterministic: never reach for local network services in tests
+        cls.media.TTS_CONCURRENCY = 1  # keep mocked subprocess ordering deterministic
 
     def test_phrase_split_preserves_original_unicode_and_every_character(self):
         script = (

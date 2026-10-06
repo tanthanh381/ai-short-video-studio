@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { assTime, createAss, renderProject, videoSize } from "./render";
+import { assTime, createAss, renderProject, videoEncoderPreset, videoSize } from "./render";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
 
 describe("render helpers", () => {
   it("chon dung kich thuoc preset", () => {
     expect(videoSize("9:16")).toEqual({ width: 1080, height: 1920 });
     expect(videoSize("16:9")).toEqual({ width: 1920, height: 1080 });
+  });
+  it("chon encoder nhanh theo preset nhung giu quality preset mac dinh", () => {
+    expect(videoEncoderPreset("fast")).toBe("veryfast");
+    expect(videoEncoderPreset("balanced")).toBe("faster");
+    expect(videoEncoderPreset("quality")).toBe("medium");
+    expect(videoEncoderPreset(undefined)).toBe("faster");
   });
   it("dinh dang thoi gian ASS", () => {
     expect(assTime(65_230)).toBe("0:01:05.23");

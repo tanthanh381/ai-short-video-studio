@@ -1193,7 +1193,7 @@ function StudioPage() {
     if (isDemo || !processing) return;
     let refreshing = false;
     let active = true;
-    const timer = window.setInterval(() => {
+    const refresh = () => {
       if (refreshing) return;
       refreshing = true;
       void Promise.all([api.getJobs(id), api.getProject(id)])
@@ -1206,7 +1206,10 @@ function StudioPage() {
         })
         .catch(() => active && setError("Mất kết nối tạm thời. Tác vụ vẫn được lưu; studio sẽ tiếp tục cập nhật khi kết nối trở lại."))
         .finally(() => { refreshing = false; });
-    }, 2500);
+    };
+    // Refresh immediately after a job starts or the page is reopened.
+    refresh();
+    const timer = window.setInterval(refresh, 2000);
     return () => { active = false; clearInterval(timer); };
   }, [id, isDemo, processing]);
   useEffect(() => {

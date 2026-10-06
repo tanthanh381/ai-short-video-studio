@@ -20,6 +20,7 @@ import urllib.parse
 import urllib.request
 import uuid
 import wave
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -52,6 +53,7 @@ VOICE_PRESETS = {
 }
 # Ordered preference; the macOS "say" Linh voice is the last-resort fallback.
 TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu,piper,say").split(",") if e]
+TTS_CONCURRENCY = max(1, min(int(os.getenv("TTS_CONCURRENCY", "2")), 4))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/ggml-base.bin"))
 # Image models the toolkit has installed (id -> label). image_server.py serves them.
@@ -235,8 +237,15 @@ def tts_aligned(text, voice, engine=None):
     chunks, cues, frames_total = [], [], 0
     sample_rate = SAMPLE_RATE
     with tempfile.TemporaryDirectory(prefix="studio-aligned-") as workdir:
-        for index, phrase in enumerate(phrases):
-            source = synth_phrase(phrase, workdir, index, voice, selected_engine)
+        # Phrase synthesis is independent. Keep output order deterministic while
+        # overlapping a small, bounded number of local requests.
+        with ThreadPoolExecutor(max_workers=min(TTS_CONCURRENCY, len(phrases))) as pool:
+            futures = [
+                pool.submit(synth_phrase, phrase, workdir, index, voice, selected_engine)
+                for index, phrase in enumerate(phrases)
+            ]
+            sources = [future.result() for future in futures]
+        for phrase, source in zip(phrases, sources):
             with wave.open(str(source), "rb") as audio:
                 if (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) != (sample_rate, 1, 2):
                     raise RuntimeError("Giọng đọc local trả định dạng audio không hợp lệ")
