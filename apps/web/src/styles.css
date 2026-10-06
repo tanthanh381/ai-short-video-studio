@@ -2059,6 +2059,41 @@ a:focus-visible {
   display: grid;
   gap: 15px;
 }
+.google-button {
+  min-height: 43px;
+  border: 1px solid #c7d3db;
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.google-button:hover { background: #f7fafb; border-color: #91a7b6; }
+.google-button:disabled { opacity: .55; cursor: wait; }
+.google-mark {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d7e0e6;
+  border-radius: 50%;
+  color: #4285f4;
+  font-family: Arial, sans-serif;
+  font-weight: 700;
+}
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8a9aa7;
+  font-size: 11px;
+}
+.login-divider::before,
+.login-divider::after { content: ""; height: 1px; background: var(--line); flex: 1; }
 .login-box form > label {
   display: grid;
   gap: 7px;

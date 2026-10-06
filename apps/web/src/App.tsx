@@ -241,7 +241,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 function LoginPage() {
-  const { signIn, sendMagicLink, sendPasswordReset, user, isDemo } = useAuth();
+  const { signIn, signInWithGoogle, sendMagicLink, sendPasswordReset, user, isDemo } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -286,6 +286,15 @@ function LoginPage() {
     setBusy(false);
     if (!nextError) navigate("/");
   }
+  async function signUpWithGoogle() {
+    setBusy(true);
+    setError(null);
+    const nextError = await signInWithGoogle();
+    if (nextError) {
+      setError(nextError);
+      setBusy(false);
+    }
+  }
   return (
     <div className="login-page">
       <div className="login-art">
@@ -327,6 +336,15 @@ function LoginPage() {
             </Notice>
           ) : (
             <form onSubmit={submit}>
+              {!resetMode && (
+                <>
+                  <button className="google-button" type="button" onClick={() => void signUpWithGoogle()} disabled={busy}>
+                    <span className="google-mark" aria-hidden="true">G</span>
+                    <span>Đăng ký bằng Google</span>
+                  </button>
+                  <div className="login-divider"><span>hoặc dùng email</span></div>
+                </>
+              )}
               <label>
                 Email
                 <input
