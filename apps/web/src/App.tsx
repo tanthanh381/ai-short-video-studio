@@ -70,6 +70,7 @@ import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } 
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
+  { to: "/tts", label: "Text to Speech", icon: Mic2 },
   { to: "/media", label: "Thư viện media", icon: Library },
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
   { to: "/settings", label: "Cài đặt", icon: Settings },
@@ -746,6 +747,91 @@ function useLocalModels(disabled: boolean) {
     return () => { active = false; };
   }, [disabled]);
   return catalog;
+}
+
+function TextToSpeechPage() {
+  const { isDemo } = useAuth();
+  const catalog = useLocalModels(isDemo);
+  const [text, setText] = useState("");
+  const [voice, setVoice] = useState(DEFAULT_VOICE_PRESET);
+  const [engine, setEngine] = useState<string | null>(null);
+  const [speed, setSpeed] = useState(1);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const defaultEngine = catalog?.tts.default ?? catalog?.tts.models[0]?.id ?? null;
+    if (defaultEngine && !engine) setEngine(defaultEngine);
+  }, [catalog, engine]);
+  useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
+
+  async function createSpeech() {
+    if (isDemo) { setError("Chế độ mẫu không kết nối máy tạo giọng đọc."); return; }
+    if (!text.trim()) { setError("Hãy nhập văn bản cần đọc."); return; }
+    setBusy(true); setError(null);
+    try {
+      const blob = await api.textToSpeech(text, voice, engine, speed);
+      setAudioUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chưa tạo được giọng đọc");
+    } finally { setBusy(false); }
+  }
+  const selectedVoice = VOICE_PRESETS.find((item) => item.id === voice)!;
+  return (
+    <SimplePage title="Text to Speech tiếng Việt" subtitle="Dán văn bản, chọn giọng đọc và tải MP3 từ máy AI local.">
+      <div className="tts-page-grid">
+        <section className="tts-editor-card">
+          <div className="section-heading-row">
+            <div><h2>Văn bản cần đọc</h2><p>Tối đa 10.000 ký tự · nội dung được xử lý trên máy self-host.</p></div>
+            <span className="tts-counter">{text.length.toLocaleString("vi-VN")} / 10.000</span>
+          </div>
+          <textarea
+            className="tts-textarea"
+            maxLength={10000}
+            value={text}
+            onChange={(event) => { setText(event.target.value); setError(null); }}
+            placeholder="Nhập hoặc dán văn bản tiếng Việt cần đọc…"
+          />
+          <div className="tts-editor-footer">
+            <span>{selectedVoice.label} · {speed.toFixed(2)}x</span>
+            <Button busy={busy} onClick={() => void createSpeech()}>
+              <Play size={17} /> Chuyển thành giọng nói
+            </Button>
+          </div>
+          {error && <Notice tone="warn">{error}</Notice>}
+          {audioUrl && (
+            <div className="tts-result">
+              <div><strong>Bản đọc đã sẵn sàng</strong><span>Nghe lại hoặc tải file MP3</span></div>
+              <audio controls src={audioUrl} />
+              <a className="button button-secondary" href={audioUrl} download="giong-doc-tieng-viet.mp3"><Download size={17} /> Tải MP3</a>
+            </div>
+          )}
+        </section>
+        <section className="tts-options-card">
+          <div className="section-heading-row"><div><h2>Tùy chọn giọng</h2><p>Giọng Việt theo thể loại nội dung</p></div></div>
+          <label className="field"><span>Engine local</span>
+            <select value={engine ?? ""} onChange={(event) => setEngine(event.target.value || null)} disabled={!catalog?.tts.models.length}>
+              {!catalog?.tts.models.length && <option value="">Chưa kết nối</option>}
+              {catalog?.tts.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+            </select>
+          </label>
+          <div className="tts-voice-grid">
+            {VOICE_PRESETS.map((preset) => (
+              <button key={preset.id} type="button" className={`tts-voice-option ${voice === preset.id ? "selected" : ""}`} onClick={() => setVoice(preset.id)}>
+                <span><strong>{preset.label}</strong><small>{preset.hint}</small></span>
+                <span className="tts-radio" aria-hidden="true">{voice === preset.id ? "✓" : ""}</span>
+              </button>
+            ))}
+          </div>
+          <label className="field tts-speed-field"><span>Tốc độ đọc <b>{speed.toFixed(2)}x</b></span>
+            <input type="range" min="0.75" max="1.25" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
+          </label>
+          <VoicePreview voice={voice} engine={engine} disabled={isDemo} />
+        </section>
+      </div>
+    </SimplePage>
+  );
 }
 
 const LOCAL_MODEL_TASKS: Array<{ key: keyof LocalModels; label: string }> = [
@@ -2885,6 +2971,7 @@ export function App() {
               <Route index element={<DashboardPage />} />
               <Route path="new" element={<NewProjectPage />} />
               <Route path="studio/:id" element={<StudioPage />} />
+              <Route path="tts" element={<TextToSpeechPage />} />
               <Route path="media" element={<MediaPage />} />
               <Route path="exports" element={<ExportsPage />} />
               <Route path="settings" element={<SettingsPage />} />

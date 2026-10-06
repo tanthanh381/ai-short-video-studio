@@ -87,8 +87,23 @@ async function voicePreviewBlob(voice: string, engine: string | null): Promise<B
   return response.blob();
 }
 
+async function textToSpeechBlob(text: string, voice: string, engine: string | null, speed: number): Promise<Blob> {
+  const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+  const response = await fetch(`${appConfig.apiUrl}/v1/text-to-speech`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ text, voice, engine, speed }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Chưa tạo được giọng đọc");
+  }
+  return response.blob();
+}
+
 export const api = {
   voicePreview: voicePreviewBlob,
+  textToSpeech: textToSpeechBlob,
   async createVideo(input: VideoInput) {
     if (appConfig.demoMode) throw new Error("Chế độ mẫu chỉ lưu bản nháp. Tạo video cần kết nối máy xử lý thật.");
     const submission = await videoSubmission(input);

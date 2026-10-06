@@ -227,8 +227,9 @@ def select_tts_engine(voice, engine=None):
     raise RuntimeError("Không engine giọng đọc local nào sẵn sàng")
 
 
-def synth_phrase(phrase, workdir, index, voice, engine):
+def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0):
     vieneu_voice, vieneu_speed = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0))
+    vieneu_speed *= max(0.75, min(float(speed), 1.25))
     source = Path(workdir) / f"phrase-{index}-{engine}.wav"
     if engine == "vieneu":
         source.write_bytes(_http_wav(VIENEU_URL, {"input": phrase, "voice": vieneu_voice, "speed": vieneu_speed, "steps": VIENEU_STEPS}))
@@ -276,10 +277,10 @@ def tts_aligned(text, voice, engine=None):
             "cues": cues, "durationMs": round(frames_total * 1000 / sample_rate)}
 
 
-def tts(text, voice, engine=None):
+def tts(text, voice, engine=None, speed=1.0):
     selected_engine = select_tts_engine(voice, engine)
     with tempfile.TemporaryDirectory(prefix="studio-tts-") as workdir:
-        source = synth_phrase(text, workdir, 0, voice, selected_engine)
+        source = synth_phrase(text, workdir, 0, voice, selected_engine, speed)
         target = Path(workdir) / "voice.mp3"
         subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(source), "-codec:a", "libmp3lame", "-q:a", "4", str(target)], check=True, timeout=120)
         return target.read_bytes()
@@ -411,7 +412,7 @@ class Handler(BaseHTTPRequestHandler):
                                                               payload.get("referenceImage")))
             elif self.path == "/tts":
                 payload = json.loads(body)
-                binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "doc-truyen")), payload.get("engine")))
+                binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "doc-truyen")), payload.get("engine"), payload.get("speed", 1.0)))
             elif self.path == "/tts-aligned":
                 payload = json.loads(body)
                 json_response(self, 200, tts_aligned(str(payload.get("text", "")), str(payload.get("voice", "doc-truyen")), payload.get("engine")))

@@ -461,6 +461,32 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.type("audio/mpeg").send(audio);
   });
 
+  app.post("/v1/text-to-speech", async (req, res) => {
+    const input = z
+      .object({
+        text: z.string().trim().min(1, "Văn bản cần đọc không được để trống").max(10_000),
+        voice: z.string().max(40),
+        engine: z.string().regex(/^[a-z0-9-]{1,20}$/u).nullish(),
+        speed: z.number().min(0.75).max(1.25).default(1),
+      })
+      .parse(req.body);
+    if (!voiceSample(input.voice)) return res.status(400).json({ error: "Giọng đọc không hợp lệ" });
+    if (!config.LOCAL_MEDIA_FEATURES_ENABLED)
+      return res.status(503).json({ error: "Chưa kết nối dịch vụ giọng đọc trên máy." });
+    try {
+      const response = await fetch(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/tts`, {
+        method: "POST",
+        signal: AbortSignal.timeout(120_000),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: input.text, voice: input.voice, engine: input.engine ?? undefined, speed: input.speed }),
+      });
+      if (!response.ok) return res.status(502).json({ error: "Dịch vụ giọng đọc chưa tạo được audio." });
+      res.type("audio/mpeg").send(Buffer.from(await response.arrayBuffer()));
+    } catch {
+      return res.status(503).json({ error: "Không kết nối được dịch vụ giọng đọc. Hãy kiểm tra máy tạo video." });
+    }
+  });
+
   app.put("/v1/settings", async (req, res) => {
     const input = accountSettingsSchema.parse(req.body);
     const { error } = await db
