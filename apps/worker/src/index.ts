@@ -141,7 +141,8 @@ type JobRow = {
     | "storyboard"
     | "generate_media"
     | "regenerate_scene"
-    | "render_video";
+    | "render_video"
+    | "dub_video";
   payload: Record<string, unknown>;
   attempts: number;
   max_attempts: number;
@@ -581,6 +582,58 @@ async function render(job: JobRow, project: Project) {
   }
 }
 
+async function renderDub(job: JobRow, project: Project) {
+  checkDeadline(job);
+  const payload = job.payload as {
+    sourceVideoPath?: string;
+    script?: string;
+    voice?: string;
+    engine?: string | null;
+    subtitle?: Project["settings"]["subtitle"];
+  };
+  if (!payload.sourceVideoPath || !payload.script?.trim())
+    throw new Error("Thiếu video upload hoặc lời thoại lồng tiếng");
+  const script = payload.script.trim();
+  const aligned = await localMedia.createSpeechAligned(script, payload.voice ?? project.settings.voice, {
+    tts: payload.engine ?? project.settings.localModels.tts,
+  });
+  const scene = {
+    id: crypto.randomUUID(), order: 0, narration: script, imagePrompt: "Uploaded video",
+    estimatedDurationMs: Math.min(120000, Math.max(1000, aligned.durationMs)),
+    actualDurationMs: aligned.durationMs, imagePath: null, videoPath: payload.sourceVideoPath,
+    audioPath: "memory://dubbing-audio", thumbnailUrl: null, mediaStatus: "ready" as const,
+    errorMessage: null, subtitles: aligned.cues,
+  } as Scene;
+  const dubProject = {
+    ...project,
+    sourceText: script,
+    settings: { ...project.settings, subtitle: payload.subtitle ?? project.settings.subtitle },
+    scenes: [scene],
+  } as Project;
+  await updateProject(project.id, { status: "rendering" });
+  const result = await renderProject(
+    config,
+    dubProject,
+    async (path) => path === "memory://dubbing-audio" ? aligned.audio : download(path),
+    (value, stage) => setProgress(job.id, value, stage),
+  );
+  try {
+    const outputPath = `${project.userId}/${project.id}/exports/${job.id}.mp4`;
+    const thumbnailPath = `${project.userId}/${project.id}/exports/${job.id}.jpg`;
+    await upload(outputPath, new Uint8Array(await readFile(result.output)), "video/mp4");
+    await upload(thumbnailPath, new Uint8Array(await readFile(result.thumbnail)), "image/jpeg");
+    const { error } = await db.from("exports").upsert({
+      project_id: project.id, job_id: job.id, storage_path: outputPath,
+      thumbnail_path: thumbnailPath, duration_ms: result.durationMs,
+      width: 1080, height: 1920, status: "completed",
+    }, { onConflict: "job_id" });
+    if (error) throw error;
+    await updateProject(project.id, { status: "completed" });
+  } finally {
+    await rm(result.workdir, { recursive: true, force: true });
+  }
+}
+
 async function run(job: JobRow) {
   const project = await getProject(job.project_id);
   if (job.job_type === "create_video") {
@@ -605,6 +658,7 @@ async function run(job: JobRow) {
   )
     await generateMedia(job, project);
   else if (job.job_type === "render_video") await render(job, project);
+  else if (job.job_type === "dub_video") await renderDub(job, project);
 }
 async function finish(job: JobRow, error?: unknown) {
   if (!error) {

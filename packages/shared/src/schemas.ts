@@ -201,6 +201,7 @@ export const jobSchema = z.object({
     "generate_media",
     "regenerate_scene",
     "render_video",
+    "dub_video",
   ]),
   status: z.enum(["queued", "running", "completed", "failed", "cancelled"]),
   progress: z.number().int().min(0).max(100),

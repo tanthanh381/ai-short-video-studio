@@ -857,6 +857,7 @@ function TextToSpeechPage() {
 }
 
 function DubSubtitlePage() {
+  const navigate = useNavigate();
   const { isDemo } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -913,10 +914,33 @@ function DubSubtitlePage() {
     if (isDemo) { setError("Chế độ mẫu chưa kết nối máy tạo giọng đọc. Hãy bật API để tạo bản lồng tiếng."); return; }
     setBusy(true); setError(null);
     try {
-      const blob = await api.textToSpeech(script, voice, engine, 1);
-      setAudioUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
+      const settings = {
+        ...DEFAULT_PROJECT_SETTINGS,
+        textProvider: "ollama" as const,
+        mediaProvider: "local" as const,
+        voice,
+        localModels: { ...DEFAULT_PROJECT_SETTINGS.localModels, tts: engine },
+        subtitle: {
+          ...DEFAULT_PROJECT_SETTINGS.subtitle,
+          enabled: subtitleEnabled,
+          preset: subtitlePreset,
+          position: subtitlePosition,
+          fontColor: subtitleColor,
+          backgroundColor: subtitleBackground,
+          backgroundOpacity: subtitleOpacity / 100,
+        },
+      };
+      const project = await api.createProject({
+        title: file.name.replace(/\.[^.]+$/u, "") || "Video lồng tiếng",
+        sourceText: script,
+        inputMode: "full-script",
+        settings,
+      });
+      const sourceVideoPath = await api.uploadMedia(project.id, file, "video");
+      await api.queue(project.id, "dub_video", { sourceVideoPath, script, voice, engine, subtitle: settings.subtitle });
+      navigate(`/studio/${project.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Chưa tạo được bản lồng tiếng.");
+      setError(e instanceof Error ? e.message : "Chưa xếp hàng được bản lồng tiếng.");
     } finally { setBusy(false); }
   }
 

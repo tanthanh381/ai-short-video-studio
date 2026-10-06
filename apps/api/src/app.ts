@@ -18,6 +18,7 @@ import {
   estimateSchema,
   projectSchema,
   projectSettingsSchema,
+  subtitleStyleSchema,
   type Project,
   voiceSample,
 } from "@studio/shared";
@@ -42,6 +43,7 @@ const jobRequestSchema = z.object({
     "generate_media",
     "regenerate_scene",
     "render_video",
+    "dub_video",
   ]),
   payload: z.record(z.string(), z.unknown()).default({}),
 });
@@ -763,6 +765,19 @@ export function createApp(config: AppConfig, db: AdminClient) {
       const sceneId = String(input.payload.sceneId ?? "");
       if (!project.scenes.some((scene) => scene.id === sceneId))
         return res.status(404).json({ error: "Không tìm thấy cảnh cần tạo lại" });
+    }
+    if (input.type === "dub_video") {
+      const dub = z.object({
+        sourceVideoPath: z.string().min(1).max(500),
+        script: z.string().trim().min(1).max(10000),
+        voice: z.string().max(40),
+        engine: z.string().regex(/^[a-z0-9-]{1,20}$/u).nullish(),
+        subtitle: subtitleStyleSchema.optional(),
+      }).parse(input.payload);
+      const prefix = `${req.userId}/${project.id}/video/`;
+      if (!dub.sourceVideoPath.startsWith(prefix) || dub.sourceVideoPath.includes(".."))
+        return res.status(403).json({ error: "Video upload không thuộc dự án này" });
+      input.payload = dub;
     }
     const { count } = await db
       .from("jobs")

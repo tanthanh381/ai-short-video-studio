@@ -202,7 +202,7 @@ export const api = {
     }),
   queue: (
     id: string,
-    type: "storyboard" | "generate_media" | "render_video",
+    type: "storyboard" | "generate_media" | "render_video" | "dub_video",
     payload: object = {},
   ) =>
     request<Job>(`/v1/projects/${id}/jobs`, {
