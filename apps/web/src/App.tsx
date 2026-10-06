@@ -70,6 +70,7 @@ import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } 
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
+  { to: "/dub-subtitle", label: "Lồng tiếng & phụ đề", icon: Subtitles },
   { to: "/tts", label: "Text to Speech", icon: Mic2 },
   { to: "/media", label: "Thư viện media", icon: Library },
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
@@ -828,6 +829,129 @@ function TextToSpeechPage() {
             <input type="range" min="0.75" max="1.25" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
           </label>
           <VoicePreview voice={voice} engine={engine} disabled={isDemo} />
+        </section>
+      </div>
+    </SimplePage>
+  );
+}
+
+function DubSubtitlePage() {
+  const { isDemo } = useAuth();
+  const [file, setFile] = useState<File | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [script, setScript] = useState("");
+  const [voice, setVoice] = useState(DEFAULT_VOICE_PRESET);
+  const [engine, setEngine] = useState<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [subtitleEnabled, setSubtitleEnabled] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const catalog = useLocalModels(isDemo);
+
+  useEffect(() => {
+    const defaultEngine = catalog?.tts.default ?? catalog?.tts.models[0]?.id ?? null;
+    if (defaultEngine && !engine) setEngine(defaultEngine);
+  }, [catalog, engine]);
+  useEffect(() => () => {
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+  }, [videoUrl, audioUrl]);
+
+  function selectVideo(next: File | undefined) {
+    if (!next) return;
+    if (!next.type.startsWith("video/")) {
+      setError("Hãy chọn file video MP4, WebM hoặc MOV.");
+      return;
+    }
+    setError(null);
+    setFile(next);
+    setVideoUrl((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return URL.createObjectURL(next);
+    });
+  }
+
+  async function createDub() {
+    if (!file) { setError("Hãy tải video cần lồng tiếng lên trước."); return; }
+    if (!script.trim()) { setError("Hãy nhập lời thoại để tạo giọng đọc và phụ đề."); return; }
+    if (isDemo) { setError("Chế độ mẫu chưa kết nối máy tạo giọng đọc. Hãy bật API để tạo bản lồng tiếng."); return; }
+    setBusy(true); setError(null);
+    try {
+      const blob = await api.textToSpeech(script, voice, engine, 1);
+      setAudioUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chưa tạo được bản lồng tiếng.");
+    } finally { setBusy(false); }
+  }
+
+  async function togglePreview() {
+    if (!videoRef.current || !audioUrl) return;
+    if (playing) {
+      videoRef.current.pause();
+      audioRef.current?.pause();
+      setPlaying(false);
+      return;
+    }
+    videoRef.current.currentTime = 0;
+    if (audioRef.current) { audioRef.current.currentTime = 0; await audioRef.current.play(); }
+    await videoRef.current.play();
+    setPlaying(true);
+  }
+
+  return (
+    <SimplePage title="Lồng tiếng & phụ đề" subtitle="Tải video có sẵn, nhập lời thoại và xem ngay bản dựng với giọng đọc tiếng Việt cùng phụ đề.">
+      <div className="dub-page-grid">
+        <section className="dub-preview-card">
+          <div className="section-heading-row">
+            <div><h2>Bản xem trước</h2><p>{file ? file.name : "Video của anh sẽ xuất hiện ở đây"}</p></div>
+            {audioUrl && <span className="ready-chip"><Check size={14} /> Đã có giọng đọc</span>}
+          </div>
+          <div className="video-preview-frame">
+            {videoUrl ? <>
+              <video ref={videoRef} src={videoUrl} onEnded={() => setPlaying(false)} playsInline />
+              {subtitleEnabled && script.trim() && <div className="dub-subtitle-overlay">{script.trim()}</div>}
+              <audio ref={audioRef} src={audioUrl} onEnded={() => setPlaying(false)} />
+            </> : <div className="video-empty"><Video size={34} /><span>Tải video để bắt đầu</span></div>}
+          </div>
+          <div className="dub-preview-actions">
+            <Button variant="secondary" disabled={!audioUrl || !videoUrl} onClick={() => void togglePreview()}>
+              {playing ? <><Pause size={17} /> Dừng xem thử</> : <><Play size={17} /> Phát video đã lồng tiếng</>}
+            </Button>
+            <span className="microcopy">Bản xem trước chạy trực tiếp trên trình duyệt.</span>
+          </div>
+        </section>
+        <section className="dub-form-card">
+          <label className="upload-dropzone">
+            <Upload size={23} />
+            <strong>{file ? "Đổi video" : "Tải video lên"}</strong>
+            <span>MP4, WebM hoặc MOV · tối đa 500 MB</span>
+            <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => selectVideo(event.target.files?.[0])} />
+          </label>
+          <Field label="Lời thoại lồng tiếng và nội dung phụ đề" hint="Nội dung này sẽ được dùng cho cả giọng đọc và dòng phụ đề xem trước.">
+            <textarea value={script} onChange={(event) => setScript(event.target.value)} rows={7} maxLength={10000} placeholder="Nhập lời thoại tiếng Việt…" />
+          </Field>
+          <div className="dub-form-row">
+            <Field label="Giọng đọc">
+              <select value={voice} onChange={(event) => setVoice(event.target.value)}>
+                {VOICE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label} — {preset.hint}</option>)}
+              </select>
+            </Field>
+            <Field label="Engine local">
+              <select value={engine ?? ""} onChange={(event) => setEngine(event.target.value || null)} disabled={!catalog?.tts.models.length}>
+                {!catalog?.tts.models.length && <option value="">Chưa kết nối</option>}
+                {catalog?.tts.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+              </select>
+            </Field>
+          </div>
+          <label className="check dub-check">
+            <input type="checkbox" checked={subtitleEnabled} onChange={(event) => setSubtitleEnabled(event.target.checked)} />
+            <span><strong>Hiển thị phụ đề trên video</strong><small>Kiểm tra vị trí phụ đề ngay trong bản xem trước.</small></span>
+          </label>
+          {error && <Notice tone="warn">{error}</Notice>}
+          <Button busy={busy} onClick={() => void createDub()}><WandSparkles size={17} /> Tạo giọng đọc & phụ đề</Button>
         </section>
       </div>
     </SimplePage>
@@ -2971,6 +3095,7 @@ export function App() {
               <Route index element={<DashboardPage />} />
               <Route path="new" element={<NewProjectPage />} />
               <Route path="studio/:id" element={<StudioPage />} />
+              <Route path="dub-subtitle" element={<DubSubtitlePage />} />
               <Route path="tts" element={<TextToSpeechPage />} />
               <Route path="media" element={<MediaPage />} />
               <Route path="exports" element={<ExportsPage />} />
