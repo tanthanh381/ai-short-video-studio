@@ -308,7 +308,7 @@ async function storyboard(job: JobRow, project: Project) {
     project_id: project.id,
     scene_order: index,
     narration: scene.narration,
-    image_prompt: withCast(cast, scene.imagePrompt),
+    image_prompt: withCast(cast, scene.imagePrompt, scene.narration),
     estimated_duration_ms: scene.estimatedDurationMs,
     media_status: "pending",
     subtitles: [],
@@ -376,7 +376,7 @@ async function generateMedia(job: JobRow, project: Project) {
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
         const image = await media.createImage(
-          `${scene.imagePrompt}. ${visualPresetPrompt(project.settings.visualPreset)}. Không chữ, không logo, không watermark.`,
+          `${scene.imagePrompt}. Exact scene narration to follow: ${scene.narration}. Do not replace this scene with a generic portrait or unrelated subject. ${visualPresetPrompt(project.settings.visualPreset)}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
           {
             ...project.settings.localModels,
