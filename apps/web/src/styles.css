@@ -1357,6 +1357,7 @@ a:focus-visible {
   padding-bottom: 12px;
 }
 .media-grid img,
+.media-grid video,
 .audio-tile {
   width: 100%;
   aspect-ratio: 1;

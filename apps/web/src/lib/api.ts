@@ -47,16 +47,37 @@ export type AccountSettings = {
   usageStats: UsageStats;
 };
 
+async function getAuthToken() {
+  let token: string | undefined;
+  if (supabase) {
+    // OAuth can finish before the browser has persisted the session locally.
+    // Give the auth client a short grace period so the first dashboard request
+    // does not become a misleading unauthenticated/network error.
+    for (let attempt = 0; attempt < 4 && !token; attempt += 1) {
+      token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token && attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
+      }
+    }
+  }
+  return token;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = (await supabase?.auth.getSession())?.data.session?.access_token;
-  const response = await fetch(`${appConfig.apiUrl}${path}`, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-  });
+  const token = await getAuthToken();
+  let response: Response;
+  try {
+    response = await fetch(`${appConfig.apiUrl}${path}`, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
+    });
+  } catch {
+    throw new Error("Không thể kết nối máy chủ. Hãy kiểm tra máy xử lý đang bật rồi thử lại.");
+  }
   const body = (await response.json().catch(() => ({}))) as {
     error?: string;
     details?: Array<{ path?: string; message?: string }>;
@@ -74,12 +95,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function voicePreviewBlob(voice: string, engine: string | null): Promise<Blob> {
-  const token = (await supabase?.auth.getSession())?.data.session?.access_token;
-  const response = await fetch(`${appConfig.apiUrl}/v1/voice-preview`, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ voice, engine }),
-  });
+  const token = await getAuthToken();
+  let response: Response;
+  try {
+    response = await fetch(`${appConfig.apiUrl}/v1/voice-preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ voice, engine }),
+    });
+  } catch {
+    throw new Error("Không thể kết nối dịch vụ giọng đọc. Hãy kiểm tra máy xử lý đang bật rồi thử lại.");
+  }
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? "Chưa nghe thử được giọng đọc");
@@ -88,12 +114,17 @@ async function voicePreviewBlob(voice: string, engine: string | null): Promise<B
 }
 
 async function textToSpeechBlob(text: string, voice: string, engine: string | null, speed: number): Promise<Blob> {
-  const token = (await supabase?.auth.getSession())?.data.session?.access_token;
-  const response = await fetch(`${appConfig.apiUrl}/v1/text-to-speech`, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ text, voice, engine, speed }),
-  });
+  const token = await getAuthToken();
+  let response: Response;
+  try {
+    response = await fetch(`${appConfig.apiUrl}/v1/text-to-speech`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ text, voice, engine, speed }),
+    });
+  } catch {
+    throw new Error("Không thể kết nối dịch vụ giọng đọc. Hãy kiểm tra máy xử lý đang bật rồi thử lại.");
+  }
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? "Chưa tạo được giọng đọc");
@@ -239,7 +270,7 @@ export const api = {
     request<
       Array<{
         id: string;
-        kind: "image" | "audio";
+        kind: "image" | "audio" | "video";
         projectTitle: string;
         url: string;
       }>

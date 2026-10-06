@@ -2700,13 +2700,13 @@ function StudioPage() {
 
 function MediaPage() {
   const { isDemo } = useAuth();
-  const [kind, setKind] = useState<"all" | "image" | "audio">("all");
+  const [kind, setKind] = useState<"all" | "image" | "audio" | "video">("all");
   const [loading, setLoading] = useState(!isDemo);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<
     Array<{
       id: string;
-      kind: "image" | "audio";
+      kind: "image" | "audio" | "video";
       projectTitle: string;
       url: string;
     }>
@@ -2728,7 +2728,7 @@ function MediaPage() {
   return (
     <SimplePage
       title="Thư viện media"
-      subtitle="Ảnh, giọng đọc và nhạc đã dùng trong các dự án."
+      subtitle="Ảnh, motion video và giọng đọc đã dùng trong các dự án."
     >
       <div className="filter-pills">
         <button
@@ -2749,6 +2749,12 @@ function MediaPage() {
         >
           Giọng đọc
         </button>
+        <button
+          className={kind === "video" ? "active" : ""}
+          onClick={() => setKind("video")}
+        >
+          Video
+        </button>
       </div>
       {error && <div className="dashboard-feedback"><Notice tone="warn"><span>{error}</span><Button variant="ghost" onClick={() => void loadMedia()}>Thử lại</Button></Notice></div>}
       {loading ? (
@@ -2759,6 +2765,8 @@ function MediaPage() {
             <article key={item.id}>
               {item.kind === "image" ? (
                 <img src={item.url} alt={item.projectTitle} />
+              ) : item.kind === "video" ? (
+                <video controls preload="metadata" src={item.url} aria-label={item.projectTitle} />
               ) : (
                 <div className="audio-tile">
                   <Mic2 />
@@ -2766,7 +2774,7 @@ function MediaPage() {
                 </div>
               )}
               <strong>{item.projectTitle}</strong>
-              <span>{item.kind === "image" ? "Ảnh cảnh" : "Giọng đọc"}</span>
+              <span>{item.kind === "image" ? "Ảnh cảnh" : item.kind === "video" ? "Motion video" : "Giọng đọc"}</span>
             </article>
           ))}
         </div>
