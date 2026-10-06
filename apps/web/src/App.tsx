@@ -59,6 +59,8 @@ import {
   type ProjectSettings,
   type Scene,
   type RegenerationComponent,
+  VISUAL_PRESET_OPTIONS,
+  visualPresetPrompt,
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
 import { api, type ServiceId, type ServiceStatus, type VideoResult } from "./lib/api";
@@ -72,6 +74,26 @@ const navItems = [
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
+
+function withVisualPreset(settings: ProjectSettings, visualPreset: ProjectSettings["visualPreset"]): ProjectSettings {
+  const option = VISUAL_PRESET_OPTIONS.find((item) => item.id === visualPreset) ?? VISUAL_PRESET_OPTIONS[0];
+  if (visualPreset === "ink-monochrome") {
+    return {
+      ...settings,
+      visualPreset,
+      visualStyle: option.description,
+      subtitle: {
+        ...settings.subtitle,
+        preset: "minimal",
+        fontColor: "#171717",
+        outlineColor: "#F5F1E8",
+        backgroundColor: "#F5F1E8",
+        backgroundOpacity: 0.94,
+      },
+    };
+  }
+  return { ...settings, visualPreset, visualStyle: option.description };
+}
 
 function Notice({
   children,
@@ -900,6 +922,14 @@ function NewProjectPage() {
                 <option value="meo-cuoc-song">Mẹo cuộc sống</option>
               </select>
             </Field>
+            <Field label="Bảng màu" hint="Nét mực trắng đen sẽ ép ảnh và video về đơn sắc, phù hợp video kể chuyện tối giản.">
+              <select
+                value={settings.visualPreset}
+                onChange={(e) => setSettings((s) => withVisualPreset(s, e.target.value as ProjectSettings["visualPreset"]))}
+              >
+                {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+              </select>
+            </Field>
             <Field label="Nhịp chia cảnh" hint="Chỉ tham khảo khi chia cảnh. Thời lượng xuất luôn theo audio thực tế.">
               <select
                 value={settings.targetDurationSec}
@@ -950,6 +980,12 @@ function NewProjectPage() {
         </section>
         <section hidden={!advanced}>
             <div className="form-grid advanced-panel">
+              <Field label="Mô tả nét hình" hint="Dùng để giữ nhất quán nhân vật và chất liệu giữa các cảnh. AI local sẽ nhận cả preset và mô tả này.">
+                <input
+                  value={settings.visualStyle}
+                  onChange={(e) => setSettings((s) => ({ ...s, visualStyle: e.target.value }))}
+                />
+              </Field>
               <Field label="Giọng đọc theo nội dung" hint={voiceHint(settings.voice)}>
                 <select
                   value={settings.voice}
@@ -968,14 +1004,6 @@ function NewProjectPage() {
                 value={settings.localModels}
                 onChange={(next) => setSettings((s) => ({ ...s, localModels: next }))}
               />
-              <Field label="Phong cách hình ảnh">
-                <input
-                  value={settings.visualStyle}
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, visualStyle: e.target.value }))
-                  }
-                />
-              </Field>
               <label className="check">
                 <input
                   type="checkbox"
@@ -1933,6 +1961,24 @@ function StudioPage() {
               <p className="microcopy">
                 Chọn máy xử lý kịch bản. Tạo video tự động mặc định dùng máy đã kết nối.
               </p>
+            </div>
+            <div className="setting-group">
+              <h3><Sparkles /> Nét hình</h3>
+              <Field label="Phong cách hình ảnh" hint={VISUAL_PRESET_OPTIONS.find((item) => item.id === project.settings.visualPreset)?.description}>
+                <select
+                  value={project.settings.visualPreset}
+                  onChange={(e) => change({ ...project, settings: withVisualPreset(project.settings, e.target.value as ProjectSettings["visualPreset"]) })}
+                >
+                  {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Mô tả nét hình">
+                <input
+                  value={project.settings.visualStyle}
+                  onChange={(e) => change({ ...project, settings: { ...project.settings, visualStyle: e.target.value } })}
+                />
+              </Field>
+              <p className="microcopy">AI local sẽ dùng preset này khi viết prompt storyboard và tạo ảnh từng cảnh. {visualPresetPrompt(project.settings.visualPreset)}</p>
             </div>
             <div className="setting-group">
               <h3><Image /> Hình ảnh và giọng đọc</h3>

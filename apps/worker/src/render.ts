@@ -129,7 +129,8 @@ export async function renderProject(
       scene.actualDurationMs = ms;
       const seconds = ms / 1000;
       // Straight cuts preserve measured timing and avoid a black opening/boundaries.
-      const filter = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=30,format=yuv420p[v]`;
+      const monochrome = project.settings.visualPreset === "ink-monochrome" ? ",hue=s=0,eq=contrast=1.04:brightness=0.01" : "";
+      const filter = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}${monochrome},zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=30,format=yuv420p[v]`;
       await exec(
         config.FFMPEG_PATH,
         [

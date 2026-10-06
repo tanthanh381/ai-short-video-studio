@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
-import { projectSchema, type Project, type Scene } from "@studio/shared";
+import { projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
 import { getConfig } from "./config";
 import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
@@ -291,7 +291,7 @@ async function storyboard(job: JobRow, project: Project) {
     audience: project.settings.targetAudience,
     style: project.settings.style,
     duration: project.settings.targetDurationSec,
-    visualStyle: project.settings.visualStyle,
+    visualStyle: `${project.settings.visualStyle}; ${visualPresetPrompt(project.settings.visualPreset)}`,
     model: project.settings.localModels.storyboard,
   } as const;
   // Cast extraction is independent of scene splitting; overlap the two Ollama
@@ -385,7 +385,7 @@ async function generateMedia(job: JobRow, project: Project) {
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
         const image = await media.createImage(
-          `${scene.imagePrompt}. Không chữ, không logo, không watermark.`,
+          `${scene.imagePrompt}. ${visualPresetPrompt(project.settings.visualPreset)}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
           {
             ...project.settings.localModels,

@@ -9,6 +9,15 @@ export const videoStyleSchema = z.enum([
 
 export const aspectRatioSchema = z.enum(["9:16", "1:1", "16:9"]);
 export const generationPresetSchema = z.enum(["fast", "balanced", "quality"]);
+export const visualPresetSchema = z.enum([
+  "cinematic-color",
+  "ink-monochrome",
+  "cartoon",
+  "historical",
+  "watercolor",
+  "paper-cut",
+]);
+export type VisualPreset = z.infer<typeof visualPresetSchema>;
 export const projectStatusSchema = z.enum([
   "draft",
   "generating_media",
@@ -102,6 +111,7 @@ export const projectSettingsSchema = z.object({
     .default(60),
   aspectRatio: aspectRatioSchema.default("9:16"),
   generationPreset: generationPresetSchema.default("balanced"),
+  visualPreset: visualPresetSchema.default("cinematic-color"),
   voice: z.string().default("alloy"),
   localModels: localModelsSchema.default(DEFAULT_LOCAL_MODELS),
   visualStyle: z.string().max(500).default("Ảnh điện ảnh chân thực, ánh sáng tự nhiên, nhân vật Việt Nam"),
