@@ -1,5 +1,5 @@
 // Default mode is read-only planning. Never accepts a Supabase service-role key.
-import {readFile,writeFile,mkdir,rename} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename,unlink} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFile} from 'node:child_process';
@@ -31,7 +31,21 @@ await mkdir(directory,{recursive:true});
 const statePath=join(directory,'state.json');
 let state;
 try{state=JSON.parse(await readFile(statePath,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;state={runId:randomUUID(),scope:'Authenticated API benchmark, not browser E2E',cases:{}};}
-async function save(){await writeFile(statePath+'.tmp',JSON.stringify(state,null,2));await rename(statePath+'.tmp',statePath);}
+async function save(){
+  const temporaryPath=statePath+'.tmp';
+  try{
+    await writeFile(temporaryPath,JSON.stringify(state,null,2));
+    await rename(temporaryPath,statePath);
+  }catch(error){
+    if(error?.code==='ENOSPC'){
+      // Remove only the journal's temporary file. Never delete the checkpoint
+      // or downloaded videos: a later run must be able to resume safely.
+      await unlink(temporaryPath,{force:true}).catch(()=>{});
+      throw new Error(`Benchmark journal cannot be saved: disk is full (${statePath}). Free disk space and resume from the existing journal; no replacement video was submitted.`);
+    }
+    throw error;
+  }
+}
 async function request(path,method='GET',body,key){
   const response=await fetch(base+path,{method,headers:{authorization:`Bearer ${token}`,'content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});
   if(!response.ok){const error=new Error(`HTTP ${response.status} for ${path}`);error.fatal=[401,403,429].includes(response.status);throw error;}
