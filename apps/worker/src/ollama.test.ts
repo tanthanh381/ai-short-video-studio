@@ -100,6 +100,7 @@ describe("Ollama locked visual-prompt response", () => {
     const payload = JSON.parse(options.body as string);
     expect(payload.model).toBe("qwen2.5:3b");
     expect(payload.stream).toBe(false);
+    expect(payload.think).toBe(false);
     expect(payload.options).toEqual(expect.objectContaining({ top_p: 0.88, repeat_penalty: 1.08, num_ctx: 8192 }));
     expect(payload.format.required).toEqual(["scenes"]);
     expect(Object.keys(payload.format.properties)).toEqual(["scenes"]);

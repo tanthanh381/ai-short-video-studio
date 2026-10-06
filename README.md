@@ -68,13 +68,15 @@ supabase       Migration database, RLS và storage
 
 ### Ollama cục bộ
 
-Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker kết nối tới Ollama trên máy chủ qua `OLLAMA_BASE_URL` (mặc định `http://host.docker.internal:11434`) và dùng model `qwen2.5:3b`. Cài model bằng `ollama pull qwen2.5:3b`. Để ưu tiên chất lượng khi máy đủ RAM, có thể đặt `OLLAMA_MODEL` thành model instruction lớn hơn đã cài trên máy; `OLLAMA_NUM_CTX=8192` và các tham số sampling ổn định giúp JSON storyboard và prompt ảnh ít lặp, ít bị cắt.
+Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker kết nối tới Ollama trên máy chủ qua `OLLAMA_BASE_URL` (mặc định `http://host.docker.internal:11434`) và dùng model `qwen3.5:4b`. Cài model bằng `ollama pull qwen3.5:4b`. `OLLAMA_NUM_CTX=8192` và các tham số sampling ổn định giúp JSON storyboard và prompt ảnh ít lặp, ít bị cắt.
 
 ### Media AI cục bộ trên macOS
 
 Pipeline không cần API trả phí: image server SDXL-Turbo chạy qua MLX tạo ảnh, VieNeu/Piper hoặc giọng `Linh` của macOS tạo TTS tiếng Việt. Mỗi cụm lời gốc được tổng hợp thành WAV; timestamp phụ đề là vị trí nối audio tính từ số mẫu PCM thực, không phải chia thời gian theo ký tự. Nhờ vậy chữ không bị Whisper nhận sai. Với audio tự tải lên, Whisper chỉ được chấp nhận khi chữ khớp kịch bản; nếu không, tác vụ dừng và yêu cầu chỉnh phụ đề hoặc tạo lại giọng local. Mã cầu nối nằm trong `local-tools/media_server.py`; model và môi trường Python local không được commit vào repository.
 
 LTX-Video 2B Distilled được tích hợp như một motion pass tùy chọn: model selector chỉ hiển thị `LTX-Video 2B Distilled` khi runtime `local-tools/ltx_server.py` trả health `ready`; nếu chưa đủ text encoder hoặc bộ nhớ, hệ thống vẫn dùng ảnh SDXL và render zoompan, không giả báo đã kết nối. Checkpoint và venv nằm ngoài repository. Trên máy 16GB, cần chừa dung lượng cho checkpoint 2B và text encoder PixArt/T5 trước khi bật model; runtime không tự tải model để tránh làm đầy ổ.
+
+VieNeu-TTS v3 Turbo chạy bằng ONNX/CPU với artifact local tại `VIENEU_MODEL_DIR` và `VIENEU_CODEC_DIR`; server chỉ báo sẵn sàng sau khi load được graph ONNX thật. ComfyUI được tích hợp qua API local `COMFYUI_URL`; lựa chọn `SDXL Base 1.0 (ComfyUI local)` chỉ xuất hiện khi endpoint `/system_stats` phản hồi và checkpoint `COMFYUI_CHECKPOINT` tồn tại trong `COMFYUI_MODEL_DIR`. Khi có ảnh tham chiếu nhân vật, hệ thống vẫn dùng SDXL-Turbo để giữ đường img2img hiện có; ComfyUI SDXL Base hiện là text-to-image.
 
 Khởi động image server MLX trước, sau đó chạy cầu nối chỉ trên localhost:
 

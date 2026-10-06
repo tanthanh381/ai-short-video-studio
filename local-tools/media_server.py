@@ -39,6 +39,13 @@ VIENEU_URL = os.getenv("VIENEU_URL", "http://127.0.0.1:5001")
 PIPER_URL = os.getenv("PIPER_URL", "http://127.0.0.1:5000")
 VIENEU_VOICE = os.getenv("VIENEU_VOICE", "Đức Trí")
 LTX_VIDEO_URL = os.getenv("LTX_VIDEO_URL", "http://127.0.0.1:8770")
+COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+COMFYUI_CHECKPOINT = os.getenv("COMFYUI_CHECKPOINT", "sd_xl_base_1.0_0.9vae.safetensors")
+COMFYUI_MODEL_DIR = Path(os.getenv(
+    "COMFYUI_MODEL_DIR",
+    str(LOCAL_AI_ROOT / "ComfyUI" / "models" / "checkpoints"),
+))
+COMFYUI_TIMEOUT_S = int(os.getenv("COMFYUI_TIMEOUT_S", "900"))
 # Voice presets selectable on the website. Keep ids in sync with packages/shared/src/voices.ts.
 # (VieNeu preset voice, speed). "giong-linh" is the macOS Linh voice.
 VOICE_PRESETS = {
@@ -59,10 +66,13 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/ggml-base.bin"))
 # Image models the toolkit has installed (id -> label). image_server.py serves them.
 IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo (MLX, nhanh)"}
-TTS_ENGINE_LABELS = {"vieneu": "VieNeu (giọng theo thể loại)", "piper": "Piper (giọng Việt nhẹ)", "say": "Giọng Linh (macOS)"}
+COMFYUI_IMAGE_MODEL = "sdxl-base-1.0-comfyui"
+COMFYUI_IMAGE_LABEL = "SDXL Base 1.0 (ComfyUI local)"
+TTS_ENGINE_LABELS = {"vieneu": "VieNeu-TTS v3 Turbo (ONNX/CPU)", "piper": "Piper (giọng Việt nhẹ)", "say": "Giọng Linh (macOS)"}
 SAMPLE_RATE = 22050
 IMAGE_LOCK = threading.Lock()  # one MLX/Metal job at a time on a 16 GB machine
 VIDEO_LOCK = threading.Lock()  # LTX is intentionally single-flight on shared Apple memory
+COMFYUI_LOCK = threading.Lock()
 
 
 def json_response(handler, status, value):
@@ -100,6 +110,11 @@ IMAGE_PRESETS = {
     "balanced": {"steps": 4, "cfg": 1.25},
     "quality": {"steps": 8, "cfg": 1.5},
 }
+COMFYUI_IMAGE_PRESETS = {
+    "fast": {"steps": 8, "cfg": 5.5},
+    "balanced": {"steps": 25, "cfg": 6.5},
+    "quality": {"steps": 35, "cfg": 7.0},
+}
 IMAGE_FACE_PRESET = os.getenv("IMAGE_FACE_PRESET", "quality")
 IMAGE_STEPS_OVERRIDE = os.getenv("IMAGE_STEPS")
 VIENEU_STEPS = int(os.getenv("VIENEU_STEPS", "16"))
@@ -123,11 +138,89 @@ HUMAN_PROMPT_RE = re.compile(
 )
 
 
+def comfyui_state():
+    """Return the real ComfyUI/checkpoint state; never infer readiness from config alone."""
+    if not COMFYUI_MODEL_DIR.joinpath(COMFYUI_CHECKPOINT).is_file():
+        return "offline", f"Thiếu checkpoint ComfyUI: {COMFYUI_CHECKPOINT}"
+    try:
+        with urllib.request.urlopen(f"{COMFYUI_URL.rstrip('/')}/system_stats", timeout=3) as response:
+            if response.status == 200:
+                return "ready", "ComfyUI và SDXL Base 1.0 đang sẵn sàng"
+    except urllib.error.HTTPError as error:
+        return "offline", f"ComfyUI trả HTTP {error.code}"
+    except Exception:
+        pass
+    return "offline", "Chưa kết nối ComfyUI local"
+
+
+def available_image_models():
+    models = dict(IMAGE_MODELS)
+    state, _ = comfyui_state()
+    if state == "ready":
+        models[COMFYUI_IMAGE_MODEL] = COMFYUI_IMAGE_LABEL
+    return models
+
+
+def comfyui_image(prompt, negative_prompt, width, height, seed, preset):
+    """Run a small, deterministic SDXL txt2img workflow through ComfyUI's local API."""
+    selected = preset if preset in COMFYUI_IMAGE_PRESETS else "balanced"
+    options = COMFYUI_IMAGE_PRESETS[selected]
+    workflow = {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": COMFYUI_CHECKPOINT}},
+        "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
+        "3": {"class_type": "CLIPTextEncode", "inputs": {"text": negative_prompt, "clip": ["1", 1]}},
+        "4": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+        "5": {"class_type": "KSampler", "inputs": {
+            "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0],
+            "seed": int(seed if seed is not None else uuid.uuid4().int % (2**32)),
+            "steps": options["steps"], "cfg": options["cfg"], "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0,
+        }},
+        "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
+        "7": {"class_type": "SaveImage", "inputs": {"filename_prefix": "ai-short-video-studio", "images": ["6", 0]}},
+    }
+    request = urllib.request.Request(
+        f"{COMFYUI_URL.rstrip('/')}/prompt",
+        data=json.dumps({"prompt": workflow, "client_id": "ai-short-video-studio"}).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        queued = json.load(response)
+    prompt_id = queued.get("prompt_id")
+    if not prompt_id:
+        raise RuntimeError("ComfyUI không trả prompt_id")
+    deadline = time.time() + COMFYUI_TIMEOUT_S
+    history = None
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(f"{COMFYUI_URL.rstrip('/')}/history/{urllib.parse.quote(prompt_id)}", timeout=10) as response:
+                history = json.load(response).get(prompt_id)
+            if history and history.get("status", {}).get("completed"):
+                break
+            if history and history.get("status", {}).get("status_str") == "error":
+                raise RuntimeError("ComfyUI báo lỗi khi chạy workflow")
+        except urllib.error.HTTPError:
+            pass
+        time.sleep(0.5)
+    if not history or not history.get("status", {}).get("completed"):
+        raise TimeoutError("ComfyUI tạo ảnh quá thời gian cho phép")
+    images = [image for output in history.get("outputs", {}).values() for image in output.get("images", [])]
+    if not images:
+        raise RuntimeError("ComfyUI hoàn tất nhưng không trả ảnh")
+    image = images[0]
+    query = urllib.parse.urlencode({"filename": image.get("filename", ""), "subfolder": image.get("subfolder", ""), "type": image.get("type", "output")})
+    with urllib.request.urlopen(f"{COMFYUI_URL.rstrip('/')}/view?{query}", timeout=60) as response:
+        data = response.read()
+    if not data.startswith(b"\x89PNG"):
+        raise RuntimeError("ComfyUI trả dữ liệu ảnh không hợp lệ")
+    return data
+
+
 def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo", preset=None, reference_image_base64=None):
     """SDXL-Turbo (MLX, Apple GPU) from the local AI toolkit, generated at the video's native aspect."""
     if aspect_ratio not in IMAGE_SIZES:
         raise ValueError("Tỷ lệ ảnh không hợp lệ")
-    check_choice("ảnh", model, IMAGE_MODELS)
+    image_models = available_image_models()
+    check_choice("ảnh", model, image_models)
     if style not in IMAGE_STYLES:
         raise ValueError("Phong cách ảnh không hợp lệ")
     if seed is not None:
@@ -146,6 +239,11 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     )
     anatomy_prefix = f", {anatomy}" if anatomy else ""
     styled = f"{IMAGE_STYLES[style]}{anatomy_prefix}, {clean}, no text, no logo, no watermark"
+    if model == COMFYUI_IMAGE_MODEL:
+        if reference_image_base64:
+            raise ValueError("SDXL Base qua ComfyUI hiện hỗ trợ text-to-image; hãy bỏ ảnh tham chiếu hoặc chọn SDXL-Turbo")
+        with COMFYUI_LOCK:
+            return comfyui_image(styled, IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else "", width, height, seed, preset)
     # SDXL-Turbo is most likely to deform anatomy at low step counts. Promote
     # every human scene in the balanced preset; explicit fast remains fast.
     if is_human and selected_preset == "balanced" and IMAGE_FACE_PRESET in IMAGE_PRESETS:
@@ -395,7 +493,7 @@ def model_catalog():
             tags = [m["name"] for m in json.load(response).get("models", [])]
     except Exception:
         pass
-    default_llm = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+    default_llm = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
     whisper_id = Path(WHISPER_MODEL).stem
     whisper_ready = service_up(WHISPER_URL, "/") and Path(WHISPER_MODEL).is_file()
     available_engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL),
@@ -405,8 +503,8 @@ def model_catalog():
         "available": True,
         "storyboard": {"models": [{"id": t, "label": t} for t in tags],
                        "default": default_llm if default_llm in tags else (tags[0] if tags else None)},
-        "image": {"models": [{"id": i, "label": l} for i, l in IMAGE_MODELS.items()],
-                  "default": next(iter(IMAGE_MODELS))},
+        "image": {"models": [{"id": i, "label": l} for i, l in available_image_models().items()],
+                  "default": next(iter(available_image_models()))},
         "tts": {"models": [{"id": e, "label": TTS_ENGINE_LABELS[e]} for e in TTS_ENGINES
                            if available_engines.get(e)],
                 "default": next((e for e in TTS_ENGINES if available_engines.get(e)), None)},
@@ -431,15 +529,20 @@ def check_choice(kind, value, allowed):
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
-            image_ready = image_server_state() != "down" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
+            comfy_ready, _ = comfyui_state()
+            image_ready = image_server_state() != "down" or comfy_ready == "ready" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
             engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL),
                        "say": bool(shutil.which("say"))}
             tts_ready = any(engines.get(e) for e in TTS_ENGINES)
             transcribe_ready = service_up(WHISPER_URL, "/")
             ltx_ready, ltx_detail = ltx_state()
+            comfy_ready, comfy_detail = comfyui_state()
+            ollama_ready = service_up(OLLAMA_URL, "/api/tags")
             json_response(self, 200, {"ok": image_ready and tts_ready, "image": image_ready,
                                     "tts": tts_ready, "alignedTts": tts_ready, "ttsEngines": engines,
-                                    "transcribe": transcribe_ready, "video": ltx_ready == "ready",
+                                    "transcribe": transcribe_ready, "ollama": ollama_ready,
+                                    "comfyui": comfy_ready == "ready", "comfyuiState": comfy_ready,
+                                    "comfyuiDetail": comfy_detail, "video": ltx_ready == "ready",
                                     "videoState": ltx_ready, "videoDetail": ltx_detail})
             return
         if self.path == "/models":

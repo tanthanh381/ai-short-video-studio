@@ -12,7 +12,7 @@ type OllamaResponse = { response?: string; error?: string };
 export class OllamaStoryboardAdapter implements StoryboardProvider {
   constructor(
     private readonly baseUrl: string,
-    private readonly model = "qwen2.5:3b",
+    private readonly model = "qwen3.5:4b",
     private readonly tuning: { numCtx?: number; keepAlive?: string } = {},
   ) {}
 
@@ -24,6 +24,10 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
       body: JSON.stringify({
         model: input.model || this.model,
         stream: false,
+        // Qwen3.5 exposes a reasoning stream by default. Storyboard JSON needs
+        // the final response within the predict budget, so keep reasoning off
+        // for this structured, latency-sensitive authoring call.
+        think: false,
         keep_alive: this.tuning.keepAlive ?? "30s", // free RAM before the image model needs it
         format: input.lockedScenes ? {
           type: "object", additionalProperties: false, required: ["scenes"],
@@ -74,6 +78,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
         body: JSON.stringify({
           model: input.model || this.model,
           stream: false,
+          think: false,
           keep_alive: this.tuning.keepAlive ?? "30s",
           format: { type: "object", additionalProperties: false, required: ["character"], properties: { character: { type: "string" } } },
           options: { temperature: 0.12, top_p: 0.85, repeat_penalty: 1.08, num_ctx: Math.min(this.tuning.numCtx ?? 8192, 4096), num_predict: 140 },
