@@ -83,11 +83,20 @@ describe("one-click video API", () => {
     expect(response.status).toBe(202);
     const args = f.rpc.mock.calls[0]![1];
     expect(args.p_source_text).toBe(script);
+    expect(args.p_input_mode).toBe("full-script");
     expect(args.p_title).toBe("Hãy dành một phút để lắng nghe chính mình.");
     expect(args.p_settings).toMatchObject({ textProvider: "ollama", mediaProvider: "local", rewriteFullScript: false, aspectRatio: "9:16" });
     expect(args.p_idempotency_key).toBe("create-video:unique-click-123");
     expect(response.body.job.type).toBe("create_video");
     expect(response.body.project.sourceText).toBe(script);
+  });
+
+  it("passes idea mode through to the trusted queue function", async () => {
+    const f = fixture();
+    const response = await request(f.app).post("/v1/videos").set("Authorization", "Bearer test")
+      .send({ sourceText: "Một ý tưởng video về thói quen xác minh thông tin.", inputMode: "idea" });
+    expect(response.status).toBe(202);
+    expect(f.rpc.mock.calls[0]![1].p_input_mode).toBe("idea");
   });
 
   it("fails capability preflight before creating projects or jobs", async () => {

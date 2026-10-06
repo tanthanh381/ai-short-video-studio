@@ -1112,6 +1112,7 @@ function NewProjectPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sourceText, setSourceText] = useState("");
+  const [inputMode, setInputMode] = useState<Project["inputMode"]>("idea");
   const [settings, setSettings] = useState<ProjectSettings>(
     { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET },
   );
@@ -1126,7 +1127,7 @@ function NewProjectPage() {
     setBusy(true);
     setError(null);
     try {
-      const project = await api.createVideo({ sourceText, settings });
+      const project = await api.createVideo({ sourceText, inputMode, settings });
       navigate(`/studio/${project.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chưa thể bắt đầu tạo video. Hãy thử lại.");
@@ -1144,7 +1145,7 @@ function NewProjectPage() {
       const project = await api.createProject({
         title: sourceText.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới",
         sourceText,
-        inputMode: "full-script",
+        inputMode,
         settings,
       });
       navigate(`/studio/${project.id}`);
@@ -1169,9 +1170,19 @@ function NewProjectPage() {
       <form className="creation-form" onSubmit={submit}>
         <section>
           <Field
-            label="Kịch bản"
-            hint="Giữ nguyên câu chữ và dấu tiếng Việt. Thời lượng video theo giọng đọc thực tế."
+            label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : "Kịch bản hoàn chỉnh"}
+            hint={inputMode === "idea"
+              ? "AI sẽ phát triển ý tưởng thành hook, mạch chuyện, cảnh và lời đọc."
+              : "Giữ nguyên câu chữ và dấu tiếng Việt. Thời lượng video theo giọng đọc thực tế."}
           >
+            <div className="form-grid">
+              <Field label="Cách xử lý nội dung">
+                <select value={inputMode} onChange={(e) => setInputMode(e.target.value as Project["inputMode"])} disabled={busy}>
+                  <option value="idea">Ý tưởng — AI phát triển thành kịch bản</option>
+                  <option value="full-script">Kịch bản — giữ nguyên lời anh nhập</option>
+                </select>
+              </Field>
+            </div>
             <textarea
               aria-label="Nội dung kịch bản"
               value={sourceText}
@@ -1181,7 +1192,7 @@ function NewProjectPage() {
               maxLength={30000}
               rows={10}
               disabled={busy}
-              placeholder="Dán toàn bộ lời đọc cho video vào đây…"
+              placeholder={inputMode === "idea" ? "Ví dụ: Một video 30 giây giải thích vì sao cần xác minh tin nhắn chuyển tiền…" : "Dán toàn bộ lời đọc cho video vào đây…"}
             />
             <div className="script-meta" aria-live="polite">
               <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>

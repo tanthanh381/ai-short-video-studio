@@ -564,6 +564,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       p_user_id: req.userId,
       p_idempotency_key: `create-video:${key}`,
       p_source_text: input.sourceText,
+      p_input_mode: input.inputMode,
       p_title: autoTitle(input.sourceText),
       p_settings: settings,
       p_max_concurrent: req.maxConcurrentJobs,

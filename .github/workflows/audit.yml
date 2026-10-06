@@ -142,6 +142,7 @@ jobs:
             for path in supabase/migrations/20261002*.sql supabase/migrations/20261004*.sql; do psql -v ON_ERROR_STOP=1 -f "$path"; done
             psql -v ON_ERROR_STOP=1 -f scripts/audit/db-baseline.sql
             psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261005090000_api_only_project_writes.sql
+            for path in supabase/migrations/20261006*.sql; do psql -v ON_ERROR_STOP=1 -f "$path"; done
             psql -v ON_ERROR_STOP=1 -f supabase/tests/access_regressions.sql
             psql -v ON_ERROR_STOP=1 -f supabase/tests/pipeline_regressions.sql
           } 2>&1 | tee audit-artifacts/database.log

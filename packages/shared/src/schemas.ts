@@ -171,6 +171,7 @@ export const createVideoSchema = z.object({
   sourceText: z.string().min(10).max(30000).refine((text) => text.trim().length >= 10, {
     message: "Kịch bản cần ít nhất 10 ký tự",
   }),
+  inputMode: z.enum(["idea", "full-script"]).default("full-script"),
   settings: projectSettingsSchema.partial().default({}),
 });
 

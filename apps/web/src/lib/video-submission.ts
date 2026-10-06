@@ -1,7 +1,8 @@
-import type { ProjectSettings } from "@studio/shared";
+import type { Project, ProjectSettings } from "@studio/shared";
 
 export type VideoInput = {
   sourceText: string;
+  inputMode?: Project["inputMode"];
   settings?: Partial<ProjectSettings>;
 };
 
