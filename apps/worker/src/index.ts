@@ -381,7 +381,7 @@ async function generateMedia(job: JobRow, project: Project) {
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
         const image = await media.createImage(
-          `${scene.imagePrompt}. Exact scene narration to follow: ${scene.narration}. Do not replace this scene with a generic portrait or unrelated subject. ${visualPresetPrompt(project.settings.visualPreset)}. Không chữ, không logo, không watermark.`,
+          `${scene.imagePrompt}. The described action and physical objects must be the main subject of the frame. Do not replace the scene with a generic portrait or unrelated person. Do not use a face close-up unless the narration explicitly asks for one. ${visualPresetPrompt(project.settings.visualPreset)}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
           {
             ...project.settings.localModels,

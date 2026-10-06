@@ -250,16 +250,38 @@ export async function createFaithfulStoryboard(
   };
 }
 
-/** Ground common physical actions when a small text model omits their objects. */
+/**
+ * Ground physical actions when a small local model returns a generic portrait.
+ * The anchor is deliberately concrete and in English because SDXL's text
+ * encoder is much more reliable with visible nouns/actions than Vietnamese
+ * narration appended to the end of the prompt.
+ */
 export function visualActionPrompt(narration: string, prompt: string) {
   const text = narration.toLocaleLowerCase("vi");
-  if (/(không|chưa|đừng)\s+(viết|ghi|tưới)/u.test(text)) return prompt;
-  if (/(^|[\s,.!?;:])(viết|ghi)(?=$|[\s,.!?;:])/u.test(text)
-    && !/(bài|chữ|nét)\s+viết/u.test(text) && /(nhật ký|ghi chép|biết ơn)/u.test(text))
-    return `Visible hands holding a pen and writing on an open paper notebook on a desk, ${prompt}`.slice(0, 2000);
-  if (/(^|[\s,.!?;:])tưới(?=$|[\s,.!?;:])/u.test(text) && /(cây|hoa)/u.test(text))
-    return `Water pouring from a small watering can onto a potted plant, ${prompt}`.slice(0, 2000);
-  return prompt;
+  if (/(không|chưa|đừng)\s+(viết|ghi|tưới|đọc|mở|uống|ăn)/u.test(text)) return prompt;
+  const hasWritingAction = /(^|[\s,.!?;:])(viết|ghi)(?=$|[\s,.!?;:])/u.test(text)
+    && !/(bài|chữ|nét)\s+viết/u.test(text);
+  if (hasWritingAction && /(nhật ký|ghi chép|biết ơn)/u.test(text))
+    return `pen visibly writing in an open paper notebook on a desk, over-the-shoulder medium shot, ${prompt}`.slice(0, 2000);
+  if (hasWritingAction)
+    return `visible hands holding a pen and writing on an open paper notebook on a desk, pen tip and written page in focus, ${prompt}`.slice(0, 2000);
+  const anchors: Array<[RegExp, string]> = [
+    [/(tưới)(?=.*(cây|hoa|chậu))/u, "water visibly pouring from a small watering can onto a potted plant, droplets in the air"],
+    [/(đọc sách|đọc quyển sách|mở sách)/u, "an open book with visible pages held open as the main foreground object, person reading beside a warm lamp"],
+    [/(điện thoại|tin nhắn|gọi điện|smartphone)/u, "a smartphone held in the foreground with a visible message interface but no readable text, over-the-shoulder shot"],
+    [/(máy tính|laptop|bàn phím)/u, "an open laptop on a desk as the main foreground object, hands using the keyboard, screen without readable text"],
+    [/(nấu ăn|nấu|chiên|xào|bếp)/u, "a pot, pan and ingredients clearly visible on a kitchen counter, hands stirring the food"],
+    [/(uống|ly nước|cốc nước|cà phê)/u, "a glass or cup visibly held in the foreground while the person drinks, liquid and rim clearly visible"],
+    [/(ăn cơm|ăn|bữa sáng|bữa tối)/u, "a plate of food and a fork clearly visible in the foreground while the person eats at a table"],
+    [/(mở cửa|kéo cửa)/u, "a hand visibly turning the door handle and opening a door, doorway and room beyond clearly visible"],
+    [/(đóng cửa)/u, "a hand visibly pulling a door closed, door handle and doorway clearly visible"],
+    [/(trồng cây|gieo hạt|trồng hoa)/u, "hands placing a small seedling into visible soil in a pot, gardening tools beside it"],
+    [/(lau nhà|dọn dẹp|quét nhà)/u, "a cleaning cloth, broom or mop visibly touching the floor, the cleaned room clearly visible"],
+    [/(đi bộ|bước đi|chạy|đạp xe)/u, "a full-body person visibly moving along the described path, feet and surrounding environment in frame"],
+  ];
+  const anchor = anchors.find(([pattern]) => pattern.test(text))?.[1];
+  if (!anchor) return prompt;
+  return `${anchor}, ${prompt}`.slice(0, 2000);
 }
 
 export function parseStoryboard(value: unknown): StoryboardResult {

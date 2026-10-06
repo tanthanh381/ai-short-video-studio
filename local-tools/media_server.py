@@ -119,7 +119,7 @@ IMAGE_STEPS_OVERRIDE = os.getenv("IMAGE_STEPS")
 VIENEU_STEPS = int(os.getenv("VIENEU_STEPS", "16"))
 TTS_BREAK_WORDS = int(os.getenv("TTS_BREAK_WORDS", "18"))
 IMAGE_STYLES = {
-    "photo": "cinematic photo, natural skin, detailed face, sharp focus, soft film lighting",
+    "photo": "cinematic photo, realistic textures, sharp focus, soft film lighting",
     "illustration": "cinematic illustration, detailed, soft painterly lighting",
 }
 IMAGE_ANATOMY_GUARD = os.getenv("IMAGE_ANATOMY_GUARD", "true").lower() not in {"0", "false", "no"}
@@ -237,7 +237,9 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         else ""
     )
     anatomy_prefix = f", {anatomy}" if anatomy else ""
-    styled = f"{IMAGE_STYLES[style]}{anatomy_prefix}, {clean}, no text, no logo, no watermark"
+    human_detail = ", natural skin, detailed face" if is_human else ""
+    nonhuman_focus = "" if is_human else ", the described object or environment is the main subject, no people, no human figures, no face"
+    styled = f"{IMAGE_STYLES[style]}{human_detail}{anatomy_prefix}{nonhuman_focus}, {clean}, no text, no logo, no watermark"
     if model == COMFYUI_IMAGE_MODEL:
         if reference_image_base64:
             raise ValueError("SDXL Base qua ComfyUI hiện hỗ trợ text-to-image; hãy bỏ ảnh tham chiếu hoặc chọn SDXL-Turbo")

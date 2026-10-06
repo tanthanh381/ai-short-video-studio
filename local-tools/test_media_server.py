@@ -220,6 +220,24 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             command = [str(item) for item in process.call_args.args[0]]
             self.assertIn("anatomically correct hands", command[2])
 
+    def test_non_human_scene_does_not_force_a_face(self):
+        class ImageResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b"PNG"
+
+        with patch.object(self.media, "image_server_state", return_value="ready"), \
+             patch.object(self.media.urllib.request, "urlopen", return_value=ImageResponse()) as request:
+            self.media.local_image("An open notebook and smartphone on a wooden desk", "9:16")
+        payload = json.loads(request.call_args.args[0].data)
+        self.assertIn("no people", payload["prompt"])
+        self.assertNotIn("detailed face", payload["prompt"])
+
     def test_image_preset_forwards_quality_steps_to_warm_server(self):
         class ImageResponse:
             def __enter__(self):

@@ -327,10 +327,17 @@ describe("visible actions grounded in the original scene", () => {
   });
 
   it.each([
-    "Một người đi bộ trên con đường nhỏ vào buổi sáng.",
-    "Tối nay, cô ấy đọc sách dưới ánh đèn ấm áp.",
+    ["Tối nay, cô ấy đọc sách dưới ánh đèn ấm áp.", /open book.*visible pages/i],
+    ["Cô ấy kiểm tra tin nhắn trên điện thoại.", /smartphone.*foreground/i],
+    ["Anh ấy nấu bữa tối trong bếp.", /pot.*pan.*ingredients/i],
+  ])("anchors the concrete object for an action: %s", (narration, expected) => {
+    expect(visualActionPrompt(narration, "A quiet interior, cinematic light")).toMatch(expected);
+  });
+
+  it.each([
     "Tôi thích bài viết về lòng biết ơn.",
     "Tôi nghi ngờ trang nhật ký này.",
+    "Con đường nhỏ dưới hàng cây vào buổi sáng.",
   ])("keeps an unrelated visual prompt unchanged instead of inventing an action: %s", (narration) => {
     const originalPrompt = "A quiet garden path beneath tall trees, morning sunshine";
     expect(visualActionPrompt(narration, originalPrompt)).toBe(originalPrompt);
