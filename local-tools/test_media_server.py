@@ -86,6 +86,18 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual("".join(phrases), script)
         self.assertTrue(all(len(phrase.strip()) <= 240 for phrase in phrases))
 
+    def test_sentence_boundary_is_kept_for_sentence_level_prosody(self):
+        script = "Tôi mệt. Hãy nghỉ một chút. Ngày mai sẽ tốt hơn."
+        phrases = self.media.split_speech_phrases(script)
+        self.assertEqual(phrases, ["Tôi mệt. ", "Hãy nghỉ một chút. ", "Ngày mai sẽ tốt hơn."])
+
+    def test_emotion_markup_preserves_the_original_script(self):
+        text = "Nếu hôm nay bạn thấy mệt, hãy cho phép mình nghỉ một chút."
+        marked = self.media.expressive_text(text, "tam-su")
+        self.assertTrue(marked.startswith("[thở dài] "))
+        self.assertEqual(marked.removeprefix("[thở dài] "), text)
+        self.assertLess(self.media.emotion_profile(text, "tam-su")["speed"], 1)
+
     def test_timing_uses_actual_pcm_samples_and_original_phrase_text(self):
         script = "Bình tĩnh nhé. Kiểm tra địa chỉ liên kết thật kỹ. Không chia sẻ mật khẩu."
         processes = FakeSpeechProcesses()
@@ -143,6 +155,32 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(sent[0][1]["voice"], "Hải Đăng")
         self.assertEqual(sent[0][1]["speed"], 0.88)
         self.assertEqual(result["durationMs"], 500)
+
+    def test_vieneu_receives_sentence_emotion_but_subtitle_keeps_original_text(self):
+        sent = []
+
+        def fake_http(url, payload):
+            sent.append((url, payload))
+            return b"RIFF-fake-network-audio"
+
+        def fake_run(command, **kwargs):
+            command = [str(item) for item in command]
+            with wave.open(command[-1], "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(22050)
+                audio.writeframes(b"\x80\x01" * 11025)
+            return subprocess.CompletedProcess(command, 0)
+
+        script = "Nếu hôm nay bạn thấy mệt, hãy cho phép mình nghỉ một chút. Ngày mai sẽ tốt hơn."
+        with patch.object(self.media, "TTS_ENGINES", ["vieneu"]), \
+             patch.object(self.media, "service_up", return_value=True), \
+             patch.object(self.media, "_http_wav", side_effect=fake_http), \
+             patch.object(self.media.subprocess, "run", side_effect=fake_run):
+            result = self.media.tts_aligned(script, "tam-su")
+        self.assertIn("[thở dài]", sent[0][1]["input"])
+        self.assertEqual("".join(cue["text"] for cue in result["cues"]), script)
+        self.assertLess(sent[0][1]["speed"], 0.92)
 
     def test_every_vieneu_preset_uses_a_supported_voice_name(self):
         supported = {

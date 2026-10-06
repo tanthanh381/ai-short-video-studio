@@ -805,7 +805,7 @@ function TextToSpeechPage() {
       <div className="tts-page-grid">
         <section className="tts-editor-card">
           <div className="section-heading-row">
-            <div><h2>Văn bản cần đọc</h2><p>Tối đa 10.000 ký tự · nội dung được xử lý trên máy self-host.</p></div>
+            <div><h2>Văn bản cần đọc</h2><p>Tối đa 10.000 ký tự · tự nhấn nhá cảm xúc theo từng câu trên máy self-host.</p></div>
             <span className="tts-counter">{text.length.toLocaleString("vi-VN")} / 10.000</span>
           </div>
           <textarea

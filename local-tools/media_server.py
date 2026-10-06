@@ -72,6 +72,7 @@ SAMPLE_RATE = 22050
 IMAGE_LOCK = threading.Lock()  # one MLX/Metal job at a time on a 16 GB machine
 VIDEO_LOCK = threading.Lock()  # LTX is intentionally single-flight on shared Apple memory
 COMFYUI_LOCK = threading.Lock()
+VIENEU_LOCK = threading.Lock()  # VieNeu keeps one CPU inference state; parallel requests can corrupt it
 
 
 def json_response(handler, status, value):
@@ -118,6 +119,41 @@ IMAGE_FACE_PRESET = os.getenv("IMAGE_FACE_PRESET", "quality")
 IMAGE_STEPS_OVERRIDE = os.getenv("IMAGE_STEPS")
 VIENEU_STEPS = int(os.getenv("VIENEU_STEPS", "16"))
 TTS_BREAK_WORDS = int(os.getenv("TTS_BREAK_WORDS", "18"))
+# VieNeu-TTS v3 Turbo understands these inline non-verbal cues. They are only
+# added to the text sent to the synthesizer; subtitle cues always keep the
+# original script verbatim.
+EMOTION_TAG_RE = re.compile(r"\[(?:cười|cuoi|thở dài|tho dai|hắng giọng|hang giong)\]", re.IGNORECASE)
+EMOTION_MARKERS = {
+    "sigh": (
+        "mệt", "buồn", "đau", "khóc", "cô đơn", "nuối tiếc", "thất vọng", "tổn thương", "lo lắng",
+        "sợ hãi", "chia tay", "mất mát", "im lặng", "nhớ thương", "buông bỏ", "trưởng thành",
+        "bình yên", "đôi khi", "nếu hôm nay", "hãy cho phép mình nghỉ",
+    ),
+    "chuckle": (
+        "vui", "hạnh phúc", "yêu đời", "tuyệt vời", "thành công", "chúc mừng", "tự hào", "may mắn",
+        "cảm ơn", "chào mừng", "phấn khởi", "rộn ràng", "ưu đãi", "quà tặng", "bất ngờ thú vị",
+    ),
+    "clear_throat": (
+        "quan trọng", "chú ý", "cảnh báo", "đừng", "hãy nhớ", "ngay bây giờ", "sự thật là",
+        "điều cần biết", "không được", "bắt buộc", "bí quyết", "lưu ý",
+    ),
+}
+EMOTION_PROFILE = {
+    "sigh": {"tag": "[thở dài]", "speed": 0.94},
+    "chuckle": {"tag": "[cười]", "speed": 1.04},
+    "clear_throat": {"tag": "[hắng giọng]", "speed": 0.98},
+}
+
+
+def normalize_vi_text(text):
+    # Keep Vietnamese tone marks: "đau" must not accidentally match "đầu".
+    return re.sub(r"\s+", " ", text.lower().replace("đ", "d")).strip()
+
+
+NORMALIZED_EMOTION_MARKERS = {
+    emotion: tuple(normalize_vi_text(marker) for marker in markers)
+    for emotion, markers in EMOTION_MARKERS.items()
+}
 IMAGE_STYLES = {
     "photo": "cinematic photo, realistic textures, sharp focus, soft film lighting",
     "illustration": "cinematic illustration, detailed, soft painterly lighting",
@@ -279,7 +315,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
 
 
 def split_speech_phrases(text):
-    """Original contiguous clauses. Timing is measured after synthesis, never guessed."""
+    """Original contiguous sentences/clauses; timing is measured after synthesis."""
     if not text.strip() or len(text) > 5000:
         raise ValueError("Lời đọc trống hoặc quá dài cho một cảnh")
     phrases, current, count = [], "", 0
@@ -291,7 +327,10 @@ def split_speech_phrases(text):
             current, count = "", 0
         current += token
         count += bool(token.strip())
-        if count >= TTS_BREAK_WORDS or (count >= 8 and re.search(r"[,;:!?。.][\"'”’)]?\s*$", token)):
+        # Keep one sentence per synthesis request whenever possible. This lets
+        # VieNeu express each sentence independently instead of flattening a
+        # whole paragraph into one prosody pattern.
+        if count >= TTS_BREAK_WORDS or (count >= 2 and re.search(r"[.!?…。！？][\"'”’)]?\s*$", token)):
             phrases.append(current)
             current, count = "", 0
     if current:
@@ -300,6 +339,42 @@ def split_speech_phrases(text):
         else:
             phrases.append(current)
     return phrases
+
+
+def emotion_profile(text, voice=""):
+    """Infer a conservative speaking cue from Vietnamese words and punctuation.
+
+    This is intentionally deterministic and local-first. It does not rewrite
+    the script or claim to understand every emotion; it adds a cue only when a
+    strong lexical/voice signal is present. VieNeu maps the three cues to its
+    trained emotion tokens.
+    """
+    if EMOTION_TAG_RE.search(text):
+        return None
+    normalized = normalize_vi_text(text)
+    scores = {
+        name: sum(1 for marker in markers if re.search(rf"(?<!\w){re.escape(marker)}(?!\w)", normalized))
+        for name, markers in NORMALIZED_EMOTION_MARKERS.items()
+    }
+    # Voice context is a tie-breaker only; words and punctuation remain the
+    # primary signal so a news voice can still sound concerned when the script
+    # calls for it.
+    if voice in {"tam-su", "triet-ly", "co-trang", "co-trang-nu"} and re.search(r"[.!?…]$", text.strip()):
+        scores["sigh"] += int(any(word in normalized for word in ("hay", "nguoi", "cuoc doi", "thoi gian")))
+    if voice == "nang-dong" and "!" in text:
+        scores["chuckle"] += 1
+    if "!" in text and scores["clear_throat"]:
+        scores["clear_throat"] += 1
+    best, score = max(scores.items(), key=lambda item: item[1])
+    return EMOTION_PROFILE[best] if score > 0 else None
+
+
+def expressive_text(text, voice=""):
+    """Return VieNeu markup while leaving the original script untouched elsewhere."""
+    profile = emotion_profile(text, voice)
+    if not profile:
+        return text
+    return f"{profile['tag']} {text.lstrip()}"
 
 
 def _http_wav(url, payload):
@@ -331,12 +406,19 @@ def select_tts_engine(voice, engine=None):
 
 def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0):
     vieneu_voice, vieneu_speed = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0))
-    vieneu_speed *= max(0.75, min(float(speed), 1.25))
+    requested_speed = max(0.75, min(float(speed), 1.25))
+    profile = emotion_profile(phrase, voice) if engine == "vieneu" else None
+    if profile:
+        vieneu_speed *= profile["speed"]
+    vieneu_speed *= requested_speed
+    input_text = expressive_text(phrase, voice) if engine == "vieneu" else phrase
     source = Path(workdir) / f"phrase-{index}-{engine}.wav"
     if engine == "vieneu":
-        source.write_bytes(_http_wav(VIENEU_URL, {"input": phrase, "voice": vieneu_voice, "speed": vieneu_speed, "steps": VIENEU_STEPS}))
+        payload = {"input": input_text, "voice": vieneu_voice, "speed": vieneu_speed, "steps": VIENEU_STEPS}
+        with VIENEU_LOCK:
+            source.write_bytes(_http_wav(VIENEU_URL, payload))
     elif engine == "piper":
-        source.write_bytes(_http_wav(PIPER_URL, {"input": phrase}))
+        source.write_bytes(_http_wav(PIPER_URL, {"input": input_text}))
     else:
         raise RuntimeError("Engine giọng đọc local không được hỗ trợ")
     return _to_pcm22050(source)
