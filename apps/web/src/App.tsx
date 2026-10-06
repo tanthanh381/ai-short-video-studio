@@ -1024,7 +1024,7 @@ function DubSubtitlePage() {
           <label className="upload-dropzone">
             <Upload size={23} />
             <strong>{file ? "Đổi video" : "Tải video lên"}</strong>
-            <span>MP4, WebM hoặc MOV · tối đa 500 MB</span>
+            <span>MP4, WebM hoặc MOV · tối đa 50 MB</span>
             <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => selectVideo(event.target.files?.[0])} />
           </label>
           <Field label="Lời thoại lồng tiếng và nội dung phụ đề" hint="Nội dung này sẽ được dùng cho cả giọng đọc và dòng phụ đề xem trước.">
