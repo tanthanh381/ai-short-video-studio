@@ -3,6 +3,21 @@ export * from "./voices";
 export * from "./script";
 export * from "./regeneration";
 
+import type { VisualPreset } from "./schemas";
+
+export const VISUAL_PRESET_OPTIONS: Array<{ id: VisualPreset; label: string; description: string; prompt: string }> = [
+  { id: "cinematic-color", label: "Màu điện ảnh", description: "Ánh sáng tự nhiên, chiều sâu và màu sắc chân thực.", prompt: "cinematic natural illustration, realistic lighting, rich but natural colors, gentle depth of field" },
+  { id: "ink-monochrome", label: "Nét mực trắng đen", description: "Vẽ tay đơn giản trên nền giấy, đen và xám mềm.", prompt: "black and white hand-drawn ink illustration, off-white paper texture, strong black contours, soft grey shading, no color" },
+  { id: "cartoon", label: "Hoạt hình", description: "Nét viền rõ, hình khối vui tươi, biểu cảm dễ đọc.", prompt: "clean 2D cartoon illustration, bold rounded outlines, expressive characters, simplified shapes, bright friendly colors, consistent character design" },
+  { id: "historical", label: "Cổ trang", description: "Bối cảnh lịch sử, trang phục truyền thống và chất liệu điện ảnh.", prompt: "historical period illustration, accurate traditional clothing and architecture, cinematic warm light, detailed fabric and environment, respectful authentic setting" },
+  { id: "watercolor", label: "Màu nước", description: "Mảng màu loang nhẹ, mềm và giàu cảm xúc.", prompt: "delicate watercolor illustration, visible paper grain, soft bleeding edges, translucent layered washes, gentle natural palette" },
+  { id: "paper-cut", label: "Cắt giấy", description: "Các lớp giấy nổi, bóng đổ nhẹ và bố cục tối giản.", prompt: "layered paper-cut illustration, tactile colored paper shapes, clean silhouettes, subtle cast shadows, handcrafted dimensional composition" },
+];
+
+export function visualPresetPrompt(preset: VisualPreset): string {
+  return VISUAL_PRESET_OPTIONS.find((item) => item.id === preset)?.prompt ?? VISUAL_PRESET_OPTIONS[0]!.prompt;
+}
+
 export const DEFAULT_PROJECT_SETTINGS = {
   textProvider: "anthropic" as const,
   mediaProvider: "local" as const,
@@ -11,12 +26,17 @@ export const DEFAULT_PROJECT_SETTINGS = {
   targetDurationSec: 60 as const,
   aspectRatio: "9:16" as const,
   generationPreset: "balanced" as const,
+  visualPreset: "cinematic-color" as const,
   voice: "alloy",
   localModels: { storyboard: null, image: null, video: null, tts: null, transcribe: null },
   visualStyle: "Ảnh điện ảnh chân thực, ánh sáng tự nhiên, nhân vật Việt Nam",
   allowUploads: true,
   backgroundMusicPath: null,
   musicVolume: 0.12,
+  logoPath: null,
+  logoPosition: "top-right" as const,
+  logoScale: 0.14,
+  logoOpacity: 0.9,
   rewriteFullScript: false,
   subtitle: {
     enabled: true,

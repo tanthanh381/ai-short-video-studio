@@ -9,7 +9,6 @@ import base64
 import io
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 import threading
@@ -47,7 +46,7 @@ COMFYUI_MODEL_DIR = Path(os.getenv(
 ))
 COMFYUI_TIMEOUT_S = int(os.getenv("COMFYUI_TIMEOUT_S", "900"))
 # Voice presets selectable on the website. Keep ids in sync with packages/shared/src/voices.ts.
-# (VieNeu preset voice, speed). "giong-linh" is the macOS Linh voice.
+# (VieNeu preset voice, speed).
 VOICE_PRESETS = {
     "doc-truyen": ("Đức Trí", 1.0),
     "co-trang": ("Anh Khôi", 0.88),
@@ -59,8 +58,8 @@ VOICE_PRESETS = {
     "thuyet-minh": ("Mạnh Dũng", 1.0),
     "nang-dong": ("Xuân Tiên", 1.12),
 }
-# Ordered preference; the macOS "say" Linh voice is the last-resort fallback.
-TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu,piper,say").split(",") if e]
+# Ordered preference for local Vietnamese engines.
+TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu,piper").split(",") if e in {"vieneu", "piper"}]
 TTS_CONCURRENCY = max(1, min(int(os.getenv("TTS_CONCURRENCY", "2")), 4))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/ggml-base.bin"))
@@ -68,7 +67,7 @@ WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/g
 IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo (MLX, nhanh)"}
 COMFYUI_IMAGE_MODEL = "sdxl-base-1.0-comfyui"
 COMFYUI_IMAGE_LABEL = "SDXL Base 1.0 (ComfyUI local)"
-TTS_ENGINE_LABELS = {"vieneu": "VieNeu-TTS v3 Turbo (ONNX/CPU)", "piper": "Piper (giọng Việt nhẹ)", "say": "Giọng Linh (macOS)"}
+TTS_ENGINE_LABELS = {"vieneu": "VieNeu-TTS v3 Turbo (ONNX/CPU)", "piper": "Piper (giọng Việt nhẹ)"}
 SAMPLE_RATE = 22050
 IMAGE_LOCK = threading.Lock()  # one MLX/Metal job at a time on a 16 GB machine
 VIDEO_LOCK = threading.Lock()  # LTX is intentionally single-flight on shared Apple memory
@@ -322,29 +321,23 @@ def select_tts_engine(voice, engine=None):
     """Select once per job so a long narration never changes voice halfway through."""
     if engine:
         return check_choice("giọng đọc", engine, TTS_ENGINE_LABELS)
-    if voice == "giong-linh":
-        return "say"
     for candidate in TTS_ENGINES:
-        if candidate == "say" or service_up({"vieneu": VIENEU_URL, "piper": PIPER_URL}.get(candidate, ""), "/health"):
+        if service_up({"vieneu": VIENEU_URL, "piper": PIPER_URL}.get(candidate, ""), "/health"):
             return candidate
     raise RuntimeError("Không engine giọng đọc local nào sẵn sàng")
 
 
-def synth_phrase(phrase, workdir, index, voice, engine):
+def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0):
     vieneu_voice, vieneu_speed = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0))
+    vieneu_speed *= max(0.75, min(float(speed), 1.25))
     source = Path(workdir) / f"phrase-{index}-{engine}.wav"
     if engine == "vieneu":
         source.write_bytes(_http_wav(VIENEU_URL, {"input": phrase, "voice": vieneu_voice, "speed": vieneu_speed, "steps": VIENEU_STEPS}))
     elif engine == "piper":
         source.write_bytes(_http_wav(PIPER_URL, {"input": phrase}))
-    elif engine == "say":
-        subprocess.run(["say", "-v", "Linh", "-o", str(source), "--file-format=WAVE",
-                        f"--data-format=LEI16@{SAMPLE_RATE}", "--", phrase],
-                       check=True, timeout=120, capture_output=True)
     else:
         raise RuntimeError("Engine giọng đọc local không được hỗ trợ")
-    # "say" already writes mono 16-bit PCM at SAMPLE_RATE; only network engines need converting.
-    return source if engine == "say" else _to_pcm22050(source)
+    return _to_pcm22050(source)
 
 
 def tts_aligned(text, voice, engine=None):
@@ -384,10 +377,10 @@ def tts_aligned(text, voice, engine=None):
             "cues": cues, "durationMs": round(frames_total * 1000 / sample_rate)}
 
 
-def tts(text, voice, engine=None):
+def tts(text, voice, engine=None, speed=1.0):
     selected_engine = select_tts_engine(voice, engine)
     with tempfile.TemporaryDirectory(prefix="studio-tts-") as workdir:
-        source = synth_phrase(text, workdir, 0, voice, selected_engine)
+        source = synth_phrase(text, workdir, 0, voice, selected_engine, speed)
         target = Path(workdir) / "voice.mp3"
         subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(source), "-codec:a", "libmp3lame", "-q:a", "4", str(target)], check=True, timeout=120)
         return target.read_bytes()
@@ -497,7 +490,7 @@ def model_catalog():
     whisper_id = Path(WHISPER_MODEL).stem
     whisper_ready = service_up(WHISPER_URL, "/") and Path(WHISPER_MODEL).is_file()
     available_engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL),
-                         "say": bool(shutil.which("say"))}
+                         }
     ltx_ready, _ = ltx_state()
     return {
         "available": True,
@@ -531,8 +524,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             comfy_ready, _ = comfyui_state()
             image_ready = image_server_state() != "down" or comfy_ready == "ready" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
-            engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL),
-                       "say": bool(shutil.which("say"))}
+            engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL)}
             tts_ready = any(engines.get(e) for e in TTS_ENGINES)
             transcribe_ready = service_up(WHISPER_URL, "/")
             ltx_ready, ltx_detail = ltx_state()
@@ -573,10 +565,10 @@ class Handler(BaseHTTPRequestHandler):
                     payload.get("seed"), payload.get("preset")))
             elif self.path == "/tts":
                 payload = json.loads(body)
-                binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "Linh")), payload.get("engine")))
+                binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "doc-truyen")), payload.get("engine"), payload.get("speed", 1.0)))
             elif self.path == "/tts-aligned":
                 payload = json.loads(body)
-                json_response(self, 200, tts_aligned(str(payload.get("text", "")), str(payload.get("voice", "Linh")), payload.get("engine")))
+                json_response(self, 200, tts_aligned(str(payload.get("text", "")), str(payload.get("voice", "doc-truyen")), payload.get("engine")))
             elif self.path.split("?")[0] == "/transcribe":
                 json_response(self, 200, {"words": transcribe(body, urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("model", [None])[0])})
             else:

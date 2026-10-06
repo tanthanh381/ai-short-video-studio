@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
-import { projectSchema, type Project, type Scene } from "@studio/shared";
+import { projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
 import { getConfig } from "./config";
 import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
@@ -292,7 +292,7 @@ async function storyboard(job: JobRow, project: Project) {
     audience: project.settings.targetAudience,
     style: project.settings.style,
     duration: project.settings.targetDurationSec,
-    visualStyle: project.settings.visualStyle,
+    visualStyle: `${project.settings.visualStyle}; ${visualPresetPrompt(project.settings.visualPreset)}`,
     model: project.settings.localModels.storyboard,
   } as const;
   // Cast extraction is independent of scene splitting; overlap the two Ollama
@@ -309,7 +309,7 @@ async function storyboard(job: JobRow, project: Project) {
     project_id: project.id,
     scene_order: index,
     narration: scene.narration,
-    image_prompt: withCast(cast, scene.imagePrompt),
+    image_prompt: withCast(cast, scene.imagePrompt, scene.narration),
     estimated_duration_ms: scene.estimatedDurationMs,
     media_status: "pending",
     subtitles: [],
@@ -345,15 +345,6 @@ async function generateMedia(job: JobRow, project: Project) {
   await updateProject(project.id, { status: "generating_media" });
   let finished = 0;
   let newlyGenerated = 0;
-  let characterReference: Uint8Array | null = null;
-  const referenceScene = project.scenes.find((scene) => scene.imagePath && scene.id !== targetId);
-  if (referenceScene?.imagePath) {
-    try {
-      characterReference = await download(referenceScene.imagePath);
-    } catch (error) {
-      log.warn({ projectId: project.id, sceneId: referenceScene.id, err: error instanceof Error ? error.message : "unknown" }, "character_reference_unavailable");
-    }
-  }
   for (const scene of scenes) {
     checkDeadline(job);
     try {
@@ -389,17 +380,15 @@ async function generateMedia(job: JobRow, project: Project) {
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
         const image = await media.createImage(
-          `${scene.imagePrompt}. Không chữ, không logo, không watermark.`,
+          `${scene.imagePrompt}. Exact scene narration to follow: ${scene.narration}. Do not replace this scene with a generic portrait or unrelated subject. ${visualPresetPrompt(project.settings.visualPreset)}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
           {
             ...project.settings.localModels,
-            seed: imageSeedFor(project.id),
+            seed: imageSeedFor(`${project.id}:${scene.id}`),
             style: imageStyleFor(project.settings.visualStyle),
             preset: project.settings.generationPreset,
-            referenceImageBase64: characterReference ? Buffer.from(characterReference).toString("base64") : null,
           },
         );
-        if (!characterReference) characterReference = image;
         imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
         await upload(imagePath, image, "image/png");
         await updateScene(scene.id, { image_path: imagePath });
@@ -519,6 +508,12 @@ async function generateMedia(job: JobRow, project: Project) {
       successful_scenes: finished,
       total_scenes: scenes.length,
       provider: project.settings.mediaProvider,
+      estimated_input_tokens: Math.ceil(project.sourceText.length / 4),
+      estimated_output_tokens: Math.ceil(scenes.reduce((sum, scene) => sum + scene.narration.length, 0) / 4),
+      estimated_tokens: Math.ceil(
+        (project.sourceText.length + scenes.reduce((sum, scene) => sum + scene.narration.length, 0)) / 4,
+      ),
+      token_source: "estimate",
     },
   });
   if (usageError) throw usageError;

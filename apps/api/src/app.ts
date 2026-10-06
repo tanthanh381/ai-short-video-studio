@@ -49,7 +49,7 @@ const uploadRequestSchema = z.object({
   fileName: z.string().min(1).max(180),
   contentType: z.string().min(1).max(120),
   size: z.number().int().positive(),
-  kind: z.enum(["image", "audio", "music"]),
+  kind: z.enum(["image", "audio", "music", "logo"]),
 });
 const accountSettingsSchema = z.object({
   dailyBudgetUsd: z.number().min(0).max(1000),
@@ -62,6 +62,15 @@ type WorkerHealthPayload = {
   services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia", { state: ServiceState; detail: string }>>;
 };
 type LocalMediaHealthPayload = { video?: boolean; videoState?: string; videoDetail?: string };
+
+type UsageStats = {
+  today: { usedUsd: number; eventCount: number; inputTokens: number; outputTokens: number; totalTokens: number };
+  last30Days: { usedUsd: number; eventCount: number; totalTokens: number };
+  budgetUsd: number;
+  remainingUsd: number;
+  budgetPercent: number;
+  tokenSource: "estimated" | "recorded";
+};
 
 function safeName(name: string) {
   return name
@@ -111,6 +120,60 @@ export function createApp(config: AppConfig, db: AdminClient) {
     .map((x) => x.trim())
     .filter(Boolean);
   let serviceStatusCache: { expiresAt: number; value: Record<string, ServiceStatus> } | null = null;
+
+  async function getUsageStats(userId: string, budgetUsd: number): Promise<UsageStats> {
+    const now = new Date();
+    const dayStart = new Date(now);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const monthStart = new Date(dayStart);
+    monthStart.setUTCDate(monthStart.getUTCDate() - 29);
+    const { data, error } = await db
+      .from("usage_events")
+      .select("amount_usd, metadata, created_at")
+      .eq("user_id", userId)
+      .gte("created_at", monthStart.toISOString());
+    if (error) throw error;
+
+    const rows = data ?? [];
+    const readNumber = (metadata: unknown, ...keys: string[]) => {
+      if (!metadata || typeof metadata !== "object") return 0;
+      const record = metadata as Record<string, unknown>;
+      for (const key of keys) {
+        const value = Number(record[key]);
+        if (Number.isFinite(value) && value > 0) return value;
+      }
+      return 0;
+    };
+    const isToday = (createdAt: unknown) =>
+      typeof createdAt === "string" && createdAt >= dayStart.toISOString();
+    const todayRows = rows.filter((row) => isToday(row.created_at));
+    const sumUsd = (items: typeof rows) =>
+      Number(items.reduce((sum, row) => sum + Number(row.amount_usd ?? 0), 0).toFixed(6));
+    const sumTokens = (items: typeof rows, ...keys: string[]) =>
+      Math.round(items.reduce((sum, row) => sum + readNumber(row.metadata, ...keys), 0));
+    const todayInputTokens = sumTokens(todayRows, "input_tokens", "inputTokens", "estimated_input_tokens");
+    const todayOutputTokens = sumTokens(todayRows, "output_tokens", "outputTokens", "estimated_output_tokens");
+    const todayUsedUsd = sumUsd(todayRows);
+    const todayTotalTokens = todayInputTokens + todayOutputTokens;
+    return {
+      today: {
+        usedUsd: todayUsedUsd,
+        eventCount: todayRows.length,
+        inputTokens: todayInputTokens,
+        outputTokens: todayOutputTokens,
+        totalTokens: todayTotalTokens,
+      },
+      last30Days: {
+        usedUsd: sumUsd(rows),
+        eventCount: rows.length,
+        totalTokens: sumTokens(rows, "total_tokens", "totalTokens", "estimated_tokens") || todayTotalTokens,
+      },
+      budgetUsd,
+      remainingUsd: Number(Math.max(0, budgetUsd - todayUsedUsd).toFixed(6)),
+      budgetPercent: budgetUsd > 0 ? Math.min(100, Number(((todayUsedUsd / budgetUsd) * 100).toFixed(1))) : 0,
+      tokenSource: "estimated",
+    };
+  }
 
   async function probe(url: string) {
     try {
@@ -302,6 +365,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     const bucket = db.storage.from("private-media");
     for (const directory of [
       "image",
+      "logo",
       "audio",
       "music",
       "generated",
@@ -351,6 +415,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.json({
       dailyBudgetUsd: req.dailyBudgetUsd,
       maxConcurrentJobs: req.maxConcurrentJobs,
+      usageStats: await getUsageStats(req.userId!, req.dailyBudgetUsd!),
       capabilities: {
         supabase: true,
         ai: config.AI_FEATURES_ENABLED,
@@ -408,6 +473,32 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.type("audio/mpeg").send(audio);
   });
 
+  app.post("/v1/text-to-speech", async (req, res) => {
+    const input = z
+      .object({
+        text: z.string().trim().min(1, "Văn bản cần đọc không được để trống").max(10_000),
+        voice: z.string().max(40),
+        engine: z.string().regex(/^[a-z0-9-]{1,20}$/u).nullish(),
+        speed: z.number().min(0.75).max(1.25).default(1),
+      })
+      .parse(req.body);
+    if (!voiceSample(input.voice)) return res.status(400).json({ error: "Giọng đọc không hợp lệ" });
+    if (!config.LOCAL_MEDIA_FEATURES_ENABLED)
+      return res.status(503).json({ error: "Chưa kết nối dịch vụ giọng đọc trên máy." });
+    try {
+      const response = await fetch(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/tts`, {
+        method: "POST",
+        signal: AbortSignal.timeout(120_000),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: input.text, voice: input.voice, engine: input.engine ?? undefined, speed: input.speed }),
+      });
+      if (!response.ok) return res.status(502).json({ error: "Dịch vụ giọng đọc chưa tạo được audio." });
+      res.type("audio/mpeg").send(Buffer.from(await response.arrayBuffer()));
+    } catch {
+      return res.status(503).json({ error: "Không kết nối được dịch vụ giọng đọc. Hãy kiểm tra máy tạo video." });
+    }
+  });
+
   app.put("/v1/settings", async (req, res) => {
     const input = accountSettingsSchema.parse(req.body);
     const { error } = await db
@@ -420,6 +511,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (error) throw error;
     res.json({
       ...input,
+      usageStats: await getUsageStats(req.userId!, input.dailyBudgetUsd),
       capabilities: {
         supabase: true,
         ai: config.AI_FEATURES_ENABLED,
@@ -456,7 +548,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       ...DEFAULT_PROJECT_SETTINGS,
       textProvider: "ollama",
       mediaProvider: "local",
-      voice: "vi-VN",
+      voice: DEFAULT_PROJECT_SETTINGS.voice,
       ...input.settings,
     });
     const unavailable = oneClickUnavailable(settings);
@@ -546,7 +638,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (input.updatedAt !== existing.updatedAt)
       return res.status(409).json({ error: "Dự án đã được cập nhật. Vui lòng tải lại trước khi chỉnh sửa." });
     const prefix = `${req.userId}/${input.id}/`;
-    const paths = [input.settings.backgroundMusicPath, ...input.scenes.flatMap((scene) => [scene.imagePath, scene.videoPath, scene.audioPath])];
+    const paths = [input.settings.backgroundMusicPath, input.settings.logoPath, ...input.scenes.flatMap((scene) => [scene.imagePath, scene.videoPath, scene.audioPath])];
     if (paths.some((path) => path !== null && (!path.startsWith(prefix) || path.includes(".."))))
       return res.status(403).json({ error: "Media không thuộc dự án này" });
     const rows = input.scenes.map((scene) => ({
@@ -799,7 +891,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (!project)
       return res.status(404).json({ error: "Không tìm thấy dự án" });
     const allowed =
-      input.kind === "image"
+      input.kind === "image" || input.kind === "logo"
         ? ["image/jpeg", "image/png", "image/webp"]
         : ["audio/mpeg", "audio/wav", "audio/mp4", "audio/aac", "audio/x-m4a"];
     if (!allowed.includes(input.contentType))

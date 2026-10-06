@@ -18,7 +18,7 @@ export function validateCaptionTiming(scene: Scene, audioDurationMs: number) {
 }
 
 /** Preserve voice gain; lower the music while speech is present. */
-export function buildAudioMixFilter(hasMusic: boolean, volume: number, durationMs: number) {
+export function buildAudioMixFilter(hasMusic: boolean, volume: number, durationMs: number, musicInputIndex = 1) {
   if (!Number.isFinite(volume) || volume < 0 || volume > 1)
     throw new Error("Music volume must be between 0 and 1");
   if (!Number.isFinite(durationMs) || durationMs <= 0)
@@ -29,7 +29,7 @@ export function buildAudioMixFilter(hasMusic: boolean, volume: number, durationM
   const format = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo";
   const fadeStart = Math.max(0, durationMs / 1000 - 1).toFixed(3);
   return `[0:a]${format},asplit=2[voice][sidechain];`
-    + `[1:a]${format},volume=${volume},afade=t=out:st=${fadeStart}:d=1[music];`
+    + `[${musicInputIndex}:a]${format},volume=${volume},afade=t=out:st=${fadeStart}:d=1[music];`
     + "[music][sidechain]sidechaincompress=threshold=0.03:ratio=8:attack=15:release=250:makeup=1[ducked];"
     + `[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,${limiter}[a]`;
 }

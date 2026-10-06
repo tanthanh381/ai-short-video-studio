@@ -60,6 +60,7 @@ describe("API", () => {
         const query = {
           select: () => query,
           eq: () => query,
+          gte: () => query,
           maybeSingle: async () => ({
             data: { user_id: "user-1", is_active: true, daily_budget_usd: 3, max_concurrent_jobs: 1 },
             error: null,

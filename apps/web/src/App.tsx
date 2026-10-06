@@ -59,19 +59,42 @@ import {
   type ProjectSettings,
   type Scene,
   type RegenerationComponent,
+  VISUAL_PRESET_OPTIONS,
+  visualPresetPrompt,
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
-import { api, type ServiceId, type ServiceStatus, type VideoResult } from "./lib/api";
+import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
 import { projectIsProcessing } from "./lib/video-submission";
 import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
+  { to: "/tts", label: "Text to Speech", icon: Mic2 },
   { to: "/media", label: "Thư viện media", icon: Library },
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
+
+function withVisualPreset(settings: ProjectSettings, visualPreset: ProjectSettings["visualPreset"]): ProjectSettings {
+  const option = VISUAL_PRESET_OPTIONS.find((item) => item.id === visualPreset) ?? VISUAL_PRESET_OPTIONS[0]!;
+  if (visualPreset === "ink-monochrome") {
+    return {
+      ...settings,
+      visualPreset,
+      visualStyle: option.description,
+      subtitle: {
+        ...settings.subtitle,
+        preset: "minimal",
+        fontColor: "#171717",
+        outlineColor: "#F5F1E8",
+        backgroundColor: "#F5F1E8",
+        backgroundOpacity: 0.94,
+      },
+    };
+  }
+  return { ...settings, visualPreset, visualStyle: option.description };
+}
 
 function Notice({
   children,
@@ -726,6 +749,91 @@ function useLocalModels(disabled: boolean) {
   return catalog;
 }
 
+function TextToSpeechPage() {
+  const { isDemo } = useAuth();
+  const catalog = useLocalModels(isDemo);
+  const [text, setText] = useState("");
+  const [voice, setVoice] = useState(DEFAULT_VOICE_PRESET);
+  const [engine, setEngine] = useState<string | null>(null);
+  const [speed, setSpeed] = useState(1);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const defaultEngine = catalog?.tts.default ?? catalog?.tts.models[0]?.id ?? null;
+    if (defaultEngine && !engine) setEngine(defaultEngine);
+  }, [catalog, engine]);
+  useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
+
+  async function createSpeech() {
+    if (isDemo) { setError("Chế độ mẫu không kết nối máy tạo giọng đọc."); return; }
+    if (!text.trim()) { setError("Hãy nhập văn bản cần đọc."); return; }
+    setBusy(true); setError(null);
+    try {
+      const blob = await api.textToSpeech(text, voice, engine, speed);
+      setAudioUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chưa tạo được giọng đọc");
+    } finally { setBusy(false); }
+  }
+  const selectedVoice = VOICE_PRESETS.find((item) => item.id === voice)!;
+  return (
+    <SimplePage title="Text to Speech tiếng Việt" subtitle="Dán văn bản, chọn giọng đọc và tải MP3 từ máy AI local.">
+      <div className="tts-page-grid">
+        <section className="tts-editor-card">
+          <div className="section-heading-row">
+            <div><h2>Văn bản cần đọc</h2><p>Tối đa 10.000 ký tự · nội dung được xử lý trên máy self-host.</p></div>
+            <span className="tts-counter">{text.length.toLocaleString("vi-VN")} / 10.000</span>
+          </div>
+          <textarea
+            className="tts-textarea"
+            maxLength={10000}
+            value={text}
+            onChange={(event) => { setText(event.target.value); setError(null); }}
+            placeholder="Nhập hoặc dán văn bản tiếng Việt cần đọc…"
+          />
+          <div className="tts-editor-footer">
+            <span>{selectedVoice.label} · {speed.toFixed(2)}x</span>
+            <Button busy={busy} onClick={() => void createSpeech()}>
+              <Play size={17} /> Chuyển thành giọng nói
+            </Button>
+          </div>
+          {error && <Notice tone="warn">{error}</Notice>}
+          {audioUrl && (
+            <div className="tts-result">
+              <div><strong>Bản đọc đã sẵn sàng</strong><span>Nghe lại hoặc tải file MP3</span></div>
+              <audio controls src={audioUrl} />
+              <a className="button button-secondary" href={audioUrl} download="giong-doc-tieng-viet.mp3"><Download size={17} /> Tải MP3</a>
+            </div>
+          )}
+        </section>
+        <section className="tts-options-card">
+          <div className="section-heading-row"><div><h2>Tùy chọn giọng</h2><p>Giọng Việt theo thể loại nội dung</p></div></div>
+          <label className="field"><span>Engine local</span>
+            <select value={engine ?? ""} onChange={(event) => setEngine(event.target.value || null)} disabled={!catalog?.tts.models.length}>
+              {!catalog?.tts.models.length && <option value="">Chưa kết nối</option>}
+              {catalog?.tts.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+            </select>
+          </label>
+          <div className="tts-voice-grid">
+            {VOICE_PRESETS.map((preset) => (
+              <button key={preset.id} type="button" className={`tts-voice-option ${voice === preset.id ? "selected" : ""}`} onClick={() => setVoice(preset.id)}>
+                <span><strong>{preset.label}</strong><small>{preset.hint}</small></span>
+                <span className="tts-radio" aria-hidden="true">{voice === preset.id ? "✓" : ""}</span>
+              </button>
+            ))}
+          </div>
+          <label className="field tts-speed-field"><span>Tốc độ đọc <b>{speed.toFixed(2)}x</b></span>
+            <input type="range" min="0.75" max="1.25" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
+          </label>
+          <VoicePreview voice={voice} engine={engine} disabled={isDemo} />
+        </section>
+      </div>
+    </SimplePage>
+  );
+}
+
 const LOCAL_MODEL_TASKS: Array<{ key: keyof LocalModels; label: string }> = [
   { key: "storyboard", label: "Chia cảnh & prompt ảnh (Ollama)" },
   { key: "image", label: "Tạo ảnh" },
@@ -873,6 +981,17 @@ function NewProjectPage() {
               />
               <span>Cho phép viết lại kịch bản trước khi tạo video</span>
             </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.subtitle.enabled}
+                onChange={(e) => setSettings((s) => ({
+                  ...s,
+                  subtitle: { ...s.subtitle, enabled: e.target.checked },
+                }))}
+              />
+              <span>Chèn phụ đề vào video</span>
+            </label>
         </section>
         <section hidden={!advanced}>
           <h2>Định dạng video</h2>
@@ -899,6 +1018,14 @@ function NewProjectPage() {
                 <option value="kien-thuc">Kiến thức</option>
                 <option value="truyen-cam-hung">Truyền cảm hứng</option>
                 <option value="meo-cuoc-song">Mẹo cuộc sống</option>
+              </select>
+            </Field>
+            <Field label="Bảng màu" hint="Nét mực trắng đen sẽ ép ảnh và video về đơn sắc, phù hợp video kể chuyện tối giản.">
+              <select
+                value={settings.visualPreset}
+                onChange={(e) => setSettings((s) => withVisualPreset(s, e.target.value as ProjectSettings["visualPreset"]))}
+              >
+                {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
             </Field>
             <Field label="Nhịp chia cảnh" hint="Chỉ tham khảo khi chia cảnh. Thời lượng xuất luôn theo audio thực tế.">
@@ -951,6 +1078,12 @@ function NewProjectPage() {
         </section>
         <section hidden={!advanced}>
             <div className="form-grid advanced-panel">
+              <Field label="Mô tả nét hình" hint="Dùng để giữ nhất quán nhân vật và chất liệu giữa các cảnh. AI local sẽ nhận cả preset và mô tả này.">
+                <input
+                  value={settings.visualStyle}
+                  onChange={(e) => setSettings((s) => ({ ...s, visualStyle: e.target.value }))}
+                />
+              </Field>
               <Field label="Giọng đọc theo nội dung" hint={voiceHint(settings.voice)}>
                 <select
                   value={settings.voice}
@@ -969,14 +1102,6 @@ function NewProjectPage() {
                 value={settings.localModels}
                 onChange={(next) => setSettings((s) => ({ ...s, localModels: next }))}
               />
-              <Field label="Phong cách hình ảnh">
-                <input
-                  value={settings.visualStyle}
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, visualStyle: e.target.value }))
-                  }
-                />
-              </Field>
               <label className="check">
                 <input
                   type="checkbox"
@@ -1148,6 +1273,7 @@ function StudioPage() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [result, setResult] = useState<VideoResult | null>(null);
   const [resultLoading, setResultLoading] = useState(false);
   const [capabilities, setCapabilities] = useState<{
@@ -1243,6 +1369,18 @@ function StudioPage() {
       active = false;
     };
   }, [id, isDemo, project?.scenes, selected]);
+  useEffect(() => {
+    const path = project?.settings.logoPath;
+    if (!path || isDemo) {
+      setLogoPreviewUrl(null);
+      return;
+    }
+    let active = true;
+    void api.mediaUrl(id, path)
+      .then(({ url }) => active && setLogoPreviewUrl(url))
+      .catch(() => active && setLogoPreviewUrl(null));
+    return () => { active = false; };
+  }, [id, isDemo, project?.settings.logoPath]);
   function change(next: Project) {
     if (locked.current) return;
     setProject(next);
@@ -1529,6 +1667,28 @@ function StudioPage() {
       await flushEdits();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tải nhạc");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  async function uploadLogo(file: File) {
+    if (!project) return;
+    if (locked.current) return;
+    if (isDemo) {
+      setError("Tải logo cần kết nối kho lưu trữ.");
+      return;
+    }
+    setBusyAction("logo");
+    locked.current = true;
+    try {
+      const path = await api.uploadMedia(id, file, "logo");
+      const next = { ...project, settings: { ...project.settings, logoPath: path } };
+      setProject(next);
+      pendingEdits.current = next;
+      setSaved(false);
+      await flushEdits();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải logo");
     } finally {
       setBusyAction(null);
     }
@@ -1937,6 +2097,24 @@ function StudioPage() {
               </p>
             </div>
             <div className="setting-group">
+              <h3><Sparkles /> Nét hình</h3>
+              <Field label="Phong cách hình ảnh" hint={VISUAL_PRESET_OPTIONS.find((item) => item.id === project.settings.visualPreset)?.description ?? "Chọn phong cách hình ảnh cho các cảnh."}>
+                <select
+                  value={project.settings.visualPreset}
+                  onChange={(e) => change({ ...project, settings: withVisualPreset(project.settings, e.target.value as ProjectSettings["visualPreset"]) })}
+                >
+                  {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Mô tả nét hình">
+                <input
+                  value={project.settings.visualStyle}
+                  onChange={(e) => change({ ...project, settings: { ...project.settings, visualStyle: e.target.value } })}
+                />
+              </Field>
+              <p className="microcopy">AI local sẽ dùng preset này khi viết prompt storyboard và tạo ảnh từng cảnh. {visualPresetPrompt(project.settings.visualPreset)}</p>
+            </div>
+            <div className="setting-group">
               <h3><Image /> Hình ảnh và giọng đọc</h3>
               <Field label="Cách tạo media">
                 <select value={project.settings.mediaProvider} onChange={(e) => change({ ...project, settings: { ...project.settings, mediaProvider: e.target.value as ProjectSettings["mediaProvider"] } })}>
@@ -1944,6 +2122,50 @@ function StudioPage() {
                   <option value="openai">OpenAI — có phí API</option>
                 </select>
               </Field>
+            </div>
+            <div className="setting-group">
+              <h3><Image /> Logo video</h3>
+              <p className="microcopy">Logo được chèn lên mọi cảnh khi xuất MP4. Khuyến nghị PNG nền trong suốt, tối đa 5 MB.</p>
+              {logoPreviewUrl && <img className="logo-preview" src={logoPreviewUrl} alt="Logo đang chọn" />}
+              <label className="button button-ghost file-button">
+                <Upload size={16} />
+                {project.settings.logoPath ? "Thay logo" : "Tải logo lên"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void uploadLogo(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {project.settings.logoPath && (
+                <>
+                  <Button variant="danger" onClick={() => change({ ...project, settings: { ...project.settings, logoPath: null } })}>
+                    Bỏ logo khỏi video
+                  </Button>
+                  <Field label="Vị trí logo">
+                    <select
+                      value={project.settings.logoPosition}
+                      onChange={(e) => change({ ...project, settings: { ...project.settings, logoPosition: e.target.value as ProjectSettings["logoPosition"] } })}
+                    >
+                      <option value="top-left">Trên trái</option>
+                      <option value="top-right">Trên phải</option>
+                      <option value="bottom-left">Dưới trái</option>
+                      <option value="bottom-right">Dưới phải</option>
+                    </select>
+                  </Field>
+                  <Field label="Kích thước logo">
+                    <input type="range" min="0.05" max="0.35" step="0.01" value={project.settings.logoScale} onChange={(e) => change({ ...project, settings: { ...project.settings, logoScale: Number(e.target.value) } })} />
+                    <small>{Math.round(project.settings.logoScale * 100)}% chiều rộng video</small>
+                  </Field>
+                  <Field label="Độ trong suốt">
+                    <input type="range" min="0.1" max="1" step="0.05" value={project.settings.logoOpacity} onChange={(e) => change({ ...project, settings: { ...project.settings, logoOpacity: Number(e.target.value) } })} />
+                    <small>{Math.round(project.settings.logoOpacity * 100)}%</small>
+                  </Field>
+                </>
+              )}
             </div>
             <div className="setting-group">
               <h3>
@@ -2427,6 +2649,14 @@ function SettingsPage() {
     worker: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     render: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
   };
+  const defaultUsageStats = {
+    today: { usedUsd: 0, eventCount: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    last30Days: { usedUsd: 0, eventCount: 0, totalTokens: 0 },
+    budgetUsd: 3,
+    remainingUsd: 3,
+    budgetPercent: 0,
+    tokenSource: "estimated" as const,
+  };
   const [settings, setSettings] = useState({
     dailyBudgetUsd: 3,
     maxConcurrentJobs: 1,
@@ -2440,6 +2670,7 @@ function SettingsPage() {
       render: false,
     },
     serviceStatuses: defaultServiceStatuses,
+    usageStats: defaultUsageStats as UsageStats,
   });
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -2450,7 +2681,8 @@ function SettingsPage() {
     setRefreshing(true);
     setMessage(null);
     try {
-      setSettings(await api.getSettings());
+      const next = await api.getSettings();
+      setSettings({ ...next, usageStats: next.usageStats ?? defaultUsageStats });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Không thể kiểm tra trạng thái dịch vụ");
     } finally {
@@ -2471,12 +2703,18 @@ function SettingsPage() {
     setBusy(true);
     setMessage(null);
     try {
-      setSettings(
-        await api.updateSettings({
-          dailyBudgetUsd: settings.dailyBudgetUsd,
-          maxConcurrentJobs: settings.maxConcurrentJobs,
-        }),
-      );
+      const next = await api.updateSettings({
+        dailyBudgetUsd: settings.dailyBudgetUsd,
+        maxConcurrentJobs: settings.maxConcurrentJobs,
+      });
+      setSettings({
+        ...next,
+        usageStats: next.usageStats ?? {
+          ...settings.usageStats,
+          budgetUsd: settings.dailyBudgetUsd,
+          remainingUsd: Math.max(0, settings.dailyBudgetUsd - settings.usageStats.today.usedUsd),
+        },
+      });
       setMessage("Đã lưu hạn mức. Backend sẽ áp dụng cho các tác vụ mới.");
     } catch (error) {
       setMessage(
@@ -2587,6 +2825,28 @@ function SettingsPage() {
             </div>
             <b className={renderState.className} title={renderState.detail}>{renderState.label}</b>
           </div>
+        </section>
+        <section className="usage-summary">
+          <div className="section-heading-row">
+            <div>
+              <h2>Sử dụng hôm nay</h2>
+              <p>Chi phí và token theo các tác vụ đã hoàn tất.</p>
+            </div>
+            <span className="usage-percent">{settings.usageStats.budgetPercent}%</span>
+          </div>
+          <div className="budget-meter" aria-label={`Đã dùng ${settings.usageStats.budgetPercent}% ngân sách`}>
+            <span style={{ width: `${settings.usageStats.budgetPercent}%` }} />
+          </div>
+          <div className="usage-metrics">
+            <div><span>Đã dùng</span><strong>${settings.usageStats.today.usedUsd.toFixed(2)}</strong></div>
+            <div><span>Còn lại</span><strong>${settings.usageStats.remainingUsd.toFixed(2)}</strong></div>
+            <div><span>Token ước tính</span><strong>{settings.usageStats.today.totalTokens.toLocaleString("vi-VN")}</strong></div>
+            <div><span>Tác vụ</span><strong>{settings.usageStats.today.eventCount}</strong></div>
+          </div>
+          <p className="microcopy">
+            Ngân sách ngày: ${settings.usageStats.budgetUsd.toFixed(2)} · 30 ngày qua: ${settings.usageStats.last30Days.usedUsd.toFixed(2)}.
+            Token hiện là số ước tính từ nội dung, dùng để theo dõi xu hướng.
+          </p>
         </section>
         <section>
           <h2>Kiểm soát chi phí</h2>
@@ -2713,6 +2973,7 @@ export function App() {
               <Route index element={<DashboardPage />} />
               <Route path="new" element={<NewProjectPage />} />
               <Route path="studio/:id" element={<StudioPage />} />
+              <Route path="tts" element={<TextToSpeechPage />} />
               <Route path="media" element={<MediaPage />} />
               <Route path="exports" element={<ExportsPage />} />
               <Route path="settings" element={<SettingsPage />} />

@@ -16,6 +16,20 @@ export type VideoResult = {
 export type ServiceState = "healthy" | "configured" | "offline" | "disabled" | "unknown";
 export type ServiceId = "api" | "supabase" | "openai" | "anthropic" | "ollama" | "localMedia" | "worker" | "render";
 export type ServiceStatus = { state: ServiceState; detail: string; checkedAt: string };
+export type UsageStats = {
+  today: {
+    usedUsd: number;
+    eventCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  last30Days: { usedUsd: number; eventCount: number; totalTokens: number };
+  budgetUsd: number;
+  remainingUsd: number;
+  budgetPercent: number;
+  tokenSource: "estimated" | "recorded";
+};
 
 export type AccountSettings = {
   dailyBudgetUsd: number;
@@ -30,6 +44,7 @@ export type AccountSettings = {
     render: boolean;
   };
   serviceStatuses: Record<ServiceId, ServiceStatus>;
+  usageStats: UsageStats;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -72,8 +87,23 @@ async function voicePreviewBlob(voice: string, engine: string | null): Promise<B
   return response.blob();
 }
 
+async function textToSpeechBlob(text: string, voice: string, engine: string | null, speed: number): Promise<Blob> {
+  const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+  const response = await fetch(`${appConfig.apiUrl}/v1/text-to-speech`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ text, voice, engine, speed }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Chưa tạo được giọng đọc");
+  }
+  return response.blob();
+}
+
 export const api = {
   voicePreview: voicePreviewBlob,
+  textToSpeech: textToSpeechBlob,
   async createVideo(input: VideoInput) {
     if (appConfig.demoMode) throw new Error("Chế độ mẫu chỉ lưu bản nháp. Tạo video cần kết nối máy xử lý thật.");
     const submission = await videoSubmission(input);
@@ -159,7 +189,7 @@ export const api = {
   signedUpload: (
     projectId: string,
     file: File,
-    kind: "image" | "audio" | "music",
+    kind: "image" | "audio" | "music" | "logo",
   ) =>
     request<{ token: string; path: string }>(
       `/v1/projects/${projectId}/uploads/sign`,
@@ -176,7 +206,7 @@ export const api = {
   async uploadMedia(
     projectId: string,
     file: File,
-    kind: "image" | "audio" | "music",
+    kind: "image" | "audio" | "music" | "logo",
   ) {
     if (!supabase) throw new Error("Chưa kết nối kho media");
     const signed = await this.signedUpload(projectId, file, kind);

@@ -131,9 +131,10 @@ export async function renderProject(
       scene.actualDurationMs = ms;
       const seconds = ms / 1000;
       // Straight cuts preserve measured timing and avoid a black opening/boundaries.
+      const monochrome = project.settings.visualPreset === "ink-monochrome" ? ",hue=s=0,eq=contrast=1.04:brightness=0.01" : "";
       const filter = scene.videoPath
         ? `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=30,format=yuv420p[v]`
-        : `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=30,format=yuv420p[v]`;
+        : `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}${monochrome},zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=30,format=yuv420p[v]`;
       const videoInput = scene.videoPath ? ["-stream_loop", "-1", "-i", motionPath] : ["-loop", "1", "-framerate", "30", "-i", imagePath];
       await exec(
         config.FFMPEG_PATH,
@@ -206,6 +207,12 @@ export async function renderProject(
     await writeFile(ass, createAss({ ...project, scenes: timelineScenes }), "utf8");
     const output = join(workdir, "output.mp4");
     const args = ["-y", "-i", base];
+    let logoPath: string | null = null;
+    if (project.settings.logoPath) {
+      logoPath = join(workdir, "logo");
+      await writeFile(logoPath, await getFile(project.settings.logoPath));
+      args.push("-loop", "1", "-i", logoPath);
+    }
     let musicPath: string | null = null;
     if (project.settings.backgroundMusicPath) {
       musicPath = join(workdir, "music");
@@ -221,8 +228,17 @@ export async function renderProject(
       .replace(/'/g, "\\'");
     // Use the explicit `filename` option: FFmpeg 8/9 parses a quoted filename
     // followed by `fontsdir` differently from older builds.
-    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}format=yuv420p[v]`;
-    filter += `;${buildAudioMixFilter(Boolean(musicPath), project.settings.musicVolume, total)}`;
+    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}format=yuv420p[base]`;
+    if (logoPath) {
+      const margin = Math.round(width * 0.04);
+      const x = project.settings.logoPosition.endsWith("right") ? `W-w-${margin}` : `${margin}`;
+      const y = project.settings.logoPosition.startsWith("bottom") ? `H-h-${margin}` : `${margin}`;
+      const logoWidth = Math.round(width * project.settings.logoScale);
+      filter += `;[1:v]scale=${logoWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=${project.settings.logoOpacity}[logo];[base][logo]overlay=x=${x}:y=${y}:format=auto[v]`;
+    } else {
+      filter += ";[base]null[v]";
+    }
+    filter += `;${buildAudioMixFilter(Boolean(musicPath), project.settings.musicVolume, total, logoPath ? 2 : 1)}`;
     args.push(
       "-filter_complex",
       filter,

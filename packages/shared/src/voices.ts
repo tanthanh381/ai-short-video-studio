@@ -12,7 +12,6 @@ export const VOICE_PRESETS = [
   { id: "tin-tuc-nu", label: "Tin tức (nữ)", hint: "Nữ, rõ ràng, nhanh vừa phải", sample: "Bản tin hôm nay xin gửi đến quý vị những thông tin nổi bật trong ngày." },
   { id: "thuyet-minh", label: "Thuyết minh / kiến thức", hint: "Nam, tự nhiên, dễ nghe", sample: "Bạn có biết, mỗi giây trôi qua, Trái Đất đã di chuyển hàng chục ki-lô-mét quanh Mặt Trời?" },
   { id: "nang-dong", label: "Năng động / quảng cáo", hint: "Nữ, nhịp nhanh", sample: "Ưu đãi chỉ trong hôm nay! Nhanh tay chọn ngay món bạn thích và nhận quà liền tay!" },
-  { id: "giong-linh", label: "Giọng Linh (macOS)", hint: "Nữ, giọng máy mặc định của Mac", sample: "Xin chào, tôi là Linh. Đây là giọng đọc mặc định của máy Mac." },
 ] as const;
 
 export type VoicePresetId = (typeof VOICE_PRESETS)[number]["id"];
