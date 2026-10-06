@@ -2212,7 +2212,6 @@ a:focus-visible {
 .subtitle-color-row .check { margin-bottom: 8px; white-space: nowrap; }
 .dub-form-card .voice-preview { margin-top: 2px; }
 .dub-form-card .voice-preview .button { padding-left: 0; }
-}
 .dub-preview-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-top: 16px; }
 .upload-dropzone {
   min-height: 136px;
