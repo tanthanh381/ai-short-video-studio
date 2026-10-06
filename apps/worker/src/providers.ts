@@ -269,7 +269,7 @@ export function parseStoryboard(value: unknown): StoryboardResult {
 }
 
 
-/** Stable 31-bit seed per project: all scenes share it so the same character keeps the same look. */
+/** Stable 31-bit seed for one scene. Including the scene id keeps reruns deterministic without cloning every frame. */
 export function imageSeedFor(projectId: string): number {
   let hash = 2166136261;
   for (const char of projectId) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
