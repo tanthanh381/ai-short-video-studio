@@ -114,3 +114,16 @@ docker-compose --env-file .env.selfhost -f docker-compose.selfhost.yml ps
 ## Quyết định readiness
 
 Chưa đánh dấu READY. Frontend live, backend self-host và migration production đã xác minh; E2E có xác thực, video AI thực, benchmark và một cảnh báo Auth vẫn là các điều kiện bắt buộc còn thiếu.
+
+## Kiểm tra bổ sung trong executor audit
+
+| Kiểm tra | Kết quả hiện tại |
+|---|---|
+| Python unit tests trong `local-tools` | PASS — 15/15 |
+| `git diff --check` | PASS |
+| FFmpeg native có filter `subtitles` | FAIL — binary hiện tại không liệt kê filter này; không dùng làm bằng chứng render production |
+| Node.js/pnpm trong executor audit | BLOCKED — không có executable trong `PATH`, nên chưa rerun được typecheck/test/build JavaScript |
+| Docker daemon trong executor audit | BLOCKED — không truy cập được Colima socket; chưa dùng được Docker image để xác minh FFmpeg runtime |
+| Live Pages/Funnel trong executor audit | BLOCKED — DNS/network không truy cập được; không thay thế bằng bằng chứng cũ |
+
+Các kết quả trên chỉ cập nhật trạng thái xác minh của executor audit. Chúng không thay thế việc chạy E2E có xác thực và benchmark trên Mini self-host.
