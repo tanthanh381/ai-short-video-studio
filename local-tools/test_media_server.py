@@ -140,9 +140,18 @@ class LocalSpeechCaptionTests(unittest.TestCase):
              patch.object(self.media, "_http_wav", side_effect=fake_http), \
              patch.object(self.media.subprocess, "run", side_effect=fake_run):
             result = self.media.tts_aligned("Trăng treo đầu núi.", "co-trang")
-        self.assertEqual(sent[0][1]["voice"], "Anh Khôi")
+        self.assertEqual(sent[0][1]["voice"], "Hải Đăng")
         self.assertEqual(sent[0][1]["speed"], 0.88)
         self.assertEqual(result["durationMs"], 500)
+
+    def test_every_vieneu_preset_uses_a_supported_voice_name(self):
+        supported = {
+            "Adam", "Adam bựa", "Hải Đăng", "Kim Thanh", "Mai Anh", "Minh Triết", "Minh Đức",
+            "Mỹ Duyên", "Ngọc Huyền", "Ngọc Linh", "Ngọc Trân", "Phạm Tuyên", "Quang Sơn",
+            "Quốc Tuấn", "Quỳnh Anh", "Thanh Bình", "Thiền Tâm Đức", "Thiện Minh", "Thái Sơn",
+            "Thùy Dung", "Thục Đoan", "Trúc Ly", "Xuân Vĩnh", "Đoan Trang", "Đức Trí",
+        }
+        self.assertTrue(all(voice in supported for voice, _speed in self.media.VOICE_PRESETS.values()))
 
     def test_unknown_engine_is_rejected_instead_of_silently_falling_back(self):
         with patch.object(self.media.subprocess, "run") as process:

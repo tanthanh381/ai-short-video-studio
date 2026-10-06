@@ -49,14 +49,14 @@ COMFYUI_TIMEOUT_S = int(os.getenv("COMFYUI_TIMEOUT_S", "900"))
 # (VieNeu preset voice, speed).
 VOICE_PRESETS = {
     "doc-truyen": ("Đức Trí", 1.0),
-    "co-trang": ("Anh Khôi", 0.88),
+    "co-trang": ("Hải Đăng", 0.88),
     "co-trang-nu": ("Mỹ Duyên", 0.9),
-    "triet-ly": ("Minh Quân", 0.85),
+    "triet-ly": ("Minh Triết", 0.85),
     "tam-su": ("Trúc Ly", 0.92),
-    "tin-tuc": ("Hữu Quân", 1.05),
-    "tin-tuc-nu": ("Ái Hân", 1.05),
-    "thuyet-minh": ("Mạnh Dũng", 1.0),
-    "nang-dong": ("Xuân Tiên", 1.12),
+    "tin-tuc": ("Quang Sơn", 1.05),
+    "tin-tuc-nu": ("Ngọc Huyền", 1.05),
+    "thuyet-minh": ("Phạm Tuyên", 1.0),
+    "nang-dong": ("Xuân Vĩnh", 1.12),
 }
 # Ordered preference for local Vietnamese engines.
 TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu,piper").split(",") if e in {"vieneu", "piper"}]
