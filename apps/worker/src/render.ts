@@ -117,29 +117,29 @@ export async function renderProject(
     const timelineScenes: Scene[] = [];
     let done = 0;
     for (const scene of project.scenes) {
-      if (!scene.imagePath || !scene.audioPath)
-        throw new Error(`Cảnh ${scene.order + 1} chưa có đủ ảnh và giọng đọc`);
+      if ((!scene.imagePath && !scene.videoPath) || !scene.audioPath)
+        throw new Error(`Cảnh ${scene.order + 1} chưa có đủ media và giọng đọc`);
       const imagePath = join(workdir, `scene-${scene.order}.png`);
+      const motionPath = join(workdir, `scene-${scene.order}.mp4`);
       const audioPath = join(workdir, `scene-${scene.order}.mp3`);
       const segmentPath = join(workdir, `scene-${scene.order}.mkv`);
-      await writeFile(imagePath, await getFile(scene.imagePath));
+      if (scene.videoPath) await writeFile(motionPath, await getFile(scene.videoPath));
+      else await writeFile(imagePath, await getFile(scene.imagePath!));
       await writeFile(audioPath, await getFile(scene.audioPath));
       const ms = await durationMs(config, audioPath);
       if (project.settings.subtitle.enabled) validateCaptionTiming(scene, ms);
       scene.actualDurationMs = ms;
       const seconds = ms / 1000;
       // Straight cuts preserve measured timing and avoid a black opening/boundaries.
-      const filter = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=30,format=yuv420p[v]`;
+      const filter = scene.videoPath
+        ? `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=30,format=yuv420p[v]`
+        : `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=30,format=yuv420p[v]`;
+      const videoInput = scene.videoPath ? ["-stream_loop", "-1", "-i", motionPath] : ["-loop", "1", "-framerate", "30", "-i", imagePath];
       await exec(
         config.FFMPEG_PATH,
         [
           "-y",
-          "-loop",
-          "1",
-          "-framerate",
-          "30",
-          "-i",
-          imagePath,
+          ...videoInput,
           "-i",
           audioPath,
           "-t",

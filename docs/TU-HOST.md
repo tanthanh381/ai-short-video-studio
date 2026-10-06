@@ -31,6 +31,9 @@ Khởi động các tiến trình local trước khi bật worker Docker:
 export LOCAL_AI_ROOT="$HOME/Developer/local-ai"
 "$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
 LOCAL_MEDIA_HOST=127.0.0.1 /opt/homebrew/bin/python3.12 local-tools/media_server.py
+# Chỉ bật sau khi có đủ text encoder local:
+LTX_VIDEO_TEXT_ENCODER="$HOME/.cache/huggingface/hub/models--PixArt-alpha--PixArt-XL-2-1024-MS/snapshots/<revision>" \
+  "$LOCAL_AI_ROOT/ltx-venv/bin/python" local-tools/ltx_server.py
 ```
 
 Trong `.env.selfhost`:
@@ -38,6 +41,7 @@ Trong `.env.selfhost`:
 ```dotenv
 LOCAL_MEDIA_BASE_URL=http://host.docker.internal:8765
 LOCAL_MEDIA_FEATURES_ENABLED=true
+LTX_VIDEO_URL=http://127.0.0.1:8770
 ```
 
 Trong màn hình tạo video, preset ảnh local có ba mức: **Fast** (2 bước SDXL-Turbo, ưu tiên tốc độ), **Balanced** (4 bước, mặc định) và **Quality** (8 bước, ưu tiên chi tiết khuôn mặt/tay). Có thể đặt `IMAGE_PRESET=balanced` làm mặc định cho máy; lựa chọn trong từng dự án được truyền an toàn tới media bridge và không gọi API trả phí.

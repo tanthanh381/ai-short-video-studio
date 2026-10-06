@@ -729,6 +729,7 @@ function useLocalModels(disabled: boolean) {
 const LOCAL_MODEL_TASKS: Array<{ key: keyof LocalModels; label: string }> = [
   { key: "storyboard", label: "Chia cảnh & prompt ảnh (Ollama)" },
   { key: "image", label: "Tạo ảnh" },
+  { key: "video", label: "Chuyển động video (LTX)" },
   { key: "tts", label: "Giọng đọc (engine)" },
   { key: "transcribe", label: "Đồng bộ phụ đề (Whisper)" },
 ];
@@ -1318,7 +1319,7 @@ function StudioPage() {
     scenes[index] = {
       ...scene,
       ...(narrationChanged ? { audioPath: null, actualDurationMs: null, subtitles: [], mediaStatus: "pending" as const } : {}),
-      ...(imageChanged ? { imagePath: null, mediaStatus: "pending" as const } : {}),
+      ...(imageChanged ? { imagePath: null, videoPath: null, mediaStatus: "pending" as const } : {}),
     };
     change({ ...project, scenes, status: "draft" });
   }
@@ -1345,6 +1346,7 @@ function StudioPage() {
       estimatedDurationMs: 5000,
       actualDurationMs: null,
       imagePath: null,
+      videoPath: null,
       audioPath: null,
       thumbnailUrl: null,
       mediaStatus: "pending",
@@ -1449,7 +1451,7 @@ function StudioPage() {
       if (!scene) return;
       const updatedScene: Scene = {
         ...scene,
-        ...(kind === "image" ? { imagePath: path } : { audioPath: path }),
+        ...(kind === "image" ? { imagePath: path, videoPath: null } : { audioPath: path }),
         ...(kind === "audio" ? { actualDurationMs: null, subtitles: [] } : {}),
         mediaStatus: "pending",
         errorMessage: null,

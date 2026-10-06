@@ -81,6 +81,7 @@ function scene(order: number, durationMs: number): Scene {
     estimatedDurationMs: durationMs,
     actualDurationMs: durationMs,
     imagePath: order === 0 ? "one.png" : "two.png",
+    videoPath: null,
     audioPath: order === 0 ? "one.mp3" : "two.mp3",
     thumbnailUrl: null,
     mediaStatus: "ready",

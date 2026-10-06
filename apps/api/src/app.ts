@@ -61,6 +61,7 @@ type ServiceStatus = { state: ServiceState; detail: string; checkedAt: string };
 type WorkerHealthPayload = {
   services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia", { state: ServiceState; detail: string }>>;
 };
+type LocalMediaHealthPayload = { video?: boolean; videoState?: string; videoDetail?: string };
 
 function safeName(name: string) {
   return name
@@ -124,7 +125,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (serviceStatusCache && serviceStatusCache.expiresAt > Date.now()) return serviceStatusCache.value;
     const checkedAt = new Date().toISOString();
     const shouldCheckWorker = config.RENDER_WORKER_ENABLED || config.OPENAI_FEATURES_ENABLED || config.ANTHROPIC_FEATURES_ENABLED || config.OLLAMA_FEATURES_ENABLED || config.LOCAL_MEDIA_FEATURES_ENABLED;
-    const [workerResponse, ollamaReady, mediaReady] = await Promise.all([
+    const [workerResponse, ollamaReady, mediaReady, mediaHealth] = await Promise.all([
       shouldCheckWorker
         ? fetch(`${config.WORKER_HEALTH_URL.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(2_500) })
         .then(async (response) => response.ok ? await response.json() as WorkerHealthPayload : null)
@@ -132,6 +133,11 @@ export function createApp(config: AppConfig, db: AdminClient) {
         : Promise.resolve(null),
       config.OLLAMA_FEATURES_ENABLED ? probe(`${config.OLLAMA_BASE_URL.replace(/\/$/, "")}/api/tags`) : Promise.resolve(false),
       config.LOCAL_MEDIA_FEATURES_ENABLED ? probe(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/models`) : Promise.resolve(false),
+      config.LOCAL_MEDIA_FEATURES_ENABLED
+        ? fetch(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(2_500) })
+          .then(async (response) => response.ok ? await response.json() as LocalMediaHealthPayload : null)
+          .catch(() => null)
+        : Promise.resolve(null),
     ]);
     const workerService = workerResponse?.services?.worker;
     const renderService = workerResponse?.services?.render;
@@ -156,7 +162,13 @@ export function createApp(config: AppConfig, db: AdminClient) {
       ),
       localMedia: status(
         config.LOCAL_MEDIA_FEATURES_ENABLED ? (mediaReady ? "healthy" : "offline") : "disabled",
-        config.LOCAL_MEDIA_FEATURES_ENABLED ? (mediaReady ? "Media server đang phản hồi /models" : "Không kết nối được media server") : "Tính năng media local đang tắt",
+        config.LOCAL_MEDIA_FEATURES_ENABLED
+          ? mediaReady
+            ? mediaHealth?.videoState && mediaHealth.videoState !== "ready"
+              ? `Media server hoạt động; LTX: ${mediaHealth.videoDetail ?? "chưa sẵn sàng"}`
+              : "Media server và LTX đang phản hồi"
+            : "Không kết nối được media server"
+          : "Tính năng media local đang tắt",
       ),
       openai: fromWorker("openai", status(config.OPENAI_FEATURES_ENABLED ? "unknown" : "disabled", config.OPENAI_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng OpenAI đang tắt")),
       anthropic: fromWorker("anthropic", status(config.ANTHROPIC_FEATURES_ENABLED ? "unknown" : "disabled", config.ANTHROPIC_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng Claude đang tắt")),
@@ -354,7 +366,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
 
   app.get("/v1/local-models", async (_req, res) => {
     const empty = { models: [], default: null };
-    const unavailable = { available: false, storyboard: empty, image: empty, tts: empty, transcribe: empty };
+    const unavailable = { available: false, storyboard: empty, image: empty, video: empty, tts: empty, transcribe: empty };
     if (!config.LOCAL_MEDIA_FEATURES_ENABLED) return res.json(unavailable);
     try {
       const response = await fetch(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/models`, {
@@ -534,7 +546,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (input.updatedAt !== existing.updatedAt)
       return res.status(409).json({ error: "Dự án đã được cập nhật. Vui lòng tải lại trước khi chỉnh sửa." });
     const prefix = `${req.userId}/${input.id}/`;
-    const paths = [input.settings.backgroundMusicPath, ...input.scenes.flatMap((scene) => [scene.imagePath, scene.audioPath])];
+    const paths = [input.settings.backgroundMusicPath, ...input.scenes.flatMap((scene) => [scene.imagePath, scene.videoPath, scene.audioPath])];
     if (paths.some((path) => path !== null && (!path.startsWith(prefix) || path.includes(".."))))
       return res.status(403).json({ error: "Media không thuộc dự án này" });
     const rows = input.scenes.map((scene) => ({
@@ -546,6 +558,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       estimated_duration_ms: scene.estimatedDurationMs,
       actual_duration_ms: scene.actualDurationMs,
       image_path: scene.imagePath,
+      video_path: scene.videoPath,
       audio_path: scene.audioPath,
       media_status: scene.mediaStatus,
       error_message: scene.errorMessage,
@@ -855,7 +868,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
   app.get("/v1/media", async (req, res) => {
     const { data, error } = await db
       .from("scenes")
-      .select("id,image_path,audio_path,projects!inner(title,user_id)")
+      .select("id,image_path,video_path,audio_path,projects!inner(title,user_id)")
       .eq("projects.user_id", req.userId!)
       .order("updated_at", { ascending: false })
       .limit(100);
@@ -868,6 +881,14 @@ export function createApp(config: AppConfig, db: AdminClient) {
               id: `${row.id}:image`,
               kind: "image" as const,
               path: row.image_path,
+              projectTitle: project.title,
+            }
+          : null,
+        row.video_path
+          ? {
+              id: `${row.id}:video`,
+              kind: "video" as const,
+              path: row.video_path,
               projectTitle: project.title,
             }
           : null,
@@ -884,7 +905,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
           item,
         ): item is {
           id: string;
-          kind: "image" | "audio";
+          kind: "image" | "video" | "audio";
           path: string;
           projectTitle: string;
         } => item !== null,

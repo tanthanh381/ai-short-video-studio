@@ -38,6 +38,7 @@ WHISPER_URL = os.getenv("WHISPER_URL", "http://127.0.0.1:8080")
 VIENEU_URL = os.getenv("VIENEU_URL", "http://127.0.0.1:5001")
 PIPER_URL = os.getenv("PIPER_URL", "http://127.0.0.1:5000")
 VIENEU_VOICE = os.getenv("VIENEU_VOICE", "Đức Trí")
+LTX_VIDEO_URL = os.getenv("LTX_VIDEO_URL", "http://127.0.0.1:8770")
 # Voice presets selectable on the website. Keep ids in sync with packages/shared/src/voices.ts.
 # (VieNeu preset voice, speed). "giong-linh" is the macOS Linh voice.
 VOICE_PRESETS = {
@@ -61,6 +62,7 @@ IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo (MLX, nhanh)"}
 TTS_ENGINE_LABELS = {"vieneu": "VieNeu (giọng theo thể loại)", "piper": "Piper (giọng Việt nhẹ)", "say": "Giọng Linh (macOS)"}
 SAMPLE_RATE = 22050
 IMAGE_LOCK = threading.Lock()  # one MLX/Metal job at a time on a 16 GB machine
+VIDEO_LOCK = threading.Lock()  # LTX is intentionally single-flight on shared Apple memory
 
 
 def json_response(handler, status, value):
@@ -350,6 +352,41 @@ def service_up(url, path="/health"):
         return False
 
 
+def ltx_state():
+    """Return the real LTX runtime state; never infer readiness from a feature flag."""
+    try:
+        with urllib.request.urlopen(f"{LTX_VIDEO_URL.rstrip('/')}/health", timeout=3) as response:
+            payload = json.load(response)
+            return str(payload.get("state", "ready")), str(payload.get("detail", "LTX runtime đang phản hồi"))
+    except urllib.error.HTTPError as error:
+        try:
+            payload = json.loads(error.read().decode())
+            return str(payload.get("state", "offline")), str(payload.get("detail", "LTX runtime chưa sẵn sàng"))
+        except Exception:
+            return "offline", "LTX runtime chưa sẵn sàng"
+    except Exception:
+        return "offline", "Chưa kết nối LTX runtime"
+
+
+def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None, preset=None):
+    """Proxy a bounded image-to-video request to the separately installed LTX runtime."""
+    check_choice("video", model, {"ltxv-2b-0.9.8-distilled": "LTX-Video 2B Distilled"})
+    state, detail = ltx_state()
+    if state != "ready":
+        raise RuntimeError(detail)
+    if not image_base64 or len(image_base64) > 8 * 1024 * 1024:
+        raise ValueError("Ảnh tham chiếu LTX trống hoặc vượt giới hạn 8 MB")
+    payload = json.dumps({"model": model, "prompt": prompt[:3000], "aspectRatio": aspect_ratio,
+                          "seed": seed, "preset": preset, "imageBase64": image_base64}).encode()
+    request = urllib.request.Request(f"{LTX_VIDEO_URL.rstrip('/')}/video", data=payload,
+                                     headers={"Content-Type": "application/json"})
+    with VIDEO_LOCK, urllib.request.urlopen(request, timeout=1800) as response:
+        data = response.read()
+    if not data.startswith(b"\x00\x00\x00") and not data.startswith(b"RIFF"):
+        raise RuntimeError("LTX runtime trả về dữ liệu video không hợp lệ")
+    return data
+
+
 def model_catalog():
     """What the website can offer per task. Anything not installed/running is left out."""
     tags = []
@@ -363,6 +400,7 @@ def model_catalog():
     whisper_ready = service_up(WHISPER_URL, "/") and Path(WHISPER_MODEL).is_file()
     available_engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL),
                          "say": bool(shutil.which("say"))}
+    ltx_ready, _ = ltx_state()
     return {
         "available": True,
         "storyboard": {"models": [{"id": t, "label": t} for t in tags],
@@ -375,6 +413,9 @@ def model_catalog():
         "transcribe": {"models": [{"id": whisper_id, "label": f"Whisper {whisper_id.replace('ggml-', '')}"}]
                        if whisper_ready else [],
                        "default": whisper_id if whisper_ready else None},
+        "video": {"models": [{"id": "ltxv-2b-0.9.8-distilled", "label": "LTX-Video 2B Distilled (I2V)"}]
+                  if ltx_ready == "ready" else [],
+                  "default": "ltxv-2b-0.9.8-distilled" if ltx_ready == "ready" else None},
     }
 
 
@@ -395,9 +436,11 @@ class Handler(BaseHTTPRequestHandler):
                        "say": bool(shutil.which("say"))}
             tts_ready = any(engines.get(e) for e in TTS_ENGINES)
             transcribe_ready = service_up(WHISPER_URL, "/")
+            ltx_ready, ltx_detail = ltx_state()
             json_response(self, 200, {"ok": image_ready and tts_ready, "image": image_ready,
                                     "tts": tts_ready, "alignedTts": tts_ready, "ttsEngines": engines,
-                                    "transcribe": transcribe_ready})
+                                    "transcribe": transcribe_ready, "video": ltx_ready == "ready",
+                                    "videoState": ltx_ready, "videoDetail": ltx_detail})
             return
         if self.path == "/models":
             json_response(self, 200, model_catalog())
@@ -419,6 +462,12 @@ class Handler(BaseHTTPRequestHandler):
                 binary_response(self, "image/png", local_image(prompt, payload.get("aspectRatio", "9:16"), payload.get("model"),
                                                               payload.get("seed"), payload.get("style") or "photo", payload.get("preset"),
                                                               payload.get("referenceImage")))
+            elif self.path == "/video":
+                payload = json.loads(body)
+                binary_response(self, "video/mp4", local_video(
+                    str(payload.get("imageBase64", "")), str(payload.get("prompt", "")),
+                    payload.get("aspectRatio", "9:16"), payload.get("model"),
+                    payload.get("seed"), payload.get("preset")))
             elif self.path == "/tts":
                 payload = json.loads(body)
                 binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "Linh")), payload.get("engine")))

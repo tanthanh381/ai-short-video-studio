@@ -1,5 +1,5 @@
 import { regenerationComponentSchema, type Scene } from "@studio/shared";
-export type RegenerationCheckpoint = { imagePath: string | null; audioPath: string | null; subtitlesCompleted?: boolean };
+export type RegenerationCheckpoint = { imagePath: string | null; videoPath?: string | null; audioPath: string | null; subtitlesCompleted?: boolean };
 /** Keep successful assets on retry; voice replacement invalidates dependent captions. */
 export function regenerationPlan(scene: Scene, requested: unknown, previous: RegenerationCheckpoint, subtitlesEnabled: boolean) {
   const component = regenerationComponentSchema.parse(requested);

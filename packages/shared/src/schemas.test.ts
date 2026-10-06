@@ -59,7 +59,7 @@ describe("schema du an", () => {
 
   it("settings cũ không có localModels vẫn hợp lệ và mặc định là null", () => {
     const parsed = projectSettingsSchema.parse({});
-    expect(parsed.localModels).toEqual({ storyboard: null, image: null, tts: null, transcribe: null });
+    expect(parsed.localModels).toEqual({ storyboard: null, image: null, video: null, tts: null, transcribe: null });
     expect(projectSettingsSchema.safeParse({ localModels: { image: "a b" } }).success).toBe(false);
   });
 });

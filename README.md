@@ -74,12 +74,17 @@ Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker 
 
 Pipeline không cần API trả phí: image server SDXL-Turbo chạy qua MLX tạo ảnh, VieNeu/Piper hoặc giọng `Linh` của macOS tạo TTS tiếng Việt. Mỗi cụm lời gốc được tổng hợp thành WAV; timestamp phụ đề là vị trí nối audio tính từ số mẫu PCM thực, không phải chia thời gian theo ký tự. Nhờ vậy chữ không bị Whisper nhận sai. Với audio tự tải lên, Whisper chỉ được chấp nhận khi chữ khớp kịch bản; nếu không, tác vụ dừng và yêu cầu chỉnh phụ đề hoặc tạo lại giọng local. Mã cầu nối nằm trong `local-tools/media_server.py`; model và môi trường Python local không được commit vào repository.
 
+LTX-Video 2B Distilled được tích hợp như một motion pass tùy chọn: model selector chỉ hiển thị `LTX-Video 2B Distilled` khi runtime `local-tools/ltx_server.py` trả health `ready`; nếu chưa đủ text encoder hoặc bộ nhớ, hệ thống vẫn dùng ảnh SDXL và render zoompan, không giả báo đã kết nối. Checkpoint và venv nằm ngoài repository. Trên máy 16GB, cần chừa dung lượng cho checkpoint 2B và text encoder PixArt/T5 trước khi bật model; runtime không tự tải model để tránh làm đầy ổ.
+
 Khởi động image server MLX trước, sau đó chạy cầu nối chỉ trên localhost:
 
 ```bash
 export LOCAL_AI_ROOT="$HOME/Developer/local-ai"
 "$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
 LOCAL_MEDIA_HOST=127.0.0.1 /opt/homebrew/bin/python3.12 local-tools/media_server.py
+# Chỉ chạy dòng dưới sau khi đã có text encoder local; runtime không tự tải model.
+LTX_VIDEO_TEXT_ENCODER="$HOME/.cache/huggingface/hub/models--PixArt-alpha--PixArt-XL-2-1024-MS/snapshots/<revision>" \
+  "$LOCAL_AI_ROOT/ltx-venv/bin/python" local-tools/ltx_server.py
 ```
 
 Trong `.env.selfhost`, bật `LOCAL_MEDIA_FEATURES_ENABLED=true` và giữ `LOCAL_MEDIA_BASE_URL=http://host.docker.internal:8765`, rồi rebuild worker. Script khởi động đặt SDXL-Turbo 4 bước, `TTS_BREAK_WORDS=18` và `VIENEU_STEPS=16` để ưu tiên tốc độ; chạy `IMAGE_STEPS=6 scripts/Mo-Video-Studio.command` hoặc `IMAGE_STEPS=8 ...` nếu ưu tiên chi tiết. Anatomy guard và negative prompt mặc định bật để giảm mặt/tay/cơ thể méo; `IMAGE_CFG_WEIGHT=1.25` tăng khả năng tuân thủ negative prompt, còn đặt `IMAGE_CFG_WEIGHT=0` nếu cần tốc độ tối đa. TTS vẫn giữ timestamp chính xác. Chất lượng và tốc độ phụ thuộc phần cứng. Các model local là phần mềm/model có giấy phép riêng.

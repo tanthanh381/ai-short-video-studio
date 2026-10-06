@@ -37,6 +37,26 @@ export class LocalMediaAdapter implements MediaProvider {
     return new Uint8Array(await response.arrayBuffer());
   }
 
+  async createVideo(input: { image: Uint8Array; prompt: string; aspectRatio: string }, models: MediaModelOptions = {}): Promise<Uint8Array> {
+    if (!models.video) throw new Error("Chưa chọn model video local");
+    const response = await checked(
+      await fetch(this.url("/video"), {
+        method: "POST",
+        signal: AbortSignal.timeout(1_800_000),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: models.video,
+          prompt: input.prompt,
+          aspectRatio: input.aspectRatio,
+          seed: models.seed ?? undefined,
+          preset: models.preset,
+          imageBase64: Buffer.from(input.image).toString("base64"),
+        }),
+      }),
+    );
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
   async createSpeech(text: string, voice: string, models: MediaModelOptions = {}): Promise<Uint8Array> {
     const response = await checked(
       await fetch(this.url("/tts"), {

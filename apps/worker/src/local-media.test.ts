@@ -16,6 +16,19 @@ describe("LocalMediaAdapter", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it("gọi endpoint LTX image-to-video khi đã chọn model", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new Uint8Array([9, 8]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await new LocalMediaAdapter("http://localhost:8765").createVideo(
+      { image: new Uint8Array([1, 2]), prompt: "A natural portrait", aspectRatio: "9:16" },
+      { video: "ltxv-2b-0.9.8-distilled", seed: 8703, preset: "balanced" },
+    );
+    expect(result).toEqual(new Uint8Array([9, 8]));
+    expect(fetchMock.mock.calls[0]![0]).toBe("http://localhost:8765/video");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1].body))).toMatchObject({ model: "ltxv-2b-0.9.8-distilled", seed: 8703 });
+    vi.unstubAllGlobals();
+  });
+
   it("chuyển model local đã chọn theo từng tác vụ sang cầu nối", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ words: [{ word: "xin", start: 0, end: 0.3 }] })));
     vi.stubGlobal("fetch", fetchMock);

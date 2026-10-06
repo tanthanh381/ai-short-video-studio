@@ -12,7 +12,7 @@ export const DEFAULT_PROJECT_SETTINGS = {
   aspectRatio: "9:16" as const,
   generationPreset: "balanced" as const,
   voice: "alloy",
-  localModels: { storyboard: null, image: null, tts: null, transcribe: null },
+  localModels: { storyboard: null, image: null, video: null, tts: null, transcribe: null },
   visualStyle: "Ảnh điện ảnh chân thực, ánh sáng tự nhiên, nhân vật Việt Nam",
   allowUploads: true,
   backgroundMusicPath: null,
@@ -57,6 +57,7 @@ export type LocalModelCatalog = {
   available: boolean;
   storyboard: { models: LocalModelOption[]; default: string | null };
   image: { models: LocalModelOption[]; default: string | null };
+  video: { models: LocalModelOption[]; default: string | null };
   tts: { models: LocalModelOption[]; default: string | null };
   transcribe: { models: LocalModelOption[]; default: string | null };
 };

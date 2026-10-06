@@ -24,6 +24,7 @@ export function mapScene(row: Row): Scene {
     actualDurationMs:
       row.actual_duration_ms == null ? null : Number(row.actual_duration_ms),
     imagePath: row.image_path == null ? null : String(row.image_path),
+    videoPath: row.video_path == null ? null : String(row.video_path),
     audioPath: row.audio_path == null ? null : String(row.audio_path),
     thumbnailUrl: null,
     mediaStatus: row.media_status as Scene["mediaStatus"],

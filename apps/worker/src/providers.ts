@@ -51,6 +51,7 @@ export interface StoryboardProvider {
 /** Lựa chọn model local theo tác vụ; adapter không hỗ trợ sẽ bỏ qua. */
 export type MediaModelOptions = {
   image?: string | null;
+  video?: string | null;
   tts?: string | null;
   transcribe?: string | null;
   /** Same seed for every scene of a project keeps the recurring character recognisable. */
@@ -63,6 +64,8 @@ export type MediaModelOptions = {
 
 export interface MediaProvider {
   createImage(prompt: string, aspectRatio: string, models?: MediaModelOptions): Promise<Uint8Array>;
+  /** Optional image-to-video motion pass. Providers without it keep the still-image path. */
+  createVideo?(input: { image: Uint8Array; prompt: string; aspectRatio: string }, models?: MediaModelOptions): Promise<Uint8Array>;
   createSpeech(text: string, voice: string, models?: MediaModelOptions): Promise<Uint8Array>;
   createSpeechAligned?(text: string, voice: string, models?: MediaModelOptions): Promise<{
     audio: Uint8Array;

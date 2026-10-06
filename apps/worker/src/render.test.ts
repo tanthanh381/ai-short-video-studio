@@ -39,6 +39,7 @@ describe("render helpers", () => {
           estimatedDurationMs: 3000,
           actualDurationMs: 3000,
           imagePath: "a",
+          videoPath: null,
           audioPath: "b",
           thumbnailUrl: null,
           mediaStatus: "ready",
@@ -82,6 +83,7 @@ describe("render helpers", () => {
           estimatedDurationMs: 1000,
           actualDurationMs: 1000,
           imagePath: "image",
+          videoPath: null,
           audioPath: "audio",
           thumbnailUrl: null,
           mediaStatus: "ready" as const,
@@ -125,6 +127,7 @@ describe("render helpers", () => {
           estimatedDurationMs: 1000,
           actualDurationMs: null,
           imagePath: null,
+          videoPath: null,
           audioPath: "audio",
           thumbnailUrl: null,
           mediaStatus: "pending" as const,
@@ -144,6 +147,6 @@ describe("render helpers", () => {
         async () => new Uint8Array(),
         async () => undefined,
       ),
-    ).rejects.toThrow("Cảnh 1 chưa có đủ ảnh và giọng đọc");
+    ).rejects.toThrow("Cảnh 1 chưa có đủ media và giọng đọc");
   });
 });

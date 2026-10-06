@@ -224,6 +224,7 @@ async function getProject(id: string): Promise<Project> {
       estimatedDurationMs: s.estimated_duration_ms,
       actualDurationMs: s.actual_duration_ms,
       imagePath: s.image_path,
+      videoPath: s.video_path ?? null,
       audioPath: s.audio_path,
       thumbnailUrl: null,
       mediaStatus: s.media_status,
@@ -357,7 +358,7 @@ async function generateMedia(job: JobRow, project: Project) {
     checkDeadline(job);
     try {
       if (targetId && !job.payload.regeneration) {
-        job.payload = { ...job.payload, regeneration: { imagePath: scene.imagePath, audioPath: scene.audioPath } };
+        job.payload = { ...job.payload, regeneration: { imagePath: scene.imagePath, videoPath: scene.videoPath, audioPath: scene.audioPath } };
         const { error: checkpointError } = await db.from("jobs").update({ payload: job.payload }).eq("id", job.id);
         if (checkpointError) throw checkpointError;
       }
@@ -367,13 +368,16 @@ async function generateMedia(job: JobRow, project: Project) {
         : { image: false, audio: false, subtitles: false };
       const regenerateImage = plan.image;
       const regenerateAudio = plan.audio;
-      if (!regenerateImage && !regenerateAudio && !plan.subtitles && sceneMediaReady(scene, project.settings.subtitle.enabled)) {
+      if (!regenerateImage && !regenerateAudio && !plan.subtitles &&
+        (!project.settings.localModels.video || Boolean(scene.videoPath)) &&
+        sceneMediaReady(scene, project.settings.subtitle.enabled)) {
         finished++;
         await progress(job, Math.round((finished / scenes.length) * 100), `Đã giữ media cảnh ${scene.order + 1}`);
         continue;
       }
       await updateScene(scene.id, { media_status: "processing", error_message: null });
       let imagePath = regenerateImage ? null : scene.imagePath;
+      let videoPath = regenerateImage ? null : scene.videoPath;
       let audioPath = regenerateAudio ? null : scene.audioPath;
       let audio: Uint8Array;
       let subtitles = regenerateAudio || plan.subtitles ? [] : scene.subtitles;
@@ -399,6 +403,28 @@ async function generateMedia(job: JobRow, project: Project) {
         imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
         await upload(imagePath, image, "image/png");
         await updateScene(scene.id, { image_path: imagePath });
+      }
+      if (!videoPath && project.settings.localModels.video && media.createVideo) {
+        await progress(
+          job,
+          Math.round((finished / scenes.length) * 85) + 2,
+          `Đang tạo chuyển động LTX cảnh ${scene.order + 1}`,
+        );
+        const motion = await media.createVideo(
+          {
+            image: await download(imagePath),
+            prompt: `${scene.imagePrompt}. Natural subtle motion, stable face and identity, physically correct hands, consistent clothing, no flicker, no morphing, no extra limbs.`,
+            aspectRatio: project.settings.aspectRatio,
+          },
+          {
+            ...project.settings.localModels,
+            seed: imageSeedFor(project.id),
+            preset: project.settings.generationPreset,
+          },
+        );
+        videoPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.mp4`;
+        await upload(videoPath, motion, "video/mp4");
+        await updateScene(scene.id, { video_path: videoPath });
       }
       if (!audioPath) {
         await progress(
@@ -434,6 +460,7 @@ async function generateMedia(job: JobRow, project: Project) {
       checkDeadline(job);
       await updateScene(scene.id, {
           image_path: imagePath,
+          video_path: videoPath,
           audio_path: audioPath,
           subtitles,
           actual_duration_ms: actualDurationMs,
@@ -447,7 +474,7 @@ async function generateMedia(job: JobRow, project: Project) {
           if (checkpointError) throw checkpointError;
         }
         const generatedPrefix = `${project.userId}/${project.id}/generated/`;
-        const replacedPaths = [previous?.imagePath, previous?.audioPath].filter(
+        const replacedPaths = [previous?.imagePath, previous?.videoPath, previous?.audioPath].filter(
           (path): path is string =>
             Boolean(path) &&
             path!.startsWith(generatedPrefix) &&

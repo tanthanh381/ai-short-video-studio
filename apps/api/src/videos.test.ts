@@ -143,7 +143,7 @@ describe("local model selection API", () => {
     const response = await request(f.app).post("/v1/videos").set("Authorization", "Bearer test")
       .send({ sourceText: script, settings: { textProvider: "ollama", mediaProvider: "local", localModels: { storyboard: "qwen2.5:3b", tts: "piper" } } });
     expect(response.status).toBe(202);
-    expect((f.rpc.mock.calls[0]![1].p_settings as { localModels: unknown }).localModels).toEqual({ storyboard: "qwen2.5:3b", image: null, tts: "piper", transcribe: null });
+    expect((f.rpc.mock.calls[0]![1].p_settings as { localModels: unknown }).localModels).toEqual({ storyboard: "qwen2.5:3b", image: null, video: null, tts: "piper", transcribe: null });
   });
 
   it("rejects model names that could smuggle other values", async () => {
