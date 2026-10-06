@@ -6,8 +6,10 @@ in memory. Run it with the toolkit's venv python (it has mlx installed):
     $LOCAL_AI_ROOT/venv/bin/python local-tools/image_server.py
 """
 
+import base64
 import io
 import json
+import math
 import queue
 import os
 import random
@@ -89,24 +91,52 @@ CLIP_LIMIT = 77  # position embeddings: BOS + up to 75 tokens + EOS
 
 
 def fit_clip_tokens(sd, prompt):
-    """Longer prompts overflow the text encoder (index error). Drop trailing words until it fits."""
+    """Keep both SDXL text encoders inside their 77-token position limit."""
     words = prompt.split()
-    while words and len(sd.tokenizer_1.tokenize(" ".join(words))) > CLIP_LIMIT:
+    while words and max(
+        len(sd.tokenizer_1.tokenize(" ".join(words))),
+        len(sd.tokenizer_2.tokenize(" ".join(words))),
+    ) > CLIP_LIMIT:
         words.pop()
     return " ".join(words)
 
 
-def render(sd, prompt, seed, steps=None, width=512, height=512, negative_prompt=NEGATIVE_PROMPT, cfg_weight=None):
+def reference_array(raw, width, height):
+    source = Image.open(io.BytesIO(raw)).convert("RGB")
+    source = source.resize((width, height), Image.Resampling.LANCZOS)
+    return (mx.array(np.array(source)).astype(mx.float32) / 255) * 2 - 1
+
+
+def render(sd, prompt, seed, steps=None, width=512, height=512, negative_prompt=NEGATIVE_PROMPT, cfg_weight=None,
+           reference_image_bytes=None, reference_strength=0.32):
     prompt = fit_clip_tokens(sd, ascii_prompt(prompt))
+    negative_prompt = fit_clip_tokens(sd, ascii_prompt(negative_prompt))
     if not prompt:
         raise ValueError("empty prompt")
     latent = (height // 8, width // 8)
     selected_cfg = CFG_WEIGHT if cfg_weight is None else float(cfg_weight)
     selected_cfg = selected_cfg if negative_prompt.strip() else 0.0
-    latents = sd.generate_latents(prompt, n_images=1, cfg_weight=selected_cfg, num_steps=steps or STEPS,
-                                  negative_text=negative_prompt if selected_cfg > 1 else "",
-                                  latent_size=latent,
-                                  seed=seed if seed is not None else random.randrange(2**31))
+    actual_steps = steps or STEPS
+    if reference_image_bytes is not None:
+        strength = min(0.65, max(0.15, float(reference_strength)))
+        # MLX image-to-image internally multiplies num_steps by strength. Keep
+        # the effective denoising budget equal to the selected preset.
+        reference_steps = max(actual_steps, math.ceil(actual_steps / strength))
+        latents = sd.generate_latents_from_image(
+            reference_array(reference_image_bytes, width, height),
+            prompt,
+            n_images=1,
+            strength=strength,
+            cfg_weight=selected_cfg,
+            num_steps=reference_steps,
+            negative_text=negative_prompt if selected_cfg > 1 else "",
+            seed=seed if seed is not None else random.randrange(2**31),
+        )
+    else:
+        latents = sd.generate_latents(prompt, n_images=1, cfg_weight=selected_cfg, num_steps=actual_steps,
+                                      negative_text=negative_prompt if selected_cfg > 1 else "",
+                                      latent_size=latent,
+                                      seed=seed if seed is not None else random.randrange(2**31))
     for x_t in latents:
         mx.eval(x_t)
     image = sd.decode(x_t)
@@ -168,6 +198,17 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError(f"bad {key}")
                     options[key] = value
             options["negative_prompt"] = str(body.get("negativePrompt", NEGATIVE_PROMPT)).strip()[:1200]
+            reference = body.get("referenceImage")
+            if reference:
+                if not isinstance(reference, str) or len(reference) > 8_000_000:
+                    raise ValueError("bad reference image")
+                try:
+                    raw = base64.b64decode(reference, validate=True)
+                    if len(raw) > 6_000_000:
+                        raise ValueError("reference image too large")
+                    options["reference_image_bytes"] = raw
+                except Exception as error:
+                    raise ValueError("bad reference image") from error
             self._send(200, "image/png", generate(prompt, body.get("seed"), **options))
         except ValueError as error:
             print(f"[image] bad request: {error}", flush=True)

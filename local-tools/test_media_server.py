@@ -180,6 +180,34 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             command = [str(item) for item in process.call_args.args[0]]
             self.assertIn("anatomically correct hands", command[2])
 
+    def test_image_quality_guard_adds_face_constraints(self):
+        with patch.object(self.media, "image_server_state", return_value="ready"), \
+             patch.object(self.media.urllib.request, "urlopen") as request:
+            response = request.return_value.__enter__.return_value
+            response.read.return_value = b"PNG"
+            self.media.local_image("Portrait close-up of a young woman", "9:16", preset="balanced")
+        payload = json.loads(request.call_args.args[0].data)
+        self.assertEqual(payload["preset"], "quality")
+        self.assertIn("symmetrical natural facial features", payload["prompt"])
+        self.assertIn("melted face", payload["negativePrompt"])
+
+    def test_character_reference_is_forwarded_only_for_human_scenes(self):
+        class ImageResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b"PNG"
+
+        with patch.object(self.media, "image_server_state", return_value="ready"), \
+             patch.object(self.media.urllib.request, "urlopen", return_value=ImageResponse()) as request:
+            self.media.local_image("Young woman reading a book", "9:16", reference_image_base64="aW1hZ2U=")
+        payload = json.loads(request.call_args.args[0].data)
+        self.assertEqual(payload["referenceImage"], "aW1hZ2U=")
+
     def test_image_quality_guard_handles_vietnamese_human_prompts(self):
         with patch.object(self.media, "image_server_state", return_value="down"), \
              patch.object(self.media, "IMAGE_TIMEOUT_S", 0), \

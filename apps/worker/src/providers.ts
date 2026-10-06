@@ -55,6 +55,8 @@ export type MediaModelOptions = {
   transcribe?: string | null;
   /** Same seed for every scene of a project keeps the recurring character recognisable. */
   seed?: number | null;
+  /** Base64 PNG reference from the first character scene for local img2img consistency. */
+  referenceImageBase64?: string | null;
   style?: "photo" | "illustration";
   preset?: z.infer<typeof generationPresetSchema>;
 };

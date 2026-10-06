@@ -98,6 +98,7 @@ IMAGE_PRESETS = {
     "balanced": {"steps": 4, "cfg": 1.25},
     "quality": {"steps": 8, "cfg": 1.5},
 }
+IMAGE_FACE_PRESET = os.getenv("IMAGE_FACE_PRESET", "quality")
 IMAGE_STEPS_OVERRIDE = os.getenv("IMAGE_STEPS")
 VIENEU_STEPS = int(os.getenv("VIENEU_STEPS", "16"))
 TTS_BREAK_WORDS = int(os.getenv("TTS_BREAK_WORDS", "18"))
@@ -108,7 +109,8 @@ IMAGE_STYLES = {
 IMAGE_ANATOMY_GUARD = os.getenv("IMAGE_ANATOMY_GUARD", "true").lower() not in {"0", "false", "no"}
 IMAGE_NEGATIVE_PROMPT = os.getenv(
     "IMAGE_NEGATIVE_PROMPT",
-    "deformed face, asymmetrical face, bad anatomy, malformed hands, extra fingers, fused fingers, missing fingers, "
+    "deformed face, melted face, asymmetrical face, misaligned eyes, cross-eyed, duplicated facial features, "
+    "bad anatomy, malformed hands, extra fingers, fused fingers, missing fingers, "
     "extra limbs, duplicated person, warped body, broken arms, broken legs, unnatural eyes, blurry face, low detail, "
     "cropped head, cut off hands, text, logo, watermark",
 )
@@ -119,7 +121,7 @@ HUMAN_PROMPT_RE = re.compile(
 )
 
 
-def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo", preset=None):
+def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo", preset=None, reference_image_base64=None):
     """SDXL-Turbo (MLX, Apple GPU) from the local AI toolkit, generated at the video's native aspect."""
     if aspect_ratio not in IMAGE_SIZES:
         raise ValueError("Tỷ lệ ảnh không hợp lệ")
@@ -133,9 +135,20 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     preset_options = IMAGE_PRESETS.get(selected_preset, IMAGE_PRESETS["balanced"])
     # Style words first: if the text encoder's 77-token limit forces trimming, the scene detail goes, not the style.
     clean = clean_image_prompt(prompt)
-    anatomy = "anatomically correct hands, natural body proportions, complete limbs, realistic facial features" if IMAGE_ANATOMY_GUARD and HUMAN_PROMPT_RE.search(clean) else ""
+    is_human = bool(HUMAN_PROMPT_RE.search(clean))
+    anatomy = (
+        "one person only, one face, two aligned eyes, symmetrical natural facial features, natural skin texture, "
+        "anatomically correct hands, natural body proportions, complete limbs"
+        if IMAGE_ANATOMY_GUARD and is_human
+        else ""
+    )
     anatomy_prefix = f", {anatomy}" if anatomy else ""
     styled = f"{IMAGE_STYLES[style]}{anatomy_prefix}, {clean}, no text, no logo, no watermark"
+    # SDXL-Turbo is most likely to deform anatomy at low step counts. Promote
+    # every human scene in the balanced preset; explicit fast remains fast.
+    if is_human and selected_preset == "balanced" and IMAGE_FACE_PRESET in IMAGE_PRESETS:
+        selected_preset = IMAGE_FACE_PRESET
+        preset_options = IMAGE_PRESETS[selected_preset]
     # The server may still be importing/loading the model (minutes). Wait for it rather than loading a
     # second 7 GB copy through the one-shot script, which only runs if the server never comes up.
     deadline, down_since = time.time() + IMAGE_TIMEOUT_S, None
@@ -148,9 +161,12 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
             break
         time.sleep(5)
     if state == "ready":  # model kept loaded in memory: seconds per image
-        request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps({"prompt": styled, "model": model, "seed": seed, "steps": int(IMAGE_STEPS_OVERRIDE or preset_options["steps"]), "preset": selected_preset,
-                                                                      "width": width, "height": height,
-                                                                      "negativePrompt": IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else ""}).encode(),
+        payload = {"prompt": styled, "model": model, "seed": seed, "steps": int(IMAGE_STEPS_OVERRIDE or preset_options["steps"]), "preset": selected_preset,
+                   "width": width, "height": height,
+                   "negativePrompt": IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else ""}
+        if reference_image_base64 and is_human:
+            payload["referenceImage"] = reference_image_base64
+        request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps(payload).encode(),
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
             return response.read()
@@ -401,7 +417,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not prompt.strip() or len(prompt) > 3000:
                     raise ValueError("Mô tả ảnh trống hoặc quá dài")
                 binary_response(self, "image/png", local_image(prompt, payload.get("aspectRatio", "9:16"), payload.get("model"),
-                                                              payload.get("seed"), payload.get("style") or "photo", payload.get("preset")))
+                                                              payload.get("seed"), payload.get("style") or "photo", payload.get("preset"),
+                                                              payload.get("referenceImage")))
             elif self.path == "/tts":
                 payload = json.loads(body)
                 binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "Linh")), payload.get("engine")))

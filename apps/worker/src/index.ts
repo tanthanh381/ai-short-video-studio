@@ -344,6 +344,15 @@ async function generateMedia(job: JobRow, project: Project) {
   await updateProject(project.id, { status: "generating_media" });
   let finished = 0;
   let newlyGenerated = 0;
+  let characterReference: Uint8Array | null = null;
+  const referenceScene = project.scenes.find((scene) => scene.imagePath && scene.id !== targetId);
+  if (referenceScene?.imagePath) {
+    try {
+      characterReference = await download(referenceScene.imagePath);
+    } catch (error) {
+      log.warn({ projectId: project.id, sceneId: referenceScene.id, err: error instanceof Error ? error.message : "unknown" }, "character_reference_unavailable");
+    }
+  }
   for (const scene of scenes) {
     checkDeadline(job);
     try {
@@ -378,8 +387,15 @@ async function generateMedia(job: JobRow, project: Project) {
         const image = await media.createImage(
           `${scene.imagePrompt}. Không chữ, không logo, không watermark.`,
           project.settings.aspectRatio,
-          { ...project.settings.localModels, seed: imageSeedFor(project.id), style: imageStyleFor(project.settings.visualStyle), preset: project.settings.generationPreset },
+          {
+            ...project.settings.localModels,
+            seed: imageSeedFor(project.id),
+            style: imageStyleFor(project.settings.visualStyle),
+            preset: project.settings.generationPreset,
+            referenceImageBase64: characterReference ? Buffer.from(characterReference).toString("base64") : null,
+          },
         );
+        if (!characterReference) characterReference = image;
         imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
         await upload(imagePath, image, "image/png");
         await updateScene(scene.id, { image_path: imagePath });
