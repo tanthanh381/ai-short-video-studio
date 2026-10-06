@@ -1248,6 +1248,17 @@ a:focus-visible {
   cursor: pointer;
   width: 100%;
 }
+.logo-preview {
+  display: block;
+  max-width: 160px;
+  max-height: 72px;
+  object-fit: contain;
+  margin: 0 0 12px;
+  padding: 8px;
+  border: 1px dashed #c8d4dc;
+  border-radius: 8px;
+  background: repeating-conic-gradient(#f1f4f5 0 25%, #fff 0 50%) 50% / 12px 12px;
+}
 .cue-editor {
   margin-top: 14px;
   border-top: 1px solid #dce5ea;

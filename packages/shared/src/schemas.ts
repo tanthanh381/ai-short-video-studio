@@ -46,6 +46,8 @@ export const subtitleStyleSchema = z.object({
   backgroundOpacity: z.number().min(0).max(1).default(0.35),
 });
 
+export const logoPositionSchema = z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]);
+
 export const subtitleCueSchema = z
   .object({
     id: z.string().uuid(),
@@ -118,6 +120,10 @@ export const projectSettingsSchema = z.object({
   allowUploads: z.boolean().default(true),
   backgroundMusicPath: z.string().nullable().default(null),
   musicVolume: z.number().min(0).max(0.5).default(0.12),
+  logoPath: z.string().nullable().default(null),
+  logoPosition: logoPositionSchema.default("top-right"),
+  logoScale: z.number().min(0.05).max(0.35).default(0.14),
+  logoOpacity: z.number().min(0.1).max(1).default(0.9),
   rewriteFullScript: z.boolean().default(false),
   subtitle: subtitleStyleSchema.default({
     enabled: true,

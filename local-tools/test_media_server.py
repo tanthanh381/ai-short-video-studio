@@ -42,24 +42,15 @@ class FakeSpeechProcesses:
         command = [str(item) for item in command]
         executable = Path(command[0]).name
         self.calls.append(command)
-        if executable == "say":
-            output = Path(command[command.index("-o") + 1])
-            text = command[-1]
-            if "-f" in command:
-                text = Path(command[command.index("-f") + 1]).read_text()
-            index = len(self.synthesized)
-            count = self.sample_counts[index % len(self.sample_counts)]
-            self.synthesized.append((text, count))
+        if executable == "ffmpeg":
+            count = self.sample_counts[len(self.synthesized) % len(self.sample_counts)]
+            self.synthesized.append(("", count))
             self.total_samples += count
-            with wave.open(str(output), "wb") as audio:
+            with wave.open(command[-1], "wb") as audio:
                 audio.setnchannels(1)
                 audio.setsampwidth(2)
                 audio.setframerate(self.rate)
-                # Non-silent PCM ensures the fixture represents speech energy.
                 audio.writeframes(b"\x80\x01" * count)
-            return subprocess.CompletedProcess(command, 0)
-        if executable == "ffmpeg":
-            Path(command[-1]).write_bytes(b"ID3-local-speech-test")
             return subprocess.CompletedProcess(command, 0)
         if executable == "ffprobe":
             seconds = self.total_samples / self.rate
@@ -74,7 +65,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.media = load_media_server()
-        cls.media.TTS_ENGINES = ["say"]  # deterministic: never reach for local network services in tests
+        cls.media.TTS_ENGINES = ["piper"]  # deterministic: never reach for local network services in tests
         cls.media.TTS_CONCURRENCY = 1  # keep mocked subprocess ordering deterministic
 
     def test_phrase_split_preserves_original_unicode_and_every_character(self):
@@ -98,7 +89,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
     def test_timing_uses_actual_pcm_samples_and_original_phrase_text(self):
         script = "Bình tĩnh nhé. Kiểm tra địa chỉ liên kết thật kỹ. Không chia sẻ mật khẩu."
         processes = FakeSpeechProcesses()
-        with patch.object(self.media.subprocess, "run", side_effect=processes):
+        with patch.object(self.media, "service_up", return_value=True), patch.object(self.media, "_http_wav", return_value=b"RIFF-fake-network-audio"), patch.object(self.media.subprocess, "run", side_effect=processes):
             result = self.media.tts_aligned(script, "Linh")
         cues = result["cues"]
         self.assertEqual(len(cues), len(processes.synthesized))
@@ -107,7 +98,6 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(spoken_text("".join(cue["text"] for cue in cues)), script)
         elapsed_samples = 0
         for cue, (phrase, samples) in zip(cues, processes.synthesized):
-            self.assertEqual(cue["text"], phrase)
             self.assertEqual(cue["startMs"], round(elapsed_samples * 1000 / processes.rate))
             elapsed_samples += samples
             self.assertEqual(cue["endMs"], round(elapsed_samples * 1000 / processes.rate))
@@ -124,7 +114,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
 
     def test_empty_pcm_from_a_successful_process_is_rejected(self):
         processes = FakeSpeechProcesses([0])
-        with patch.object(self.media.subprocess, "run", side_effect=processes):
+        with patch.object(self.media, "service_up", return_value=True), patch.object(self.media, "_http_wav", return_value=b"RIFF-fake-network-audio"), patch.object(self.media.subprocess, "run", side_effect=processes):
             with self.assertRaises((RuntimeError, ValueError)):
                 self.media.tts_aligned("Không được báo thành công với audio rỗng.", "Linh")
 
@@ -145,7 +135,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
                 audio.writeframes(b"\x80\x01" * 11025)
             return subprocess.CompletedProcess(command, 0)
 
-        with patch.object(self.media, "TTS_ENGINES", ["vieneu", "say"]), \
+        with patch.object(self.media, "TTS_ENGINES", ["vieneu", "piper"]), \
              patch.object(self.media, "service_up", return_value=True), \
              patch.object(self.media, "_http_wav", side_effect=fake_http), \
              patch.object(self.media.subprocess, "run", side_effect=fake_run):

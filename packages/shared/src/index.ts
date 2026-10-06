@@ -33,6 +33,10 @@ export const DEFAULT_PROJECT_SETTINGS = {
   allowUploads: true,
   backgroundMusicPath: null,
   musicVolume: 0.12,
+  logoPath: null,
+  logoPosition: "top-right" as const,
+  logoScale: 0.14,
+  logoOpacity: 0.9,
   rewriteFullScript: false,
   subtitle: {
     enabled: true,

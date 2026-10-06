@@ -49,7 +49,7 @@ const uploadRequestSchema = z.object({
   fileName: z.string().min(1).max(180),
   contentType: z.string().min(1).max(120),
   size: z.number().int().positive(),
-  kind: z.enum(["image", "audio", "music"]),
+  kind: z.enum(["image", "audio", "music", "logo"]),
 });
 const accountSettingsSchema = z.object({
   dailyBudgetUsd: z.number().min(0).max(1000),
@@ -290,6 +290,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     const bucket = db.storage.from("private-media");
     for (const directory of [
       "image",
+      "logo",
       "audio",
       "music",
       "generated",
@@ -444,7 +445,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       ...DEFAULT_PROJECT_SETTINGS,
       textProvider: "ollama",
       mediaProvider: "local",
-      voice: "vi-VN",
+      voice: DEFAULT_PROJECT_SETTINGS.voice,
       ...input.settings,
     });
     const unavailable = oneClickUnavailable(settings);
@@ -534,7 +535,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (input.updatedAt !== existing.updatedAt)
       return res.status(409).json({ error: "Dự án đã được cập nhật. Vui lòng tải lại trước khi chỉnh sửa." });
     const prefix = `${req.userId}/${input.id}/`;
-    const paths = [input.settings.backgroundMusicPath, ...input.scenes.flatMap((scene) => [scene.imagePath, scene.audioPath])];
+    const paths = [input.settings.backgroundMusicPath, input.settings.logoPath, ...input.scenes.flatMap((scene) => [scene.imagePath, scene.audioPath])];
     if (paths.some((path) => path !== null && (!path.startsWith(prefix) || path.includes(".."))))
       return res.status(403).json({ error: "Media không thuộc dự án này" });
     const rows = input.scenes.map((scene) => ({
@@ -786,7 +787,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (!project)
       return res.status(404).json({ error: "Không tìm thấy dự án" });
     const allowed =
-      input.kind === "image"
+      input.kind === "image" || input.kind === "logo"
         ? ["image/jpeg", "image/png", "image/webp"]
         : ["audio/mpeg", "audio/wav", "audio/mp4", "audio/aac", "audio/x-m4a"];
     if (!allowed.includes(input.contentType))

@@ -894,6 +894,17 @@ function NewProjectPage() {
               />
               <span>Cho phép viết lại kịch bản trước khi tạo video</span>
             </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.subtitle.enabled}
+                onChange={(e) => setSettings((s) => ({
+                  ...s,
+                  subtitle: { ...s.subtitle, enabled: e.target.checked },
+                }))}
+              />
+              <span>Chèn phụ đề vào video</span>
+            </label>
         </section>
         <section hidden={!advanced}>
           <h2>Định dạng video</h2>
@@ -1175,6 +1186,7 @@ function StudioPage() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [result, setResult] = useState<VideoResult | null>(null);
   const [resultLoading, setResultLoading] = useState(false);
   const [capabilities, setCapabilities] = useState<{
@@ -1270,6 +1282,18 @@ function StudioPage() {
       active = false;
     };
   }, [id, isDemo, project?.scenes, selected]);
+  useEffect(() => {
+    const path = project?.settings.logoPath;
+    if (!path || isDemo) {
+      setLogoPreviewUrl(null);
+      return;
+    }
+    let active = true;
+    void api.mediaUrl(id, path)
+      .then(({ url }) => active && setLogoPreviewUrl(url))
+      .catch(() => active && setLogoPreviewUrl(null));
+    return () => { active = false; };
+  }, [id, isDemo, project?.settings.logoPath]);
   function change(next: Project) {
     if (locked.current) return;
     setProject(next);
@@ -1555,6 +1579,28 @@ function StudioPage() {
       await flushEdits();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tải nhạc");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  async function uploadLogo(file: File) {
+    if (!project) return;
+    if (locked.current) return;
+    if (isDemo) {
+      setError("Tải logo cần kết nối kho lưu trữ.");
+      return;
+    }
+    setBusyAction("logo");
+    locked.current = true;
+    try {
+      const path = await api.uploadMedia(id, file, "logo");
+      const next = { ...project, settings: { ...project.settings, logoPath: path } };
+      setProject(next);
+      pendingEdits.current = next;
+      setSaved(false);
+      await flushEdits();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải logo");
     } finally {
       setBusyAction(null);
     }
@@ -1988,6 +2034,50 @@ function StudioPage() {
                   <option value="openai">OpenAI — có phí API</option>
                 </select>
               </Field>
+            </div>
+            <div className="setting-group">
+              <h3><Image /> Logo video</h3>
+              <p className="microcopy">Logo được chèn lên mọi cảnh khi xuất MP4. Khuyến nghị PNG nền trong suốt, tối đa 5 MB.</p>
+              {logoPreviewUrl && <img className="logo-preview" src={logoPreviewUrl} alt="Logo đang chọn" />}
+              <label className="button button-ghost file-button">
+                <Upload size={16} />
+                {project.settings.logoPath ? "Thay logo" : "Tải logo lên"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void uploadLogo(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {project.settings.logoPath && (
+                <>
+                  <Button variant="danger" onClick={() => change({ ...project, settings: { ...project.settings, logoPath: null } })}>
+                    Bỏ logo khỏi video
+                  </Button>
+                  <Field label="Vị trí logo">
+                    <select
+                      value={project.settings.logoPosition}
+                      onChange={(e) => change({ ...project, settings: { ...project.settings, logoPosition: e.target.value as ProjectSettings["logoPosition"] } })}
+                    >
+                      <option value="top-left">Trên trái</option>
+                      <option value="top-right">Trên phải</option>
+                      <option value="bottom-left">Dưới trái</option>
+                      <option value="bottom-right">Dưới phải</option>
+                    </select>
+                  </Field>
+                  <Field label="Kích thước logo">
+                    <input type="range" min="0.05" max="0.35" step="0.01" value={project.settings.logoScale} onChange={(e) => change({ ...project, settings: { ...project.settings, logoScale: Number(e.target.value) } })} />
+                    <small>{Math.round(project.settings.logoScale * 100)}% chiều rộng video</small>
+                  </Field>
+                  <Field label="Độ trong suốt">
+                    <input type="range" min="0.1" max="1" step="0.05" value={project.settings.logoOpacity} onChange={(e) => change({ ...project, settings: { ...project.settings, logoOpacity: Number(e.target.value) } })} />
+                    <small>{Math.round(project.settings.logoOpacity * 100)}%</small>
+                  </Field>
+                </>
+              )}
             </div>
             <div className="setting-group">
               <h3>

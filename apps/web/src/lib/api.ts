@@ -159,7 +159,7 @@ export const api = {
   signedUpload: (
     projectId: string,
     file: File,
-    kind: "image" | "audio" | "music",
+    kind: "image" | "audio" | "music" | "logo",
   ) =>
     request<{ token: string; path: string }>(
       `/v1/projects/${projectId}/uploads/sign`,
@@ -176,7 +176,7 @@ export const api = {
   async uploadMedia(
     projectId: string,
     file: File,
-    kind: "image" | "audio" | "music",
+    kind: "image" | "audio" | "music" | "logo",
   ) {
     if (!supabase) throw new Error("Chưa kết nối kho media");
     const signed = await this.signedUpload(projectId, file, kind);

@@ -10,7 +10,7 @@ Studio tiếng Việt: đăng nhập, dán kịch bản và bấm **Tạo video*
 ## Trạng thái hiện tại
 
 - Giao diện React + TypeScript hoàn chỉnh cho máy tính và điện thoại.
-- Luồng **một nút** đã hoạt động trên website công khai: chỉ nhập kịch bản, máy tự chia cảnh bằng Ollama, tạo ảnh SDXL-Turbo qua MLX, đọc tiếng Việt bằng VieNeu/Piper hoặc macOS Linh, tạo phụ đề đúng lời gốc và ghép MP4 bằng FFmpeg. Không cần API key và không gọi API trả phí.
+- Luồng **một nút** đã hoạt động trên website công khai: chỉ nhập kịch bản, máy tự chia cảnh bằng Ollama, tạo ảnh SDXL-Turbo qua MLX, đọc tiếng Việt bằng VieNeu/Piper, tạo phụ đề đúng lời gốc và ghép MP4 bằng FFmpeg. Không cần API key và không gọi API trả phí.
 - Khi máy AI chưa được kết nối, vẫn có thể lưu bản nháp, sửa storyboard, tải ảnh/audio của mình lên và ghép MP4 khi worker sẵn sàng. Chế độ mẫu được ghi rõ và không trả video giả.
 - API Express có xác thực Supabase, danh sách tài khoản được phép, signed upload/download, giới hạn file, rate limit, ngân sách ngày, idempotency và giới hạn tác vụ đồng thời.
 - Worker có adapter Ollama/local và Claude/OpenAI tùy chọn, hàng đợi PostgreSQL bền vững, checkpoint từng bước và từng cảnh, retry giới hạn, heartbeat và FFmpeg render MP4 H.264/AAC.
@@ -30,7 +30,7 @@ Studio tiếng Việt: đăng nhập, dán kịch bản và bấm **Tạo video*
 3. Chờ xử lý; có thể tải lại hoặc mở lại dự án để theo dõi tiếp. Khi có lỗi, bấm **Tiếp tục**; cảnh đã thành công được giữ lại.
 4. Khi hoàn thành, xem video trong Studio và bấm **Tải MP4**. Bản xuất cũng được lưu tại **Lịch sử xuất**.
 
-Tên được đặt tự động. Mặc định video dọc 1080×1920, giọng Linh, phụ đề tiếng Việt và không nhạc. Giọng, tỷ lệ, nhạc và các bước chỉnh tay nằm trong phần thu gọn. Không tự viết lại kịch bản; khi không bật viết lại, nối lời đọc các cảnh khôi phục đúng nguyên văn đầu vào.
+Tên được đặt tự động. Mặc định video dọc 1080×1920, giọng tiếng Việt local, phụ đề tiếng Việt và không nhạc. Giọng, tỷ lệ, phụ đề, logo, nhạc và các bước chỉnh tay nằm trong phần thu gọn. Không tự viết lại kịch bản; khi không bật viết lại, nối lời đọc các cảnh khôi phục đúng nguyên văn đầu vào.
 
 Luồng một nút chỉ dùng **Ollama + media local**, không tự chuyển sang API trả phí khi có key. Không mất phí API nhưng vẫn dùng điện, phần cứng và dung lượng Supabase trong hạn mức tài khoản. Máy chủ phải bật, không ngủ, và chạy Docker, Ollama, image server MLX, cầu nối media, Tailscale Funnel.
 
@@ -47,7 +47,7 @@ Không có API key vẫn dùng được luồng tự động khi Ollama, image s
 | Dữ liệu     | Supabase Auth, PostgreSQL, private Storage | Đăng nhập, metadata, hàng đợi bền vững và media     |
 | Worker      | Node.js, FFmpeg, Noto Sans, Docker         | Gọi AI, checkpoint từng cảnh và render video        |
 | AI văn bản  | Ollama (mặc định), Claude/OpenAI tùy chọn  | Prompt hình ảnh theo cảnh; lời gốc được khóa bằng code |
-| AI media    | SDXL-Turbo MLX + VieNeu/Piper/macOS Linh    | Ảnh local, giọng đọc; phụ đề từ audio PCM đo thật     |
+| AI media    | SDXL-Turbo MLX + VieNeu/Piper              | Ảnh local, giọng đọc; phụ đề từ audio PCM đo thật     |
 
 Frontend không chứa secret. Worker render là một service riêng có CPU, dung lượng tạm và thời gian chạy phù hợp; GitHub Actions không được dùng làm hàng đợi video.
 
