@@ -62,6 +62,15 @@ type WorkerHealthPayload = {
   services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia", { state: ServiceState; detail: string }>>;
 };
 
+type UsageStats = {
+  today: { usedUsd: number; eventCount: number; inputTokens: number; outputTokens: number; totalTokens: number };
+  last30Days: { usedUsd: number; eventCount: number; totalTokens: number };
+  budgetUsd: number;
+  remainingUsd: number;
+  budgetPercent: number;
+  tokenSource: "estimated" | "recorded";
+};
+
 function safeName(name: string) {
   return name
     .normalize("NFKD")
@@ -110,6 +119,60 @@ export function createApp(config: AppConfig, db: AdminClient) {
     .map((x) => x.trim())
     .filter(Boolean);
   let serviceStatusCache: { expiresAt: number; value: Record<string, ServiceStatus> } | null = null;
+
+  async function getUsageStats(userId: string, budgetUsd: number): Promise<UsageStats> {
+    const now = new Date();
+    const dayStart = new Date(now);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const monthStart = new Date(dayStart);
+    monthStart.setUTCDate(monthStart.getUTCDate() - 29);
+    const { data, error } = await db
+      .from("usage_events")
+      .select("amount_usd, metadata, created_at")
+      .eq("user_id", userId)
+      .gte("created_at", monthStart.toISOString());
+    if (error) throw error;
+
+    const rows = data ?? [];
+    const readNumber = (metadata: unknown, ...keys: string[]) => {
+      if (!metadata || typeof metadata !== "object") return 0;
+      const record = metadata as Record<string, unknown>;
+      for (const key of keys) {
+        const value = Number(record[key]);
+        if (Number.isFinite(value) && value > 0) return value;
+      }
+      return 0;
+    };
+    const isToday = (createdAt: unknown) =>
+      typeof createdAt === "string" && createdAt >= dayStart.toISOString();
+    const todayRows = rows.filter((row) => isToday(row.created_at));
+    const sumUsd = (items: typeof rows) =>
+      Number(items.reduce((sum, row) => sum + Number(row.amount_usd ?? 0), 0).toFixed(6));
+    const sumTokens = (items: typeof rows, ...keys: string[]) =>
+      Math.round(items.reduce((sum, row) => sum + readNumber(row.metadata, ...keys), 0));
+    const todayInputTokens = sumTokens(todayRows, "input_tokens", "inputTokens", "estimated_input_tokens");
+    const todayOutputTokens = sumTokens(todayRows, "output_tokens", "outputTokens", "estimated_output_tokens");
+    const todayUsedUsd = sumUsd(todayRows);
+    const todayTotalTokens = todayInputTokens + todayOutputTokens;
+    return {
+      today: {
+        usedUsd: todayUsedUsd,
+        eventCount: todayRows.length,
+        inputTokens: todayInputTokens,
+        outputTokens: todayOutputTokens,
+        totalTokens: todayTotalTokens,
+      },
+      last30Days: {
+        usedUsd: sumUsd(rows),
+        eventCount: rows.length,
+        totalTokens: sumTokens(rows, "total_tokens", "totalTokens", "estimated_tokens") || todayTotalTokens,
+      },
+      budgetUsd,
+      remainingUsd: Number(Math.max(0, budgetUsd - todayUsedUsd).toFixed(6)),
+      budgetPercent: budgetUsd > 0 ? Math.min(100, Number(((todayUsedUsd / budgetUsd) * 100).toFixed(1))) : 0,
+      tokenSource: "estimated",
+    };
+  }
 
   async function probe(url: string) {
     try {
@@ -340,6 +403,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.json({
       dailyBudgetUsd: req.dailyBudgetUsd,
       maxConcurrentJobs: req.maxConcurrentJobs,
+      usageStats: await getUsageStats(req.userId!, req.dailyBudgetUsd!),
       capabilities: {
         supabase: true,
         ai: config.AI_FEATURES_ENABLED,
@@ -409,6 +473,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (error) throw error;
     res.json({
       ...input,
+      usageStats: await getUsageStats(req.userId!, input.dailyBudgetUsd),
       capabilities: {
         supabase: true,
         ai: config.AI_FEATURES_ENABLED,

@@ -1448,6 +1448,52 @@ a:focus-visible {
   padding: 7px 9px;
   font-size: 10px;
 }
+.usage-summary .section-heading-row {
+  margin-bottom: 15px;
+}
+.usage-percent {
+  color: var(--coral);
+  font-size: 12px;
+  font-weight: 800;
+}
+.budget-meter {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #e6edf0;
+}
+.budget-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2e9675, var(--coral));
+  transition: width 240ms ease;
+}
+.usage-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.usage-metrics div {
+  padding: 11px 12px;
+  border: 1px solid #e3e9ed;
+  border-radius: 9px;
+  background: #fbfcfc;
+}
+.usage-metrics span,
+.usage-metrics strong {
+  display: block;
+}
+.usage-metrics span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.usage-metrics strong {
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 17px;
+}
 .connection-row {
   display: flex;
   justify-content: space-between;

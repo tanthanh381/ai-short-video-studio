@@ -481,6 +481,12 @@ async function generateMedia(job: JobRow, project: Project) {
       successful_scenes: finished,
       total_scenes: scenes.length,
       provider: project.settings.mediaProvider,
+      estimated_input_tokens: Math.ceil(project.sourceText.length / 4),
+      estimated_output_tokens: Math.ceil(scenes.reduce((sum, scene) => sum + scene.narration.length, 0) / 4),
+      estimated_tokens: Math.ceil(
+        (project.sourceText.length + scenes.reduce((sum, scene) => sum + scene.narration.length, 0)) / 4,
+      ),
+      token_source: "estimate",
     },
   });
   if (usageError) throw usageError;

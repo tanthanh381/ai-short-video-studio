@@ -16,6 +16,20 @@ export type VideoResult = {
 export type ServiceState = "healthy" | "configured" | "offline" | "disabled" | "unknown";
 export type ServiceId = "api" | "supabase" | "openai" | "anthropic" | "ollama" | "localMedia" | "worker" | "render";
 export type ServiceStatus = { state: ServiceState; detail: string; checkedAt: string };
+export type UsageStats = {
+  today: {
+    usedUsd: number;
+    eventCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  last30Days: { usedUsd: number; eventCount: number; totalTokens: number };
+  budgetUsd: number;
+  remainingUsd: number;
+  budgetPercent: number;
+  tokenSource: "estimated" | "recorded";
+};
 
 export type AccountSettings = {
   dailyBudgetUsd: number;
@@ -30,6 +44,7 @@ export type AccountSettings = {
     render: boolean;
   };
   serviceStatuses: Record<ServiceId, ServiceStatus>;
+  usageStats: UsageStats;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

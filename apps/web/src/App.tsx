@@ -2561,6 +2561,14 @@ function SettingsPage() {
     worker: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     render: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
   };
+  const defaultUsageStats = {
+    today: { usedUsd: 0, eventCount: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    last30Days: { usedUsd: 0, eventCount: 0, totalTokens: 0 },
+    budgetUsd: 3,
+    remainingUsd: 3,
+    budgetPercent: 0,
+    tokenSource: "estimated" as const,
+  };
   const [settings, setSettings] = useState({
     dailyBudgetUsd: 3,
     maxConcurrentJobs: 1,
@@ -2574,6 +2582,7 @@ function SettingsPage() {
       render: false,
     },
     serviceStatuses: defaultServiceStatuses,
+    usageStats: defaultUsageStats,
   });
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -2584,7 +2593,8 @@ function SettingsPage() {
     setRefreshing(true);
     setMessage(null);
     try {
-      setSettings(await api.getSettings());
+      const next = await api.getSettings();
+      setSettings({ ...next, usageStats: next.usageStats ?? defaultUsageStats });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Không thể kiểm tra trạng thái dịch vụ");
     } finally {
@@ -2605,12 +2615,18 @@ function SettingsPage() {
     setBusy(true);
     setMessage(null);
     try {
-      setSettings(
-        await api.updateSettings({
-          dailyBudgetUsd: settings.dailyBudgetUsd,
-          maxConcurrentJobs: settings.maxConcurrentJobs,
-        }),
-      );
+      const next = await api.updateSettings({
+        dailyBudgetUsd: settings.dailyBudgetUsd,
+        maxConcurrentJobs: settings.maxConcurrentJobs,
+      });
+      setSettings({
+        ...next,
+        usageStats: next.usageStats ?? {
+          ...settings.usageStats,
+          budgetUsd: settings.dailyBudgetUsd,
+          remainingUsd: Math.max(0, settings.dailyBudgetUsd - settings.usageStats.today.usedUsd),
+        },
+      });
       setMessage("Đã lưu hạn mức. Backend sẽ áp dụng cho các tác vụ mới.");
     } catch (error) {
       setMessage(
@@ -2721,6 +2737,28 @@ function SettingsPage() {
             </div>
             <b className={renderState.className} title={renderState.detail}>{renderState.label}</b>
           </div>
+        </section>
+        <section className="usage-summary">
+          <div className="section-heading-row">
+            <div>
+              <h2>Sử dụng hôm nay</h2>
+              <p>Chi phí và token theo các tác vụ đã hoàn tất.</p>
+            </div>
+            <span className="usage-percent">{settings.usageStats.budgetPercent}%</span>
+          </div>
+          <div className="budget-meter" aria-label={`Đã dùng ${settings.usageStats.budgetPercent}% ngân sách`}>
+            <span style={{ width: `${settings.usageStats.budgetPercent}%` }} />
+          </div>
+          <div className="usage-metrics">
+            <div><span>Đã dùng</span><strong>${settings.usageStats.today.usedUsd.toFixed(2)}</strong></div>
+            <div><span>Còn lại</span><strong>${settings.usageStats.remainingUsd.toFixed(2)}</strong></div>
+            <div><span>Token ước tính</span><strong>{settings.usageStats.today.totalTokens.toLocaleString("vi-VN")}</strong></div>
+            <div><span>Tác vụ</span><strong>{settings.usageStats.today.eventCount}</strong></div>
+          </div>
+          <p className="microcopy">
+            Ngân sách ngày: ${settings.usageStats.budgetUsd.toFixed(2)} · 30 ngày qua: ${settings.usageStats.last30Days.usedUsd.toFixed(2)}.
+            Token hiện là số ước tính từ nội dung, dùng để theo dõi xu hướng.
+          </p>
         </section>
         <section>
           <h2>Kiểm soát chi phí</h2>
