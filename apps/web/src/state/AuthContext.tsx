@@ -16,6 +16,7 @@ type AuthValue = {
   session: Session | null;
   isDemo: boolean;
   signIn(email: string, password: string): Promise<string | null>;
+  signInWithGoogle(): Promise<string | null>;
   sendMagicLink(email: string): Promise<string | null>;
   sendPasswordReset(email: string): Promise<string | null>;
   updatePassword(password: string): Promise<string | null>;
@@ -69,6 +70,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email,
           password,
         });
+        return authErrorMessage(error?.message);
+      },
+      async signInWithGoogle() {
+        if (!supabase || appConfig.demoMode) return null;
+        const redirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo },
+        });
+        if (error && /provider|not enabled|unsupported/i.test(error.message)) {
+          return "Đăng nhập Google chưa được bật trên Supabase. Hãy bật Google trong Authentication → Providers.";
+        }
         return authErrorMessage(error?.message);
       },
       async sendMagicLink(email) {

@@ -70,6 +70,7 @@ import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } 
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
+  { to: "/dub-subtitle", label: "Lồng tiếng & phụ đề", icon: Subtitles },
   { to: "/tts", label: "Text to Speech", icon: Mic2 },
   { to: "/media", label: "Thư viện media", icon: Library },
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
@@ -240,7 +241,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 function LoginPage() {
-  const { signIn, sendMagicLink, sendPasswordReset, user, isDemo } = useAuth();
+  const { signIn, signInWithGoogle, sendMagicLink, sendPasswordReset, user, isDemo } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -285,6 +286,15 @@ function LoginPage() {
     setBusy(false);
     if (!nextError) navigate("/");
   }
+  async function signUpWithGoogle() {
+    setBusy(true);
+    setError(null);
+    const nextError = await signInWithGoogle();
+    if (nextError) {
+      setError(nextError);
+      setBusy(false);
+    }
+  }
   return (
     <div className="login-page">
       <div className="login-art">
@@ -326,6 +336,15 @@ function LoginPage() {
             </Notice>
           ) : (
             <form onSubmit={submit}>
+              {!resetMode && (
+                <>
+                  <button className="google-button" type="button" onClick={() => void signUpWithGoogle()} disabled={busy}>
+                    <span className="google-mark" aria-hidden="true">G</span>
+                    <span>Đăng ký bằng Google</span>
+                  </button>
+                  <div className="login-divider"><span>hoặc dùng email</span></div>
+                </>
+              )}
               <label>
                 Email
                 <input
@@ -828,6 +847,218 @@ function TextToSpeechPage() {
             <input type="range" min="0.75" max="1.25" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
           </label>
           <VoicePreview voice={voice} engine={engine} disabled={isDemo} />
+        </section>
+      </div>
+    </SimplePage>
+  );
+}
+
+function DubSubtitlePage() {
+  const { isDemo } = useAuth();
+  const [file, setFile] = useState<File | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [script, setScript] = useState("");
+  const [voice, setVoice] = useState(DEFAULT_VOICE_PRESET);
+  const [engine, setEngine] = useState<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [subtitleEnabled, setSubtitleEnabled] = useState(true);
+  const [subtitlePreset, setSubtitlePreset] = useState<"classic" | "focus" | "minimal">("classic");
+  const [subtitlePosition, setSubtitlePosition] = useState<"top" | "center" | "bottom">("bottom");
+  const [subtitleFontSize, setSubtitleFontSize] = useState(18);
+  const [subtitleColor, setSubtitleColor] = useState("#FFFFFF");
+  const [subtitleBackground, setSubtitleBackground] = useState("#000000");
+  const [subtitleOpacity, setSubtitleOpacity] = useState(68);
+  const [subtitleOutline, setSubtitleOutline] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [voicePreviewState, setVoicePreviewState] = useState<"idle" | "loading" | "playing">("idle");
+  const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
+  const [voicePreviewError, setVoicePreviewError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const catalog = useLocalModels(isDemo);
+
+  useEffect(() => {
+    const defaultEngine = catalog?.tts.default ?? catalog?.tts.models[0]?.id ?? null;
+    if (defaultEngine && !engine) setEngine(defaultEngine);
+  }, [catalog, engine]);
+  useEffect(() => () => {
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
+  }, [videoUrl, audioUrl, voicePreviewUrl]);
+
+  function selectVideo(next: File | undefined) {
+    if (!next) return;
+    if (!next.type.startsWith("video/")) {
+      setError("Hãy chọn file video MP4, WebM hoặc MOV.");
+      return;
+    }
+    setError(null);
+    setFile(next);
+    setVideoUrl((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return URL.createObjectURL(next);
+    });
+  }
+
+  async function createDub() {
+    if (!file) { setError("Hãy tải video cần lồng tiếng lên trước."); return; }
+    if (!script.trim()) { setError("Hãy nhập lời thoại để tạo giọng đọc và phụ đề."); return; }
+    if (isDemo) { setError("Chế độ mẫu chưa kết nối máy tạo giọng đọc. Hãy bật API để tạo bản lồng tiếng."); return; }
+    setBusy(true); setError(null);
+    try {
+      const blob = await api.textToSpeech(script, voice, engine, 1);
+      setAudioUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chưa tạo được bản lồng tiếng.");
+    } finally { setBusy(false); }
+  }
+
+  async function togglePreview() {
+    if (!videoRef.current || !audioUrl) return;
+    if (playing) {
+      videoRef.current.pause();
+      audioRef.current?.pause();
+      setPlaying(false);
+      return;
+    }
+    videoRef.current.currentTime = 0;
+    if (audioRef.current) { audioRef.current.currentTime = 0; await audioRef.current.play(); }
+    await videoRef.current.play();
+    setPlaying(true);
+  }
+
+  async function toggleVoicePreview() {
+    if (voicePreviewState === "playing") {
+      voicePreviewAudioRef.current?.pause();
+      setVoicePreviewState("idle");
+      return;
+    }
+    if (!script.trim()) {
+      setVoicePreviewError("Nhập lời thoại trước khi nghe thử.");
+      return;
+    }
+    if (isDemo) {
+      setVoicePreviewError("Chế độ mẫu chưa kết nối máy tạo giọng đọc.");
+      return;
+    }
+    setVoicePreviewError(null);
+    setVoicePreviewState("loading");
+    try {
+      const blob = await api.textToSpeech(script, voice, engine, 1);
+      const url = URL.createObjectURL(blob);
+      setVoicePreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return url; });
+      const player = voicePreviewAudioRef.current;
+      if (!player) throw new Error("Không khởi tạo được trình phát audio");
+      player.src = url;
+      player.currentTime = 0;
+      player.onended = () => setVoicePreviewState("idle");
+      player.onpause = () => setVoicePreviewState("idle");
+      await player.play();
+      setVoicePreviewState("playing");
+    } catch (e) {
+      setVoicePreviewState("idle");
+      setVoicePreviewError(e instanceof Error ? e.message : "Chưa nghe thử được giọng đọc.");
+    }
+  }
+
+  const subtitleBackgroundColor = `${subtitleBackground}${Math.round(subtitleOpacity * 2.55).toString(16).padStart(2, "0")}`;
+  const subtitleShadow = subtitleOutline ? "0 1px 2px #000, 1px 0 0 #000, -1px 0 0 #000" : "none";
+
+  return (
+    <SimplePage title="Lồng tiếng & phụ đề" subtitle="Tải video có sẵn, nhập lời thoại và xem ngay bản dựng với giọng đọc tiếng Việt cùng phụ đề.">
+      <div className="dub-page-grid">
+        <section className="dub-preview-card">
+          <div className="section-heading-row">
+            <div><h2>Bản xem trước</h2><p>{file ? file.name : "Video của anh sẽ xuất hiện ở đây"}</p></div>
+            {audioUrl && <span className="ready-chip"><Check size={14} /> Đã có giọng đọc</span>}
+          </div>
+          <div className="video-preview-frame">
+            {videoUrl ? <>
+              <video ref={videoRef} src={videoUrl} onEnded={() => setPlaying(false)} playsInline />
+              {subtitleEnabled && script.trim() && <div
+                className={`dub-subtitle-overlay dub-subtitle-${subtitlePosition} dub-subtitle-${subtitlePreset}`}
+                style={{ color: subtitleColor, backgroundColor: subtitleBackgroundColor, fontSize: `${subtitleFontSize}px`, textShadow: subtitleShadow }}
+              >{script.trim()}</div>}
+              <audio ref={audioRef} src={audioUrl ?? undefined} onEnded={() => setPlaying(false)} />
+            </> : <div className="video-empty"><Video size={34} /><span>Tải video để bắt đầu</span></div>}
+          </div>
+          <div className="dub-preview-actions">
+            <Button variant="secondary" disabled={!audioUrl || !videoUrl} onClick={() => void togglePreview()}>
+              {playing ? <><Pause size={17} /> Dừng xem thử</> : <><Play size={17} /> Phát video đã lồng tiếng</>}
+            </Button>
+            <span className="microcopy">Bản xem trước chạy trực tiếp trên trình duyệt.</span>
+          </div>
+        </section>
+        <section className="dub-form-card">
+          <label className="upload-dropzone">
+            <Upload size={23} />
+            <strong>{file ? "Đổi video" : "Tải video lên"}</strong>
+            <span>MP4, WebM hoặc MOV · tối đa 500 MB</span>
+            <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => selectVideo(event.target.files?.[0])} />
+          </label>
+          <Field label="Lời thoại lồng tiếng và nội dung phụ đề" hint="Nội dung này sẽ được dùng cho cả giọng đọc và dòng phụ đề xem trước.">
+            <textarea value={script} onChange={(event) => setScript(event.target.value)} rows={7} maxLength={10000} placeholder="Nhập lời thoại tiếng Việt…" />
+          </Field>
+          <div className="dub-form-row">
+            <Field label="Giọng đọc">
+              <select value={voice} onChange={(event) => setVoice(event.target.value as typeof voice)}>
+                {VOICE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label} — {preset.hint}</option>)}
+              </select>
+              <Button variant="ghost" disabled={voicePreviewState === "loading"} onClick={() => void toggleVoicePreview()}>
+                {voicePreviewState === "playing" ? <><Pause size={15} /> Dừng nghe thử</> : <><Play size={15} /> {voicePreviewState === "loading" ? "Đang tạo bản nghe thử…" : "Nghe thử lời thoại"}</>}
+              </Button>
+              {voicePreviewError && <small className="field-error">{voicePreviewError}</small>}
+              <audio ref={voicePreviewAudioRef} hidden />
+            </Field>
+            <Field label="Engine local">
+              <select value={engine ?? ""} onChange={(event) => setEngine(event.target.value || null)} disabled={!catalog?.tts.models.length}>
+                {!catalog?.tts.models.length && <option value="">Chưa kết nối</option>}
+                {catalog?.tts.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+              </select>
+            </Field>
+          </div>
+          <label className="check dub-check">
+            <input type="checkbox" checked={subtitleEnabled} onChange={(event) => setSubtitleEnabled(event.target.checked)} />
+            <span><strong>Hiển thị phụ đề trên video</strong><small>Kiểm tra vị trí phụ đề ngay trong bản xem trước.</small></span>
+          </label>
+          <fieldset className="subtitle-format-panel" disabled={!subtitleEnabled}>
+            <div className="section-heading-row"><div><h3>Định dạng phụ đề</h3><p>Thay đổi sẽ hiển thị ngay trên khung xem trước.</p></div></div>
+            <div className="subtitle-format-grid">
+              <Field label="Kiểu hiển thị">
+                <select value={subtitlePreset} onChange={(event) => setSubtitlePreset(event.target.value as typeof subtitlePreset)}>
+                  <option value="classic">Cổ điển — nền đen</option>
+                  <option value="focus">Tập trung — chữ lớn</option>
+                  <option value="minimal">Tối giản — nền nhẹ</option>
+                </select>
+              </Field>
+              <Field label="Vị trí">
+                <select value={subtitlePosition} onChange={(event) => setSubtitlePosition(event.target.value as typeof subtitlePosition)}>
+                  <option value="top">Phía trên</option>
+                  <option value="center">Ở giữa</option>
+                  <option value="bottom">Phía dưới</option>
+                </select>
+              </Field>
+            </div>
+            <div className="subtitle-format-grid">
+              <Field label={`Cỡ chữ · ${subtitleFontSize}px`}>
+                <input type="range" min="12" max="32" step="1" value={subtitleFontSize} onChange={(event) => setSubtitleFontSize(Number(event.target.value))} />
+              </Field>
+              <Field label={`Độ đục nền · ${subtitleOpacity}%`}>
+                <input type="range" min="0" max="100" step="1" value={subtitleOpacity} onChange={(event) => setSubtitleOpacity(Number(event.target.value))} />
+              </Field>
+            </div>
+            <div className="subtitle-color-row">
+              <Field label="Màu chữ"><input type="color" value={subtitleColor} onChange={(event) => setSubtitleColor(event.target.value)} /></Field>
+              <Field label="Màu nền"><input type="color" value={subtitleBackground} onChange={(event) => setSubtitleBackground(event.target.value)} /></Field>
+              <label className="check"><input type="checkbox" checked={subtitleOutline} onChange={(event) => setSubtitleOutline(event.target.checked)} /><span>Viền chữ</span></label>
+            </div>
+          </fieldset>
+          {error && <Notice tone="warn">{error}</Notice>}
+          <Button busy={busy} onClick={() => void createDub()}><WandSparkles size={17} /> Tạo giọng đọc & phụ đề</Button>
         </section>
       </div>
     </SimplePage>
@@ -2973,6 +3204,7 @@ export function App() {
               <Route index element={<DashboardPage />} />
               <Route path="new" element={<NewProjectPage />} />
               <Route path="studio/:id" element={<StudioPage />} />
+              <Route path="dub-subtitle" element={<DubSubtitlePage />} />
               <Route path="tts" element={<TextToSpeechPage />} />
               <Route path="media" element={<MediaPage />} />
               <Route path="exports" element={<ExportsPage />} />

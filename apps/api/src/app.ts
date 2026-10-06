@@ -49,7 +49,7 @@ const uploadRequestSchema = z.object({
   fileName: z.string().min(1).max(180),
   contentType: z.string().min(1).max(120),
   size: z.number().int().positive(),
-  kind: z.enum(["image", "audio", "music", "logo"]),
+  kind: z.enum(["image", "audio", "music", "logo", "video"]),
 });
 const accountSettingsSchema = z.object({
   dailyBudgetUsd: z.number().min(0).max(1000),
@@ -368,6 +368,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       "logo",
       "audio",
       "music",
+      "video",
       "generated",
       "exports",
     ]) {
@@ -893,7 +894,9 @@ export function createApp(config: AppConfig, db: AdminClient) {
     const allowed =
       input.kind === "image" || input.kind === "logo"
         ? ["image/jpeg", "image/png", "image/webp"]
-        : ["audio/mpeg", "audio/wav", "audio/mp4", "audio/aac", "audio/x-m4a"];
+        : input.kind === "video"
+          ? ["video/mp4", "video/webm", "video/quicktime"]
+          : ["audio/mpeg", "audio/wav", "audio/mp4", "audio/aac", "audio/x-m4a"];
     if (!allowed.includes(input.contentType))
       return res.status(415).json({ error: "Loại file không được hỗ trợ" });
     if (input.size > config.MAX_UPLOAD_MB * 1024 * 1024)
