@@ -9,11 +9,18 @@ import {
 import type { Session, User } from "@supabase/supabase-js";
 import { appConfig } from "../lib/config";
 import { supabase } from "../lib/supabase";
+import {
+  authErrorMessage,
+  authRedirectUrl,
+  clearAuthCallbackParams,
+  readAuthCallbackError,
+} from "../lib/auth";
 
 type AuthValue = {
   loading: boolean;
   user: User | null;
   session: Session | null;
+  authError: string | null;
   isDemo: boolean;
   signIn(email: string, password: string): Promise<string | null>;
   signInWithGoogle(): Promise<string | null>;
@@ -23,33 +30,49 @@ type AuthValue = {
   signOut(): Promise<void>;
 };
 
-function authErrorMessage(message: string | undefined) {
-  if (!message) return null;
-  if (/invalid login credentials/i.test(message))
-    return "Email hoặc mật khẩu không đúng.";
-  if (/email not confirmed/i.test(message))
-    return "Email chưa được xác nhận. Hãy mở email xác nhận trước khi đăng nhập.";
-  if (/rate limit|too many requests/i.test(message))
-    return "Có quá nhiều lần thử. Vui lòng chờ một lát rồi thử lại.";
-  return message;
-}
-
 const AuthContext = createContext<AuthValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(!appConfig.demoMode);
   const [session, setSession] = useState<Session | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase || appConfig.demoMode) return;
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      if (nextSession) setAuthError(null);
       setLoading(false);
     });
+    void (async () => {
+      const callbackError = readAuthCallbackError(
+        window.location.search,
+        window.location.hash,
+      );
+      try {
+        const { data: sessionData, error } = await supabase.auth.getSession();
+        if (error) setAuthError(authErrorMessage(error.message));
+        setSession(sessionData.session);
+        if (!sessionData.session && callbackError) setAuthError(callbackError);
+        if (callbackError || new URL(window.location.href).searchParams.has("code")) {
+          window.history.replaceState(
+            {},
+            document.title,
+            clearAuthCallbackParams(window.location.href),
+          );
+        }
+      } catch (error) {
+        setAuthError(
+          authErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Không thể kiểm tra phiên đăng nhập.",
+          ),
+        );
+      } finally {
+        setLoading(false);
+      }
+    })();
     return () => data.subscription.unsubscribe();
   }, []);
 
@@ -63,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } as User)
         : (session?.user ?? null),
       session,
+      authError,
       isDemo: appConfig.demoMode,
       async signIn(email, password) {
         if (!supabase || appConfig.demoMode) return null;
@@ -70,26 +94,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email,
           password,
         });
-        return authErrorMessage(error?.message);
+        const message = authErrorMessage(error?.message);
+        if (message) setAuthError(message);
+        return message;
       },
       async signInWithGoogle() {
         if (!supabase || appConfig.demoMode) return null;
-        const redirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo },
-        });
-        if (error && /provider|not enabled|unsupported/i.test(error.message)) {
-          return "Đăng nhập Google chưa được bật trên Supabase. Hãy bật Google trong Authentication → Providers.";
+        setAuthError(null);
+        try {
+          const redirectTo = authRedirectUrl(
+            window.location.origin,
+            import.meta.env.BASE_URL,
+          );
+          const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: { redirectTo },
+          });
+          if (error) {
+            const message = authErrorMessage(error.message);
+            setAuthError(message);
+            return message;
+          }
+          if (!data.url) {
+            const message = "Không nhận được địa chỉ đăng nhập Google từ Supabase.";
+            setAuthError(message);
+            return message;
+          }
+          return null;
+        } catch (error) {
+          const message = authErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Không thể bắt đầu đăng nhập Google.",
+          );
+          setAuthError(message);
+          return message;
         }
-        return authErrorMessage(error?.message);
       },
       async sendMagicLink(email) {
         if (!supabase || appConfig.demoMode) return null;
-        const redirectTo = new URL(
-          import.meta.env.BASE_URL,
+        const redirectTo = authRedirectUrl(
           window.location.origin,
-        ).toString();
+          import.meta.env.BASE_URL,
+        );
         const { error } = await supabase.auth.signInWithOtp({
           email,
           options: {
@@ -97,29 +144,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             shouldCreateUser: false,
           },
         });
-        return authErrorMessage(error?.message);
+        const message = authErrorMessage(error?.message);
+        if (message) setAuthError(message);
+        return message;
       },
       async sendPasswordReset(email) {
         if (!supabase || appConfig.demoMode) return null;
-        const redirectTo = new URL(
-          `${import.meta.env.BASE_URL}reset-password`,
+        const redirectTo = authRedirectUrl(
           window.location.origin,
-        ).toString();
+          import.meta.env.BASE_URL,
+          "reset-password",
+        );
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo,
         });
-        return authErrorMessage(error?.message);
+        const message = authErrorMessage(error?.message);
+        if (message) setAuthError(message);
+        return message;
       },
       async updatePassword(password) {
         if (!supabase || appConfig.demoMode) return null;
         const { error } = await supabase.auth.updateUser({ password });
-        return authErrorMessage(error?.message);
+        const message = authErrorMessage(error?.message);
+        if (message) setAuthError(message);
+        return message;
       },
       async signOut() {
         if (supabase) await supabase.auth.signOut();
       },
     }),
-    [loading, session],
+    [authError, loading, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

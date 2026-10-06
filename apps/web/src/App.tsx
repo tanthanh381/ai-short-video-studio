@@ -241,7 +241,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 function LoginPage() {
-  const { signIn, signInWithGoogle, sendMagicLink, sendPasswordReset, user, isDemo } = useAuth();
+  const { signIn, signInWithGoogle, sendMagicLink, sendPasswordReset, user, authError, isDemo } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -259,6 +259,9 @@ function LoginPage() {
     );
     return () => window.clearInterval(timer);
   }, [cooldown]);
+  useEffect(() => {
+    if (authError) setError(authError);
+  }, [authError]);
   if (user) return <Navigate to="/" replace />;
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -286,7 +289,7 @@ function LoginPage() {
     setBusy(false);
     if (!nextError) navigate("/");
   }
-  async function signUpWithGoogle() {
+  async function signInWithGoogleAccount() {
     setBusy(true);
     setError(null);
     const nextError = await signInWithGoogle();
@@ -338,9 +341,9 @@ function LoginPage() {
             <form onSubmit={submit}>
               {!resetMode && (
                 <>
-                  <button className="google-button" type="button" onClick={() => void signUpWithGoogle()} disabled={busy}>
+                  <button className="google-button" type="button" onClick={() => void signInWithGoogleAccount()} disabled={busy}>
                     <span className="google-mark" aria-hidden="true">G</span>
-                    <span>Đăng ký bằng Google</span>
+                    <span>Tiếp tục với Google</span>
                   </button>
                   <div className="login-divider"><span>hoặc dùng email</span></div>
                 </>

@@ -119,6 +119,10 @@ Tên biến và placeholder nằm trong [.env.example](.env.example). Không đ�
 - Dùng Supabase CLI liên kết project và áp dụng migration trong `supabase/migrations`.
 - Tạo tài khoản Auth cho chủ sở hữu và thêm đúng tài khoản đó vào `allowed_users`.
 - Giữ bucket `private-media` ở chế độ private.
+- Nếu dùng nút **Tiếp tục với Google**, vào **Authentication → Providers → Google**, bật
+  provider và nhập Google OAuth Client ID/Secret. Callback URL của Google phải là
+  `https://gvilqdcjdlwrulzjwjex.supabase.co/auth/v1/callback`; đây là URL của Supabase Auth,
+  không phải URL GitHub Pages.
 - Để dùng đăng nhập bằng mật khẩu, vào **Authentication → Users**, chọn tài khoản,
   đặt mật khẩu hoặc dùng nút **Quên hoặc chưa có mật khẩu?** trên website. Tối
   thiểu 8 ký tự; không dùng lại mật khẩu ngân hàng.
@@ -158,6 +162,11 @@ thêm cả hai URL sau vào Redirect URLs trong Supabase Auth:
 
 - `https://tanthanh381.github.io/ai-short-video-studio/`
 - `https://tanthanh381.github.io/ai-short-video-studio/reset-password`
+
+Sau khi lưu cấu hình, kiểm tra `GET https://gvilqdcjdlwrulzjwjex.supabase.co/auth/v1/settings`
+với header `apikey` bằng publishable key. Chỉ khi phản hồi có `external.google: true` mới
+coi Google OAuth đã sẵn sàng. Frontend cũng hiển thị lỗi callback thực tế thay vì giữ nút ở
+trạng thái bận vô hạn.
 
 ## Chi phí và giới hạn
 
