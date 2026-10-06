@@ -69,19 +69,5 @@ services:
     volumes:
       - worker-tmp:/app/apps/worker/tmp
 
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    init: true
-    command:
-      - tunnel
-      - --no-autoupdate
-      - run
-      - --token
-      - ${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on:
-      api:
-        condition: service_healthy
-
 volumes:
   worker-tmp:

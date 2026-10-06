@@ -4,7 +4,7 @@
 GitHub Pages (React)
        │ JWT người dùng
        ▼
-Cloudflare Tunnel ── API Express trong Docker ── Supabase Auth/Postgres/Storage
+Tailscale Funnel ── API Express trong Docker ── Supabase Auth/Postgres/Storage
                               │                              ▲
                               │ job bền vững                 │ media + trạng thái
                               ▼                              │
@@ -19,16 +19,16 @@ Cloudflare Tunnel ── API Express trong Docker ── Supabase Auth/Postgres/
 - Frontend tĩnh đặt trên GitHub Pages đúng yêu cầu. Router có `404.html` để mở trực tiếp URL con không lỗi.
 - Supabase gom đăng nhập, PostgreSQL và object storage. Bucket media là private; API chỉ cấp URL có thời hạn sau khi kiểm tra quyền.
 - API và worker tách riêng. API không giữ request trong suốt thời gian render.
-- API và worker chạy thành hai container trên máy cá nhân/NAS/VPS. Cloudflare Tunnel mở HTTPS bằng kết nối outbound, không cần mở cổng router.
+- API và worker chạy thành hai container trên máy cá nhân/NAS/VPS. Tailscale Funnel mở HTTPS bằng kết nối outbound, không cần mở cổng router.
 - Worker có FFmpeg và font Noto Sans, lấy job bằng `FOR UPDATE SKIP LOCKED`. Job có heartbeat, retry giới hạn và được khôi phục nếu worker bị gián đoạn.
 - Mỗi cảnh lưu media độc lập. Cảnh đã thành công không bị tạo lại khi cảnh khác lỗi.
 - Phụ đề dùng timestamp từ transcription audio thật (`whisper-1`, mức từ), sau đó mới cập nhật timeline.
 
-## Vì sao không render trên GitHub Actions hoặc Cloudflare Workers
+## Vì sao không render trên GitHub Actions hoặc serverless request
 
-GitHub Actions là hệ thống CI/CD, không phải hàng đợi render cho người dùng. Cloudflare Workers có giới hạn CPU theo request và không phải môi trường FFmpeg dài. Worker Docker trên máy do chủ dự án kiểm soát có CPU, file tạm và tiến trình nền cần thiết mà không phát sinh phí nền tảng render riêng.
+GitHub Actions là hệ thống CI/CD, không phải hàng đợi render cho người dùng. Các request serverless có giới hạn CPU và không phù hợp với FFmpeg dài. Worker Docker trên máy do chủ dự án kiểm soát có CPU, file tạm và tiến trình nền cần thiết mà không phát sinh phí nền tảng render riêng.
 
-Phương án này không có phí thuê Railway, nhưng không thể gọi là “miễn phí và không giới hạn”: máy phải luôn bật, dùng điện/băng thông; Supabase, Cloudflare và API AI vẫn có hạn mức hoặc phí theo chính sách của từng dịch vụ.
+Phương án này không có phí thuê Railway, nhưng không thể gọi là “miễn phí và không giới hạn”: máy phải luôn bật, dùng điện/băng thông; Supabase và API AI vẫn có hạn mức hoặc phí theo chính sách của từng dịch vụ.
 
 ## An toàn dữ liệu
 

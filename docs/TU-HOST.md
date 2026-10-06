@@ -1,6 +1,6 @@
 # Chạy backend và worker trên máy riêng
 
-Phương án này giữ frontend trên GitHub Pages và chạy API/FFmpeg trên máy cá nhân, mini PC, NAS hoặc VPS có Docker. Có thể dùng Tailscale Funnel hoặc Cloudflare Tunnel để cấp địa chỉ HTTPS công khai mà không cần mở cổng mạng.
+Phương án này giữ frontend trên GitHub Pages và chạy API/FFmpeg trên máy cá nhân, mini PC, NAS hoặc VPS có Docker. Tailscale Funnel cấp địa chỉ HTTPS công khai mà không cần mở cổng mạng.
 
 ## Chuẩn bị một lần
 
@@ -8,7 +8,7 @@ Phương án này giữ frontend trên GitHub Pages và chạy API/FFmpeg trên 
 2. Tạo một project Supabase Free riêng cho ứng dụng.
 3. Chạy migration trong thư mục `supabase/migrations` theo đúng thứ tự.
 4. Tạo tài khoản đăng nhập trong Supabase Authentication và thêm `user_id` đó vào bảng `allowed_users`.
-5. Chọn một cách public API: Tailscale Funnel (không cần domain riêng), Cloudflare Tunnel, hoặc chạy frontend trên chính máy backend với `VITE_API_URL=http://localhost:8787`.
+5. Chọn Tailscale Funnel (không cần domain riêng), hoặc chạy frontend trên chính máy backend với `VITE_API_URL=http://localhost:8787`.
 6. API key OpenAI và Anthropic là tùy chọn. Có thể để trống cả hai và chạy chế độ local-first bằng Ollama, image server SDXL-Turbo/MLX, VieNeu/Piper hoặc TTS Linh của macOS và whisper.cpp.
 
 ## Cấu hình bí mật
@@ -19,7 +19,7 @@ Sao chép `.env.selfhost.example` thành `.env.selfhost`, rồi điền các gi�
 cp .env.selfhost.example .env.selfhost
 ```
 
-Đặt `ALLOWED_ORIGINS=https://tanthanh381.github.io`. Nếu dùng Cloudflare Tunnel thì điền token Tunnel; nếu dùng Tailscale Funnel thì không cần token trong ứng dụng. Với frontend Pages, đặt `VITE_API_URL` trong biến Actions bằng hostname HTTPS public. Có thể để key AI trống khi dùng media local.
+Đặt `ALLOWED_ORIGINS=https://tanthanh381.github.io`. Tailscale Funnel không cần token trong ứng dụng. Với frontend Pages, đặt `VITE_API_URL` trong biến Actions bằng hostname HTTPS public. Có thể để key AI trống khi dùng media local.
 
 ## Cài media AI local trên macOS
 
@@ -51,7 +51,7 @@ docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml up -d --b
 docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml ps
 ```
 
-Kiểm tra API nội bộ tại `http://127.0.0.1:8787/health`. Sau đó đặt GitHub Actions variable `VITE_API_URL` bằng hostname HTTPS của Tunnel, hoặc `http://localhost:8787` nếu chạy local, rồi triển khai lại frontend.
+Kiểm tra API nội bộ tại `http://127.0.0.1:8787/health`. Sau đó đặt GitHub Actions variable `VITE_API_URL` bằng hostname HTTPS của Tailscale Funnel, hoặc `http://localhost:8787` nếu chạy local, rồi triển khai lại frontend.
 
 Trong **Cài đặt**, nút **Kiểm tra lại** gọi `GET /v1/settings` để kiểm tra Backend API, quyền Supabase, worker render, Ollama và media server. Worker cung cấp health endpoint nội bộ tại `http://worker:8790/health`; không cần publish cổng này ra Internet. OpenAI/Claude chỉ được kiểm tra sự tồn tại của API key, không gọi API provider để tránh phát sinh chi phí. Nếu vừa sửa `.env.selfhost`, hãy rebuild/restart compose trước khi kiểm tra lại.
 

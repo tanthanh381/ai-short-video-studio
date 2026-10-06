@@ -43,7 +43,7 @@ Không có API key vẫn dùng được luồng tự động khi Ollama, image s
 | Thành phần  | Công nghệ                                  | Vai trò                                             |
 | ----------- | ------------------------------------------ | --------------------------------------------------- |
 | Frontend    | React, TypeScript, Vite, GitHub Pages      | Studio, xem trước, chỉnh sửa và theo dõi job        |
-| Backend     | Node.js, Express, Docker, Tailscale Funnel/Cloudflare Tunnel | Giữ secret, kiểm tra quyền, cấp signed URL, tạo job |
+| Backend     | Node.js, Express, Docker, Tailscale Funnel | Giữ secret, kiểm tra quyền, cấp signed URL, tạo job |
 | Dữ liệu     | Supabase Auth, PostgreSQL, private Storage | Đăng nhập, metadata, hàng đợi bền vững và media     |
 | Worker      | Node.js, FFmpeg, Noto Sans, Docker         | Gọi AI, checkpoint từng cảnh và render video        |
 | AI văn bản  | Ollama (mặc định), Claude/OpenAI tùy chọn  | Prompt hình ảnh theo cảnh; lời gốc được khóa bằng code |
@@ -120,9 +120,9 @@ Chủ sở hữu sản phẩm không cần tự chạy SQL; các bước migrati
 
 ### 2. Máy tự host và kết nối HTTPS public
 
-API và worker chạy bằng `docker-compose.selfhost.yml`. Chỉ API đi qua Tailscale Funnel hoặc Cloudflare Tunnel; worker không có cổng public. Secret được chia theo nguyên tắc tối thiểu: API không nhận khóa AI, worker không nhận token Tunnel.
+API và worker chạy bằng `docker-compose.selfhost.yml`. Chỉ API đi qua Tailscale Funnel; worker không có cổng public. Secret được chia theo nguyên tắc tối thiểu: API không nhận khóa AI.
 
-Nếu đã cài Tailscale, có thể dùng Funnel miễn phí thay cho Cloudflare:
+Dùng Tailscale Funnel để cấp HTTPS public miễn phí:
 
 ```bash
 tailscale funnel --bg --https=443 http://127.0.0.1:8787
@@ -141,7 +141,7 @@ Trong repository, vào **Settings → Secrets and variables → Actions → Vari
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `VITE_API_URL` là hostname HTTPS của Tailscale Funnel hoặc Cloudflare Tunnel
+- `VITE_API_URL` là hostname HTTPS của Tailscale Funnel
 - `VITE_DEMO_MODE=false`
 
 Vào **Settings → Pages → Build and deployment**, chọn **GitHub Actions**. Mỗi lần push nhánh `main`, workflow sẽ build và publish thư mục `apps/web/dist`.
@@ -160,12 +160,11 @@ Không có dịch vụ trả phí nào được tự động mua hoặc nâng g�
 | ------------------ | ------------------------------ | ------------------------------------------------------------------------- |
 | GitHub Pages       | Gói miễn phí phù hợp frontend  | Lưu trữ và băng thông theo hạn mức GitHub Pages                           |
 | Supabase           | Có gói Free                    | Database, storage, egress và số người dùng theo hạn mức                   |
-| Cloudflare Tunnel  | Có thể dùng gói Free           | Domain riêng nếu chọn mua; lưu lượng theo chính sách Cloudflare           |
 | Máy chạy Docker    | Không có phí nền tảng riêng    | Điện, mạng và phần cứng do chủ dự án cung cấp                             |
 | Claude API         | Trả theo sử dụng               | Token đầu vào/đầu ra khi tạo storyboard                                   |
 | OpenAI API         | Trả theo sử dụng               | Token văn bản, số ảnh/chất lượng ảnh, TTS và transcription                |
 
-Giá và hạn mức có thể thay đổi. Trước khi bật production, kiểm tra trang giá chính thức của [Supabase](https://supabase.com/pricing), [Cloudflare](https://www.cloudflare.com/plans/), [Anthropic](https://www.anthropic.com/pricing) và [OpenAI](https://openai.com/api/pricing/). Ứng dụng hiển thị ước tính trước khi tạo media, áp dụng ngân sách ngày và mặc định chỉ chạy một job đồng thời.
+Giá và hạn mức có thể thay đổi. Trước khi bật production, kiểm tra trang giá chính thức của [Supabase](https://supabase.com/pricing), [Anthropic](https://www.anthropic.com/pricing) và [OpenAI](https://openai.com/api/pricing/). Ứng dụng hiển thị ước tính trước khi tạo media, áp dụng ngân sách ngày và mặc định chỉ chạy một job đồng thời.
 
 ## Bảo mật và vận hành
 
