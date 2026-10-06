@@ -76,7 +76,7 @@ const navItems = [
 ];
 
 function withVisualPreset(settings: ProjectSettings, visualPreset: ProjectSettings["visualPreset"]): ProjectSettings {
-  const option = VISUAL_PRESET_OPTIONS.find((item) => item.id === visualPreset) ?? VISUAL_PRESET_OPTIONS[0];
+  const option = VISUAL_PRESET_OPTIONS.find((item) => item.id === visualPreset) ?? VISUAL_PRESET_OPTIONS[0]!;
   if (visualPreset === "ink-monochrome") {
     return {
       ...settings,
@@ -1964,7 +1964,7 @@ function StudioPage() {
             </div>
             <div className="setting-group">
               <h3><Sparkles /> Nét hình</h3>
-              <Field label="Phong cách hình ảnh" hint={VISUAL_PRESET_OPTIONS.find((item) => item.id === project.settings.visualPreset)?.description}>
+              <Field label="Phong cách hình ảnh" hint={VISUAL_PRESET_OPTIONS.find((item) => item.id === project.settings.visualPreset)?.description ?? "Chọn phong cách hình ảnh cho các cảnh."}>
                 <select
                   value={project.settings.visualPreset}
                   onChange={(e) => change({ ...project, settings: withVisualPreset(project.settings, e.target.value as ProjectSettings["visualPreset"]) })}

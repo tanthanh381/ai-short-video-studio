@@ -15,7 +15,7 @@ export const VISUAL_PRESET_OPTIONS: Array<{ id: VisualPreset; label: string; des
 ];
 
 export function visualPresetPrompt(preset: VisualPreset): string {
-  return VISUAL_PRESET_OPTIONS.find((item) => item.id === preset)?.prompt ?? VISUAL_PRESET_OPTIONS[0].prompt;
+  return VISUAL_PRESET_OPTIONS.find((item) => item.id === preset)?.prompt ?? VISUAL_PRESET_OPTIONS[0]!.prompt;
 }
 
 export const DEFAULT_PROJECT_SETTINGS = {
