@@ -115,6 +115,24 @@ docker-compose --env-file .env.selfhost -f docker-compose.selfhost.yml ps
 
 Chưa đánh dấu READY. Frontend live, backend self-host và migration production đã xác minh; E2E có xác thực, video AI thực, benchmark và một cảnh báo Auth vẫn là các điều kiện bắt buộc còn thiếu.
 
+## Benchmark cập nhật từ Mini
+
+Ngày 06/10/2026, sau khi giải phóng khoảng 2,211 GB Docker space, runner đã tải thành công:
+
+| Case | Kết quả kỹ thuật | Điểm biên tập |
+|---|---|---|
+| B01 | Đã tải từ lượt trước; technical=true | Chưa chấm |
+| B02 | downloaded; technical=true | Chưa chấm |
+| B03 | downloaded; technical=true | Chưa chấm |
+| B04 | downloaded; technical=true | Chưa chấm |
+| B05 | downloaded; technical=true | Chưa chấm |
+| B06 | Dừng khi đọc jobs với HTTP 401 | Chưa chấm |
+| B07–B10 | Chưa chạy | Chưa chấm |
+
+Tạm thời có **5/10 MP4 technical PASS**, nhưng chưa có điểm Hook/Script/Visual/Voice/Subtitle/Editing/Audio/Emotion/Retention/Shareability nên chưa thể tính Product Score hoặc kiểm tra mục tiêu trung bình 80/100.
+
+HTTP 401 tại `/v1/projects/72088676-6239-49db-8df8-6dbc784b0a4a/jobs` cho thấy access token benchmark không còn được API chấp nhận tại thời điểm polling (thường là hết hạn hoặc phiên không còn hợp lệ). Đây không phải lỗi tạo video B02–B05. Cần dùng access token QA mới rồi chạy tiếp journal hiện có; không xóa `tmp/audit-benchmarks/state.json` và không tạo lại project B01–B05.
+
 ## Kiểm tra bổ sung trong executor audit
 
 | Kiểm tra | Kết quả hiện tại |
