@@ -913,7 +913,7 @@ function DubSubtitlePage() {
             {videoUrl ? <>
               <video ref={videoRef} src={videoUrl} onEnded={() => setPlaying(false)} playsInline />
               {subtitleEnabled && script.trim() && <div className="dub-subtitle-overlay">{script.trim()}</div>}
-              <audio ref={audioRef} src={audioUrl} onEnded={() => setPlaying(false)} />
+              <audio ref={audioRef} src={audioUrl ?? undefined} onEnded={() => setPlaying(false)} />
             </> : <div className="video-empty"><Video size={34} /><span>Tải video để bắt đầu</span></div>}
           </div>
           <div className="dub-preview-actions">
@@ -935,7 +935,7 @@ function DubSubtitlePage() {
           </Field>
           <div className="dub-form-row">
             <Field label="Giọng đọc">
-              <select value={voice} onChange={(event) => setVoice(event.target.value)}>
+              <select value={voice} onChange={(event) => setVoice(event.target.value as typeof voice)}>
                 {VOICE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label} — {preset.hint}</option>)}
               </select>
             </Field>
