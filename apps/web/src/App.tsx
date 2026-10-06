@@ -63,7 +63,7 @@ import {
   visualPresetPrompt,
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
-import { api, type ServiceId, type ServiceStatus, type VideoResult } from "./lib/api";
+import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
 import { projectIsProcessing } from "./lib/video-submission";
 import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
@@ -2582,7 +2582,7 @@ function SettingsPage() {
       render: false,
     },
     serviceStatuses: defaultServiceStatuses,
-    usageStats: defaultUsageStats,
+    usageStats: defaultUsageStats as UsageStats,
   });
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
