@@ -20,16 +20,21 @@ export function parseSrt(content: string): SrtEntry[] {
   for (const block of blocks) {
     const lines = block.trim().split("\n");
     if (lines.length < 3) continue;
-    const index = parseInt(lines[0].trim(), 10);
+    // noUncheckedIndexedAccess: use explicit non-null since length >= 3 is verified above
+    const firstLine = lines[0] ?? "";
+    const secondLine = lines[1] ?? "";
+    const index = parseInt(firstLine.trim(), 10);
     if (isNaN(index)) continue;
-    const timeMatch = lines[1]
+    const timeMatch = secondLine
       .trim()
       .match(
         /(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/,
       );
     if (!timeMatch) continue;
-    const startMs = toMs(timeMatch[1], timeMatch[2], timeMatch[3], timeMatch[4]);
-    const endMs = toMs(timeMatch[5], timeMatch[6], timeMatch[7], timeMatch[8]);
+    const [, h1, m1, s1, ms1, h2, m2, s2, ms2] = timeMatch;
+    if (!h1 || !m1 || !s1 || !ms1 || !h2 || !m2 || !s2 || !ms2) continue;
+    const startMs = toMs(h1, m1, s1, ms1);
+    const endMs = toMs(h2, m2, s2, ms2);
     if (endMs <= startMs) continue;
     const text = lines
       .slice(2)
