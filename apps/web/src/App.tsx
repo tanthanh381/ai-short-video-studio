@@ -22,6 +22,7 @@ import {
   MoreHorizontal,
   Music2,
   Pause,
+  PenLine,
   Play,
   Plus,
   RefreshCw,
@@ -74,6 +75,7 @@ const navItems = [
   { to: "/tts", label: "Text to Speech", icon: Mic2 },
   { to: "/media", label: "Thư viện media", icon: Library },
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
+  { to: "/whiteboard", label: "Annotation vẽ tay", icon: PenLine },
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
 
@@ -3200,6 +3202,26 @@ function SimplePage({
   );
 }
 
+function WhiteboardPage() {
+  const editorSrc = `${import.meta.env.BASE_URL}whiteboard-editor.html`;
+  return (
+    <div className="page whiteboard-page">
+      <div className="page-heading">
+        <div>
+          <h1>Annotation vẽ tay</h1>
+          <p>Mở thư mục ảnh nét vẽ, kéo khung vùng trên canvas và lưu file annotation JSON để render video whiteboard bằng script Python local.</p>
+        </div>
+      </div>
+      <iframe
+        src={editorSrc}
+        title="Trình soạn thảo annotation vẽ tay"
+        className="whiteboard-iframe"
+        allow="clipboard-read; clipboard-write"
+      />
+    </div>
+  );
+}
+
 function NotFound() {
   return (
     <div className="center-page">
@@ -3254,6 +3276,7 @@ export function App() {
               <Route path="tts" element={<TextToSpeechPage />} />
               <Route path="media" element={<MediaPage />} />
               <Route path="exports" element={<ExportsPage />} />
+              <Route path="whiteboard" element={<WhiteboardPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

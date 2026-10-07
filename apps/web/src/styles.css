@@ -2250,3 +2250,6 @@ a:focus-visible {
   .subtitle-format-grid, .subtitle-color-row { grid-template-columns: 1fr; gap: 0; }
   .subtitle-color-row .check { margin: 0 0 14px; }
 }
+.whiteboard-page { display: flex; flex-direction: column; gap: 14px; height: calc(100vh - 80px); }
+.whiteboard-page .page-heading { flex-shrink: 0; }
+.whiteboard-iframe { flex: 1; width: 100%; min-height: 520px; border: 1px solid var(--line); border-radius: 12px; background: #14161a; }
