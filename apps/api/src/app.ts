@@ -762,9 +762,13 @@ export function createApp(config: AppConfig, db: AdminClient) {
       });
     }
     if (input.type === "render_whiteboard") {
-      const hasMedia = project.scenes.some(s => s.imagePath && s.audioPath);
-      if (!hasMedia)
-        return res.status(409).json({ error: "Cần tạo ảnh và giọng đọc trước khi render video vẽ tay." });
+      if (!project.scenes.some(s => s.imagePath))
+        return res.status(409).json({ error: "Cần tạo ảnh cho ít nhất một cảnh trước khi render video vẽ tay." });
+      const noAudio = project.scenes.filter(s => s.imagePath && !s.audioPath);
+      if (noAudio.length)
+        return res.status(409).json({
+          error: `${noAudio.length} cảnh có ảnh nhưng chưa có giọng đọc (cảnh ${noAudio.map(s => s.order + 1).join(", ")}). Hãy tạo giọng đọc trước.`,
+        });
     }
     if (input.type === "regenerate_scene") {
       input.payload = regenerationRequestSchema.parse(input.payload);

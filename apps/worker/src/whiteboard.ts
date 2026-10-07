@@ -96,11 +96,14 @@ export async function renderWhiteboardVideo(
 ): Promise<void> {
   const { config, db, download, upload, updateProject, updateScene, setProgress, checkDeadline } = deps;
 
-  const readyScenes = project.scenes.filter(
-    (s) => s.imagePath && s.audioPath && s.actualDurationMs,
-  );
+  const readyScenes = project.scenes.filter((s) => s.imagePath);
   if (!readyScenes.length)
-    throw new Error("Chưa có cảnh nào có đủ ảnh và giọng đọc để render video vẽ tay");
+    throw new Error("Chưa có cảnh nào có ảnh để render video vẽ tay. Hãy tạo ảnh cho ít nhất một cảnh trước.");
+  const scenesWithoutAudio = readyScenes.filter((s) => !s.audioPath);
+  if (scenesWithoutAudio.length)
+    throw new Error(
+      `${scenesWithoutAudio.length} cảnh chưa có giọng đọc (cảnh ${scenesWithoutAudio.map((s) => s.order + 1).join(", ")}). Hãy tạo giọng đọc trước.`,
+    );
 
   await updateProject(project.id, { status: "rendering" });
   await setProgress(jobId, 2, "Đang chuẩn bị render video vẽ tay");
@@ -135,7 +138,7 @@ export async function renderWhiteboardVideo(
       }
 
       // Annotation
-      const totalMs = scene.actualDurationMs!;
+      const totalMs = scene.actualDurationMs ?? scene.estimatedDurationMs;
       const annotation =
         (scene.annotationJson as object | null) ??
         generateAutoAnnotation(scene.id, imgW, imgH, totalMs, project.settings.aspectRatio);

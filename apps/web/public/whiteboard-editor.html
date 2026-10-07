@@ -197,7 +197,7 @@ fi.addEventListener('change', async () => {
   await loadPairs(Object.keys(files), n => files[n], () => null);
 });
 function baseName(n) { const ext = IMG_EXT.find(e => n.toLowerCase().endsWith(e)); return ext ? n.slice(0, -ext.length) : null; }
-const pairedImageNames = names => names.filter(n => { const base = baseName(n); return base !== null && names.includes(base + '.annotation.json'); }).sort();
+const pairedImageNames = names => names.filter(n => baseName(n) !== null).sort();
 
 async function loadPairs(names, getFile, getHandle) {
   const imgNames = pairedImageNames(names);
