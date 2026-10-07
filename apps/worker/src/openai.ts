@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { Scene } from "@studio/shared";
 import {
   buildStoryboardInstruction,
+  lockedVisualStoryboardJsonSchema,
+  parseLockedVisualStoryboard,
   parseStoryboard,
   storyboardJsonSchema,
   type AIProvider,
@@ -42,13 +44,23 @@ export class OpenAIAdapter implements AIProvider {
         body: JSON.stringify({
           model: this.models.text,
           instructions: buildStoryboardInstruction(input),
-          input: `Tên video: ${input.title}\nNội dung:\n${input.sourceText}`,
+          input: input.lockedScenes
+            ? JSON.stringify({
+                title: input.title,
+                storyContext: input.sourceText,
+                sceneOffset: input.sceneOffset ?? 0,
+                totalScenes: input.totalScenes ?? input.lockedScenes.length,
+                lockedScenes: input.lockedScenes,
+              })
+            : `Tên video: ${input.title}\nNội dung:\n${input.sourceText}`,
           text: {
             format: {
               type: "json_schema",
               name: "storyboard",
               strict: true,
-              schema: storyboardJsonSchema,
+              schema: input.lockedScenes
+                ? lockedVisualStoryboardJsonSchema(input.lockedScenes.length)
+                : storyboardJsonSchema,
             },
           },
         }),
@@ -64,7 +76,9 @@ export class OpenAIAdapter implements AIProvider {
         ?.flatMap((o) => o.content ?? [])
         .find((c) => c.type === "output_text")?.text;
     if (!text) throw new Error("OpenAI không trả về storyboard");
-    return parseStoryboard(text);
+    return input.lockedScenes
+      ? parseLockedVisualStoryboard(input, text)
+      : parseStoryboard(text);
   }
 
   async createImage(prompt: string, aspectRatio: string): Promise<Uint8Array> {

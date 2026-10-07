@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   cleanScriptForNarration,
   alignKnownText,
+  buildProductionImagePrompt,
   buildStoryboardInstruction,
   createFaithfulStoryboard,
+  lockedVisualStoryboardJsonSchema,
   parseStoryboard,
+  parseLockedVisualStoryboard,
   splitScript,
+  validateCreativeStoryboard,
   visualActionPrompt,
   type StoryboardInput,
   type StoryboardResult,
@@ -77,6 +81,91 @@ describe("storyboard provider contract", () => {
       }),
     );
     expect(result.scenes).toHaveLength(2);
+  });
+});
+
+describe("creative storyboard quality gate", () => {
+  const ideaInput: StoryboardInput = {
+    ...input,
+    sourceText: "Xác minh tin nhắn chuyển tiền giả mạo trước khi hành động.",
+    inputMode: "idea",
+  };
+  const coherent: StoryboardResult = {
+    hook: "Tin nhắn càng giục, bạn càng phải xác minh.",
+    narration: "Tin nhắn càng giục, bạn càng phải xác minh. Huy nhận yêu cầu chuyển tiền giả mạo từ tài khoản mang tên người quen và dừng lại trước khi hành động. Anh gọi số điện thoại đã lưu, phát hiện người bạn không hề nhờ chuyển tiền, rồi xóa tin nhắn và báo cáo tài khoản đáng ngờ.",
+    scenes: [
+      { narration: "Tin nhắn càng giục, bạn càng phải xác minh.", imagePrompt: "A man pauses before a phone", estimatedDurationMs: 5_000 },
+      { narration: "Huy nhận yêu cầu chuyển tiền giả mạo từ tài khoản mang tên người quen và dừng lại trước khi hành động.", imagePrompt: "A man checks a suspicious request", estimatedDurationMs: 9_000 },
+      { narration: "Anh gọi số điện thoại đã lưu, phát hiện người bạn không hề nhờ chuyển tiền, rồi xóa tin nhắn và báo cáo tài khoản đáng ngờ.", imagePrompt: "A man verifies the request by phone", estimatedDurationMs: 10_000 },
+    ],
+    suggestedTitle: "Chậm lại để xác minh",
+    suggestedDescription: "Một tình huống giả mạo cần được xác minh trước khi chuyển tiền.",
+  };
+
+  it("accepts a hook that is spoken and scenes that cover the supplied idea", () => {
+    expect(validateCreativeStoryboard(ideaInput, coherent)).toBe(coherent);
+  });
+
+  it("rejects a polished storyboard that omits the user's subject", () => {
+    const unrelated = {
+      ...coherent,
+      narration: "Một người đi dạo giữa khu vườn vào buổi sáng. Anh ngắm những bông hoa và uống một tách trà dưới hiên nhà. Cuối cùng anh trở về nhà trong ánh nắng dịu nhẹ và khép lại một ngày bình yên.",
+      scenes: coherent.scenes.map((scene, index) => ({ ...scene, narration: [
+        "Một người đi dạo giữa khu vườn vào buổi sáng.",
+        "Anh ngắm những bông hoa và uống một tách trà dưới hiên nhà.",
+        "Cuối cùng anh trở về nhà trong ánh nắng dịu nhẹ và khép lại một ngày bình yên.",
+      ][index]! })),
+      hook: "Một buổi sáng bình yên bắt đầu từ khu vườn.",
+    };
+    expect(() => validateCreativeStoryboard(ideaInput, unrelated)).toThrow(/không bao quát đủ chủ đề/);
+  });
+
+  it("rejects a hook that is metadata only and never spoken in scene one", () => {
+    expect(() => validateCreativeStoryboard(ideaInput, {
+      ...coherent,
+      hook: "Một sai lầm có thể làm bạn mất toàn bộ tiền.",
+    })).toThrow(/Hook chưa xuất hiện/);
+  });
+
+  it("rejects narration text that is absent from the spoken scenes", () => {
+    expect(() => validateCreativeStoryboard(ideaInput, {
+      ...coherent,
+      narration: coherent.narration + " Phần kết luận quan trọng này không có trong bất kỳ cảnh nào.",
+    })).toThrow(/không bao quát phần narration/);
+  });
+});
+
+describe("locked visual storyboard contract", () => {
+  it("uses the complete story position and strict scene-only schema", () => {
+    const locked = { ...input, lockedScenes: ["Cảnh bảy.", "Cảnh tám."], sceneOffset: 6, totalScenes: 10 };
+    const instruction = buildStoryboardInstruction(locked);
+    expect(instruction).toContain("scenes 7-8 of 10");
+    expect(instruction).toContain("complete story context");
+    expect(lockedVisualStoryboardJsonSchema(2).properties.scenes.minItems).toBe(2);
+  });
+
+  it("rebuilds trusted narration from locked scenes without model-authored metadata", () => {
+    const locked = { ...input, lockedScenes: ["Cảnh một.", "Cảnh hai."] };
+    const result = parseLockedVisualStoryboard(locked, JSON.stringify({
+      scenes: [
+        { imagePrompt: "A Vietnamese woman checks a phone beside a window" },
+        { imagePrompt: "The same woman calls a trusted number in daylight" },
+      ],
+    }));
+    expect(result.scenes.map((scene) => scene.narration)).toEqual(locked.lockedScenes);
+    expect(result.narration).toBe(locked.sourceText);
+  });
+});
+
+describe("diffusion prompt quality", () => {
+  it("keeps the production prompt English-only and free of raw Vietnamese narration", () => {
+    const prompt = buildProductionImagePrompt(
+      "A Vietnamese woman verifies a suspicious transfer request on her phone",
+      "cinematic natural illustration, realistic lighting",
+    );
+    expect(prompt).toContain("concrete story beat");
+    expect(prompt).not.toContain("Không chữ");
+    expect(prompt).not.toContain("lời đọc");
   });
 });
 
@@ -230,8 +319,15 @@ describe("locked full-script storyboard", () => {
 
   it("delegates rewriting only when the user explicitly enables it", async () => {
     const rewritten: StoryboardResult = {
-      ...generatedStoryboard({ ...input, lockedScenes: ["Nội dung đã được biên tập."] }),
-      narration: "Nội dung đã được biên tập.",
+      hook: "Nội dung tiếng Việt mở ra điều đáng suy nghĩ.",
+      narration: "Nội dung tiếng Việt mở ra điều đáng suy nghĩ. Một người nhìn lại câu chuyện đủ dài, xác định vấn đề cần thay đổi và bắt đầu bằng hành động nhỏ. Sau nhiều thử nghiệm, người ấy hiểu bài học cốt lõi, chia sẻ kết quả rõ ràng và khép lại bằng một lựa chọn thiết thực cho ngày hôm nay.",
+      scenes: [
+        { narration: "Nội dung tiếng Việt mở ra điều đáng suy nghĩ.", imagePrompt: "A person pauses beside a window", estimatedDurationMs: 4_000 },
+        { narration: "Một người nhìn lại câu chuyện đủ dài, xác định vấn đề cần thay đổi và bắt đầu bằng hành động nhỏ.", imagePrompt: "A person writes a practical plan", estimatedDurationMs: 9_000 },
+        { narration: "Sau nhiều thử nghiệm, người ấy hiểu bài học cốt lõi, chia sẻ kết quả rõ ràng và khép lại bằng một lựa chọn thiết thực cho ngày hôm nay.", imagePrompt: "A person completes a meaningful task", estimatedDurationMs: 10_000 },
+      ],
+      suggestedTitle: "Một câu chuyện ngắn",
+      suggestedDescription: "Nội dung tiếng Việt được biên tập thành một câu chuyện hoàn chỉnh.",
     };
     const provider = { createStoryboard: vi.fn(async () => rewritten) };
     const result = await createFaithfulStoryboard(provider, { ...input, rewrite: true });

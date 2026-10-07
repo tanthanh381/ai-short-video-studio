@@ -12,7 +12,7 @@ import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
-import { alignKnownText, cleanScriptForNarration, createFaithfulStoryboard, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
+import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
@@ -381,7 +381,10 @@ async function generateMedia(job: JobRow, project: Project) {
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
         const image = await media.createImage(
-          `${scene.imagePrompt}. The described action and physical objects must be the main subject of the frame. Do not replace the scene with a generic portrait or unrelated person. Do not use a face close-up unless the narration explicitly asks for one. ${visualPresetPrompt(project.settings.visualPreset)}. Không chữ, không logo, không watermark.`,
+          buildProductionImagePrompt(
+            scene.imagePrompt,
+            visualPresetPrompt(project.settings.visualPreset),
+          ),
           project.settings.aspectRatio,
           {
             ...project.settings.localModels,

@@ -114,6 +114,8 @@ describe("Ollama locked visual-prompt response", () => {
     expect(JSON.parse(payload.prompt)).toEqual({
       title: lockedInput.title,
       storyContext: lockedInput.sourceText,
+      sceneOffset: 0,
+      totalScenes: lockedInput.lockedScenes!.length,
       lockedScenes: lockedInput.lockedScenes,
     });
   });

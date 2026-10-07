@@ -80,7 +80,7 @@ Rollout self-host đã đạt điều kiện kỹ thuật tối thiểu. Tuy nhi
 | P1 | Chưa chứng minh chất lượng video | Tạo đủ 10 MP4 thật, chấm 10 tiêu chí, đạt trung bình ≥80 và hook ≥8 |
 | P1 | Chưa nghe/đánh giá TTS thực | Kiểm tra tiếng Việt, English, mixed, pause, emotion và fallback consistency |
 | P1 | Chưa chứng minh retry/resume/provider failure | Worker crash/timeout/storage failure và retry giữ được scene thành công |
-| P1 | Quality gate semantic chưa có | Tách lỗi hook/visual/voice/subtitle và regenerate đúng component |
+| P1 | Quality gate semantic còn thiếu một phần | Gate storyboard về coverage/hook/narration đã được bổ sung trong checkout audit; cần rollout và tiếp tục tách lỗi visual/voice/subtitle để regenerate đúng component |
 | P1 | Leaked Password Protection đang tắt | Bật trong Supabase Auth và kiểm tra lại security advisor |
 
 ## Điều kiện cần từ máy Mini
@@ -145,3 +145,11 @@ HTTP 401 tại `/v1/projects/72088676-6239-49db-8df8-6dbc784b0a4a/jobs` cho th�
 | Live Pages/Funnel trong executor audit | BLOCKED — DNS/network không truy cập được; không thay thế bằng bằng chứng cũ |
 
 Các kết quả trên chỉ cập nhật trạng thái xác minh của executor audit. Chúng không thay thế việc chạy E2E có xác thực và benchmark trên Mini self-host.
+
+## Cải tiến chất lượng nội dung ngày 07/10/2026
+
+Checkout audit đã bổ sung gate trước bước tạo media để chặn storyboard bỏ sót chủ đề, hook không được đọc ở scene đầu, narration không nằm trong các scene và mật độ lời đọc không phù hợp thời lượng. Prompt visual theo batch giờ nhận vị trí trong toàn bộ câu chuyện và prompt diffusion được chuẩn hóa tiếng Anh để giảm ảnh chung chung.
+
+Các kiểm tra trong worker image đã đạt: typecheck 4/4 workspace, 204/204 test TypeScript, production build và FFmpeg smoke H.264/AAC 1080×1920 với phụ đề ASS UTF-8. Python local-tools đạt 19/19 test. Project chưa có script lint.
+
+Thay đổi này chưa có trên Mini và chưa được dùng để tạo lại benchmark. Vì vậy trạng thái sản phẩm vẫn là PARTIALLY READY cho tới khi rollout, chạy 10 video mới và chấm nội dung bằng playback đầy đủ.

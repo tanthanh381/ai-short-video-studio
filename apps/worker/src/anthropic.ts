@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   buildStoryboardInstruction,
+  lockedVisualStoryboardJsonSchema,
+  parseLockedVisualStoryboard,
   parseStoryboard,
   storyboardJsonSchema,
   type StoryboardInput,
@@ -27,19 +29,31 @@ export class AnthropicStoryboardAdapter implements StoryboardProvider {
         messages: [
           {
             role: "user",
-            content: `Tên video: ${input.title}\nNội dung:\n${input.sourceText}`,
+            content: input.lockedScenes
+              ? JSON.stringify({
+                  title: input.title,
+                  storyContext: input.sourceText,
+                  sceneOffset: input.sceneOffset ?? 0,
+                  totalScenes: input.totalScenes ?? input.lockedScenes.length,
+                  lockedScenes: input.lockedScenes,
+                })
+              : `Tên video: ${input.title}\nNội dung:\n${input.sourceText}`,
           },
         ],
         output_config: {
           format: {
             type: "json_schema",
-            schema: storyboardJsonSchema,
+            schema: input.lockedScenes
+              ? lockedVisualStoryboardJsonSchema(input.lockedScenes.length)
+              : storyboardJsonSchema,
           },
         },
       });
       const text = message.content.find((block) => block.type === "text")?.text;
       if (!text) throw new Error("Claude không trả về storyboard");
-      return parseStoryboard(text);
+      return input.lockedScenes
+        ? parseLockedVisualStoryboard(input, text)
+        : parseStoryboard(text);
     } catch (error) {
       if (error instanceof Anthropic.APIError) {
         throw new Error(
