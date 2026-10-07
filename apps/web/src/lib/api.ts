@@ -219,6 +219,10 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(annotation),
     }),
+  clearSceneAnnotation: (projectId: string, sceneId: string) =>
+    request<{ ok: boolean }>(`/v1/projects/${projectId}/scenes/${sceneId}/annotation`, {
+      method: "DELETE",
+    }),
   estimate: (id: string) => request<Estimate>(`/v1/projects/${id}/estimate`),
   retryJob: (id: string) =>
     request<Job>(`/v1/jobs/${id}/retry`, { method: "POST" }),

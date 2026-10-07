@@ -131,6 +131,7 @@ export const projectSettingsSchema = z.object({
   logoScale: z.number().min(0.05).max(0.35).default(0.14),
   logoOpacity: z.number().min(0.1).max(1).default(0.9),
   rewriteFullScript: z.boolean().default(false),
+  trimSilence: z.boolean().default(false),
   subtitle: subtitleStyleSchema.default({
     enabled: true,
     preset: "classic",
@@ -147,7 +148,7 @@ export const projectSchema = z.object({
   userId: z.string().uuid(),
   title: z.string().min(1).max(160),
   sourceText: z.string().min(1).max(30000),
-  inputMode: z.enum(["idea", "full-script"]).default("idea"),
+  inputMode: z.enum(["idea", "full-script", "srt"]).default("idea"),
   hook: z.string().max(500).default(""),
   suggestedTitle: z.string().max(200).default(""),
   suggestedDescription: z.string().max(2000).default(""),
@@ -163,17 +164,15 @@ export const createProjectSchema = z.object({
   sourceText: z
     .string()
     .trim()
-    .min(10, "Ý tưởng hoặc kịch bản cần ít nhất 10 ký tự")
+    .min(1, "Nội dung không được để trống")
     .max(30000),
-  inputMode: z.enum(["idea", "full-script"]).default("idea"),
+  inputMode: z.enum(["idea", "full-script", "srt"]).default("idea"),
   settings: projectSettingsSchema,
 });
 
 export const createVideoSchema = z.object({
-  sourceText: z.string().min(10).max(30000).refine((text) => text.trim().length >= 10, {
-    message: "Kịch bản cần ít nhất 10 ký tự",
-  }),
-  inputMode: z.enum(["idea", "full-script"]).default("full-script"),
+  sourceText: z.string().min(1).max(30000),
+  inputMode: z.enum(["idea", "full-script", "srt"]).default("full-script"),
   settings: projectSettingsSchema.partial().default({}),
 });
 

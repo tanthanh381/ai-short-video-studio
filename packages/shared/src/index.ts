@@ -2,6 +2,7 @@ export * from "./schemas";
 export * from "./voices";
 export * from "./script";
 export * from "./regeneration";
+export * from "./srt";
 
 import type { VisualPreset } from "./schemas";
 
@@ -38,6 +39,7 @@ export const DEFAULT_PROJECT_SETTINGS = {
   logoScale: 0.14,
   logoOpacity: 0.9,
   rewriteFullScript: false,
+  trimSilence: false,
   subtitle: {
     enabled: true,
     preset: "classic" as const,

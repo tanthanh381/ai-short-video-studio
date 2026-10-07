@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
-import { projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
+import { parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
 import { getConfig } from "./config";
 import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
@@ -183,6 +183,29 @@ async function progress(job: JobRow, value: number, stage: string) {
 }
 
 const exec = promisify(execFile);
+async function trimAudioSilence(audio: Uint8Array): Promise<Uint8Array> {
+  const dir = await mkdtemp(join(tmpdir(), "studio-trim-"));
+  try {
+    const inPath = join(dir, "in.mp3");
+    const outPath = join(dir, "out.mp3");
+    await writeFile(inPath, audio);
+    await exec(
+      config.FFMPEG_PATH,
+      [
+        "-y", "-i", inPath,
+        "-af", "silenceremove=start_periods=1:start_threshold=-50dB:start_duration=0.05:stop_periods=1:stop_threshold=-50dB:stop_duration=0.3",
+        "-c:a", "libmp3lame", "-q:a", "2",
+        outPath,
+      ],
+      { timeout: 30_000 },
+    );
+    return new Uint8Array(await readFile(outPath));
+  } catch {
+    return audio;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
 async function probeAudioDuration(audio: Uint8Array) {
   const directory = await mkdtemp(join(tmpdir(), "studio-probe-"));
   try {
@@ -269,6 +292,29 @@ async function removePrefix(prefix: string) {
 }
 
 async function storyboard(job: JobRow, project: Project) {
+  if (project.inputMode === "srt") {
+    const entries = parseSrt(project.sourceText);
+    if (!entries.length)
+      throw new Error("File SRT không có nội dung hợp lệ. Hãy kiểm tra định dạng file.");
+    await setProgress(job.id, 10, "Đang tạo cảnh từ file SRT");
+    const rows = entries.map((e, i) => ({
+      project_id: project.id,
+      scene_order: i,
+      narration: e.text,
+      image_prompt: e.text,
+      estimated_duration_ms: e.endMs - e.startMs,
+      media_status: "pending",
+      subtitles: [{ id: crypto.randomUUID(), startMs: 0, endMs: e.endMs - e.startMs, text: e.text }],
+    }));
+    const { error: saveError } = await db.rpc("replace_storyboard", {
+      p_project_id: project.id, p_user_id: project.userId, p_scenes: rows,
+      p_hook: "", p_suggested_title: project.title,
+      p_suggested_description: "",
+      p_status: job.job_type === "create_video" ? "queued" : "draft",
+    });
+    if (saveError) throw saveError;
+    return;
+  }
   const providerName = project.settings.textProvider;
   const provider: StoryboardProvider | null =
     providerName === "openai"
@@ -432,6 +478,10 @@ async function generateMedia(job: JobRow, project: Project) {
           : null;
         audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice, project.settings.localModels);
         subtitles = aligned?.cues ?? [];
+        if (project.settings.trimSilence) {
+          audio = await trimAudioSilence(audio);
+          subtitles = [];
+        }
         actualDurationMs = aligned?.durationMs ?? await probeAudioDuration(audio);
         const extension = aligned?.contentType === "audio/wav" ? "wav" : "mp3";
         audioPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.${extension}`;

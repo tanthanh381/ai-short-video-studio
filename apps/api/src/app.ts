@@ -1080,6 +1080,20 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.json({ ok: true });
   });
 
+  app.delete("/v1/projects/:id/scenes/:sceneId/annotation", async (req, res) => {
+    const project = await loadProject(req.params.id, req.userId!);
+    if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
+    if (!project.scenes.some((s) => s.id === req.params.sceneId))
+      return res.status(404).json({ error: "Không tìm thấy cảnh" });
+    const { error } = await db
+      .from("scenes")
+      .update({ annotation_json: null })
+      .eq("id", req.params.sceneId)
+      .eq("project_id", req.params.id);
+    if (error) throw error;
+    res.json({ ok: true });
+  });
+
   app.use(
     (error: unknown, req: Request, res: Response, _next: NextFunction) => {
       if (error instanceof ZodError) {

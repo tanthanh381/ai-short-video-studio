@@ -10,6 +10,7 @@ import {
   Clock3,
   Copy,
   Download,
+  FileText,
   Film,
   FolderOpen,
   Gauge,
@@ -1139,6 +1140,7 @@ function NewProjectPage() {
   const [error, setError] = useState<string | null>(null);
   const [sourceText, setSourceText] = useState("");
   const [inputMode, setInputMode] = useState<Project["inputMode"]>("idea");
+  const [srtFile, setSrtFile] = useState<File | null>(null);
   const [settings, setSettings] = useState<ProjectSettings>(
     { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET },
   );
@@ -1146,6 +1148,10 @@ function NewProjectPage() {
   const localModels = useLocalModels(isDemo || !advanced);
   const submitting = useRef(false);
   const wordCount = sourceText.trim() ? sourceText.trim().split(/\s+/u).length : 0;
+  async function getSrtText(): Promise<string> {
+    if (!srtFile) throw new Error("Hãy chọn file .srt trước khi tiếp tục.");
+    return srtFile.text();
+  }
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (submitting.current) return;
@@ -1153,7 +1159,8 @@ function NewProjectPage() {
     setBusy(true);
     setError(null);
     try {
-      const project = await api.createVideo({ sourceText, inputMode, settings });
+      const text = inputMode === "srt" ? await getSrtText() : sourceText;
+      const project = await api.createVideo({ sourceText: text, inputMode, settings });
       navigate(`/studio/${project.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chưa thể bắt đầu tạo video. Hãy thử lại.");
@@ -1163,14 +1170,19 @@ function NewProjectPage() {
     }
   }
   async function saveDraft() {
-    if (submitting.current || sourceText.trim().length < 10) return;
+    const minLen = inputMode === "srt" ? 0 : 10;
+    if (submitting.current || (inputMode !== "srt" && sourceText.trim().length < minLen)) return;
     submitting.current = true;
     setBusy(true);
     setError(null);
     try {
+      const text = inputMode === "srt" ? await getSrtText() : sourceText;
+      const title = inputMode === "srt"
+        ? (srtFile?.name.replace(/\.srt$/i, "") ?? "Video từ SRT")
+        : text.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới";
       const project = await api.createProject({
-        title: sourceText.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới",
-        sourceText,
+        title,
+        sourceText: text,
         inputMode,
         settings,
       });
@@ -1196,34 +1208,71 @@ function NewProjectPage() {
       <form className="creation-form" onSubmit={submit}>
         <section>
           <Field
-            label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : "Kịch bản hoàn chỉnh"}
+            label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : inputMode === "srt" ? "File phụ đề .srt" : "Kịch bản hoàn chỉnh"}
             hint={inputMode === "idea"
               ? "AI sẽ phát triển ý tưởng thành hook, mạch chuyện, cảnh và lời đọc."
+              : inputMode === "srt"
+              ? "Mỗi dòng phụ đề thành một cảnh. Thời lượng cảnh theo timecode trong file."
               : "Giữ nguyên câu chữ và dấu tiếng Việt. Thời lượng video theo giọng đọc thực tế."}
           >
             <div className="form-grid">
               <Field label="Cách xử lý nội dung">
-                <select value={inputMode} onChange={(e) => setInputMode(e.target.value as Project["inputMode"])} disabled={busy}>
+                <select value={inputMode} onChange={(e) => { setInputMode(e.target.value as Project["inputMode"]); setSrtFile(null); }} disabled={busy}>
                   <option value="idea">Ý tưởng — AI phát triển thành kịch bản</option>
                   <option value="full-script">Kịch bản — giữ nguyên lời anh nhập</option>
+                  <option value="srt">File phụ đề .srt — chia cảnh theo timecode</option>
                 </select>
               </Field>
             </div>
-            <textarea
-              aria-label="Nội dung kịch bản"
-              value={sourceText}
-              onChange={(e) => setSourceText(e.target.value)}
-              required
-              minLength={10}
-              maxLength={30000}
-              rows={10}
-              disabled={busy}
-              placeholder={inputMode === "idea" ? "Ví dụ: Một video 30 giây giải thích vì sao cần xác minh tin nhắn chuyển tiền…" : "Dán toàn bộ lời đọc cho video vào đây…"}
-            />
-            <div className="script-meta" aria-live="polite">
-              <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>
-              <span>{wordCount.toLocaleString("vi-VN")} từ</span>
-            </div>
+            {inputMode === "srt" ? (
+              <div className="srt-upload-area">
+                <input
+                  type="file"
+                  id="srt-file-input"
+                  accept=".srt,text/plain"
+                  disabled={busy}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    setSrtFile(file);
+                  }}
+                  style={{ display: "none" }}
+                />
+                <label htmlFor="srt-file-input" className="srt-upload-label">
+                  {srtFile ? (
+                    <span className="srt-file-chosen">
+                      <FileText size={16} /> {srtFile.name} ({(srtFile.size / 1024).toFixed(1)} KB)
+                    </span>
+                  ) : (
+                    <span className="srt-file-placeholder">
+                      <Upload size={16} /> Chọn file .srt…
+                    </span>
+                  )}
+                </label>
+                {srtFile && (
+                  <button type="button" className="srt-clear-btn" onClick={() => setSrtFile(null)} disabled={busy}>
+                    Xóa
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <textarea
+                  aria-label="Nội dung kịch bản"
+                  value={sourceText}
+                  onChange={(e) => setSourceText(e.target.value)}
+                  required
+                  minLength={10}
+                  maxLength={30000}
+                  rows={10}
+                  disabled={busy}
+                  placeholder={inputMode === "idea" ? "Ví dụ: Một video 30 giây giải thích vì sao cần xác minh tin nhắn chuyển tiền…" : "Dán toàn bộ lời đọc cho video vào đây…"}
+                />
+                <div className="script-meta" aria-live="polite">
+                  <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>
+                  <span>{wordCount.toLocaleString("vi-VN")} từ</span>
+                </div>
+              </>
+            )}
           </Field>
           <div className="creation-defaults">
             <span><Video size={15} /> Video dọc 1080 × 1920</span>
@@ -1262,6 +1311,16 @@ function NewProjectPage() {
                 }))}
               />
               <span>Chèn phụ đề vào video</span>
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.trimSilence}
+                onChange={(e) =>
+                  setSettings((s) => ({ ...s, trimSilence: e.target.checked }))
+                }
+              />
+              <span>Cắt khoảng lặng đầu/cuối giọng đọc (trim silence)</span>
             </label>
         </section>
         <section hidden={!advanced}>
@@ -1389,7 +1448,7 @@ function NewProjectPage() {
             </div>
         </section>
         <div className="form-actions">
-          <Button type="button" variant="ghost" disabled={busy || sourceText.trim().length < 10} onClick={() => void saveDraft()}>
+          <Button type="button" variant="ghost" disabled={busy || (inputMode !== "srt" && sourceText.trim().length < 10) || (inputMode === "srt" && !srtFile)} onClick={() => void saveDraft()}>
             <Save size={17} /> Lưu bản nháp
           </Button>
           <Button type="submit" busy={busy} disabled={isDemo}>
@@ -1412,6 +1471,8 @@ function SceneCard({
   onUpload,
   onRegenerate,
   onUploadAnnotation,
+  onDownloadImage,
+  onClearAnnotation,
 }: {
   scene: Scene;
   selected: boolean;
@@ -1422,6 +1483,8 @@ function SceneCard({
   onUpload(file: File, kind: "image" | "audio"): void;
   onRegenerate(component?: RegenerationComponent): void;
   onUploadAnnotation(file: File): void;
+  onDownloadImage?(): void;
+  onClearAnnotation?(): void;
 }) {
   return (
     <article
@@ -1489,8 +1552,11 @@ function SceneCard({
                 }}
               />
             </label>
-            <label className="icon-upload" title="Tải annotation JSON vẽ tay">
+            <label className="icon-upload" title={scene.annotationJson !== null ? "Đã có annotation vẽ tay — tải file mới để thay thế" : "Tải annotation JSON vẽ tay"} style={{ position: "relative" }}>
               <PenLine size={18} />
+              {scene.annotationJson !== null && (
+                <span className="annotation-badge" title="Đã có annotation">✓</span>
+              )}
               <input
                 type="file"
                 accept="application/json,.json"
@@ -1501,6 +1567,22 @@ function SceneCard({
                 }}
               />
             </label>
+            {scene.annotationJson !== null && onClearAnnotation && (
+              <button
+                title="Xóa annotation vẽ tay"
+                onClick={(e) => { e.stopPropagation(); onClearAnnotation(); }}
+              >
+                <X size={16} />
+              </button>
+            )}
+            {scene.imagePath && onDownloadImage && (
+              <button
+                title="Tải ảnh cảnh này về máy"
+                onClick={(e) => { e.stopPropagation(); onDownloadImage(); }}
+              >
+                <Download size={16} />
+              </button>
+            )}
             <button
               title="Tạo lại riêng cảnh này"
               onClick={(e) => {
@@ -1902,8 +1984,51 @@ function StudioPage() {
       const text = await file.text();
       const annotation = JSON.parse(text) as object;
       await api.updateSceneAnnotation(id, sceneId, annotation);
+      setProject((p) => {
+        if (!p) return p;
+        return {
+          ...p,
+          scenes: p.scenes.map((s) =>
+            s.id === sceneId ? { ...s, annotationJson: annotation } : s,
+          ),
+        };
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tải annotation JSON");
+    }
+  }
+  async function clearSceneAnnotation(sceneId: string) {
+    if (!project) return;
+    setError(null);
+    try {
+      await api.clearSceneAnnotation(id, sceneId);
+      setProject((p) => {
+        if (!p) return p;
+        return {
+          ...p,
+          scenes: p.scenes.map((s) =>
+            s.id === sceneId ? { ...s, annotationJson: null } : s,
+          ),
+        };
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể xóa annotation");
+    }
+  }
+  async function downloadSceneImage(scene: Scene) {
+    if (!scene.imagePath) return;
+    setError(null);
+    try {
+      const { url } = await api.mediaUrl(id, scene.imagePath);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `scene-${scene.order + 1}.jpg`;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải ảnh");
     }
   }
   async function regenerate(sceneId: string, component: RegenerationComponent = "all") {
@@ -2258,6 +2383,8 @@ function StudioPage() {
                   onUpload={(file, kind) => void uploadScene(index, file, kind)}
                   onRegenerate={(component) => void regenerate(scene.id, component)}
                   onUploadAnnotation={(file) => void uploadSceneAnnotation(scene.id, file)}
+                  onClearAnnotation={() => void clearSceneAnnotation(scene.id)}
+                  onDownloadImage={() => void downloadSceneImage(scene)}
                 />
               ))}
             </div>
