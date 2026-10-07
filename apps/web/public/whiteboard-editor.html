@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Trình soạn thảo Video Vẽ Tay · Cảnh Giác Số</title>
+<title>Trình soạn thảo Vùng Vẽ Tay · AI Short Video Studio</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; font-family: -apple-system, "Segoe UI", sans-serif; background: #14161a; color: #e6e8ec; }
@@ -82,37 +82,36 @@
 <div class="body">
   <div class="stage-wrap">
     <div id="hint" class="hint">
-      <h3>Trình soạn thảo vùng vẽ tay</h3>
+      <h3>Chỉnh annotation vùng vẽ tay</h3>
+      <p style="color:#8b929c;font-size:13px;margin:0 0 20px">Công cụ này giúp bạn chia ảnh của mỗi cảnh thành nhiều <b style="color:#e6e8ec">vùng</b> và đặt thứ tự, hướng vẽ, thời gian cho từng vùng. Kết quả được lưu vào file JSON rồi tải lên Studio để render video vẽ tay.</p>
       <div class="step">
         <div class="step-num">1</div>
-        <div>Chuẩn bị các ảnh nét vẽ (nền kem <code>#F5EBD7</code>) và file <code>.annotation.json</code> tương ứng trong một thư mục.</div>
+        <div><b>Chuẩn bị ảnh cảnh:</b> Vào Studio → mở project → bấm chuột phải vào ảnh từng cảnh → lưu về máy. Gom tất cả vào một thư mục.</div>
       </div>
       <div class="step">
         <div class="step-num">2</div>
-        <div>Bấm <b>Mở thư mục…</b> và chọn thư mục chứa cặp <code>tên.png</code> + <code>tên.annotation.json</code>.</div>
+        <div><b>Mở thư mục ảnh:</b> Bấm <b>📁 Mở thư mục…</b> ở trên và chọn thư mục vừa tạo. Các cảnh sẽ xuất hiện trong danh sách chọn.</div>
       </div>
       <div class="step">
         <div class="step-num">3</div>
-        <div>Kéo khung để di chuyển vùng; kéo 4 góc/cạnh để đổi kích thước. Chỉnh thứ tự vẽ bằng cách kéo danh sách bên phải.</div>
+        <div><b>Vẽ vùng:</b> Bấm nút <b>＋ Thêm vùng</b> ở bảng bên phải, sau đó kéo khung màu cam trên ảnh để định vị. Kéo góc/cạnh để thay đổi kích thước.</div>
       </div>
       <div class="step">
         <div class="step-num">4</div>
-        <div>Sửa thời gian bắt đầu/kết thúc, hướng vẽ và phụ đề trong bảng bên phải.</div>
+        <div><b>Sắp xếp thứ tự:</b> Kéo thả các vùng trong danh sách bên phải để đặt thứ tự vẽ. Vùng nào vẽ trước thì xếp lên đầu. Chỉnh hướng vẽ và thời gian trong bảng phía dưới.</div>
       </div>
       <div class="step">
         <div class="step-num">5</div>
-        <div>Kéo thanh thời gian hoặc bấm ▶ để xem trước hiệu ứng vẽ từng vùng theo trình tự.</div>
+        <div><b>Xem trước:</b> Kéo thanh thời gian phía dưới hoặc bấm ▶ để xem trước thứ tự bút vẽ xuất hiện trên ảnh.</div>
       </div>
       <div class="step">
         <div class="step-num">6</div>
-        <div>Bấm <b>Lưu cảnh này</b> hoặc <b>Lưu tất cả</b> để ghi lại vào file <code>.annotation.json</code>.</div>
+        <div><b>Lưu và tải lên:</b> Bấm <b>Lưu tất cả</b> để tải file JSON về máy. Sau đó quay lại Studio → bấm nút bút ✏️ trên từng cảnh → chọn file JSON vừa lưu → bấm <b>Video vẽ tay</b> để render.</div>
       </div>
       <div class="workflow-info">
-        <b>Quy trình đầy đủ:</b> Sau khi chỉnh xong annotation, dùng lệnh Python để render video thực sự:<br>
-        <code>python render_stream_whiteboard.py ảnh.png ảnh.annotation.json ra.mp4 drawing-hand.png</code><br>
-        Xem thêm tại <a href="https://github.com/Cuongyd196/whiteboard-video" target="_blank">github.com/Cuongyd196/whiteboard-video</a>
+        💡 <b>Chưa có ảnh?</b> Tạo project trong Studio, thêm kịch bản và bấm <b>Tạo media</b> để Studio tự sinh ảnh cho từng cảnh. Sau đó quay lại đây để phân vùng.
       </div>
-      <span class="muted">Ghi chú: Tính năng lưu trực tiếp yêu cầu Chrome/Edge (File System Access API). Trình duyệt khác sẽ tự động tải file về, bạn cần thay thế thủ công.</span>
+      <span class="muted">Lưu ý: Tính năng lưu trực tiếp vào thư mục yêu cầu Chrome hoặc Edge. Trình duyệt khác sẽ tải file về, bạn chọn file đó khi upload vào Studio.</span>
     </div>
     <canvas id="canvas" hidden></canvas>
   </div>

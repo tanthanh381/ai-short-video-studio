@@ -2251,5 +2251,8 @@ a:focus-visible {
   .subtitle-color-row .check { margin: 0 0 14px; }
 }
 .whiteboard-page { display: flex; flex-direction: column; gap: 14px; height: calc(100vh - 80px); }
-.whiteboard-page .page-heading { flex-shrink: 0; }
+.whiteboard-page .page-heading { flex-shrink: 0; flex-direction: column; align-items: flex-start; gap: 10px; }
 .whiteboard-iframe { flex: 1; width: 100%; min-height: 520px; border: 1px solid var(--line); border-radius: 12px; background: #14161a; }
+.whiteboard-how { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; font-size: 13px; color: var(--ink-2); background: var(--white); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; }
+.whiteboard-how span:not(.whiteboard-how-arrow) { background: #edf4ff; color: #1155cc; border-radius: 5px; padding: 3px 9px; font-weight: 500; }
+.whiteboard-how-arrow { color: var(--line); font-size: 16px; }

@@ -3247,8 +3247,15 @@ function WhiteboardPage() {
     <div className="page whiteboard-page">
       <div className="page-heading">
         <div>
-          <h1>Annotation vẽ tay</h1>
-          <p>Mở thư mục ảnh nét vẽ, kéo khung vùng trên canvas và lưu file annotation JSON để render video whiteboard bằng script Python local.</p>
+          <h1>Video vẽ tay</h1>
+          <p>Chia ảnh của từng cảnh thành các vùng, đặt thứ tự &amp; thời gian vẽ, rồi tải file JSON lên Studio để render animation bàn tay vẽ.</p>
+        </div>
+        <div className="whiteboard-how" aria-label="Hướng dẫn nhanh">
+          <span>① Tạo media trong Studio</span>
+          <span className="whiteboard-how-arrow">→</span>
+          <span>② Phân vùng ảnh ở đây</span>
+          <span className="whiteboard-how-arrow">→</span>
+          <span>③ Upload JSON + bấm "Video vẽ tay"</span>
         </div>
       </div>
       <iframe
