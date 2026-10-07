@@ -44,6 +44,7 @@ describe("render helpers", () => {
           thumbnailUrl: null,
           mediaStatus: "ready",
           errorMessage: null,
+          annotationJson: null,
           subtitles: [
             {
               id: crypto.randomUUID(),
@@ -88,6 +89,7 @@ describe("render helpers", () => {
           thumbnailUrl: null,
           mediaStatus: "ready" as const,
           errorMessage: null,
+          annotationJson: null,
           subtitles: [
             {
               id: crypto.randomUUID(),
@@ -132,6 +134,7 @@ describe("render helpers", () => {
           thumbnailUrl: null,
           mediaStatus: "pending" as const,
           errorMessage: null,
+          annotationJson: null,
           subtitles: [],
         },
       ],

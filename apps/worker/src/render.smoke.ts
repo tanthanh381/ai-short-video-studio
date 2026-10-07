@@ -86,6 +86,7 @@ function scene(order: number, durationMs: number): Scene {
     thumbnailUrl: null,
     mediaStatus: "ready",
     errorMessage: null,
+    annotationJson: null,
     subtitles: [
       {
         id: crypto.randomUUID(),
