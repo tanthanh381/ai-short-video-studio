@@ -1774,6 +1774,7 @@ function StudioPage() {
       thumbnailUrl: null,
       mediaStatus: "pending",
       errorMessage: null,
+      annotationJson: null,
       subtitles: [],
     };
     change({ ...project, scenes: [...project.scenes, scene] });
@@ -1788,7 +1789,7 @@ function StudioPage() {
     setSelected(Math.max(0, index - 1));
   }
   async function runAction(
-    type: "storyboard" | "generate_media" | "render_video",
+    type: "storyboard" | "generate_media" | "render_video" | "render_whiteboard",
   ) {
     if (locked.current) return;
     if (isDemo) {

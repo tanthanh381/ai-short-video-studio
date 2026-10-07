@@ -25,6 +25,7 @@ function sampleProject(): Project {
       thumbnailUrl: null,
       mediaStatus: "pending",
       errorMessage: null,
+      annotationJson: null,
       subtitles: [],
     },
     {
@@ -42,6 +43,7 @@ function sampleProject(): Project {
       thumbnailUrl: null,
       mediaStatus: "pending",
       errorMessage: null,
+      annotationJson: null,
       subtitles: [],
     },
     {
@@ -58,6 +60,7 @@ function sampleProject(): Project {
       thumbnailUrl: null,
       mediaStatus: "pending",
       errorMessage: null,
+      annotationJson: null,
       subtitles: [],
     },
   ];
