@@ -44,6 +44,7 @@ const jobRequestSchema = z.object({
     "regenerate_scene",
     "render_video",
     "dub_video",
+    "render_whiteboard",
   ]),
   payload: z.record(z.string(), z.unknown()).default({}),
 });
@@ -752,13 +753,18 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (!project)
       return res.status(404).json({ error: "Không tìm thấy dự án" });
     if (
-      ["generate_media", "render_video"].includes(input.type) &&
+      ["generate_media", "render_video", "render_whiteboard"].includes(input.type) &&
       project.scenes.length === 0
     ) {
       return res.status(409).json({
         error:
           "Dự án chưa có cảnh. Hãy bấm Chia cảnh hoặc Thêm cảnh trước khi tiếp tục.",
       });
+    }
+    if (input.type === "render_whiteboard") {
+      const hasMedia = project.scenes.some(s => s.imagePath && s.audioPath);
+      if (!hasMedia)
+        return res.status(409).json({ error: "Cần tạo ảnh và giọng đọc trước khi render video vẽ tay." });
     }
     if (input.type === "regenerate_scene") {
       input.payload = regenerationRequestSchema.parse(input.payload);
@@ -1052,6 +1058,22 @@ export function createApp(config: AppConfig, db: AdminClient) {
       .createSignedUrl(item.storage_path, 300, { download: true });
     if (error) throw error;
     res.json({ url: data.signedUrl, expiresIn: 300 });
+  });
+
+  app.put("/v1/projects/:id/scenes/:sceneId/annotation", async (req, res) => {
+    const project = await loadProject(req.params.id, req.userId!);
+    if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
+    if (!project.scenes.some((s) => s.id === req.params.sceneId))
+      return res.status(404).json({ error: "Không tìm thấy cảnh" });
+    if (!req.body || typeof req.body !== "object" || !("elements" in req.body))
+      return res.status(400).json({ error: "Dữ liệu annotation không hợp lệ — cần có trường elements" });
+    const { error } = await db
+      .from("scenes")
+      .update({ annotation_json: req.body })
+      .eq("id", req.params.sceneId)
+      .eq("project_id", req.params.id);
+    if (error) throw error;
+    res.json({ ok: true });
   });
 
   app.use(

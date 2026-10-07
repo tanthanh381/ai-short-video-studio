@@ -29,6 +29,7 @@ start_if_down http://127.0.0.1:5002/health image "$LOCAL_AI_ROOT/venv/bin/python
 if ! curl -fsS http://127.0.0.1:8765/health >/dev/null 2>&1; then
   nohup /opt/homebrew/bin/python3.12 local-tools/media_server.py >tmp/local-services/media.log 2>&1 &
 fi
+start_if_down http://127.0.0.1:8766/health whiteboard /opt/homebrew/bin/python3.12 local-tools/whiteboard_server.py
 docker-compose --env-file .env.selfhost -f docker-compose.selfhost.yml up -d api worker
 tailscale funnel --bg --https=443 http://127.0.0.1:8787
 print 'Máy tạo video đã được khởi động. Giữ máy bật, không ngủ khi xử lý.'

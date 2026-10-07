@@ -16,6 +16,7 @@ import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, cr
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
+import { renderWhiteboardVideo } from "./whiteboard";
 
 const config = getConfig();
 const log = pino({
@@ -142,7 +143,8 @@ type JobRow = {
     | "generate_media"
     | "regenerate_scene"
     | "render_video"
-    | "dub_video";
+    | "dub_video"
+    | "render_whiteboard";
   payload: Record<string, unknown>;
   attempts: number;
   max_attempts: number;
@@ -662,6 +664,17 @@ async function run(job: JobRow) {
     await generateMedia(job, project);
   else if (job.job_type === "render_video") await render(job, project);
   else if (job.job_type === "dub_video") await renderDub(job, project);
+  else if (job.job_type === "render_whiteboard")
+    await renderWhiteboardVideo(job.id, project, {
+      config,
+      db,
+      download,
+      upload,
+      updateProject,
+      updateScene,
+      setProgress: (id, value, stage) => setProgress(id, value, stage),
+      checkDeadline: () => checkDeadline(job),
+    });
 }
 async function finish(job: JobRow, error?: unknown) {
   if (!error) {

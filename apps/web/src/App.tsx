@@ -1411,6 +1411,7 @@ function SceneCard({
   onMove,
   onUpload,
   onRegenerate,
+  onUploadAnnotation,
 }: {
   scene: Scene;
   selected: boolean;
@@ -1420,6 +1421,7 @@ function SceneCard({
   onMove(direction: -1 | 1): void;
   onUpload(file: File, kind: "image" | "audio"): void;
   onRegenerate(component?: RegenerationComponent): void;
+  onUploadAnnotation(file: File): void;
 }) {
   return (
     <article
@@ -1483,6 +1485,18 @@ function SceneCard({
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) onUpload(file, "audio");
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <label className="icon-upload" title="Tải annotation JSON vẽ tay">
+              <PenLine size={18} />
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onUploadAnnotation(file);
                   e.target.value = "";
                 }}
               />
@@ -1876,6 +1890,21 @@ function StudioPage() {
       setBusyAction(null);
     }
   }
+  async function uploadSceneAnnotation(sceneId: string, file: File) {
+    if (!project) return;
+    if (isDemo) {
+      setError("Chức năng này cần kết nối máy chủ. Chế độ mẫu không hỗ trợ.");
+      return;
+    }
+    setError(null);
+    try {
+      const text = await file.text();
+      const annotation = JSON.parse(text) as object;
+      await api.updateSceneAnnotation(id, sceneId, annotation);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải annotation JSON");
+    }
+  }
   async function regenerate(sceneId: string, component: RegenerationComponent = "all") {
     if (isDemo) {
       setError("Tạo lại cảnh cần kết nối OpenAI và worker thật.");
@@ -2099,6 +2128,14 @@ function StudioPage() {
           >
             <Video size={17} /> Xuất video
           </Button>
+          <Button
+            onClick={() => void runAction("render_whiteboard")}
+            busy={busyAction === "render_whiteboard"}
+            disabled={processing || Boolean(busyAction) || (!isDemo && (!project.scenes.length || !capabilities?.render))}
+            title={!project.scenes.length ? "Hãy tạo ít nhất một cảnh trước" : "Render video vẽ tay (whiteboard animation)"}
+          >
+            <PenLine size={17} /> Video vẽ tay
+          </Button>
             </div>
           </details>
         </div>
@@ -2219,6 +2256,7 @@ function StudioPage() {
                   onMove={(dir) => moveScene(index, dir)}
                   onUpload={(file, kind) => void uploadScene(index, file, kind)}
                   onRegenerate={(component) => void regenerate(scene.id, component)}
+                  onUploadAnnotation={(file) => void uploadSceneAnnotation(scene.id, file)}
                 />
               ))}
             </div>

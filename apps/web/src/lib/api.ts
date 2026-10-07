@@ -202,7 +202,7 @@ export const api = {
     }),
   queue: (
     id: string,
-    type: "storyboard" | "generate_media" | "render_video" | "dub_video",
+    type: "storyboard" | "generate_media" | "render_video" | "dub_video" | "render_whiteboard",
     payload: object = {},
   ) =>
     request<Job>(`/v1/projects/${id}/jobs`, {
@@ -213,6 +213,11 @@ export const api = {
     request<Job>(`/v1/projects/${id}/jobs`, {
       method: "POST",
       body: JSON.stringify({ type: "regenerate_scene", payload: { sceneId, component } }),
+    }),
+  updateSceneAnnotation: (projectId: string, sceneId: string, annotation: object) =>
+    request<{ ok: boolean }>(`/v1/projects/${projectId}/scenes/${sceneId}/annotation`, {
+      method: "PUT",
+      body: JSON.stringify(annotation),
     }),
   estimate: (id: string) => request<Estimate>(`/v1/projects/${id}/estimate`),
   retryJob: (id: string) =>

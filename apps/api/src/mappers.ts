@@ -32,6 +32,7 @@ export function mapScene(row: Row): Scene {
     subtitles: Array.isArray(row.subtitles)
       ? (row.subtitles as Scene["subtitles"])
       : [],
+    annotationJson: row.annotation_json ?? null,
   };
 }
 

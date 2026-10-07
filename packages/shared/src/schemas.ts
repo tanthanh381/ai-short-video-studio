@@ -82,6 +82,8 @@ export const sceneSchema = z.object({
     .default("pending"),
   errorMessage: z.string().nullable().default(null),
   subtitles: z.array(subtitleCueSchema).default([]),
+  /** Annotation JSON for whiteboard animation (regions, timing, draw order). */
+  annotationJson: z.unknown().nullable().default(null),
 });
 
 const localModelName = z
@@ -202,6 +204,7 @@ export const jobSchema = z.object({
     "regenerate_scene",
     "render_video",
     "dub_video",
+    "render_whiteboard",
   ]),
   status: z.enum(["queued", "running", "completed", "failed", "cancelled"]),
   progress: z.number().int().min(0).max(100),

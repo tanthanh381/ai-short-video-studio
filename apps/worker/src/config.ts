@@ -19,6 +19,7 @@ const schema = z.object({
   OLLAMA_NUM_CTX: z.coerce.number().int().min(2048).max(32768).default(8192),
   OLLAMA_KEEP_ALIVE: z.string().default("10m"),
   LOCAL_MEDIA_BASE_URL: z.string().url().default("http://host.docker.internal:8765"),
+  WHITEBOARD_SERVER_URL: z.string().url().default("http://host.docker.internal:8766"),
   OPENAI_TEXT_MODEL: z.string().default("gpt-5-mini"),
   OPENAI_IMAGE_MODEL: z.string().default("gpt-image-2.5-sunburst"),
   OPENAI_TTS_MODEL: z.string().default("gpt-4o-mini-tts"),
