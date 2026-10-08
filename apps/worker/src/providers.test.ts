@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   cleanScriptForNarration,
+  repairCreativeStoryboard,
   alignKnownText,
   buildProductionImagePrompt,
   buildStoryboardInstruction,
@@ -331,7 +332,7 @@ describe("locked full-script storyboard", () => {
     };
     const provider = { createStoryboard: vi.fn(async () => rewritten) };
     const result = await createFaithfulStoryboard(provider, { ...input, rewrite: true });
-    expect(result).toBe(rewritten);
+    expect(result).toEqual(rewritten); // already consistent: the repair step leaves it unchanged
     expect(provider.createStoryboard).toHaveBeenCalledWith({ ...input, rewrite: true });
   });
 });
@@ -493,5 +494,57 @@ describe("production labels are not spoken", () => {
     expect(cleaned.startsWith("Có những thứ… càng cố giữ")).toBe(true);
     expect(cleaned.endsWith("níu giữ.”")).toBe(true);
     expect(splitScript(cleaned).join("")).toBe(cleaned);
+  });
+});
+
+describe("idea mode becomes plain narration then faithful scenes", () => {
+  const ideaInput: StoryboardInput = { ...input, inputMode: "idea", rewrite: false, duration: 60 };
+  const script = Array.from({ length: 12 }, (_, i) => `Câu số ${i + 1} nói về việc buông bỏ để lòng nhẹ hơn mỗi ngày.`).join(" ");
+  const promptsFor = (value: StoryboardInput) => generatedStoryboard(value);
+
+  it("writes narration for a short idea, keeps it verbatim and only asks the model for image prompts", async () => {
+    const provider = {
+      writeScript: vi.fn(async () => script),
+      createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)),
+    };
+    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "Vì sao buông bỏ giúp lòng nhẹ hơn?" });
+    expect(provider.writeScript).toHaveBeenCalledTimes(1);
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(script);
+    // every storyboard call is a locked image-prompt batch, never a free-form rewrite
+    expect(provider.createStoryboard.mock.calls.every((call) => (call[0] as StoryboardInput).lockedScenes)).toBe(true);
+  });
+
+  it("treats substantial text as the author's script without calling the writer", async () => {
+    const provider = { writeScript: vi.fn(async () => "không dùng"), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
+    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: script });
+    expect(provider.writeScript).not.toHaveBeenCalled();
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(script);
+  });
+
+  it("retries a draft that is too short, then accepts an on-topic one", async () => {
+    const drafts = ["Quá ngắn.", script];
+    const provider = {
+      writeScript: vi.fn(async () => drafts.shift() ?? script),
+      createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)),
+    };
+    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "Vì sao buông bỏ giúp lòng nhẹ hơn?" });
+    expect(provider.writeScript).toHaveBeenCalledTimes(2);
+    expect(result.scenes.length).toBeGreaterThan(0);
+  });
+
+  it("fails clearly when the writer never produces usable narration", async () => {
+    const provider = { writeScript: vi.fn(async () => "Quá ngắn."), createStoryboard: vi.fn() };
+    await expect(createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "Vì sao buông bỏ giúp lòng nhẹ hơn?" })).rejects.toThrow();
+    expect(provider.writeScript).toHaveBeenCalledTimes(3);
+    expect(provider.createStoryboard).not.toHaveBeenCalled();
+  });
+
+  it("repairs a storyboard whose summary fields disagree with its scenes", () => {
+    const broken = { hook: "Một câu mở đầu hoàn toàn khác", narration: "Tóm tắt không khớp.", suggestedTitle: "t", suggestedDescription: "d",
+      scenes: [{ narration: "Cảnh một nói về mưa lớn trong thành phố.", imagePrompt: "p", estimatedDurationMs: 4000 },
+               { narration: "Cảnh hai nói về cống rãnh bị tắc.", imagePrompt: "p", estimatedDurationMs: 4000 }] };
+    const fixed = repairCreativeStoryboard(broken);
+    expect(fixed.narration).toBe("Cảnh một nói về mưa lớn trong thành phố. Cảnh hai nói về cống rãnh bị tắc.");
+    expect(fixed.hook).toBe("Cảnh một nói về mưa lớn trong thành phố.");
   });
 });

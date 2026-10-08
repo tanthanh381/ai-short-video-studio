@@ -50,6 +50,11 @@ export interface StoryboardProvider {
   createStoryboard(input: StoryboardInput): Promise<StoryboardResult>;
   /** One English description of the main character/setting, reused in every scene prompt for consistency. */
   describeCast?(input: { title: string; sourceText: string; model?: string | null }): Promise<string>;
+  /**
+   * Plain-text narration for a short idea. Free text is far easier for a small local model than a large
+   * JSON storyboard, and the result then goes through the same faithful scene-splitting path as a pasted script.
+   */
+  writeScript?(input: { title: string; sourceText: string; duration: number; audience: string; style: string; model?: string | null; attempt?: number }): Promise<string>;
 }
 
 /** Lựa chọn model local theo tác vụ; adapter không hỗ trợ sẽ bỏ qua. */
@@ -187,6 +192,31 @@ function overlapRatio(expected: string[], actual: Set<string>): number {
   return expected.filter((word) => actual.has(word)).length / expected.length;
 }
 
+/**
+ * Small local models often return a top-level `narration`/`hook` that disagrees with the scenes they
+ * wrote. The scenes are what gets spoken, so make the derived fields follow them instead of failing the
+ * whole video; real content problems (too few scenes, lost subject, wrong length) are still rejected.
+ */
+export function repairCreativeStoryboard(result: StoryboardResult): StoryboardResult {
+  const spoken = result.scenes.map((scene) => scene.narration.trim()).filter(Boolean).join(" ");
+  if (!spoken) return result;
+  const firstNarration = result.scenes[0]?.narration.trim() ?? "";
+  const hookWords = contentWords(result.hook).join(" ");
+  const hookSpoken = Boolean(hookWords) && contentWords(firstNarration).join(" ").includes(hookWords);
+  const firstSentence = firstNarration.split(/(?<=[.!?…])\s+/u)[0] ?? "";
+  return {
+    ...result,
+    narration: spoken.slice(0, 30_000),
+    hook: (hookSpoken ? result.hook : firstSentence || result.hook).slice(0, 500),
+  };
+}
+
+/** Share of the user's key terms that survive into the spoken scenes (0..1); 1 when the source has none. */
+export function subjectOverlap(sourceText: string, result: StoryboardResult): number {
+  const spoken = new Set(contentWords(result.scenes.map((scene) => scene.narration).join(" ")));
+  return overlapRatio(importantTerms(sourceText).slice(0, 24), spoken);
+}
+
 /** Reject polished-looking JSON that loses the user's subject, hook or spoken story. */
 export function validateCreativeStoryboard(input: StoryboardInput, result: StoryboardResult): StoryboardResult {
   const spoken = result.scenes.map((scene) => scene.narration.trim()).filter(Boolean).join(" ");
@@ -318,17 +348,53 @@ async function createLockedBatch(
   throw lastError;
 }
 
+/** At or above this many words an "idea" is treated as the author's own script. */
+const IDEA_AS_SCRIPT_WORDS = 40;
+
+/** Ask for narration up to three times; keep the best acceptable draft rather than failing the video. */
+async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardInput): Promise<string> {
+  const minimumWords = Math.round(input.duration * 1.2);
+  const maximumWords = Math.round(input.duration * 3.4);
+  const terms = importantTerms(input.sourceText);
+  let best = "";
+  let bestScore = -1;
+  let lastError: unknown = new Error("AI chưa viết được lời đọc từ ý tưởng; hãy thử lại");
+  for (let attempt = 0; attempt < BATCH_ATTEMPTS; attempt++) {
+    try {
+      const draft = cleanScriptForNarration(await provider.writeScript!({
+        title: input.title, sourceText: input.sourceText, duration: input.duration,
+        audience: input.audience, style: input.style, model: input.model ?? null, attempt,
+      }));
+      const words = contentWords(draft);
+      if (words.length < minimumWords || words.length > maximumWords) continue;
+      const overlap = terms.length >= 2 ? overlapRatio(terms, new Set(words)) : 1;
+      if (overlap > bestScore) { best = draft; bestScore = overlap; }
+      if (overlap >= 0.25 || terms.length < 2) break; // on topic: stop asking
+    } catch (error) { lastError = error; }
+  }
+  if (best && (bestScore >= 0.1 || terms.length < 2)) return best;
+  throw lastError;
+}
+
 export async function createFaithfulStoryboard(
   provider: StoryboardProvider,
   input: StoryboardInput,
 ): Promise<StoryboardResult> {
   if (input.inputMode !== "full-script") {
-    // An idea has no script to preserve. Require the generated scenes to carry
+    // Substantial text is already a script: keep the author's words and only split it into scenes.
+    if (contentWords(input.sourceText).length >= IDEA_AS_SCRIPT_WORDS)
+      return createFaithfulStoryboard(provider, { ...input, inputMode: "full-script", rewrite: false });
+    // A short idea: let the model write plain narration first, then split it like any pasted script.
+    if (provider.writeScript) {
+      const script = await writeIdeaScript(provider, input);
+      return createFaithfulStoryboard(provider, { ...input, inputMode: "full-script", rewrite: false, sourceText: script });
+    }
+    // Other providers write the whole storyboard themselves. Require the generated scenes to carry
     // the source subject, spoken hook and full narration before media spending.
     let lastError: unknown;
     for (let attempt = 0; attempt < BATCH_ATTEMPTS; attempt++) {
       try {
-        return validateCreativeStoryboard(input, await provider.createStoryboard({ ...input, attempt }));
+        return validateCreativeStoryboard(input, repairCreativeStoryboard(await provider.createStoryboard({ ...input, attempt })));
       }
       catch (error) { lastError = error; if (!isUnusableModelAnswer(error)) throw error; }
     }
@@ -337,7 +403,7 @@ export async function createFaithfulStoryboard(
   if (input.rewrite) {
     // A small local model often cannot rewrite a whole script in one JSON answer (runs on until truncated).
     // Try once; if the answer is unusable, keep the author's script verbatim rather than failing the video.
-    try { return validateCreativeStoryboard(input, await provider.createStoryboard(input)); }
+    try { return validateCreativeStoryboard(input, repairCreativeStoryboard(await provider.createStoryboard(input))); }
     catch (error) { if (!isUnusableModelAnswer(error)) throw error; }
   }
   const slices = splitScript(input.sourceText);
