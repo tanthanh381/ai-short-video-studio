@@ -66,6 +66,8 @@ class LocalSpeechCaptionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.media = load_media_server()
+        # The synthesis processes are mocked; tests must not depend on ffmpeg being installed (CI runners).
+        cls.media.find_binary = lambda name, env_var: f"/usr/bin/{name}"
         cls.media.TTS_ENGINES = ["piper"]  # deterministic: never reach for local network services in tests
         cls.media.TTS_CONCURRENCY = 1  # keep mocked subprocess ordering deterministic
 
