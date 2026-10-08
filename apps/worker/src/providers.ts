@@ -439,27 +439,31 @@ export async function createFaithfulStoryboard(
  * narration appended to the end of the prompt.
  */
 export function visualActionPrompt(narration: string, prompt: string) {
-  const text = narration.toLocaleLowerCase("vi");
+  // "ghi nhận/ghi điểm/ghi nhớ…" mean record/score/remember, not writing in a notebook.
+  const text = narration.toLocaleLowerCase("vi")
+    .replace(/ghi\s+(nhận|nhớ|điểm|tên|danh|âm|hình|lại|rõ|được|bàn)/gu, " ");
+  // Whole words only: "ăn" must not match inside "khăn", "chăn", "năng"; "ghi" not inside "ghim", etc.
+  const word = (source: string) => new RegExp(`(?<![\\p{L}])(?:${source})(?![\\p{L}])`, "u");
   if (/(không|chưa|đừng)\s+(viết|ghi|tưới|đọc|mở|uống|ăn)/u.test(text)) return prompt;
-  const hasWritingAction = /(^|[\s,.!?;:])(viết|ghi)(?=$|[\s,.!?;:])/u.test(text)
+  const hasWritingAction = word("viết|ghi").test(text)
     && !/(bài|chữ|nét)\s+viết/u.test(text);
   if (hasWritingAction && /(nhật ký|ghi chép|biết ơn)/u.test(text))
     return `pen visibly writing in an open paper notebook on a desk, over-the-shoulder medium shot, ${prompt}`.slice(0, 2000);
   if (hasWritingAction)
     return `visible hands holding a pen and writing on an open paper notebook on a desk, pen tip and written page in focus, ${prompt}`.slice(0, 2000);
   const anchors: Array<[RegExp, string]> = [
-    [/(tưới)(?=.*(cây|hoa|chậu))/u, "water visibly pouring from a small watering can onto a potted plant, droplets in the air"],
-    [/(đọc sách|đọc quyển sách|mở sách)/u, "an open book with visible pages held open as the main foreground object, person reading beside a warm lamp"],
-    [/(điện thoại|tin nhắn|gọi điện|smartphone)/u, "a smartphone held in the foreground with a visible message interface but no readable text, over-the-shoulder shot"],
-    [/(máy tính|laptop|bàn phím)/u, "an open laptop on a desk as the main foreground object, hands using the keyboard, screen without readable text"],
-    [/(nấu ăn|nấu|chiên|xào|bếp)/u, "a pot, pan and ingredients clearly visible on a kitchen counter, hands stirring the food"],
-    [/(uống|ly nước|cốc nước|cà phê)/u, "a glass or cup visibly held in the foreground while the person drinks, liquid and rim clearly visible"],
-    [/(ăn cơm|ăn|bữa sáng|bữa tối)/u, "a plate of food and a fork clearly visible in the foreground while the person eats at a table"],
-    [/(mở cửa|kéo cửa)/u, "a hand visibly turning the door handle and opening a door, doorway and room beyond clearly visible"],
-    [/(đóng cửa)/u, "a hand visibly pulling a door closed, door handle and doorway clearly visible"],
-    [/(trồng cây|gieo hạt|trồng hoa)/u, "hands placing a small seedling into visible soil in a pot, gardening tools beside it"],
-    [/(lau nhà|dọn dẹp|quét nhà)/u, "a cleaning cloth, broom or mop visibly touching the floor, the cleaned room clearly visible"],
-    [/(đi bộ|bước đi|chạy|đạp xe)/u, "a full-body person visibly moving along the described path, feet and surrounding environment in frame"],
+    [new RegExp(`(?<![\\p{L}])(?:tưới)(?![\\p{L}])(?=.*(?:cây|hoa|chậu))`, "u"), "water visibly pouring from a small watering can onto a potted plant, droplets in the air"],
+    [word("đọc sách|đọc quyển sách|mở sách"), "an open book with visible pages held open as the main foreground object, person reading beside a warm lamp"],
+    [word("điện thoại|tin nhắn|gọi điện|smartphone"), "a smartphone held in the foreground with a visible message interface but no readable text, over-the-shoulder shot"],
+    [word("máy tính|laptop|bàn phím"), "an open laptop on a desk as the main foreground object, hands using the keyboard, screen without readable text"],
+    [word("nấu ăn|nấu|chiên|xào|bếp"), "a pot, pan and ingredients clearly visible on a kitchen counter, hands stirring the food"],
+    [word("uống|ly nước|cốc nước|cà phê"), "a glass or cup visibly held in the foreground while the person drinks, liquid and rim clearly visible"],
+    [word("ăn cơm|ăn|bữa sáng|bữa tối"), "a plate of food and a fork clearly visible in the foreground while the person eats at a table"],
+    [word("mở cửa|kéo cửa"), "a hand visibly turning the door handle and opening a door, doorway and room beyond clearly visible"],
+    [word("đóng cửa"), "a hand visibly pulling a door closed, door handle and doorway clearly visible"],
+    [word("trồng cây|gieo hạt|trồng hoa"), "hands placing a small seedling into visible soil in a pot, gardening tools beside it"],
+    [word("lau nhà|dọn dẹp|quét nhà"), "a cleaning cloth, broom or mop visibly touching the floor, the cleaned room clearly visible"],
+    [word("đi bộ|bước đi|chạy|đạp xe"), "a full-body person visibly moving along the described path, feet and surrounding environment in frame"],
   ];
   const anchor = anchors.find(([pattern]) => pattern.test(text))?.[1];
   if (!anchor) return prompt;

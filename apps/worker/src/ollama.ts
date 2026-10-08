@@ -120,4 +120,16 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
     if (!body.response?.trim()) throw new Error("Ollama không viết được lời đọc từ ý tưởng; hãy thử lại");
     return body.response;
   }
+
+  /** Free the model's RAM as soon as the text work is done; the image and voice models need it next. */
+  async unload(model?: string | null): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
+        method: "POST",
+        signal: AbortSignal.timeout(10_000),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: model || this.model, keep_alive: 0 }),
+      });
+    } catch { /* best effort: keep-alive will release it anyway */ }
+  }
 }

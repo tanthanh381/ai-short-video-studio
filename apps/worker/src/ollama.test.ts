@@ -177,3 +177,17 @@ describe("Ollama locked visual-prompt response", () => {
     expect(models).toEqual(["llama3.2:3b", "qwen2.5:3b"]);
   });
 });
+
+describe("OllamaStoryboardAdapter.unload", () => {
+  it("asks Ollama to release the model immediately and never throws", async () => {
+    const mock = vi.fn(async () => new Response("{}"));
+    vi.stubGlobal("fetch", mock);
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen2.5:3b");
+    await adapter.unload(null);
+    await adapter.unload("llama3.2:3b");
+    const bodies = (mock.mock.calls as unknown as Array<[string, { body: string }]>).map((call) => JSON.parse(call[1].body));
+    expect(bodies).toEqual([{ model: "qwen2.5:3b", keep_alive: 0 }, { model: "llama3.2:3b", keep_alive: 0 }]);
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down"); }));
+    await expect(adapter.unload(null)).resolves.toBeUndefined();
+  });
+});

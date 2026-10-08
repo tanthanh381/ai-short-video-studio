@@ -548,3 +548,22 @@ describe("idea mode becomes plain narration then faithful scenes", () => {
     expect(fixed.hook).toBe("Cảnh một nói về mưa lớn trong thành phố.");
   });
 });
+
+describe("visual action anchors do not fire on unrelated words", () => {
+  const base = "A flooded street at dusk with a canal in the background";
+  it.each([
+    "Nhiều trạm đo ghi nhận vũ lượng mưa trên 100 mm trong ngày.",
+    "Triều cường được ghi nhận vượt báo động I và II.",
+    "Chiếc khăn len và tấm chăn mỏng nằm trên ghế.",
+    "Mức nước sông tăng mạnh nhờ năng lượng của cơn bão.",
+    "Kênh Tham Lương, kênh Nhiêu Lộc đều có mực nước dâng cao.",
+  ])("leaves the model's prompt alone for: %s", (narration) => {
+    expect(visualActionPrompt(narration, base)).toBe(base);
+  });
+
+  it("still grounds genuine actions", () => {
+    expect(visualActionPrompt("Cô ngồi viết nhật ký mỗi tối.", base)).toContain("notebook");
+    expect(visualActionPrompt("Anh ăn cơm cùng gia đình.", base)).toContain("plate of food");
+    expect(visualActionPrompt("Cô tưới chậu cây nhỏ bên cửa sổ.", base)).toContain("watering can");
+  });
+});

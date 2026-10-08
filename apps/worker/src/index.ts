@@ -353,6 +353,7 @@ async function storyboard(job: JobRow, project: Project) {
       : Promise.resolve(""),
   ]);
   checkDeadline(job);
+  if (providerName === "ollama") await ollama.unload(project.settings.localModels.storyboard);
   await setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard");
   const rows = result.scenes.map((scene, index) => ({
     project_id: project.id,
@@ -394,6 +395,37 @@ async function generateMedia(job: JobRow, project: Project) {
   await updateProject(project.id, { status: "generating_media" });
   let finished = 0;
   let newlyGenerated = 0;
+  // Generate every missing image first, then voices. Alternating the image and voice models scene by scene
+  // makes them evict each other from RAM on a 16 GB Mac (minutes of swapping); one pass per model keeps each hot.
+  const pendingImages = targetId ? [] : scenes.filter((scene) => !scene.imagePath);
+  const prepass = pendingImages.length > 0;
+  const mediaProgress = (done: number) => prepass
+    ? 42 + Math.round((done / scenes.length) * 43)
+    : Math.round((done / scenes.length) * 85);
+  for (const [index, scene] of pendingImages.entries()) {
+    checkDeadline(job);
+    try {
+      await updateScene(scene.id, { media_status: "processing", error_message: null });
+      await progress(job, Math.round((index / pendingImages.length) * 42), `Đang tạo ảnh cảnh ${scene.order + 1}`);
+      const image = await media.createImage(
+        buildProductionImagePrompt(scene.imagePrompt, visualPresetPrompt(project.settings.visualPreset)),
+        project.settings.aspectRatio,
+        {
+          ...project.settings.localModels,
+          seed: imageSeedFor(`${project.id}:${scene.id}`),
+          style: imageStyleFor(project.settings.visualStyle),
+          preset: project.settings.generationPreset,
+        },
+      );
+      const imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
+      await upload(imagePath, image, "image/png");
+      await updateScene(scene.id, { image_path: imagePath });
+      (scene as { imagePath: string | null }).imagePath = imagePath;
+    } catch (error) {
+      // Not fatal: the per-scene pass below retries this image once more and records a clear failure.
+      log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "image_prepass_failed");
+    }
+  }
   for (const scene of scenes) {
     checkDeadline(job);
     try {
@@ -425,7 +457,7 @@ async function generateMedia(job: JobRow, project: Project) {
       if (!imagePath) {
         await progress(
           job,
-          Math.round((finished / scenes.length) * 85),
+          mediaProgress(finished),
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
         const image = await media.createImage(
@@ -448,7 +480,7 @@ async function generateMedia(job: JobRow, project: Project) {
       if (!videoPath && project.settings.localModels.video && media.createVideo) {
         await progress(
           job,
-          Math.round((finished / scenes.length) * 85) + 2,
+          mediaProgress(finished) + 2,
           `Đang tạo chuyển động LTX cảnh ${scene.order + 1}`,
         );
         const motion = await media.createVideo(
@@ -470,7 +502,7 @@ async function generateMedia(job: JobRow, project: Project) {
       if (!audioPath) {
         await progress(
           job,
-          Math.round((finished / scenes.length) * 85) + 4,
+          mediaProgress(finished) + 4,
           `Đang tạo giọng đọc cảnh ${scene.order + 1}`,
         );
         const aligned = media.createSpeechAligned
@@ -495,7 +527,7 @@ async function generateMedia(job: JobRow, project: Project) {
       }
       await progress(
         job,
-        Math.round((finished / scenes.length) * 85) + 7,
+        mediaProgress(finished) + 7,
         `Đang đồng bộ phụ đề cảnh ${scene.order + 1}`,
       );
       if (!subtitles.length && project.settings.subtitle.enabled) {
