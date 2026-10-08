@@ -8,6 +8,7 @@ assertions catch character-based or estimated-duration captions.
 import base64
 import importlib.util
 import io
+import os
 import json
 import re
 import subprocess
@@ -299,6 +300,18 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             self.media.local_image("cảnh", "9:16", "model-la")
         with self.assertRaises(ValueError):
             self.media.transcribe(b"audio", "model-la")
+
+    def test_missing_ffmpeg_gives_a_clear_error_instead_of_a_generic_failure(self):
+        with patch.object(self.media, "find_binary", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "Thiếu ffmpeg"):
+                self.media.require_ffmpeg()
+
+    def test_homebrew_tools_are_reachable_when_launched_with_a_minimal_path(self):
+        # launchd / IDE agents start services with PATH=/usr/bin:/bin:/usr/sbin:/sbin
+        with patch.dict(os.environ, {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin"}):
+            load_media_server()
+            self.assertIn("/opt/homebrew/bin", os.environ["PATH"].split(os.pathsep))
+            self.assertIn("/usr/local/bin", os.environ["PATH"].split(os.pathsep))
 
     def test_whitespace_only_text_never_calls_a_synthesizer(self):
         with patch.object(self.media.subprocess, "run") as process:

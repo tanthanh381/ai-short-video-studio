@@ -9,6 +9,7 @@ import base64
 import io
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -22,9 +23,29 @@ import wave
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import traceback
 
 
 HOST = os.getenv("LOCAL_MEDIA_HOST", "127.0.0.1")
+# Services are often started from launchers (launchd, IDE agents) whose PATH is only /usr/bin:/bin.
+# Make Homebrew tools reachable for this process and every child it spawns.
+for _dir in ("/usr/local/bin", "/opt/homebrew/bin"):
+    if _dir not in os.environ.get("PATH", "").split(os.pathsep):
+        os.environ["PATH"] = _dir + os.pathsep + os.environ.get("PATH", "")
+
+
+def find_binary(name, env_var):
+    candidates = [os.getenv(env_var), shutil.which(name), f"/opt/homebrew/bin/{name}", f"/usr/local/bin/{name}"]
+    return next((c for c in candidates if c and os.path.isfile(c) and os.access(c, os.X_OK)), None)
+
+
+def require_ffmpeg():
+    path = find_binary("ffmpeg", "FFMPEG_PATH")
+    if not path:
+        raise RuntimeError("Thiếu ffmpeg trên máy (brew install ffmpeg hoặc đặt FFMPEG_PATH)")
+    return path
+
+
 PORT = int(os.getenv("LOCAL_MEDIA_PORT", "8765"))
 LOCAL_AI_ROOT = Path(os.getenv(
     "LOCAL_AI_ROOT",
@@ -388,7 +409,7 @@ def _http_wav(url, payload):
 def _to_pcm22050(source):
     """Any audio file -> mono 16-bit PCM at SAMPLE_RATE, so phrases concatenate with exact timing."""
     target = source.with_suffix(".pcm.wav")
-    subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(source),
+    subprocess.run([require_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", "-i", str(source),
                     "-ac", "1", "-ar", str(SAMPLE_RATE), "-sample_fmt", "s16", str(target)],
                    check=True, timeout=120, capture_output=True)
     return target
@@ -466,7 +487,7 @@ def tts(text, voice, engine=None, speed=1.0):
     with tempfile.TemporaryDirectory(prefix="studio-tts-") as workdir:
         source = synth_phrase(text, workdir, 0, voice, selected_engine, speed)
         target = Path(workdir) / "voice.mp3"
-        subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(source), "-codec:a", "libmp3lame", "-q:a", "4", str(target)], check=True, timeout=120)
+        subprocess.run([require_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", "-i", str(source), "-codec:a", "libmp3lame", "-q:a", "4", str(target)], check=True, timeout=120)
         return target.read_bytes()
 
 
@@ -609,13 +630,14 @@ class Handler(BaseHTTPRequestHandler):
             comfy_ready, _ = comfyui_state()
             image_ready = image_server_state() != "down" or comfy_ready == "ready" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
             engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL)}
-            tts_ready = any(engines.get(e) for e in TTS_ENGINES)
+            ffmpeg_ready = find_binary("ffmpeg", "FFMPEG_PATH") is not None
+            tts_ready = ffmpeg_ready and any(engines.get(e) for e in TTS_ENGINES)
             transcribe_ready = service_up(WHISPER_URL, "/")
             ltx_ready, ltx_detail = ltx_state()
             comfy_ready, comfy_detail = comfyui_state()
             ollama_ready = service_up(OLLAMA_URL, "/api/tags")
             json_response(self, 200, {"ok": image_ready and tts_ready, "image": image_ready,
-                                    "tts": tts_ready, "alignedTts": tts_ready, "ttsEngines": engines,
+                                    "tts": tts_ready, "alignedTts": tts_ready, "ttsEngines": engines, "ffmpeg": ffmpeg_ready,
                                     "transcribe": transcribe_ready, "ollama": ollama_ready,
                                     "comfyui": comfy_ready == "ready", "comfyuiState": comfy_ready,
                                     "comfyuiDetail": comfy_detail, "video": ltx_ready == "ready",
@@ -660,6 +682,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as error:
             json_response(self, 400, {"error": str(error)[:200]})
         except Exception:
+            traceback.print_exc()  # the real cause goes to the service log, never to the client
             # Never include a subprocess command (which contains the private script).
             json_response(self, 500, {"error": "Không hoàn thành xử lý media local; kiểm tra máy và thử lại"})
 
