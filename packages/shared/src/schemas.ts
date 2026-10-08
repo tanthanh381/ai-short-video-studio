@@ -164,14 +164,16 @@ export const createProjectSchema = z.object({
   sourceText: z
     .string()
     .trim()
-    .min(1, "Nội dung không được để trống")
+    .min(10, "Ý tưởng hoặc kịch bản cần ít nhất 10 ký tự")
     .max(30000),
   inputMode: z.enum(["idea", "full-script", "srt"]).default("idea"),
   settings: projectSettingsSchema,
 });
 
 export const createVideoSchema = z.object({
-  sourceText: z.string().min(1).max(30000),
+  sourceText: z.string().min(10).max(30000).refine((text) => text.trim().length >= 10, {
+    message: "Kịch bản cần ít nhất 10 ký tự",
+  }),
   inputMode: z.enum(["idea", "full-script", "srt"]).default("full-script"),
   settings: projectSettingsSchema.partial().default({}),
 });
