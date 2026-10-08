@@ -67,6 +67,9 @@ def model_thread():
         nn.quantize(sd.text_encoder_2, class_predicate=lambda _, m: isinstance(m, nn.Linear))
         nn.quantize(sd.unet, group_size=32, bits=8)
         sd.ensure_models_are_loaded()
+        # MLX keeps freed GPU buffers cached for reuse; across many 576x1024 renders that grew to 11 GB and
+        # pushed the other models into swap. A small cache keeps the speed and the memory bounded.
+        mx.set_cache_limit(int(os.getenv("IMAGE_CACHE_LIMIT_MB", "768")) * 1024 * 1024)
         STATE["sd"] = sd
         print("[image] model ready", flush=True)
     except Exception as error:
@@ -79,6 +82,8 @@ def model_thread():
             future.set_result(render(sd, prompt, seed, **options))
         except Exception as error:  # reported to the waiting request
             future.set_exception(error)
+        finally:
+            mx.clear_cache()  # release this render's temporary buffers (decode needs several GB at 576x1024)
 
 
 def ascii_prompt(prompt):

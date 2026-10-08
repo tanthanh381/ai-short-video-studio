@@ -319,6 +319,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
             break
         time.sleep(5)
     if state == "ready":  # model kept loaded in memory: seconds per image
+        recycle_if_bloated("image", IMAGE_SERVER_URL)  # a restart reloads the model (~1 min) but frees GBs of cache
         payload = {"prompt": styled, "model": model, "seed": seed, "steps": int(IMAGE_STEPS_OVERRIDE or preset_options["steps"]), "preset": selected_preset,
                    "width": width, "height": height,
                    "negativePrompt": IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else ""}
@@ -398,6 +399,59 @@ def expressive_text(text, voice=""):
     return f"{profile['tag']} {text.lstrip()}"
 
 
+# Long-running model servers grow (VieNeu reached 7.9 GB, the MLX image server 11 GB) until a 16 GB Mac swaps and
+# every image takes minutes. Recycle them through launchd (KeepAlive restarts them clean) when they get bloated.
+SUPERVISED = {  # name -> (launchd label, port, health URL, limit in MB)
+    "vieneu": ("com.ai-short-video.vieneu", 5001, None, int(os.getenv("VIENEU_MAX_MB", "3000"))),
+    "image": ("com.ai-short-video.image", 5002, None, int(os.getenv("IMAGE_MAX_MB", "9000"))),
+}
+RECYCLE_LOCK = threading.Lock()
+
+
+def process_footprint_mb(pid):
+    """Memory footprint including compressed pages (what really pressures the Mac); None if unknown."""
+    try:
+        out = subprocess.run(["top", "-l", "1", "-pid", str(pid), "-stats", "mem"],
+                             capture_output=True, text=True, timeout=20).stdout.strip().splitlines()
+        match = re.fullmatch(r"([\d.]+)([KMG])[+-]?", out[-1].strip())
+        if not match:
+            return None
+        return float(match.group(1)) * {"K": 1 / 1024, "M": 1, "G": 1024}[match.group(2)]
+    except Exception:
+        return None
+
+
+def listener_pid(port):
+    try:
+        out = subprocess.run(["lsof", "-tiTCP:%d" % port, "-sTCP:LISTEN"], capture_output=True, text=True, timeout=10).stdout
+        return int(out.split()[0]) if out.split() else None
+    except Exception:
+        return None
+
+
+def recycle_if_bloated(name, base_url, wait_s=240):
+    """Restart a launchd-supervised model server whose footprint passed its limit. True if it was restarted."""
+    label, port, _, limit_mb = SUPERVISED[name]
+    with RECYCLE_LOCK:
+        pid = listener_pid(port)
+        footprint = process_footprint_mb(pid) if pid else None
+        if footprint is None or footprint < limit_mb:
+            return False
+        kicked = subprocess.run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{label}"],
+                                capture_output=True, timeout=30)
+        if kicked.returncode != 0:  # not supervised: restarting would leave it dead
+            return False
+        print(f"[local-media] recycled {name}: {footprint:.0f} MB > {limit_mb} MB", flush=True)
+        deadline = time.time() + wait_s
+        while time.time() < deadline:
+            time.sleep(3)
+            new_pid = listener_pid(port)
+            if new_pid and new_pid != pid and (name == "image" and image_server_state() == "ready" or
+                                                name != "image" and service_up(base_url)):
+                return True
+        raise RuntimeError(f"Dịch vụ {name} khởi động lại quá lâu; kiểm tra máy và thử lại")
+
+
 def _http_wav(url, payload):
     request = urllib.request.Request(
         f"{url}/v1/audio/speech", data=json.dumps(payload).encode(),
@@ -448,6 +502,9 @@ def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0):
 def tts_aligned(text, voice, engine=None):
     phrases = split_speech_phrases(text)
     selected_engine = select_tts_engine(voice, engine)
+    if selected_engine == "vieneu":
+        with VIENEU_LOCK:
+            recycle_if_bloated("vieneu", VIENEU_URL)
     chunks, cues, frames_total = [], [], 0
     sample_rate = SAMPLE_RATE
     with tempfile.TemporaryDirectory(prefix="studio-aligned-") as workdir:
@@ -484,6 +541,9 @@ def tts_aligned(text, voice, engine=None):
 
 def tts(text, voice, engine=None, speed=1.0):
     selected_engine = select_tts_engine(voice, engine)
+    if selected_engine == "vieneu":
+        with VIENEU_LOCK:
+            recycle_if_bloated("vieneu", VIENEU_URL)
     with tempfile.TemporaryDirectory(prefix="studio-tts-") as workdir:
         source = synth_phrase(text, workdir, 0, voice, selected_engine, speed)
         target = Path(workdir) / "voice.mp3"

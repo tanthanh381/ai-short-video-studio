@@ -315,6 +315,44 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             self.assertIn("/opt/homebrew/bin", os.environ["PATH"].split(os.pathsep))
             self.assertIn("/usr/local/bin", os.environ["PATH"].split(os.pathsep))
 
+    def test_footprint_parser_understands_top_output(self):
+        def fake_top(output):
+            return subprocess.CompletedProcess(["top"], 0, stdout=f"MEM\n{output}\n", stderr="")
+        for text, expected in (("7877M", 7877.0), ("11G", 11264.0), ("512K", 0.5), ("1228M+", 1228.0)):
+            with patch.object(self.media.subprocess, "run", return_value=fake_top(text)):
+                self.assertAlmostEqual(self.media.process_footprint_mb(123), expected, places=1)
+        with patch.object(self.media.subprocess, "run", return_value=fake_top("n/a")):
+            self.assertIsNone(self.media.process_footprint_mb(123))
+
+    def test_bloated_supervised_service_is_restarted_but_a_lean_one_is_left_alone(self):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append([str(item) for item in command])
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        pids = iter([100, 200, 200, 200])
+        with patch.object(self.media, "listener_pid", side_effect=lambda port: next(pids)), \
+             patch.object(self.media, "process_footprint_mb", return_value=7877.0), \
+             patch.object(self.media, "service_up", return_value=True), \
+             patch.object(self.media.time, "sleep"), \
+             patch.object(self.media.subprocess, "run", side_effect=fake_run):
+            self.assertTrue(self.media.recycle_if_bloated("vieneu", self.media.VIENEU_URL))
+        self.assertTrue(any(c[:3] == ["launchctl", "kickstart", "-k"] and c[3].endswith("com.ai-short-video.vieneu") for c in calls))
+
+        with patch.object(self.media, "listener_pid", return_value=100), \
+             patch.object(self.media, "process_footprint_mb", return_value=600.0), \
+             patch.object(self.media.subprocess, "run") as process:
+            self.assertFalse(self.media.recycle_if_bloated("vieneu", self.media.VIENEU_URL))
+            process.assert_not_called()
+
+    def test_unsupervised_bloated_service_is_never_killed(self):
+        with patch.object(self.media, "listener_pid", return_value=100), \
+             patch.object(self.media, "process_footprint_mb", return_value=9999.0), \
+             patch.object(self.media.subprocess, "run",
+                          return_value=subprocess.CompletedProcess(["launchctl"], 113, stdout="", stderr="")):
+            self.assertFalse(self.media.recycle_if_bloated("vieneu", self.media.VIENEU_URL))
+
     def test_whitespace_only_text_never_calls_a_synthesizer(self):
         with patch.object(self.media.subprocess, "run") as process:
             with self.assertRaises((RuntimeError, ValueError)):
