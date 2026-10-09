@@ -101,12 +101,13 @@ export function isOldTimeStory(text: string): boolean {
 
 /**
  * Two siblings as one short phrase. Short on purpose: the image model reads only 77 tokens, and a long cast left no
- * room for the action, so every scene became a line-up. Never "elder": the model draws a white-bearded old man.
+ * room for the action, so every scene became a line-up. Never "elder" or "older": the model draws a white-bearded old man.
  */
 function brothersCast(oldTime: boolean): string {
+  // "Older" is read as old age by SDXL Base (white-bearded men): say big/little brother and "young".
   return oldTime
-    ? "two Vietnamese brothers in ancient peasant clothes, the older in a red tunic, the younger in a blue tunic"
-    : "two Vietnamese brothers, the older in a red t-shirt, the younger in a blue t-shirt";
+    ? "two young Vietnamese brothers in ancient peasant clothes, the big brother in a red tunic, the little brother in a blue tunic"
+    : "two young Vietnamese brothers, the big brother in a red t-shirt, the little brother in a blue t-shirt";
 }
 
 const word = (source: string) => new RegExp(`(?<![\\p{L}])(?:${source})(?![\\p{L}])`, "iu");

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   eraAppropriateCast,
+  youthfulSiblings,
   fallbackImagePrompt,
   imageStyleFor,
   isEnglishPrompt,
@@ -696,6 +697,15 @@ describe("eraAppropriateCast", () => {
     const cast = "a Vietnamese young woman with long black hair, a white shirt and jeans";
     expect(eraAppropriateCast(cast, "Hôm nay cô ấy đi làm muộn vì kẹt xe.")).toBe(cast);
     expect(eraAppropriateCast("", tale)).toBe("");
+  });
+});
+
+describe("youthfulSiblings", () => {
+  it("keeps siblings young for the image model", () => {
+    expect(youthfulSiblings("The older brother lounges while the younger brother works; an elder sister watches"))
+      .toBe("The big brother lounges while the little brother works; a big sister watches");
+    expect(youthfulSiblings("Older brother smiles")).toBe("Big brother smiles");
+    expect(youthfulSiblings("an old man by the well")).toBe("an old man by the well");
   });
 });
 

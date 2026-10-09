@@ -14,7 +14,7 @@ import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
 import { castForScript, fallbackCardTitle, usesStoryCard } from "./card-layout";
 import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
-import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, imageAspectFor, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
+import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, imageAspectFor, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
@@ -386,7 +386,7 @@ async function storyboard(job: JobRow, project: Project) {
     project_id: project.id,
     scene_order: index,
     narration: scene.narration,
-    image_prompt: withCast(cast, scene.imagePrompt, scene.narration, cardMode),
+    image_prompt: withCast(cast, youthfulSiblings(scene.imagePrompt), scene.narration, cardMode),
     estimated_duration_ms: scene.estimatedDurationMs,
     media_status: "pending",
     subtitles: [],
