@@ -92,6 +92,8 @@ const ROLE_LOOKS = {
   boy: "a little boy with short black hair, a yellow t-shirt and blue shorts",
   woman: "a Vietnamese young woman with long black hair, a white shirt and jeans",
   man: "a Vietnamese young man with short black hair, a gray shirt and jeans",
+  elder: "a plump Vietnamese elder brother with a topknot and a dark red tunic",
+  younger: "a thin Vietnamese younger brother with short hair and a patched indigo tunic",
 } as const;
 
 const word = (source: string) => new RegExp(`(?<![\\p{L}])(?:${source})(?![\\p{L}])`, "iu");
@@ -100,13 +102,20 @@ const NOT_A_CHILD = "đường|người|mắt|sông|phố|số|dao|vật|thuyề
 /** Up to two recurring characters, in story order, or "" when the script names no clear role. */
 export function castForScript(text: string): string {
   const source = text.normalize("NFC").toLocaleLowerCase("vi");
+  // "Hai anh em", "người anh … người em": a story about two siblings, whatever else it mentions.
+  if (word("hai anh em|người anh").test(source) && word("người em|em mình|em trai").test(source))
+    return `${ROLE_LOOKS.elder}, and ${ROLE_LOOKS.younger}`;
   const found: Array<[number, keyof typeof ROLE_LOOKS]> = [];
   const at = (role: keyof typeof ROLE_LOOKS, pattern: RegExp) => {
     const match = pattern.exec(source);
     if (match) found.push([match.index, role]);
   };
-  at("mother", word("mẹ|má|mạ"));
-  at("father", word("cha|bố|tía"));
+  // Parents who "died early" are backstory, not the characters on screen.
+  const orphaned = /(?:cha mẹ|bố mẹ|ba mẹ)\s+(?:đều\s+)?(?:mất|qua đời|đã khuất|mất sớm)|mồ côi/u.test(source);
+  if (!orphaned) {
+    at("mother", word("mẹ|má|mạ"));
+    at("father", word("cha|bố|tía"));
+  }
   at("grandmother", word("bà nội|bà ngoại|bà"));
   at("grandfather", word("ông nội|ông ngoại|ông"));
   const parentOrGrand = found.length > 0;

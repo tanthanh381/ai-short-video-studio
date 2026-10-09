@@ -359,7 +359,9 @@ async function storyboard(job: JobRow, project: Project) {
   } else {
     // Cast extraction is independent of scene splitting; overlap the two Ollama
     // requests so the consistency guard does not add a full model round-trip.
-    [result, cast] = await Promise.all([createFaithfulStoryboard(provider, storyboardInput), describeCast()]);
+    // Fixed role looks (mother in red, two brothers…) keep people recognisable better than a model-written cast.
+    const scriptCast = castForScript(sourceText);
+    [result, cast] = await Promise.all([createFaithfulStoryboard(provider, storyboardInput), scriptCast ? Promise.resolve(scriptCast) : describeCast()]);
   }
   cast = eraAppropriateCast(cast, sourceText);
   checkDeadline(job);

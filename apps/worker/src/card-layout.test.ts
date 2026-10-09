@@ -105,6 +105,14 @@ describe("recurring cast for story cards", () => {
     expect(castForScript("Mẹ chọn con đường khó, vì con người cần nghị lực.")).not.toMatch(/little/);
   });
 
+  it("casts the two brothers of a sibling story, not the parents who died", () => {
+    const cast = castForScript("Ngày xửa ngày xưa, có hai anh em sống nương tựa vào nhau từ khi cha mẹ mất sớm. Người anh tham lam, người em hiền lành.");
+    expect(cast).toContain("elder brother");
+    expect(cast).toContain("younger brother");
+    expect(cast).not.toMatch(/mother|father/u);
+    expect(castForScript("Cậu bé mồ côi cha mẹ, sống với bà ngoại.")).toMatch(/grandmother/u);
+  });
+
   it("falls back to a lone protagonist, and to nothing when no role is named", () => {
     expect(castForScript("Cô gái ngồi viết nhật ký mỗi tối.")).toContain("young woman");
     expect(castForScript("Cuộc đời ngắn lắm, hãy sống thật bình yên.")).toBe("");
