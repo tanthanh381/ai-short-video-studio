@@ -108,6 +108,17 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual("".join(phrases), script)
         self.assertTrue(all(len(phrase.strip()) <= 240 for phrase in phrases))
 
+    def test_a_long_sentence_is_split_at_a_clause_never_leaving_a_lone_word(self):
+        sentence = "Khi bước ra ngoài, ánh sáng buổi sớm giúp cơ thể tỉnh táo hơn cả một ly cà phê.\n"
+        phrases = self.media.split_speech_phrases(sentence)
+        self.assertEqual("".join(phrases), sentence)
+        self.assertTrue(all(len(p.split()) >= 4 for p in phrases), phrases)
+        self.assertTrue(phrases[-1].rstrip().endswith("cà phê."))
+        long = "Đi bộ đều đặn mỗi ngày giúp tim khỏe hơn, đầu óc nhẹ nhõm hơn, giấc ngủ sâu hơn và tinh thần lúc nào cũng vui vẻ, yêu đời."
+        parts = self.media.split_speech_phrases(long)
+        self.assertGreater(len(parts), 1)
+        self.assertTrue(all(p.rstrip().endswith((",", ".")) for p in parts), parts)  # cut at commas
+
     def test_sentence_boundary_is_kept_for_sentence_level_prosody(self):
         script = "Tôi mệt. Hãy nghỉ một chút. Ngày mai sẽ tốt hơn."
         phrases = self.media.split_speech_phrases(script)

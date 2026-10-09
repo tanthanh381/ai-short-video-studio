@@ -80,7 +80,7 @@ VOICE_PRESETS = {
     "tin-tuc": ("Quang Sơn", 1.05, 3.34),
     "tin-tuc-nu": ("Ngọc Huyền", 1.05, 4.16),
     "thuyet-minh": ("Phạm Tuyên", 1.02, 4.10),
-    "nang-dong": ("Xuân Vĩnh", 1.1, 4.30),
+    "nang-dong": ("Xuân Vĩnh", 1.05, 4.30),
 }
 # Short-form narration lands at 3.3-4.2 words/s; 3.7 is the middle. Measured on finished videos, the gaps between
 # phrases make the spoken rate about 4% lower than the raw synthesis rate.
@@ -394,31 +394,56 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         return target.read_bytes()
 
 
+SENTENCE_END = re.compile(r"[.!?…。！？][\"'”’)]?\s*$")
+CLAUSE_END = re.compile(r"[,;:—–][\"'”’)]?\s*$")
+
+
+def _words(tokens):
+    return sum(bool(token.strip()) for token in tokens)
+
+
+def _split_long(tokens):
+    """One sentence that is too long for one request: cut at the comma nearest its middle, else in the middle.
+    A cut that leaves under four words on either side is never made ("…một ly cà | phê." made VieNeu say "Fê")."""
+    if _words(tokens) <= TTS_BREAK_WORDS and len("".join(tokens)) <= 240:
+        return ["".join(tokens)]
+    word_ends = [i for i, token in enumerate(tokens) if token.strip()]
+    total = len(word_ends)
+    middle = total / 2
+    allowed = [k for k in range(4, total - 3)]  # k words go left
+    clause = [k for k in allowed if CLAUSE_END.search(tokens[word_ends[k - 1]])]
+    if clause:
+        k = min(clause, key=lambda candidate: abs(candidate - middle))
+    elif allowed:
+        k = min(allowed, key=lambda candidate: abs(candidate - middle))
+    else:
+        return ["".join(tokens)]
+    cut = word_ends[k - 1] + 1
+    return _split_long(tokens[:cut]) + _split_long(tokens[cut:])
+
+
 def split_speech_phrases(text):
-    """Original contiguous sentences/clauses; timing is measured after synthesis."""
+    """Original contiguous sentences/clauses; timing is measured after synthesis.
+
+    One sentence per synthesis request lets VieNeu give each sentence its own prosody; a sentence longer than
+    TTS_BREAK_WORDS is divided at a clause boundary into balanced parts, never into a tail of one or two words."""
     if not text.strip() or len(text) > 5000:
         raise ValueError("Lời đọc trống hoặc quá dài cho một cảnh")
-    phrases, current, count = [], "", 0
-    for token in re.findall(r"\S+\s*|\s+", text):
-        if len(token) > 240:
-            raise ValueError("Lời đọc có một từ quá dài cho phụ đề")
-        if current and len(current) + len(token) > 240:
-            phrases.append(current)
-            current, count = "", 0
-        current += token
-        count += bool(token.strip())
-        # Keep one sentence per synthesis request whenever possible. This lets
-        # VieNeu express each sentence independently instead of flattening a
-        # whole paragraph into one prosody pattern.
-        if count >= TTS_BREAK_WORDS or (count >= 2 and re.search(r"[.!?…。！？][\"'”’)]?\s*$", token)):
-            phrases.append(current)
-            current, count = "", 0
+    tokens = re.findall(r"\S+\s*|\s+", text)
+    if any(len(token) > 240 for token in tokens):
+        raise ValueError("Lời đọc có một từ quá dài cho phụ đề")
+    sentences, current = [], []
+    for token in tokens:
+        current.append(token)
+        if _words(current) >= 2 and SENTENCE_END.search(token):
+            sentences.append(current)
+            current = []
     if current:
-        if not current.strip() and phrases:
-            phrases[-1] += current
+        if not "".join(current).strip() and sentences:
+            sentences[-1] += current
         else:
-            phrases.append(current)
-    return phrases
+            sentences.append(current)
+    return [phrase for sentence in sentences for phrase in _split_long(sentence)]
 
 
 def emotion_profile(text, voice=""):

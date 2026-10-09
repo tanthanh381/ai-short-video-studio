@@ -423,6 +423,7 @@ async function generateMedia(job: JobRow, project: Project) {
   await updateProject(project.id, { status: "generating_media" });
   let finished = 0;
   let newlyGenerated = 0;
+  let firstMediaError: string | undefined;
   // Generate every missing image first, then voices. Alternating the image and voice models scene by scene
   // makes them evict each other from RAM on a 16 GB Mac (minutes of swapping); one pass per model keeps each hot.
   const pendingImages = targetId ? [] : scenes.filter((scene) => !scene.imagePath);
@@ -602,6 +603,7 @@ async function generateMedia(job: JobRow, project: Project) {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Không thể tạo media";
+      firstMediaError ??= message;
       await updateScene(scene.id, {
           media_status: "failed",
           error_message: message.slice(0, 500),
@@ -612,7 +614,9 @@ async function generateMedia(job: JobRow, project: Project) {
       );
     }
   }
-  if (finished === 0) throw new Error("Tất cả các cảnh đều tạo media lỗi");
+  // Say why: "every scene failed" alone left the owner guessing (it was an unavailable voice engine).
+  const reason = firstMediaError ? `: ${firstMediaError.slice(0, 220)}` : "";
+  if (finished === 0) throw new Error(`Tất cả các cảnh đều tạo media lỗi${reason}`);
   await updateProject(project.id, { status: finished === scenes.length ? job.job_type === "create_video" ? "queued" : "draft" : "failed" });
   const { error: usageError } = await db.from("usage_events").insert({
     user_id: project.userId,
@@ -635,7 +639,7 @@ async function generateMedia(job: JobRow, project: Project) {
   if (usageError) throw usageError;
   if (finished < scenes.length)
     throw new Error(
-      `${scenes.length - finished} cảnh tạo media lỗi; các cảnh thành công đã được giữ lại`,
+      `${scenes.length - finished} cảnh tạo media lỗi${reason}. Các cảnh thành công đã được giữ lại`,
     );
 }
 
