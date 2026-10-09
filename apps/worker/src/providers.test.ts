@@ -416,7 +416,7 @@ describe("visible actions grounded in the original scene", () => {
     "Lan ghi chép lại điều đã học trong ngày.",
     "Cô ấy viết ra ba điều biết ơn trước khi ngủ.",
   ])("shows a physical pen, open notebook and desk for a writing action: %s", (narration) => {
-    const originalPrompt = "A Vietnamese woman in a quiet bedroom at night, warm lamp light";
+    const originalPrompt = "A Vietnamese woman at night";
     const grounded = visualActionPrompt(narration, originalPrompt);
     expect(grounded).toMatch(/pen/i);
     expect(grounded).toMatch(/open.*notebook/i);
@@ -576,8 +576,13 @@ describe("visual action anchors do not fire on unrelated words", () => {
   });
 
   it("still grounds genuine actions", () => {
-    expect(visualActionPrompt("Cô ngồi viết nhật ký mỗi tối.", base)).toContain("notebook");
+    expect(visualActionPrompt("Cô ngồi viết nhật ký mỗi tối.", "A woman in her room")).toContain("notebook");
     expect(visualActionPrompt("Cô tưới chậu cây nhỏ bên cửa sổ.", "A woman at a window")).toContain("watering can");
+  });
+
+  it("keeps a detailed prompt as the writer's own depiction", () => {
+    const prompt = "Wide shot of the same Vietnamese woman standing confidently at her desk, full of energy";
+    expect(visualActionPrompt("Uống đủ nước giúp duy trì năng lượng cả ngày.", prompt)).toBe(prompt);
   });
 
   it("leaves a comparison with coffee and a walk to the model's own depiction", () => {
@@ -590,7 +595,7 @@ describe("visual action anchors do not fire on unrelated words", () => {
     // "Ăn khế trả vàng": a folk tale about a bird eating star fruit, not a dinner table.
     expect(visualActionPrompt("Ăn khế trả vàng, chim đậu xuống ăn hết quả khế.", base)).toBe(base);
     expect(visualActionPrompt("Cô tưới chậu cây nhỏ.", "A girl watering a small potted plant on a balcony")).toBe("A girl watering a small potted plant on a balcony");
-    expect(visualActionPrompt("Cô tưới chậu cây nhỏ bên cửa sổ.", base)).toContain("watering can");
+    expect(visualActionPrompt("Cô tưới chậu cây nhỏ bên cửa sổ.", "A woman by a window")).toContain("watering can");
   });
 });
 
