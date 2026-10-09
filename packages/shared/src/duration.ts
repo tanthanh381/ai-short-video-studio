@@ -85,7 +85,9 @@ export function contentPlan(durationSec: number, style: string, voice: string, v
       middle.push({ label: `Diễn biến ${index}`, brief: "một việc cụ thể xảy ra, đẩy câu chuyện đi tiếp" });
     middle.push({ label: "Bước ngoặt", brief: "điều bất ngờ hoặc lựa chọn quyết định" });
     end = { label: "Kết", brief: "kết cục và bài học đọng lại trong một câu" };
-    summary = `Mở đầu → ${middle.length} đoạn diễn biến → Kết`;
+    const events = middle.filter((beat) => beat.label.startsWith("Diễn biến")).length;
+    summary = ["Mở đầu", durationSec > 15 ? "Bối cảnh" : null, events ? `${events} diễn biến` : null, "Bước ngoặt", "Kết"]
+      .filter(Boolean).join(" → ");
   } else if (style === "truyen-cam-hung") {
     hook = { label: "Mở đầu", brief: "một câu chạm đúng cảm xúc người xem" };
     for (let index = 1; index <= points; index++)

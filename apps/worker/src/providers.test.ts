@@ -3,6 +3,7 @@ import {
   eraAppropriateCast,
   trimToWords,
   foreignWords,
+  withoutForeignScript,
   withQuestionHook,
   vietnameseByDefault,
   youthfulSiblings,
@@ -588,6 +589,16 @@ describe("idea mode becomes plain narration then faithful scenes", () => {
     const narration = result.scenes.map((scene) => scene.narration).join("");
     expect(narration).not.toMatch(/Mở đầu:|Ý 1|Kết\*\*|khoảng 40 từ/u);
     expect(narration.startsWith("Vì sao lòng ta nặng?")).toBe(true);
+  });
+
+  it("never reads out another writing system and prefers a clean draft", async () => {
+    const drafts = [`${sentences(14)} Hãy bắt đầu今夜 với giấc ngủ sâu.`, `${sentences(14)} Hãy bắt đầu tối nay với giấc ngủ sâu.`];
+    const provider = { writeScript: vi.fn(async (_request: unknown) => drafts.shift() ?? script), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
+    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "buông bỏ" });
+    expect(provider.writeScript).toHaveBeenCalledTimes(2);
+    expect(result.scenes.map((scene) => scene.narration).join("")).toContain("Hãy bắt đầu tối nay");
+    expect(withoutForeignScript("Hãy bắt đầu今夜 với giấc ngủ.")).toBe("Hãy bắt đầu với giấc ngủ.");
+    expect(foreignWords("Ngủ ngon 今夜")).toContain("今夜");
   });
 
   it("fails clearly, naming the length, when the writer stays far too short", async () => {

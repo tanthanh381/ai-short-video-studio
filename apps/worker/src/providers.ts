@@ -627,11 +627,13 @@ async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardIn
         ...(previousWords !== undefined ? { previousWords } : {}),
       })));
       previousWords = contentWords(raw).length;
-      const draft = fitToWords(withQuestionHook(raw, input.sourceText), max);
+      // Another writing system counts against the draft below and is never read out, even if this draft is kept.
+      const otherScript = foreignWords(raw).length - foreignWords(withoutForeignScript(raw)).length;
+      const draft = fitToWords(withQuestionHook(withoutForeignScript(raw), input.sourceText), max);
       const words = contentWords(draft).length;
       const overlap = terms.length >= 2 ? overlapRatio(terms, new Set(contentWords(draft))) : 1;
       // An English word in Vietnamese narration ("sau khi hydrate") is read out oddly: prefer a clean draft.
-      const english = foreignWords(draft).length;
+      const english = foreignWords(draft).length + otherScript;
       // Being long enough weighs most: a 60-second video must not come out at 40 seconds.
       const length = words >= min ? 1 : words / min;
       const score = overlap - 0.3 * english + 2 * length;
@@ -676,9 +678,17 @@ export function trimToWords(script: string, maximum: number): string {
 // "bouncier") marks a foreign word.
 const VI_CLUSTERS = new Set(["b", "c", "ch", "d", "g", "gh", "gi", "h", "k", "kh", "l", "m", "n", "ng", "ngh", "nh", "p", "ph", "q", "qu", "r", "s", "t", "th", "tr", "v", "x"]);
 
-/** Lower-case words in a Vietnamese script that cannot be Vietnamese (English slipped in). Names are skipped. */
+/** Writing systems a Vietnamese voice cannot read; qwen3.5 slipped "今夜" (tonight) into a sentence. */
+const FOREIGN_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}\p{Script=Cyrillic}\p{Script=Arabic}]+/gu;
+
+/** Removes runs of other writing systems ("Hãy bắt đầu今夜 với" -> "Hãy bắt đầu với"). */
+export function withoutForeignScript(script: string): string {
+  return script.replace(FOREIGN_SCRIPT, " ").replace(/[ \t]{2,}/gu, " ").replace(/ +([,.!?…])/gu, "$1");
+}
+
+/** Lower-case words in a Vietnamese script that cannot be Vietnamese (English or another script slipped in). Names are skipped. */
 export function foreignWords(script: string): string[] {
-  const found = new Set<string>();
+  const found = new Set<string>(script.match(FOREIGN_SCRIPT) ?? []);
   for (const word of script.normalize("NFC").match(/[\p{L}]+/gu) ?? []) {
     if (word.length < 4 || word[0] !== word[0]!.toLowerCase() || /[^a-z]/u.test(word)) continue; // accents = Vietnamese
     const clusters = word.match(/[^aeiouy]+/gu) ?? [];

@@ -18,6 +18,7 @@ import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, cr
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
+import { trimWavSilence } from "./silence";
 import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, whiteboardReady, withoutDrawingHand } from "./whiteboard";
 
 const config = getConfig();
@@ -462,11 +463,21 @@ async function generateMedia(job: JobRow, project: Project) {
       : null;
     let audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed: project.settings.voiceSpeed });
     let subtitles = aligned?.cues ?? [];
+    let alignedDurationMs = aligned?.durationMs;
     if (project.settings.trimSilence) {
-      audio = await trimAudioSilence(audio);
-      subtitles = [];
+      if (aligned?.contentType === "audio/wav") {
+        // Cut on the bridge's WAV and move the cues with it: re-transcribing never matched Vietnamese word for word.
+        const trimmed = trimWavSilence(audio, subtitles);
+        audio = trimmed.wav;
+        subtitles = trimmed.cues;
+        alignedDurationMs = trimmed.durationMs;
+      } else {
+        audio = await trimAudioSilence(audio);
+        subtitles = [];
+        alignedDurationMs = undefined;
+      }
     }
-    const actualDurationMs = aligned?.durationMs ?? await probeAudioDuration(audio);
+    const actualDurationMs = alignedDurationMs ?? await probeAudioDuration(audio);
     const extension = aligned?.contentType === "audio/wav" ? "wav" : "mp3";
     const audioPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.${extension}`;
     await upload(audioPath, audio, aligned?.contentType ?? "audio/mpeg");

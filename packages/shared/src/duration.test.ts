@@ -35,6 +35,8 @@ describe("video length from an idea", () => {
     expect(contentPlan(15, "ke-chuyen", "doc-truyen").beats.map((beat) => beat.label)).toEqual(["Mở đầu", "Bước ngoặt", "Kết"]);
     expect(contentPlan(90, "ke-chuyen", "doc-truyen").beats.map((beat) => beat.label))
       .toEqual(["Mở đầu", "Bối cảnh", "Diễn biến 1", "Diễn biến 2", "Bước ngoặt", "Kết"]);
+    expect(contentPlan(90, "ke-chuyen", "doc-truyen").summary).toBe("Mở đầu → Bối cảnh → 2 diễn biến → Bước ngoặt → Kết");
+    expect(contentPlan(15, "ke-chuyen", "doc-truyen").summary).toBe("Mở đầu → Bước ngoặt → Kết");
   });
 
   it("accepts every duration on offer and rejects others", () => {
