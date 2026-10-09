@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DURATION_OPTIONS, VOICE_MOOD, contentPlan, durationLabel, narrationSeconds, wordBudget } from "./duration";
+import { DURATION_OPTIONS, VOICE_MOOD, contentPlan, durationLabel, narrationSeconds, paceCorrection, wordBudget } from "./duration";
 import { VOICE_PRESETS } from "./voices";
 import { projectSettingsSchema } from "./schemas";
 
@@ -42,6 +42,14 @@ describe("video length from an idea", () => {
   it("accepts every duration on offer and rejects others", () => {
     for (const seconds of DURATION_OPTIONS) expect(projectSettingsSchema.parse({ targetDurationSec: seconds }).targetDurationSec).toBe(seconds);
     expect(() => projectSettingsSchema.parse({ targetDurationSec: 75 })).toThrow();
+  });
+
+  it("corrects the reading speed only when the voiced length misses by more than 8%, never by more than 12%", () => {
+    expect(paceCorrection(50_200, 60)).toBe(0.88); // the measured "1 phút" at 50 s: read slower, clamped
+    expect(paceCorrection(57_000, 60)).toBeNull(); // within 8%
+    expect(paceCorrection(33_600, 30)).toBeCloseTo(1.12); // too long: read faster
+    expect(paceCorrection(32_700, 30)).toBeCloseTo(1.09);
+    expect(paceCorrection(0, 60)).toBeNull();
   });
 
   it("labels durations in Vietnamese", () => {

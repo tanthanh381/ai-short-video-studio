@@ -24,6 +24,79 @@ export const CARD = {
   badgeY: 70,
 } as const;
 
+/**
+ * Paper stage (9:16 only): one character on plain kraft paper, a caption under it, nothing else on screen — the look
+ * of "Đạo lý cổ phong" shorts. The picture is drawn square, its edges fade into a paper of its own backdrop colour,
+ * and the character breathes and sways a little while the paper stays still.
+ */
+export const PAPER = {
+  width: 1080,
+  height: 1920,
+  /** The square picture: centred, its bottom edge where the character stands. */
+  // The reference shorts keep the character small (~40-60% of the width) with open paper around it.
+  stage: 640,
+  stageBottom: 1250,
+  /** Captions start just under the character. */
+  captionTop: 1320,
+  /** Share of the picture's side over which its edges fade into the paper. */
+  feather: 0.14,
+  /** Kraft paper of the reference shorts (measured RGB 211,187,135 through the whole video). */
+  paper: [211, 187, 135] as const,
+} as const;
+
+/** The one recurring character of a paper-stage video when the script names nobody. */
+export const PAPER_MASCOT = "a little chibi boy with a topknot hair bun and a long olive headband ribbon, wearing an olive green ancient robe";
+
+export function usesPaperStage(settings: { layoutTemplate?: string; aspectRatio: string }): boolean {
+  return settings.layoutTemplate === "paper-stage" && settings.aspectRatio === "9:16";
+}
+
+/**
+ * Shifts the picture's colours so its paper becomes the reference kraft, and fades its edges to transparent so it
+ * melts into the sheet. The model draws the paper a little green one time and yellow the next; shifting every scene
+ * to the same paper keeps the video one sheet, as in the reference shorts.
+ */
+export function paperFeatherFilter(shift: readonly [number, number, number] = [0, 0, 0], side: number = PAPER.stage): string {
+  const fade = Math.round(side * PAPER.feather);
+  const [dr, dg, db] = shift;
+  return `scale=${side}:${side}:force_original_aspect_ratio=increase:flags=lanczos,crop=${side}:${side},format=rgba,` +
+    `geq=r='clip(r(X,Y)+${dr},0,255)':g='clip(g(X,Y)+${dg},0,255)':b='clip(b(X,Y)+${db},0,255)':` +
+    `a='255*min(1,min(min(X,W-1-X),min(Y,H-1-Y))/${fade})'`;
+}
+
+/** The colour shift from a picture's paper (its lightest corner) to the reference kraft, at most ±60 per channel. */
+export function paperShift(corners: Array<[number, number, number]>): [number, number, number] {
+  const luma = ([r, g, b]: [number, number, number]) => 0.299 * r + 0.587 * g + 0.114 * b;
+  if (!corners.length) return [0, 0, 0];
+  const paper = corners.reduce((best, corner) => (luma(corner) > luma(best) ? corner : best), corners[0]!);
+  return paper.map((value, channel) => Math.max(-60, Math.min(60, PAPER.paper[channel]! - value))) as [number, number, number];
+}
+
+/**
+ * One scene: the paper (input 2) with the feathered character (input 0) breathing (1.2% scale, 3.4 s) and swaying
+ * (0.4°, 4.6 s) from the feet, so it reads as alive without a video model. Phase differs per scene.
+ */
+export function paperStageFilter(index: number): string {
+  const phase = (index % 4) * 0.8;
+  return `[0:v]format=rgba,scale=w='trunc(${PAPER.stage}*(1+0.012*sin(2*PI*(t+${phase})/3.4))/2)*2':h=-2:eval=frame,` +
+    `rotate=a='0.007*sin(2*PI*(t+${phase})/4.6)':c=none:ow=iw:oh=ih[character];` +
+    `[2:v]format=yuv420p[paper];[paper][character]overlay=x='(W-w)/2':y='${PAPER.stageBottom}-h':eval=frame:format=auto,fps=30,format=yuv420p[v]`;
+}
+
+/** The kraft sheet: fine grain and a faint vignette. */
+export function paperCanvasArgs(output: string, color: string = PAPER_HEX): string[] {
+  // A strong vignette darkened the sheet around the picture, whose own paper then showed as a light square.
+  return ["-y", "-f", "lavfi", "-i", `color=c=0x${color}:s=${PAPER.width}x${PAPER.height}:d=1,noise=alls=5:allf=u,vignette=PI/14`,
+    "-frames:v", "1", "-update", "1", output];
+}
+
+/** ffmpeg filters that average one 48 px corner of the picture to a single RGB pixel. */
+export const PAPER_CORNERS = ["crop=48:48:0:0", "crop=48:48:iw-48:0", "crop=48:48:0:ih-48", "crop=48:48:iw-48:ih-48"]
+  .map((crop) => `${crop},scale=1:1:flags=area`);
+
+/** The sheet's colour as ffmpeg hex. */
+export const PAPER_HEX = PAPER.paper.map((value) => value.toString(16).padStart(2, "0")).join("");
+
 export function usesStoryCard(settings: { layoutTemplate?: string; aspectRatio: string }): boolean {
   return settings.layoutTemplate === "story-card" && settings.aspectRatio === "9:16";
 }

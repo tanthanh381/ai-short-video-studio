@@ -844,7 +844,11 @@ export function parseStoryboard(value: unknown): StoryboardResult {
 
 /** Story-card videos show the picture in a 16:10 band instead of the whole 9:16 frame. */
 export function imageAspectFor(settings: { aspectRatio: string; layoutTemplate?: string }): string {
-  return settings.layoutTemplate === "story-card" && settings.aspectRatio === "9:16" ? "16:10" : settings.aspectRatio;
+  if (settings.aspectRatio !== "9:16") return settings.aspectRatio;
+  if (settings.layoutTemplate === "story-card") return "16:10";
+  // Paper stage: a square character picture placed on the paper (card-layout.ts PAPER).
+  if (settings.layoutTemplate === "paper-stage") return "1:1";
+  return settings.aspectRatio;
 }
 
 /** Stable 31-bit seed for one scene. Including the scene id keeps reruns deterministic without cloning every frame. */
@@ -858,7 +862,7 @@ export function imageSeedFor(projectId: string): number {
  * Photographic by default; painted/cartoon looks only when the author's visual style asks for them.
  * "flat" is the 2D picture-book look (cartoon preset or an explicit flat/2D/vector request).
  */
-export type ImageStyle = "photo" | "illustration" | "flat" | "historical" | "ink" | "watercolor" | "paper-cut" | "whiteboard";
+export type ImageStyle = "photo" | "illustration" | "flat" | "historical" | "ink" | "watercolor" | "paper-cut" | "whiteboard" | "chibi";
 
 /** Each website preset has its own look in the image bridge; the default (cinematic) and custom wording fall back to a guess. */
 const PRESET_IMAGE_STYLE: Record<string, ImageStyle> = {
@@ -868,6 +872,7 @@ const PRESET_IMAGE_STYLE: Record<string, ImageStyle> = {
   watercolor: "watercolor",
   "paper-cut": "paper-cut",
   whiteboard: "whiteboard",
+  "chibi-co-phong": "chibi",
 };
 
 export function imageStyleFor(visualStyle: string, visualPreset?: string): ImageStyle {

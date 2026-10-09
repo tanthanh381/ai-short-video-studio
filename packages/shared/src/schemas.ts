@@ -17,6 +17,7 @@ export const visualPresetSchema = z.enum([
   "watercolor",
   "paper-cut",
   "whiteboard",
+  "chibi-co-phong",
 ]);
 export type VisualPreset = z.infer<typeof visualPresetSchema>;
 export const projectStatusSchema = z.enum([
@@ -50,7 +51,8 @@ export const subtitleStyleSchema = z.object({
 export const logoPositionSchema = z.enum(["top-left", "top-center", "top-right", "bottom-left", "bottom-right"]);
 
 /** full-bleed: ảnh phủ toàn khung. story-card: tiêu đề + dải tranh + phụ đề + chữ ký kênh trên nền màu (kiểu video truyện minh họa). */
-export const layoutTemplateSchema = z.enum(["full-bleed", "story-card"]);
+// paper-stage: one character on plain kraft paper, caption under it ("Đạo lý cổ phong" shorts).
+export const layoutTemplateSchema = z.enum(["full-bleed", "story-card", "paper-stage"]);
 
 export const subtitleCueSchema = z
   .object({

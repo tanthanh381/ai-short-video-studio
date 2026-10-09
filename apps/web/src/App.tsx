@@ -1451,13 +1451,14 @@ function NewProjectPage() {
                 {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
             </Field>
-            <Field label="Khung video" hint="Thẻ truyện: tiêu đề vàng trên nền xanh, tranh minh họa ở giữa, phụ đề bên dưới, có tên kênh ở chân video (video dọc 9:16).">
+            <Field label="Khung video" hint="Thẻ truyện: tiêu đề vàng trên nền xanh, tranh minh họa ở giữa, phụ đề bên dưới. Nhân vật trên nền giấy: một nhân vật chibi giữa tờ giấy kraft, phụ đề nhỏ ngay dưới (video dọc 9:16).">
               <select
                 value={settings.layoutTemplate}
                 onChange={(e) => setSettings((s) => withLayoutTemplate(s, e.target.value as ProjectSettings["layoutTemplate"]))}
               >
                 <option value="full-bleed">Toàn khung hình</option>
                 <option value="story-card">Thẻ truyện (tranh minh họa)</option>
+                <option value="paper-stage">Nhân vật trên nền giấy</option>
               </select>
             </Field>
             {settings.layoutTemplate === "story-card" && (
@@ -2751,6 +2752,7 @@ function StudioPage() {
                 >
                   <option value="full-bleed">Toàn khung hình</option>
                   <option value="story-card">Thẻ truyện (tranh minh họa)</option>
+                <option value="paper-stage">Nhân vật trên nền giấy</option>
                 </select>
               </Field>
               {project.settings.layoutTemplate === "story-card" && (

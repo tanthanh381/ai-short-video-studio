@@ -24,6 +24,19 @@ describe("channel presets", () => {
     expect(knowledge).toMatchObject({ layoutTemplate: "full-bleed", visualPreset: "cinematic-color" });
   });
 
+  it("leaving the paper stage gives readable captions back on a full-frame picture", () => {
+    const paper = CHANNEL_PRESETS.find((preset) => preset.id === "dao-ly-co-phong")!.apply(DEFAULT_PROJECT_SETTINGS);
+    expect(paper).toMatchObject({ layoutTemplate: "paper-stage", visualPreset: "chibi-co-phong", aspectRatio: "9:16", hookTitle: false, captionHighlight: false });
+    expect(paper.subtitle.backgroundOpacity).toBe(0);
+    for (const preset of CHANNEL_PRESETS.filter((item) => item.id !== "dao-ly-co-phong" && item.id !== "co-tich")) {
+      const next = preset.apply(paper);
+      expect(next.layoutTemplate, preset.id).toBe("full-bleed");
+      expect(next.subtitle.fontColor, preset.id).toBe(DEFAULT_PROJECT_SETTINGS.subtitle.fontColor);
+      expect(next.subtitle.backgroundOpacity, preset.id).toBe(DEFAULT_PROJECT_SETTINGS.subtitle.backgroundOpacity);
+    }
+    expect(CHANNEL_PRESETS.find((item) => item.id === "co-tich")!.apply(paper).subtitle.fontColor).toBe(DEFAULT_PROJECT_SETTINGS.subtitle.fontColor);
+  });
+
   it("estimates narration length from words, the voice's pace and reading speed", () => {
     expect(estimatedNarrationSeconds(309, "doc-truyen", 1)).toBe(84); // "Ăn khế trả vàng" at the normalised pace
     expect(estimatedNarrationSeconds(309, "doc-truyen", 1.2)).toBe(70);

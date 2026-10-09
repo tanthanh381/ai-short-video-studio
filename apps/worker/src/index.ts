@@ -6,13 +6,13 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
-import { drawsByHand, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
+import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
 import { getConfig } from "./config";
 import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
-import { castForScript, fallbackCardTitle, storyNationality, usesStoryCard, withNationality } from "./card-layout";
+import { castForScript, fallbackCardTitle, PAPER_MASCOT, storyNationality, usesPaperStage, usesStoryCard, withNationality } from "./card-layout";
 import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
 import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, imageAspectFor, vietnameseByDefault, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
@@ -387,6 +387,8 @@ async function storyboard(job: JobRow, project: Project) {
   const nationality = storyNationality(`${project.title}\n${sourceText}\n${result.narration}`);
   // The "Cổ trang" look is a period story even when the script never says "ngày xưa".
   cast = eraAppropriateCast(withNationality(cast, nationality), sourceText, project.settings.visualPreset === "historical", nationality);
+  // Paper stage: the same little character carries every scene (the genre's mascot), whoever the script addresses.
+  if (usesPaperStage(project.settings)) cast = PAPER_MASCOT;
   checkDeadline(job);
   // One short promise-style title, written once: the story card's banner, or the hook over the first seconds of
   // a full-frame video. It is stored as the project's hook (which used to hold a copy of the script's start).
@@ -457,11 +459,12 @@ async function generateMedia(job: JobRow, project: Project) {
   const mediaProgress = (done: number) => prepass
     ? 42 + Math.round((done / scenes.length) * 43)
     : Math.round((done / scenes.length) * 85);
-  const speak = async (scene: Scene) => {
+  const speak = async (scene: Scene, speedFactor = 1) => {
+    const speed = project.settings.voiceSpeed * speedFactor;
     const aligned = media.createSpeechAligned
-      ? await media.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, speed: project.settings.voiceSpeed })
+      ? await media.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, speed })
       : null;
-    let audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed: project.settings.voiceSpeed });
+    let audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed });
     let subtitles = aligned?.cues ?? [];
     let alignedDurationMs = aligned?.durationMs;
     if (project.settings.trimSilence) {
@@ -499,6 +502,22 @@ async function generateMedia(job: JobRow, project: Project) {
           log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "voice_prepass_failed");
         }
       }
+      // An idea is written to a chosen length, but voices read 3.8-4.1 words/s depending on the script. Measure the
+      // voiced total and, when it misses by more than 8%, read every scene again at a corrected speed (still on the
+      // CPU while the GPU draws), so "1 phút" comes out near a minute.
+      const voicedMs = scenes.reduce((total, scene) => total + (scene.actualDurationMs ?? 0), 0);
+      const factor = project.inputMode === "idea" && scenes.every((scene) => scene.audioPath)
+        ? paceCorrection(voicedMs, project.settings.targetDurationSec) : null;
+      if (!factor) return;
+      log.info({ jobId: job.id, voicedMs, targetSec: project.settings.targetDurationSec, factor }, "voice_pace_corrected");
+      for (const scene of scenes) {
+        try {
+          const voiced = await speak(scene, factor);
+          Object.assign(scene, { audioPath: voiced.audioPath, subtitles: voiced.subtitles, actualDurationMs: voiced.actualDurationMs });
+        } catch (error) {
+          log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "voice_pace_retry_failed");
+        }
+      }
     })()
     : Promise.resolve();
   for (const [index, scene] of pendingImages.entries()) {
@@ -511,7 +530,7 @@ async function generateMedia(job: JobRow, project: Project) {
         imageAspectFor(project.settings),
         {
           ...project.settings.localModels,
-          seed: imageSeedFor(`${project.id}:${scene.id}`),
+          seed: sceneSeed(project, scene),
           style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
           preset: project.settings.generationPreset,
         },
@@ -569,7 +588,7 @@ async function generateMedia(job: JobRow, project: Project) {
           imageAspectFor(project.settings),
           {
             ...project.settings.localModels,
-            seed: imageSeedFor(`${project.id}:${scene.id}`),
+            seed: sceneSeed(project, scene),
             style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
             preset: project.settings.generationPreset,
           },
@@ -808,6 +827,11 @@ async function renderDub(job: JobRow, project: Project) {
   } finally {
     await rm(result.workdir, { recursive: true, force: true });
   }
+}
+
+/** One seed per scene; a paper-stage video uses one seed for all, which keeps its mascot the same from scene to scene. */
+function sceneSeed(project: Project, scene: Scene): number {
+  return imageSeedFor(usesPaperStage(project.settings) ? project.id : `${project.id}:${scene.id}`);
 }
 
 /** The scene's picture prompt; a hand-drawn video must not get a second hand inside the picture. */

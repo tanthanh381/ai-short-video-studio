@@ -201,9 +201,11 @@ IMAGE_STYLES = {
     # Drawn by the hand renderer: it inks the dark outlines first, then washes in the flat colours. Photos have no
     # outlines to follow (sparse specks, then white holes where the background matched the paper), so this look only.
     "whiteboard": "whiteboard doodle illustration, bold black marker outlines, flat pastel colors, plain white background",
+    # "Đạo lý cổ phong": one small character on plain kraft paper; the website places the square picture on paper.
+    "chibi": "cute chibi illustration, plain warm beige kraft paper background, ancient Asian robe in muted olive green, soft muted colors, clean ink outlines, centered full body, empty background",
 }
 # Drawn looks: photo skin/anatomy wording would pull them back towards photographs.
-STYLIZED_IMAGE_STYLES = {"flat", "ink", "watercolor", "paper-cut", "whiteboard"}
+STYLIZED_IMAGE_STYLES = {"flat", "ink", "watercolor", "paper-cut", "whiteboard", "chibi"}
 IMAGE_ANATOMY_GUARD = os.getenv("IMAGE_ANATOMY_GUARD", "true").lower() not in {"0", "false", "no"}
 IMAGE_NEGATIVE_PROMPT = os.getenv(
     "IMAGE_NEGATIVE_PROMPT",
@@ -461,7 +463,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
             image = response.read()
-        return detail_faces(image, IMAGE_STYLES[style], clean, seed) if FACE_SUBJECT_RE.search(clean) else image
+        # Chibi faces are big, simple shapes by design; a "detailed face" redraw would turn them half-realistic.
+        return detail_faces(image, IMAGE_STYLES[style], clean, seed) if style != "chibi" and FACE_SUBJECT_RE.search(clean) else image
     with IMAGE_LOCK, tempfile.TemporaryDirectory(prefix="studio-image-") as workdir:
         target = Path(workdir) / "image.png"
         subprocess.run(["/bin/zsh", str(IMAGE_SCRIPT), styled, str(target)],

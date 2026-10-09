@@ -119,3 +119,39 @@ describe("recurring cast for story cards", () => {
     expect(castForScript("Cuộc đời ngắn lắm, hãy sống thật bình yên.")).toBe("");
   });
 });
+
+describe("paper stage (Đạo lý cổ phong)", () => {
+  it("is a 9:16 frame with a square picture and the same mascot", async () => {
+    const { usesPaperStage, PAPER, PAPER_MASCOT, paperStageFilter, paperFeatherFilter } = await import("./card-layout");
+    const { imageAspectFor } = await import("./providers");
+    expect(usesPaperStage({ layoutTemplate: "paper-stage", aspectRatio: "9:16" })).toBe(true);
+    expect(usesPaperStage({ layoutTemplate: "paper-stage", aspectRatio: "16:9" })).toBe(false);
+    expect(imageAspectFor({ layoutTemplate: "paper-stage", aspectRatio: "9:16" })).toBe("1:1");
+    expect(PAPER_MASCOT).toMatch(/chibi/);
+    // the character stands on the same line in every scene and the captions start below it
+    expect(PAPER.stageBottom).toBeLessThan(PAPER.captionTop);
+    expect(paperStageFilter(0)).toContain(`y='${PAPER.stageBottom}-h'`);
+    // breathing and swaying differ in phase from scene to scene
+    expect(paperStageFilter(1)).not.toBe(paperStageFilter(0));
+    expect(paperFeatherFilter()).toContain(`scale=${PAPER.stage}:${PAPER.stage}`);
+    // every picture is shifted onto the same kraft: measured from its lightest corner (hair or a prop is darker)
+    const { paperShift } = await import("./card-layout");
+    expect(paperShift([[60, 70, 40], [201, 197, 140], [190, 185, 130], [90, 80, 60]])).toEqual([10, -10, -5]);
+    expect(paperShift([[255, 255, 255]])).toEqual([-44, -60, -60]); // capped: never more than ±60 a channel
+    expect(paperFeatherFilter([10, -10, -5])).toContain("r='clip(r(X,Y)+10,0,255)'");
+  });
+
+  it("puts the captions under the character, small and without a box", async () => {
+    const { createAss } = await import("./render");
+    const { PAPER } = await import("./card-layout");
+    const scene = { id: "s", order: 0, narration: "Đừng quá khó ăn khó ở.", imagePrompt: "p", estimatedDurationMs: 2000, actualDurationMs: 2000,
+      imagePath: "a", videoPath: null, audioPath: "b", thumbnailUrl: null, mediaStatus: "ready", errorMessage: null, annotationJson: null,
+      subtitles: [{ id: "c", text: "Đừng quá khó ăn khó ở.", startMs: 0, endMs: 2000 }] };
+    const ass = createAss({ settings: { ...DEFAULT_PROJECT_SETTINGS, layoutTemplate: "paper-stage", aspectRatio: "9:16",
+      subtitle: { ...DEFAULT_PROJECT_SETTINGS.subtitle, fontColor: "#3E3A22", backgroundOpacity: 0 } }, scenes: [scene] } as never);
+    const style = ass.split("\n").find((line) => line.startsWith("Style: Default"))!.split(",");
+    expect(style[18]).toBe("8"); // top-anchored ...
+    expect(style[21]).toBe(String(PAPER.captionTop)); // ... just under the character
+    expect(style[15]).toBe("1"); // outline only, no box
+  });
+});

@@ -1,12 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { drawsByHand, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
 import { buildAudioMixFilter, buildAmbientMusicArgs, validateCaptionTiming } from "./render-quality";
-import { CARD, brandInitials, cardFooterLines, cardTitleFontSize, fallbackCardTitle, splitCardTitle, usesStoryCard } from "./card-layout";
+import { CARD, PAPER, brandInitials, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperCanvasArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
 import { drawSceneByHand } from "./whiteboard";
 
 const exec = promisify(execFile);
@@ -87,14 +87,20 @@ export function createAss(project: Project) {
   const { width, height } = videoSize(project.settings.aspectRatio);
   const style = project.settings.subtitle;
   const cardMode = usesStoryCard(project.settings);
-  // Story card: captions sit directly under the picture band, top-anchored, in a calmer size.
-  const alignment = cardMode ? 8 : style.position === "top" ? 8 : style.position === "center" ? 5 : 2;
+  const paperMode = usesPaperStage(project.settings);
+  // Story card: captions sit directly under the picture band, top-anchored, in a calmer size. Paper stage: under
+  // the character, small and quiet.
+  const alignment = cardMode || paperMode ? 8 : style.position === "top" ? 8 : style.position === "center" ? 5 : 2;
   const marginV = cardMode
     ? CARD.subtitleTop
-    : style.position === "bottom"
+    : paperMode
+      ? PAPER.captionTop
+      : style.position === "bottom"
       ? Math.round(height * 0.16)
       : Math.round(height * 0.1);
-  const fontSize = cardMode
+  const fontSize = paperMode
+    ? Math.round(height * 0.026)
+    : cardMode
     ? Math.round(height * 0.03)
     : style.preset === "focus"
       ? Math.round(height * 0.042)
@@ -254,6 +260,7 @@ export async function renderProject(
     const { width, height } = videoSize(project.settings.aspectRatio);
     const encoderPreset = videoEncoderPreset(project.settings.generationPreset);
     const cardFrame = usesStoryCard(project.settings) ? await buildCardFrame(config, workdir, project) : null;
+    const paperStage = usesPaperStage(project.settings);
     let done = 0;
     const renderSegment = async (scene: Scene) => {
       if ((!scene.imagePath && !scene.videoPath) || !scene.audioPath)
@@ -282,6 +289,21 @@ export async function renderProject(
           "-frames:v", "1", stillPath], { timeout: 60_000 });
         await drawSceneByHand(config, scene, stillPath, size, ms, motionPath);
       }
+      // Paper stage: the character on a paper of its own backdrop colour (input 2), breathing; see card-layout.ts.
+      let paperCanvas: string | null = null;
+      if (paperStage && !scene.videoPath && !handDrawn) {
+        const feathered = join(workdir, `scene-${scene.order}-character.png`);
+        const corners: Array<[number, number, number]> = [];
+        for (const corner of PAPER_CORNERS) {
+          const { stdout } = await exec(config.FFMPEG_PATH, ["-v", "error", "-i", imagePath, "-vf", corner, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            { encoding: "buffer", timeout: 30_000 }) as unknown as { stdout: Buffer };
+          if (stdout.length >= 3) corners.push([stdout[0]!, stdout[1]!, stdout[2]!]);
+        }
+        await exec(config.FFMPEG_PATH, ["-y", "-i", imagePath, "-vf", paperFeatherFilter(paperShift(corners)), "-frames:v", "1", feathered], { timeout: 60_000 });
+        paperCanvas = join(workdir, "paper.png");
+        await exec(config.FFMPEG_PATH, paperCanvasArgs(paperCanvas), { timeout: 60_000 });
+        await writeFile(imagePath, await readFile(feathered));
+      }
       const clip = Boolean(scene.videoPath) || handDrawn;
       // An uploaded clip loops to cover the voice; a drawing must not start over, so it holds its finished frame.
       const clipFrames = handDrawn ? "fps=30,tpad=stop_mode=clone:stop_duration=2" : "fps=30";
@@ -289,7 +311,9 @@ export async function renderProject(
       // Stills are scaled to twice the output before the camera move: zoompan rounds positions to whole pixels,
       // which made slow pans stutter (frame-to-frame motion stdev 1.39 -> 0.87); then a light sharpen for the upscale.
       const sharpen = ",unsharp=5:5:0.5:5:5:0.0";
-      const filter = cardFrame
+      const filter = paperCanvas
+        ? paperStageFilter(scene.order)
+        : cardFrame
         // Story card: the picture lives in a 16:10 band over the pre-rendered background (input 2).
         ? clip
           ? `[0:v]scale=${CARD.width}:${CARD.bandH}:force_original_aspect_ratio=increase,crop=${CARD.width}:${CARD.bandH},${clipFrames},format=yuv420p[band];[2:v]format=yuv420p[bg];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
@@ -305,7 +329,7 @@ export async function renderProject(
           ...videoInput,
           "-i",
           audioPath,
-          ...(cardFrame ? ["-loop", "1", "-framerate", "30", "-i", cardFrame] : []),
+          ...(paperCanvas ? ["-loop", "1", "-framerate", "30", "-i", paperCanvas] : cardFrame ? ["-loop", "1", "-framerate", "30", "-i", cardFrame] : []),
           "-t",
           seconds.toFixed(3),
           "-filter_complex",

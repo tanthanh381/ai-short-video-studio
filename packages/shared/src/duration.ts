@@ -112,6 +112,18 @@ export function contentPlan(durationSec: number, style: string, voice: string, v
   return { durationSec, words, beats, scenes: Math.max(2, Math.round(words.target / 14.5)), summary };
 }
 
+/**
+ * Reading-speed factor that brings voiced narration to its target, or null when it is close enough (±8%).
+ * The word budget alone misses: the same voice read 3.8-4.1 words/s across scripts (questions and exclamations run
+ * faster), and a "1 phút" idea came out at 50 s. Clamped to ±12% so the voice still sounds natural.
+ */
+export function paceCorrection(actualMs: number, targetSec: number): number | null {
+  if (!actualMs || !targetSec) return null;
+  const ratio = actualMs / 1000 / targetSec;
+  if (Math.abs(1 - ratio) <= 0.08) return null;
+  return Math.min(1.12, Math.max(0.88, ratio));
+}
+
 /** "45 giây", "1 phút", "1 phút 30 giây". */
 export function durationLabel(seconds: number): string {
   const total = Math.round(seconds);
