@@ -89,6 +89,9 @@ class RegionStreamRenderer:
         self.sy = self.out_h / ch
 
         self.color_img = cv2.resize(image_bgr, (self.out_w, self.out_h), interpolation=cv2.INTER_AREA)
+        # The finished picture shown at the end. Drawing steps may only read it: a step that once repainted the working
+        # copy left paper-coloured holes in faces, so the hold frames come from this untouched copy instead.
+        self.source_img = self.color_img.copy()
         gray = cv2.cvtColor(self.color_img, cv2.COLOR_BGR2GRAY)
         self.thresh_map = cv2.adaptiveThreshold(
             gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 10
@@ -413,7 +416,8 @@ class RegionStreamRenderer:
                         self._lay_ink_grid(writer, ink_frames, samples, pen_lifts, sample_cell, path, allowed)
                         centers = [self._cell_center(c) for c in path]
                     else:
-                        self._lay_ink(writer, ink_frames, [], set(), None, allowed)
+                        # No outline in this region (a plain colour): hold the paper for the ink time, then colour it.
+                        self._lay_ink(writer, ink_frames, [], set(), allowed)
                         centers = []
 
                 cur_ms += ink_frames * ms_per_frame
@@ -426,8 +430,8 @@ class RegionStreamRenderer:
 
             # 凝视：补到 total_ms，并确保结尾至少停留 0.5s 完整原图
             gaze_until = max(total_ms, cur_ms + 500)
-            # 最终帧显示完整原图（凝视）
-            self.drawn[...] = self.color_img.astype(np.float32)
+            # The hold shows the exact source picture
+            self.drawn[...] = self.source_img.astype(np.float32)
             fill_static(gaze_until)
         finally:
             writer.release()

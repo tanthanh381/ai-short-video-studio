@@ -323,6 +323,73 @@ def comfyui_image(prompt, negative_prompt, width, height, seed, preset):
     return data
 
 
+# Faces are redrawn larger after generation (local-tools/face_detail.py, YuNet + image-to-image): SDXL-Turbo smeared
+# eyes and bent glasses on faces of ~100 px. Runs in the whiteboard venv, which has OpenCV; any failure keeps the image.
+FACE_DETAIL = os.getenv("FACE_DETAIL", "true").lower() not in {"0", "false", "no"}
+FACE_PYTHON = os.getenv("FACE_DETAIL_PYTHON", str(Path.home() / "Developer/local-ai/wb-venv/bin/python"))
+FACE_SCRIPT = Path(__file__).resolve().parent / "face_detail.py"
+# Who may have a face worth redrawing. Wider than HUMAN_PROMPT_RE ("two elderly friends", "a mother"), and still a gate:
+# a redraw prompted as a person would put a human face on a cat or a clock that YuNet happened to score high.
+FACE_SUBJECT_RE = re.compile(
+    r"\b(?:person|people|human|portrait|face|wom[ae]n|m[ae]n|girls?|boys?|child(?:ren)?|kids?|baby|mother|father|parents?|"
+    r"family|couple|friends?|elderly|grand(?:mother|father|parents?)|sisters?|brothers?|daughters?|sons?|wife|husband|"
+    r"students?|teachers?|doctors?|nurses?|farmers?|workers?|villagers?|monks?|soldiers?|warriors?|swordsm[ae]n|"
+    r"king|queen|princess|prince|lady|gentleman|character|customers?|vendors?|chefs?|drivers?)\b",
+    re.I,
+)
+NATIONALITY_RE = re.compile(r"\b(Vietnamese|Japanese|Korean|Chinese|Thai|Asian|Indian|African|European|American)\b", re.I)
+
+
+FACE_MODEL = Path(os.getenv("FACE_MODEL", str(Path.home() / "Developer/local-ai/models/face/face_detection_yunet_2023mar.onnx")))
+# Counted so /health (and the website's Settings) shows the pass is really running: a step that fails quietly is how
+# the hand-drawn videos stayed broken without anyone noticing.
+FACE_STATS = {"images": 0, "faces": 0, "skipped": 0, "lastError": None}
+
+
+def face_detail_state():
+    """(ready, detail) for /health."""
+    if not FACE_DETAIL:
+        return False, "Đã tắt bằng FACE_DETAIL=false"
+    missing = [name for name, path in (("Python có OpenCV", Path(FACE_PYTHON)), ("mô hình dò mặt", FACE_MODEL),
+                                       ("face_detail.py", FACE_SCRIPT)) if not path.exists()]
+    if missing:
+        return False, "Thiếu " + ", ".join(missing)
+    stats = f"đã sửa {FACE_STATS['faces']} khuôn mặt trong {FACE_STATS['images']} ảnh từ lúc khởi động"
+    if FACE_STATS["lastError"]:
+        return True, f"Sẵn sàng; {stats}; lỗi gần nhất: {FACE_STATS['lastError']}"
+    return True, f"Sẵn sàng; {stats}"
+
+
+def detail_faces(image, style_words, prompt, seed):
+    if not face_detail_state()[0]:
+        FACE_STATS["skipped"] += 1
+        return image
+    nationality = NATIONALITY_RE.search(prompt)
+    # Naming who it is keeps Asian faces Asian; without it the redraw drifted to Western features.
+    who = f"a {nationality.group(1).capitalize()} person" if nationality else "a person"
+    try:
+        with tempfile.TemporaryDirectory(prefix="studio-face-") as workdir:
+            source, target = Path(workdir) / "in.png", Path(workdir) / "out.png"
+            source.write_bytes(image)
+            done = subprocess.run([FACE_PYTHON, "-I", str(FACE_SCRIPT), str(source), str(target), "--style", style_words,
+                                   "--who", who, "--seed", str(seed if seed is not None else 7)],
+                                  capture_output=True, text=True, timeout=240,
+                                  env={**os.environ, "IMAGE_SERVER_URL": IMAGE_SERVER_URL})
+            if done.returncode != 0:
+                raise RuntimeError(done.stderr.strip().splitlines()[-1] if done.stderr.strip() else f"exit {done.returncode}")
+            faces = json.loads(done.stdout.strip().splitlines()[-1]).get("faces", 0)
+            FACE_STATS["images"] += 1
+            FACE_STATS["faces"] += faces
+            print(f"[face] redrew {faces} face(s) as {who}", flush=True)
+            if faces and target.exists():
+                return target.read_bytes()
+    except Exception as error:  # noqa: BLE001 - the picture without the redraw is still usable
+        FACE_STATS["skipped"] += 1
+        FACE_STATS["lastError"] = str(error)[:200]
+        print(f"[face] skipped: {error}", flush=True)
+    return image
+
+
 def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo", preset=None, reference_image_base64=None):
     """SDXL-Turbo (MLX, Apple GPU) from the local AI toolkit, generated at the video's native aspect."""
     if aspect_ratio not in IMAGE_SIZES:
@@ -393,7 +460,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps(payload).encode(),
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
-            return response.read()
+            image = response.read()
+        return detail_faces(image, IMAGE_STYLES[style], clean, seed) if FACE_SUBJECT_RE.search(clean) else image
     with IMAGE_LOCK, tempfile.TemporaryDirectory(prefix="studio-image-") as workdir:
         target = Path(workdir) / "image.png"
         subprocess.run(["/bin/zsh", str(IMAGE_SCRIPT), styled, str(target)],
@@ -808,7 +876,9 @@ class Handler(BaseHTTPRequestHandler):
             ltx_ready, ltx_detail = ltx_state()
             comfy_ready, comfy_detail = comfyui_state()
             ollama_ready = service_up(OLLAMA_URL, "/api/tags")
+            face_ready, face_detail = face_detail_state()
             json_response(self, 200, {"ok": image_ready and tts_ready, "image": image_ready,
+                                    "faceDetail": face_ready, "faceDetailDetail": face_detail,
                                     "tts": tts_ready, "alignedTts": tts_ready, "ttsEngines": engines, "ffmpeg": ffmpeg_ready,
                                     "transcribe": transcribe_ready, "ollama": ollama_ready,
                                     "comfyui": comfy_ready == "ready", "comfyuiState": comfy_ready,

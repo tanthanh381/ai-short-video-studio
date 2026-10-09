@@ -64,7 +64,7 @@ type ServiceStatus = { state: ServiceState; detail: string; checkedAt: string };
 type WorkerHealthPayload = {
   services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia" | "whiteboard", { state: ServiceState; detail: string }>>;
 };
-type LocalMediaHealthPayload = { video?: boolean; videoState?: string; videoDetail?: string };
+type LocalMediaHealthPayload = { video?: boolean; videoState?: string; videoDetail?: string; faceDetail?: boolean; faceDetailDetail?: string };
 
 type UsageStats = {
   today: { usedUsd: number; eventCount: number; inputTokens: number; outputTokens: number; totalTokens: number };
@@ -242,6 +242,13 @@ export function createApp(config: AppConfig, db: AdminClient) {
               ? `Media server hoạt động; LTX: ${mediaHealth.videoDetail ?? "chưa sẵn sàng"}`
               : "Media server và LTX đang phản hồi"
             : "Không kết nối được media server"
+          : "Tính năng media local đang tắt",
+      ),
+      // Faces of generated pictures are redrawn by the media bridge; shown so a silently disabled pass gets noticed.
+      faceDetail: status(
+        config.LOCAL_MEDIA_FEATURES_ENABLED ? (mediaHealth ? (mediaHealth.faceDetail ? "healthy" : "offline") : "offline") : "disabled",
+        config.LOCAL_MEDIA_FEATURES_ENABLED
+          ? mediaHealth?.faceDetailDetail ?? (mediaHealth ? "Media server chưa hỗ trợ sửa khuôn mặt" : "Không kết nối được media server")
           : "Tính năng media local đang tắt",
       ),
       // The worker reaches the hand-drawing server; the API container does not need to.

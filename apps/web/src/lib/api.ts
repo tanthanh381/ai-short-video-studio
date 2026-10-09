@@ -20,7 +20,7 @@ export type VideoResult = {
 };
 
 export type ServiceState = "healthy" | "configured" | "offline" | "disabled" | "unknown";
-export type ServiceId = "api" | "supabase" | "openai" | "anthropic" | "ollama" | "localMedia" | "whiteboard" | "worker" | "render";
+export type ServiceId = "api" | "supabase" | "openai" | "anthropic" | "ollama" | "localMedia" | "faceDetail" | "whiteboard" | "worker" | "render";
 export type ServiceStatus = { state: ServiceState; detail: string; checkedAt: string };
 export type UsageStats = {
   today: {

@@ -59,6 +59,22 @@ Video chọn phong cách **Vẽ tay bảng trắng** được worker gửi từn
 
 LaunchAgent `~/Library/LaunchAgents/com.ai-short-video.whiteboard.plist` chạy server bằng `wb-venv` khi đăng nhập và tự bật lại nếu tắt. Trạng thái hiện ở Cài đặt → "Máy vẽ tay". Khi máy này tắt, video vẽ tay báo lỗi ngay từ đầu thay vì sau khi đã tạo ảnh và giọng.
 
+### Sửa khuôn mặt
+
+SDXL-Turbo vẽ khuôn mặt nhỏ (khoảng 100 px) hay bị méo mắt, cong kính. Sau mỗi ảnh có người, media bridge chạy `local-tools/face_detail.py` (trong `wb-venv`): mô hình YuNet tìm khuôn mặt, từng mặt được phóng lên 512 px, vẽ lại bằng image-to-image (mức 0,42, giữ tư thế, tóc, kính, nét cười) rồi ghép lại dưới viền mờ. Cần thêm một file mô hình 232 KB:
+
+```bash
+mkdir -p "$LOCAL_AI_ROOT/models/face"
+curl -fsSL -o "$LOCAL_AI_ROOT/models/face/face_detection_yunet_2023mar.onnx" \
+  https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+```
+
+Cài đặt → "Sửa khuôn mặt" cho biết bước này có chạy không và đã sửa bao nhiêu mặt; thiếu venv hoặc mô hình thì hiện rõ thiếu gì thay vì âm thầm bỏ qua. Tắt bằng `FACE_DETAIL=false` trong môi trường của media bridge. Chỉ áp dụng cho ảnh SDXL-Turbo; ảnh SDXL Base (ComfyUI) đã vẽ ở độ phân giải gốc của nó.
+
+### Kiểm thử phần Python
+
+`pnpm test` chạy cả test của bộ vẽ tay và bước sửa mặt (`scripts/test-local-tools.sh`, cần `wb-venv`; máy không có venv như CI sẽ bỏ qua và ghi rõ).
+
 ## Khởi động
 
 ```bash

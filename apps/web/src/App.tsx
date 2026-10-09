@@ -3312,6 +3312,7 @@ function SettingsPage() {
     anthropic: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     ollama: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     localMedia: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
+    faceDetail: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     whiteboard: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     worker: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     render: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
@@ -3417,6 +3418,7 @@ function SettingsPage() {
   const anthropicState = serviceState("anthropic", settings.capabilities.anthropic);
   const ollamaState = serviceState("ollama", settings.capabilities.ollama);
   const localMediaState = serviceState("localMedia", settings.capabilities.localMedia);
+  const faceDetailState = serviceState("faceDetail", settings.capabilities.localMedia);
   const whiteboardState = serviceState("whiteboard", settings.capabilities.render);
   const workerState = serviceState("worker", settings.capabilities.render);
   const renderState = serviceState("render", settings.capabilities.render);
@@ -3448,6 +3450,7 @@ function SettingsPage() {
             ["Supabase", "Đăng nhập, dữ liệu và media", supabaseState],
             ["Ollama", "Viết và chia cảnh kịch bản, không gửi nội dung ra ngoài", ollamaState],
             ["Media local", "Vẽ ảnh SDXL, giọng VieNeu/Piper và Whisper trên máy này", localMediaState],
+            ["Sửa khuôn mặt", "Tự tìm và vẽ lại khuôn mặt trong ảnh có người", faceDetailState],
             ["Worker dựng video", "Nhận việc từ hàng đợi, ghép và xuất MP4 bằng FFmpeg", worseState(workerState, renderState)],
             ["Máy vẽ tay", "Vẽ từng nét cho phong cách Vẽ tay bảng trắng", whiteboardState],
           ] as const).map(([name, detail, state]) => (
