@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  withCast,
   cleanScriptForNarration,
   repairCreativeStoryboard,
   alignKnownText,
@@ -565,5 +566,32 @@ describe("visual action anchors do not fire on unrelated words", () => {
     expect(visualActionPrompt("Cô ngồi viết nhật ký mỗi tối.", base)).toContain("notebook");
     expect(visualActionPrompt("Anh ăn cơm cùng gia đình.", base)).toContain("plate of food");
     expect(visualActionPrompt("Cô tưới chậu cây nhỏ bên cửa sổ.", base)).toContain("watering can");
+  });
+});
+
+describe("withCast keeps the recurring family in every story-card scene", () => {
+  const cast = "a Vietnamese mother in her 40s with black hair in a bun, wearing a light blue blouse";
+  it("leads the prompt with the cast when the prompt names a mother", () => {
+    expect(withCast(cast, "A young mother stirs a pot in a warm kitchen", "Mẹ nấu cơm cho con.")).toMatch(/^a Vietnamese mother in her 40s/);
+  });
+  it("leaves a scene without people alone unless the layout forces the cast", () => {
+    const prompt = "A steaming bowl of rice on a wooden table, soft morning light";
+    expect(withCast(cast, prompt, "Một bát cơm nóng.")).toBe(prompt);
+    expect(withCast(cast, prompt, "Một bát cơm nóng.", true)).toBe(`${cast}. ${prompt}`);
+  });
+  it("does not repeat a description the prompt already contains", () => {
+    const prompt = `${cast}. She smiles at her son`;
+    expect(withCast(cast, prompt, "Mẹ cười.", true)).toBe(prompt);
+  });
+});
+
+describe("story-card prompt writer is told to vary composition and not re-describe the family", () => {
+  it("uses the compact instruction only when a cast is supplied", () => {
+    const base = { ...input, lockedScenes: ["Mẹ nấu cơm.", "Mẹ ru con ngủ."], sceneOffset: 0, totalScenes: 2 } as StoryboardInput;
+    const withFamily = buildStoryboardInstruction({ ...base, cast: "a Vietnamese mother with a black bun, and her young son" });
+    expect(withFamily).toContain("NEVER describe their faces, hair, age or clothes");
+    expect(withFamily).toContain("at most two people per scene");
+    expect(withFamily).toContain("clearly different composition");
+    expect(buildStoryboardInstruction(base)).not.toContain("NEVER describe their faces");
   });
 });

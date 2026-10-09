@@ -46,7 +46,10 @@ export const subtitleStyleSchema = z.object({
   backgroundOpacity: z.number().min(0).max(1).default(0.35),
 });
 
-export const logoPositionSchema = z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]);
+export const logoPositionSchema = z.enum(["top-left", "top-center", "top-right", "bottom-left", "bottom-right"]);
+
+/** full-bleed: ảnh phủ toàn khung. story-card: tiêu đề + dải tranh + phụ đề + chữ ký kênh trên nền màu (kiểu video truyện minh họa). */
+export const layoutTemplateSchema = z.enum(["full-bleed", "story-card"]);
 
 export const subtitleCueSchema = z
   .object({
@@ -131,6 +134,15 @@ export const projectSettingsSchema = z.object({
   logoScale: z.number().min(0.05).max(0.35).default(0.14),
   logoOpacity: z.number().min(0.1).max(1).default(0.9),
   rewriteFullScript: z.boolean().default(false),
+  layoutTemplate: layoutTemplateSchema.default("full-bleed"),
+  /** Tiêu đề in hoa trên đầu thẻ truyện; để trống để tự viết từ kịch bản. */
+  cardTitle: z.string().max(80).default(""),
+  /** Tên kênh in ở chân thẻ truyện ("Bản quyền thuộc về: …"). */
+  brandName: z.string().max(60).default(""),
+  /** Tốc độ đọc: 1 = bình thường; kênh suy ngẫm thường đọc nhanh hơn (≈1.15-1.25). */
+  voiceSpeed: z.number().min(0.8).max(1.3).default(1),
+  /** Tự tạo nhạc nền êm khi chưa tải nhạc riêng. */
+  autoMusic: z.boolean().default(false),
   trimSilence: z.boolean().default(false),
   subtitle: subtitleStyleSchema.default({
     enabled: true,

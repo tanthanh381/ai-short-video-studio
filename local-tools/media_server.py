@@ -117,14 +117,18 @@ def clean_image_prompt(prompt):
     """SDXL's CLIP vocabulary is English: drop the Vietnamese safety suffix and strip any other diacritics."""
     prompt = prompt.replace("Không chữ, không logo, không watermark.", "")
     text = unicodedata.normalize("NFKD", prompt.replace("đ", "d").replace("Đ", "D"))
-    text = re.sub(r"\s+", " ", text.encode("ascii", "ignore").decode()).strip(" .,")
+    text = text.encode("ascii", "ignore").decode()
+    # SDXL paints gibberish ("CLOSED CE") on anything that implies lettering; the picture reads better without it.
+    text = re.sub(r"\b(?:signs?|signboards?|billboards?|banners?|posters?|newspapers?|neon|lettering)\b", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bclosed\b", "quiet", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip(" .,")
     if not text:
         raise ValueError("Mô tả ảnh cần có nội dung tiếng Anh")
     return text
 
 
 # Native portrait/landscape sizes (multiples of 64): no square crop, so nothing is cut or upscaled much.
-IMAGE_SIZES = {"9:16": (576, 1024), "1:1": (704, 704), "16:9": (1024, 576)}
+IMAGE_SIZES = {"9:16": (576, 1024), "1:1": (704, 704), "16:9": (1024, 576), "16:10": (1024, 640)}
 IMAGE_PRESET = os.getenv("IMAGE_PRESET", "balanced")
 IMAGE_PRESETS = {
     "fast": {"steps": 2, "cfg": 1.1},
@@ -178,6 +182,8 @@ NORMALIZED_EMOTION_MARKERS = {
 IMAGE_STYLES = {
     "photo": "cinematic photo, realistic textures, sharp focus, soft film lighting",
     "illustration": "cinematic illustration, detailed, soft painterly lighting",
+    # Picture-book look used by story-card videos; kept short so the 77-token limit does not trim the scene.
+    "flat": "flat 2D vector illustration, picture book, bold outlines, muted warm colors, cartoon",
 }
 IMAGE_ANATOMY_GUARD = os.getenv("IMAGE_ANATOMY_GUARD", "true").lower() not in {"0", "false", "no"}
 IMAGE_NEGATIVE_PROMPT = os.getenv(
@@ -286,17 +292,19 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     preset_options = IMAGE_PRESETS.get(selected_preset, IMAGE_PRESETS["balanced"])
     # Style words first: if the text encoder's 77-token limit forces trimming, the scene detail goes, not the style.
     clean = clean_image_prompt(prompt)
+    is_flat = style == "flat"
     is_human = bool(HUMAN_PROMPT_RE.search(clean))
     anatomy = (
         "one person only, one face, two aligned eyes, symmetrical natural facial features, natural skin texture, "
         "anatomically correct hands, natural body proportions, complete limbs"
-        if IMAGE_ANATOMY_GUARD and is_human
+        if IMAGE_ANATOMY_GUARD and is_human and not is_flat
         else ""
     )
     anatomy_prefix = f", {anatomy}" if anatomy else ""
-    human_detail = ", natural skin, detailed face" if is_human else ""
-    nonhuman_focus = "" if is_human else ", the described object or environment is the main subject, no people, no human figures, no face"
-    styled = f"{IMAGE_STYLES[style]}{human_detail}{anatomy_prefix}{nonhuman_focus}, {clean}, no text, no logo, no watermark"
+    human_detail = ", natural skin, detailed face" if is_human and not is_flat else ""
+    nonhuman_focus = "" if (is_human or is_flat) else ", the described object or environment is the main subject, no people, no human figures, no face"
+    flat_guard = ", only the described characters, no crowd" if is_flat and is_human else ""
+    styled = f"{IMAGE_STYLES[style]}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, {clean}, no text, no logo, no watermark"
     if model == COMFYUI_IMAGE_MODEL:
         if reference_image_base64:
             raise ValueError("SDXL Base qua ComfyUI hiện hỗ trợ text-to-image; hãy bỏ ảnh tham chiếu hoặc chọn SDXL-Turbo")
@@ -481,7 +489,7 @@ def select_tts_engine(voice, engine=None):
 
 def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0):
     vieneu_voice, vieneu_speed = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0))
-    requested_speed = max(0.75, min(float(speed), 1.25))
+    requested_speed = max(0.75, min(float(speed), 1.3))
     profile = emotion_profile(phrase, voice) if engine == "vieneu" else None
     if profile:
         vieneu_speed *= profile["speed"]
@@ -496,10 +504,24 @@ def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0):
         source.write_bytes(_http_wav(PIPER_URL, {"input": input_text}))
     else:
         raise RuntimeError("Engine giọng đọc local không được hỗ trợ")
-    return _to_pcm22050(source)
+    # VieNeu v3 Turbo (and Piper) ignore the `speed` field, so pace — the voice preset, the emotion profile and the
+    # video's voiceSpeed — is applied here as a pitch-preserving time stretch. Cue timing is still read from the audio.
+    tempo = vieneu_speed if engine == "vieneu" else requested_speed
+    return _time_stretch(_to_pcm22050(source), tempo)
 
 
-def tts_aligned(text, voice, engine=None):
+def _time_stretch(source, tempo):
+    tempo = max(0.7, min(float(tempo), 1.45))
+    if abs(tempo - 1.0) < 0.03:
+        return source
+    target = source.with_name(f"{source.stem}-tempo.wav")
+    subprocess.run([require_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", "-i", str(source),
+                    "-filter:a", f"atempo={tempo:.3f}", "-ac", "1", "-ar", str(SAMPLE_RATE), "-sample_fmt", "s16", str(target)],
+                   check=True, timeout=120, capture_output=True)
+    return target
+
+
+def tts_aligned(text, voice, engine=None, speed=1.0):
     phrases = split_speech_phrases(text)
     selected_engine = select_tts_engine(voice, engine)
     if selected_engine == "vieneu":
@@ -512,7 +534,7 @@ def tts_aligned(text, voice, engine=None):
         # overlapping a small, bounded number of local requests.
         with ThreadPoolExecutor(max_workers=min(TTS_CONCURRENCY, len(phrases))) as pool:
             futures = [
-                pool.submit(synth_phrase, phrase, workdir, index, voice, selected_engine)
+                pool.submit(synth_phrase, phrase, workdir, index, voice, selected_engine, speed)
                 for index, phrase in enumerate(phrases)
             ]
             sources = [future.result() for future in futures]
@@ -734,7 +756,7 @@ class Handler(BaseHTTPRequestHandler):
                 binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "doc-truyen")), payload.get("engine"), payload.get("speed", 1.0)))
             elif self.path == "/tts-aligned":
                 payload = json.loads(body)
-                json_response(self, 200, tts_aligned(str(payload.get("text", "")), str(payload.get("voice", "doc-truyen")), payload.get("engine")))
+                json_response(self, 200, tts_aligned(str(payload.get("text", "")), str(payload.get("voice", "doc-truyen")), payload.get("engine"), payload.get("speed", 1.0)))
             elif self.path.split("?")[0] == "/transcribe":
                 json_response(self, 200, {"words": transcribe(body, urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("model", [None])[0])})
             else:

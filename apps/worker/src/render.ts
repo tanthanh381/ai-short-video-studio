@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Project, Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
-import { buildAudioMixFilter, validateCaptionTiming } from "./render-quality";
+import { buildAudioMixFilter, buildAmbientMusicArgs, validateCaptionTiming } from "./render-quality";
+import { CARD, brandInitials, cardFooterLines, cardTitleFontSize, fallbackCardTitle, splitCardTitle, usesStoryCard } from "./card-layout";
 
 const exec = promisify(execFile);
 export type RenderFiles = {
@@ -53,20 +54,24 @@ function assColor(hex: string, alpha = 0) {
 export function createAss(project: Project) {
   const { width, height } = videoSize(project.settings.aspectRatio);
   const style = project.settings.subtitle;
-  const alignment =
-    style.position === "top" ? 8 : style.position === "center" ? 5 : 2;
-  const marginV =
-    style.position === "bottom"
+  const cardMode = usesStoryCard(project.settings);
+  // Story card: captions sit directly under the picture band, top-anchored, in a calmer size.
+  const alignment = cardMode ? 8 : style.position === "top" ? 8 : style.position === "center" ? 5 : 2;
+  const marginV = cardMode
+    ? CARD.subtitleTop
+    : style.position === "bottom"
       ? Math.round(height * 0.16)
       : Math.round(height * 0.1);
-  const fontSize =
-    style.preset === "focus"
+  const fontSize = cardMode
+    ? Math.round(height * 0.03)
+    : style.preset === "focus"
       ? Math.round(height * 0.042)
       : style.preset === "minimal"
         ? Math.round(height * 0.029)
         : Math.round(height * 0.034);
+  const card = usesStoryCard(project.settings);
   const outline = style.preset === "minimal" ? 1 : 2;
-  const borderStyle = style.backgroundOpacity > 0 ? 3 : 1;
+  const borderStyle = card ? 1 : style.backgroundOpacity > 0 ? 3 : 1;
   let offset = 0;
   const lines: string[] = [];
   for (const scene of project.scenes) {
@@ -99,6 +104,47 @@ export async function durationMs(config: WorkerConfig, path: string) {
     throw new Error("File audio/video không có thời lượng hợp lệ");
   return Math.round(duration * 1000);
 }
+const FONT_BOLD = process.env.CARD_FONT_BOLD ?? "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf";
+const FONT_ITALIC = process.env.CARD_FONT_ITALIC ?? "/usr/share/fonts/truetype/noto/NotoSans-Italic.ttf";
+
+/** Static story-card background: gradient + vignette + title banner + channel footer, rendered once per video. */
+export async function buildCardFrame(config: WorkerConfig, workdir: string, project: Project): Promise<string> {
+  const title = project.settings.cardTitle.trim() || project.suggestedTitle.trim() || fallbackCardTitle(project.sourceText);
+  const lines = splitCardTitle(title);
+  const titleSize = cardTitleFontSize(lines);
+  const textFile = async (name: string, text: string) => { const path = join(workdir, name); await writeFile(path, text, "utf8"); return path; };
+  const draw: string[] = [];
+  for (const [index, line] of lines.entries()) {
+    const file = await textFile(`card-title-${index}.txt`, line);
+    draw.push(`drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${titleSize}:fontcolor=${CARD.titleColor}:borderw=3:bordercolor=0x14202a:shadowcolor=0x000000@0.45:shadowx=3:shadowy=4:x=(w-text_w)/2:y=${CARD.titleTop + index * CARD.titleLineGap}`);
+  }
+  for (const [index, line] of cardFooterLines(project.settings.brandName).entries()) {
+    const file = await textFile(`card-footer-${index}.txt`, line);
+    draw.push(`drawtext=fontfile=${FONT_ITALIC}:textfile=${file}:fontsize=${CARD.footerSize}:fontcolor=${CARD.footerColor}:borderw=1:bordercolor=0x14202a:x=(w-text_w)/2:y=${CARD.footerTop + index * 44}`);
+  }
+  const background = `[0:v]vignette=angle=PI/6,format=rgb24${draw.length ? "," + draw.join(",") : ""}[bg]`;
+  const frame = join(workdir, "card-frame.png");
+  const gradient = `gradients=s=${CARD.width}x${CARD.height}:c0=${CARD.gradientTop}:c1=${CARD.gradientBottom}:x0=540:y0=0:x1=540:y1=${CARD.height}:nb_colors=2:speed=0.00001:duration=1:rate=1`;
+  const initials = brandInitials(project.settings.brandName);
+  // With a brand but no uploaded logo, draw a round badge with the channel's initials in the logo spot.
+  const wantsBadge = Boolean(initials) && !project.settings.logoPath;
+  if (!wantsBadge) {
+    await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", gradient, "-filter_complex", `${background};[bg]null[out]`, "-map", "[out]", "-frames:v", "1", "-update", "1", frame],
+      { timeout: 60_000 });
+    return frame;
+  }
+  const size = CARD.badgeSize;
+  const centre = size / 2;
+  const initialsFile = await textFile("card-badge.txt", initials);
+  const inside = `lte(hypot(X-${centre},Y-${centre}),${centre - 9})`;
+  const badge = `[1:v]format=rgba,geq=r='if(${inside},27,255)':g='if(${inside},53,210)':b='if(${inside},80,31)':a='if(lte(hypot(X-${centre},Y-${centre}),${centre - 2}),255,0)',`
+    + `drawtext=fontfile=${FONT_BOLD}:textfile=${initialsFile}:fontsize=${Math.round(size * 0.4)}:fontcolor=${CARD.titleColor}:x=(w-text_w)/2:y=(h-text_h)/2-4[badge]`;
+  await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", gradient, "-f", "lavfi", "-i", `color=c=black:s=${size}x${size}:d=1:r=1`,
+    "-filter_complex", `${background};${badge};[bg][badge]overlay=(W-w)/2:${CARD.badgeY}:format=auto[out]`, "-map", "[out]", "-frames:v", "1", "-update", "1", frame],
+    { timeout: 60_000 });
+  return frame;
+}
+
 export async function renderProject(
   config: WorkerConfig,
   project: Project,
@@ -113,6 +159,7 @@ export async function renderProject(
   try {
     const { width, height } = videoSize(project.settings.aspectRatio);
     const encoderPreset = videoEncoderPreset(project.settings.generationPreset);
+    const cardFrame = usesStoryCard(project.settings) ? await buildCardFrame(config, workdir, project) : null;
     const segments: string[] = [];
     const timelineScenes: Scene[] = [];
     let done = 0;
@@ -132,9 +179,15 @@ export async function renderProject(
       const seconds = ms / 1000;
       // Straight cuts preserve measured timing and avoid a black opening/boundaries.
       const monochrome = project.settings.visualPreset === "ink-monochrome" ? ",hue=s=0,eq=contrast=1.04:brightness=0.01" : "";
-      const filter = scene.videoPath
-        ? `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=30,format=yuv420p[v]`
-        : `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}${monochrome},zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=30,format=yuv420p[v]`;
+      const motionFilter = "zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1";
+      const filter = cardFrame
+        // Story card: the picture lives in a 16:10 band over the pre-rendered background (input 2).
+        ? scene.videoPath
+          ? `[0:v]scale=${CARD.width}:${CARD.bandH}:force_original_aspect_ratio=increase,crop=${CARD.width}:${CARD.bandH},fps=30,format=yuv420p[band];[2:v]format=yuv420p[bg];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
+          : `[0:v]scale=${CARD.width}:${CARD.bandH}:force_original_aspect_ratio=increase,crop=${CARD.width}:${CARD.bandH}${monochrome},${motionFilter}:s=${CARD.width}x${CARD.bandH}:fps=30[band];[2:v]format=yuv420p[bg];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
+        : scene.videoPath
+          ? `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=30,format=yuv420p[v]`
+          : `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}${monochrome},${motionFilter}:s=${width}x${height}:fps=30,format=yuv420p[v]`;
       const videoInput = scene.videoPath ? ["-stream_loop", "-1", "-i", motionPath] : ["-loop", "1", "-framerate", "30", "-i", imagePath];
       await exec(
         config.FFMPEG_PATH,
@@ -143,6 +196,7 @@ export async function renderProject(
           ...videoInput,
           "-i",
           audioPath,
+          ...(cardFrame ? ["-loop", "1", "-framerate", "30", "-i", cardFrame] : []),
           "-t",
           seconds.toFixed(3),
           "-filter_complex",
@@ -214,7 +268,13 @@ export async function renderProject(
       args.push("-loop", "1", "-i", logoPath);
     }
     let musicPath: string | null = null;
-    if (project.settings.backgroundMusicPath) {
+    let musicVolume = project.settings.musicVolume;
+    if (!project.settings.backgroundMusicPath && project.settings.autoMusic) {
+      musicPath = join(workdir, "ambient.wav");
+      await exec(config.FFMPEG_PATH, buildAmbientMusicArgs(musicPath), { timeout: 60_000 });
+      args.push("-stream_loop", "-1", "-i", musicPath);
+      musicVolume = Math.max(musicVolume, 0.35); // the synthesised pad is quiet by design
+    } else if (project.settings.backgroundMusicPath) {
       musicPath = join(workdir, "music");
       await writeFile(
         musicPath,
@@ -231,14 +291,14 @@ export async function renderProject(
     let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}format=yuv420p[base]`;
     if (logoPath) {
       const margin = Math.round(width * 0.04);
-      const x = project.settings.logoPosition.endsWith("right") ? `W-w-${margin}` : `${margin}`;
+      const x = project.settings.logoPosition === "top-center" ? "(W-w)/2" : project.settings.logoPosition.endsWith("right") ? `W-w-${margin}` : `${margin}`;
       const y = project.settings.logoPosition.startsWith("bottom") ? `H-h-${margin}` : `${margin}`;
       const logoWidth = Math.round(width * project.settings.logoScale);
       filter += `;[1:v]scale=${logoWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=${project.settings.logoOpacity}[logo];[base][logo]overlay=x=${x}:y=${y}:format=auto[v]`;
     } else {
       filter += ";[base]null[v]";
     }
-    filter += `;${buildAudioMixFilter(Boolean(musicPath), project.settings.musicVolume, total, logoPath ? 2 : 1)}`;
+    filter += `;${buildAudioMixFilter(Boolean(musicPath), musicVolume, total, logoPath ? 2 : 1, true)}`;
     args.push(
       "-filter_complex",
       filter,

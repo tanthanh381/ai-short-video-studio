@@ -63,7 +63,7 @@ export class LocalMediaAdapter implements MediaProvider {
         method: "POST",
         signal: AbortSignal.timeout(120_000),
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text, voice, engine: models.tts ?? undefined }),
+        body: JSON.stringify({ text, voice, engine: models.tts ?? undefined, speed: models.speed ?? undefined }),
       }),
     );
     return new Uint8Array(await response.arrayBuffer());
@@ -74,7 +74,7 @@ export class LocalMediaAdapter implements MediaProvider {
       method: "POST",
       signal: AbortSignal.timeout(240_000),
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, voice, engine: models.tts ?? undefined }),
+      body: JSON.stringify({ text, voice, engine: models.tts ?? undefined, speed: models.speed ?? undefined }),
     }));
     const parsed = z.object({
       audioBase64: z.string().min(10),

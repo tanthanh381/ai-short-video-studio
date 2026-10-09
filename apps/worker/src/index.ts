@@ -12,7 +12,8 @@ import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
-import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
+import { castForScript, fallbackCardTitle, usesStoryCard } from "./card-layout";
+import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, imageAspectFor, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
@@ -344,29 +345,44 @@ async function storyboard(job: JobRow, project: Project) {
     visualStyle: `${project.settings.visualStyle}; ${visualPresetPrompt(project.settings.visualPreset)}`,
     model: project.settings.localModels.storyboard,
   } as const;
-  // Cast extraction is independent of scene splitting; overlap the two Ollama
-  // requests so the consistency guard does not add a full model round-trip.
-  const [result, cast] = await Promise.all([
-    createFaithfulStoryboard(provider, storyboardInput),
-    provider.describeCast
-      ? provider.describeCast({ title: project.title, sourceText, model: project.settings.localModels.storyboard })
-      : Promise.resolve(""),
-  ]);
+  const cardMode = usesStoryCard(project.settings);
+  const describeCast = () => provider.describeCast
+    ? provider.describeCast({ title: project.title, sourceText, model: project.settings.localModels.storyboard, cartoon: cardMode })
+    : Promise.resolve("");
+  let cast = "";
+  let result;
+  if (cardMode) {
+    // The prompt writer must know the family up front so every scene shows the same two characters.
+    cast = castForScript(sourceText) || await describeCast();
+    result = await createFaithfulStoryboard(provider, { ...storyboardInput, cast });
+  } else {
+    // Cast extraction is independent of scene splitting; overlap the two Ollama
+    // requests so the consistency guard does not add a full model round-trip.
+    [result, cast] = await Promise.all([createFaithfulStoryboard(provider, storyboardInput), describeCast()]);
+  }
   checkDeadline(job);
+  // Story-card banner: one short promise-style title, written once and stored with the project.
+  let suggestedTitle = result.suggestedTitle;
+  if (project.settings.layoutTemplate === "story-card" && !project.settings.cardTitle.trim()) {
+    const script = cleanScriptForNarration(project.sourceText);
+    suggestedTitle = (provider.writeCardTitle
+      ? await provider.writeCardTitle({ sourceText: script, model: project.settings.localModels.storyboard })
+      : "") || fallbackCardTitle(script);
+  }
   if (providerName === "ollama") await ollama.unload(project.settings.localModels.storyboard);
   await setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard");
   const rows = result.scenes.map((scene, index) => ({
     project_id: project.id,
     scene_order: index,
     narration: scene.narration,
-    image_prompt: withCast(cast, scene.imagePrompt, scene.narration),
+    image_prompt: withCast(cast, scene.imagePrompt, scene.narration, cardMode),
     estimated_duration_ms: scene.estimatedDurationMs,
     media_status: "pending",
     subtitles: [],
   }));
   const { error: saveError } = await db.rpc("replace_storyboard", {
     p_project_id: project.id, p_user_id: project.userId, p_scenes: rows,
-    p_hook: result.hook, p_suggested_title: result.suggestedTitle,
+    p_hook: result.hook, p_suggested_title: suggestedTitle,
     p_suggested_description: result.suggestedDescription,
     p_status: job.job_type === "create_video" ? "queued" : "draft",
   });
@@ -409,11 +425,11 @@ async function generateMedia(job: JobRow, project: Project) {
       await progress(job, Math.round((index / pendingImages.length) * 42), `Đang tạo ảnh cảnh ${scene.order + 1}`);
       const image = await media.createImage(
         buildProductionImagePrompt(scene.imagePrompt, visualPresetPrompt(project.settings.visualPreset)),
-        project.settings.aspectRatio,
+        imageAspectFor(project.settings),
         {
           ...project.settings.localModels,
           seed: imageSeedFor(`${project.id}:${scene.id}`),
-          style: imageStyleFor(project.settings.visualStyle),
+          style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
           preset: project.settings.generationPreset,
         },
       );
@@ -465,11 +481,11 @@ async function generateMedia(job: JobRow, project: Project) {
             scene.imagePrompt,
             visualPresetPrompt(project.settings.visualPreset),
           ),
-          project.settings.aspectRatio,
+          imageAspectFor(project.settings),
           {
             ...project.settings.localModels,
             seed: imageSeedFor(`${project.id}:${scene.id}`),
-            style: imageStyleFor(project.settings.visualStyle),
+            style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
             preset: project.settings.generationPreset,
           },
         );
@@ -506,9 +522,9 @@ async function generateMedia(job: JobRow, project: Project) {
           `Đang tạo giọng đọc cảnh ${scene.order + 1}`,
         );
         const aligned = media.createSpeechAligned
-          ? await media.createSpeechAligned(scene.narration, project.settings.voice, project.settings.localModels)
+          ? await media.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, speed: project.settings.voiceSpeed })
           : null;
-        audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice, project.settings.localModels);
+        audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed: project.settings.voiceSpeed });
         subtitles = aligned?.cues ?? [];
         if (project.settings.trimSilence) {
           audio = await trimAudioSilence(audio);

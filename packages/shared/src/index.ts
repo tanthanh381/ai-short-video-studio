@@ -39,6 +39,11 @@ export const DEFAULT_PROJECT_SETTINGS = {
   logoScale: 0.14,
   logoOpacity: 0.9,
   rewriteFullScript: false,
+  layoutTemplate: "full-bleed" as const,
+  cardTitle: "",
+  brandName: "",
+  voiceSpeed: 1,
+  autoMusic: false,
   trimSilence: false,
   subtitle: {
     enabled: true,

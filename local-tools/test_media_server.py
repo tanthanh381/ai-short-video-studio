@@ -18,6 +18,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 
+import contextlib
+import tempfile
+
+
+@contextlib.contextmanager
+def tempfile_dir():
+    with tempfile.TemporaryDirectory() as directory:
+        yield directory
+
+
 def load_media_server():
     location = Path(__file__).with_name("media_server.py")
     spec = importlib.util.spec_from_file_location("studio_media_server", location)
@@ -68,6 +78,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         cls.media = load_media_server()
         # The synthesis processes are mocked; tests must not depend on ffmpeg being installed (CI runners).
         cls.media.find_binary = lambda name, env_var: f"/usr/bin/{name}"
+        cls.media.listener_pid = lambda port: None  # never inspect or restart the real model servers from tests
         cls.media.TTS_ENGINES = ["piper"]  # deterministic: never reach for local network services in tests
         cls.media.TTS_CONCURRENCY = 1  # keep mocked subprocess ordering deterministic
 
@@ -206,6 +217,13 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(self.media.clean_image_prompt("Đôi bàn tay buông bỏ, ánh sáng ấm"), "Doi ban tay buong bo, anh sang am")
         with self.assertRaises(ValueError):
             self.media.clean_image_prompt("Không chữ, không logo, không watermark.")
+
+    def test_image_prompt_drops_words_that_make_the_model_paint_gibberish_text(self):
+        prompt = "A man walks past a closed shop window with a neon sign, colorful posters on the walls"
+        cleaned = self.media.clean_image_prompt(prompt).lower()
+        for word in ("sign", "neon", "poster", "closed"):
+            self.assertNotIn(word, cleaned)
+        self.assertIn("shop window", cleaned)
 
     def test_image_quality_guard_is_enabled_for_human_prompts(self):
         with patch.object(self.media, "image_server_state", return_value="down"), \
@@ -352,6 +370,33 @@ class LocalSpeechCaptionTests(unittest.TestCase):
              patch.object(self.media.subprocess, "run",
                           return_value=subprocess.CompletedProcess(["launchctl"], 113, stdout="", stderr="")):
             self.assertFalse(self.media.recycle_if_bloated("vieneu", self.media.VIENEU_URL))
+
+    def test_pace_is_applied_as_time_stretch_because_the_engine_ignores_speed(self):
+        filters = []
+
+        def fake_http(url, payload):
+            return b"RIFF-fake"
+
+        def fake_run(command, **kwargs):
+            command = [str(item) for item in command]
+            if "-filter:a" in command:
+                filters.append(command[command.index("-filter:a") + 1])
+            with wave.open(command[-1], "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(22050)
+                audio.writeframes(b"\x80\x01" * 11025)
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.object(self.media, "_http_wav", side_effect=fake_http), \
+             patch.object(self.media.subprocess, "run", side_effect=fake_run), \
+             tempfile_dir() as workdir:
+            self.media.synth_phrase("Xin chào.", workdir, 0, "doc-truyen", "vieneu", 1.3)
+        self.assertTrue(any(f.startswith("atempo=1.3") or f.startswith("atempo=1.2") or f.startswith("atempo=1.4") for f in filters), filters)
+
+    def test_normal_pace_leaves_audio_untouched(self):
+        self.assertEqual(self.media._time_stretch(Path("/tmp/x.wav"), 1.0), Path("/tmp/x.wav"))
+        self.assertEqual(self.media._time_stretch(Path("/tmp/x.wav"), 1.02), Path("/tmp/x.wav"))
 
     def test_whitespace_only_text_never_calls_a_synthesizer(self):
         with patch.object(self.media.subprocess, "run") as process:

@@ -191,3 +191,23 @@ describe("OllamaStoryboardAdapter.unload", () => {
     await expect(adapter.unload(null)).resolves.toBeUndefined();
   });
 });
+
+describe("OllamaStoryboardAdapter.writeCardTitle", () => {
+  const script = "Mẹ không nói nhiều. Tình thương không cần lời, chỉ cần nhớ về mẹ.";
+  const answer = (title: string) => new Response(JSON.stringify({ response: JSON.stringify({ title }) }));
+
+  it("rejects a title with an invented word and accepts the next one built from the script", async () => {
+    const titles = ["Tình thương mẹ, không ném lời", "Tình thương không cần lời"];
+    vi.stubGlobal("fetch", vi.fn(async () => answer(titles.shift() ?? "")));
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen2.5:3b");
+    expect(await adapter.writeCardTitle({ sourceText: script })).toBe("TÌNH THƯƠNG KHÔNG CẦN LỜI");
+  });
+
+  it("gives up after three unusable answers so the caller can use the script's own hook", async () => {
+    const mock = vi.fn(async () => answer("Hạnh phúc là cuộc hành trình"));
+    vi.stubGlobal("fetch", mock);
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen2.5:3b");
+    expect(await adapter.writeCardTitle({ sourceText: script })).toBe("");
+    expect(mock).toHaveBeenCalledTimes(3);
+  });
+});

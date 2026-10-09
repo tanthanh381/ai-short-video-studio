@@ -80,6 +80,12 @@ const navItems = [
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
 
+/** The story card is a flat illustrated look: switch to it together with the matching picture style and music. */
+function withLayoutTemplate(settings: ProjectSettings, layoutTemplate: ProjectSettings["layoutTemplate"]): ProjectSettings {
+  if (layoutTemplate !== "story-card") return { ...settings, layoutTemplate };
+  return { ...withVisualPreset(settings, "cartoon"), layoutTemplate, aspectRatio: "9:16", autoMusic: true, voiceSpeed: Math.max(settings.voiceSpeed, 1.15) };
+}
+
 function withVisualPreset(settings: ProjectSettings, visualPreset: ProjectSettings["visualPreset"]): ProjectSettings {
   const option = VISUAL_PRESET_OPTIONS.find((item) => item.id === visualPreset) ?? VISUAL_PRESET_OPTIONS[0]!;
   if (visualPreset === "ink-monochrome") {
@@ -1358,6 +1364,24 @@ function NewProjectPage() {
                 {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
             </Field>
+            <Field label="Khung video" hint="Thẻ truyện: tiêu đề vàng trên nền xanh, tranh minh họa ở giữa, phụ đề bên dưới, có tên kênh ở chân video (video dọc 9:16).">
+              <select
+                value={settings.layoutTemplate}
+                onChange={(e) => setSettings((s) => withLayoutTemplate(s, e.target.value as ProjectSettings["layoutTemplate"]))}
+              >
+                <option value="full-bleed">Toàn khung hình</option>
+                <option value="story-card">Thẻ truyện (tranh minh họa)</option>
+              </select>
+            </Field>
+            {settings.layoutTemplate === "story-card" && (
+              <Field label="Tên kênh ở chân video" hint="Để trống nếu không muốn hiện chân video.">
+                <input
+                  maxLength={60}
+                  value={settings.brandName}
+                  onChange={(e) => setSettings((s) => ({ ...s, brandName: e.target.value }))}
+                />
+              </Field>
+            )}
             <Field label="Nhịp chia cảnh" hint="Chỉ tham khảo khi chia cảnh. Thời lượng xuất luôn theo audio thực tế.">
               <select
                 value={settings.targetDurationSec}
@@ -2561,6 +2585,37 @@ function StudioPage() {
               </Field>
             </div>
             <div className="setting-group">
+              <h3><Image /> Khung video</h3>
+              <Field label="Kiểu khung">
+                <select
+                  value={project.settings.layoutTemplate}
+                  onChange={(e) => change({ ...project, settings: withLayoutTemplate(project.settings, e.target.value as ProjectSettings["layoutTemplate"]) })}
+                >
+                  <option value="full-bleed">Toàn khung hình</option>
+                  <option value="story-card">Thẻ truyện (tranh minh họa)</option>
+                </select>
+              </Field>
+              {project.settings.layoutTemplate === "story-card" && (
+                <>
+                  <Field label="Tiêu đề trên khung" hint="Để trống: AI chọn câu mở đầu hấp dẫn từ kịch bản.">
+                    <input
+                      maxLength={80}
+                      value={project.settings.cardTitle}
+                      onChange={(e) => change({ ...project, settings: { ...project.settings, cardTitle: e.target.value } })}
+                    />
+                  </Field>
+                  <Field label="Tên kênh ở chân video">
+                    <input
+                      maxLength={60}
+                      value={project.settings.brandName}
+                      onChange={(e) => change({ ...project, settings: { ...project.settings, brandName: e.target.value } })}
+                    />
+                  </Field>
+                </>
+              )}
+              <p className="microcopy">Thẻ truyện chỉ dùng cho video dọc 9:16; đổi kiểu khung xong hãy tạo lại video để áp dụng.</p>
+            </div>
+            <div className="setting-group">
               <h3><Image /> Logo video</h3>
               <p className="microcopy">Logo được chèn lên mọi cảnh khi xuất MP4. Khuyến nghị PNG nền trong suốt, tối đa 5 MB.</p>
               {logoPreviewUrl && <img className="logo-preview" src={logoPreviewUrl} alt="Logo đang chọn" />}
@@ -2587,6 +2642,7 @@ function StudioPage() {
                       value={project.settings.logoPosition}
                       onChange={(e) => change({ ...project, settings: { ...project.settings, logoPosition: e.target.value as ProjectSettings["logoPosition"] } })}
                     >
+                      <option value="top-center">Trên giữa</option>
                       <option value="top-left">Trên trái</option>
                       <option value="top-right">Trên phải</option>
                       <option value="bottom-left">Dưới trái</option>
@@ -2640,6 +2696,17 @@ function StudioPage() {
                   />
                 </>
               )}
+              <Field label="Tốc độ đọc">
+                <input
+                  type="range"
+                  min="0.8"
+                  max="1.3"
+                  step="0.05"
+                  value={project.settings.voiceSpeed}
+                  onChange={(e) => change({ ...project, settings: { ...project.settings, voiceSpeed: Number(e.target.value) } })}
+                />
+                <small>{project.settings.voiceSpeed.toFixed(2)}× · video kể chuyện ngắn thường đọc nhanh 1.15–1.3×</small>
+              </Field>
               <Button
                 variant="ghost"
                 disabled={isDemo || !activeScene?.audioPath}
@@ -2833,6 +2900,14 @@ function StudioPage() {
                   thấp hơn lời đọc
                 </small>
               </Field>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={project.settings.autoMusic}
+                  onChange={(e) => change({ ...project, settings: { ...project.settings, autoMusic: e.target.checked } })}
+                />
+                <span>Tự tạo nhạc nền êm khi chưa tải nhạc</span>
+              </label>
               <label className="button button-ghost file-button">
                 <Upload size={16} />
                 {project.settings.backgroundMusicPath
