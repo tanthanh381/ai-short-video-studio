@@ -47,8 +47,10 @@ import {
   useParams,
 } from "react-router-dom";
 import {
+  cleanScriptForNarration,
   DEFAULT_PROJECT_SETTINGS,
   formatDuration,
+  looksLikeSubtitles,
   humanStatus,
   isVoicePreset,
   voiceHint,
@@ -829,6 +831,7 @@ function TextToSpeechPage() {
           </div>
           <textarea
             className="tts-textarea"
+            aria-label="Văn bản cần đọc"
             maxLength={10000}
             value={text}
             onChange={(event) => { setText(event.target.value); setError(null); }}
@@ -1156,23 +1159,21 @@ function NewProjectPage() {
   const [error, setError] = useState<string | null>(null);
   const [sourceText, setSourceText] = useState("");
   const [inputMode, setInputMode] = useState<Project["inputMode"]>("idea");
-  const [srtFile, setSrtFile] = useState<File | null>(null);
   const [settings, setSettings] = useState<ProjectSettings>(
-    // Short-form narration sounds dragged at 1.0x (about 2.9 words/s); 1.1x is the calmest pace that still feels native.
-    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, voiceSpeed: 1.1, captionHighlight: true },
+    // 1.0x is already the short-form pace: the voice bridge brings every voice to about 3.7 words per second.
+    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, captionHighlight: true },
   );
   const [channelPreset, setChannelPreset] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);
   const localModels = useLocalModels(isDemo || !advanced);
   const submitting = useRef(false);
-  const wordCount = sourceText.trim() ? sourceText.trim().split(/\s+/u).length : 0;
+  // Pasted subtitles are read without their cue numbers and timings, so count only what will be spoken.
+  const pastedSubtitles = looksLikeSubtitles(sourceText);
+  const spokenText = (() => { try { return cleanScriptForNarration(sourceText); } catch { return ""; } })();
+  const wordCount = spokenText.trim() ? spokenText.trim().split(/\s+/u).length : 0;
   // Text of 40+ words is read as written (an idea that long is treated as the script), so its length is known now.
   const readsAsWritten = inputMode === "full-script" || (inputMode === "idea" && wordCount >= 40);
   const narrationSeconds = estimatedNarrationSeconds(wordCount, settings.voiceSpeed);
-  async function getSrtText(): Promise<string> {
-    if (!srtFile) throw new Error("Hãy chọn file .srt trước khi tiếp tục.");
-    return srtFile.text();
-  }
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (submitting.current) return;
@@ -1180,8 +1181,7 @@ function NewProjectPage() {
     setBusy(true);
     setError(null);
     try {
-      const text = inputMode === "srt" ? await getSrtText() : sourceText;
-      const project = await api.createVideo({ sourceText: text, inputMode, settings });
+      const project = await api.createVideo({ sourceText, inputMode, settings });
       navigate(`/studio/${project.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chưa thể bắt đầu tạo video. Hãy thử lại.");
@@ -1191,19 +1191,15 @@ function NewProjectPage() {
     }
   }
   async function saveDraft() {
-    const minLen = inputMode === "srt" ? 0 : 10;
-    if (submitting.current || (inputMode !== "srt" && sourceText.trim().length < minLen)) return;
+    if (submitting.current || sourceText.trim().length < 10) return;
     submitting.current = true;
     setBusy(true);
     setError(null);
     try {
-      const text = inputMode === "srt" ? await getSrtText() : sourceText;
-      const title = inputMode === "srt"
-        ? (srtFile?.name.replace(/\.srt$/i, "") ?? "Video từ SRT")
-        : text.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới";
+      const title = spokenText.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới";
       const project = await api.createProject({
         title,
-        sourceText: text,
+        sourceText,
         inputMode,
         settings,
       });
@@ -1229,77 +1225,47 @@ function NewProjectPage() {
       <form className="creation-form" onSubmit={submit}>
         <section>
           <Field
-            label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : inputMode === "srt" ? "File phụ đề .srt" : "Kịch bản hoàn chỉnh"}
+            label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : "Kịch bản hoàn chỉnh"}
             hint={inputMode === "idea"
               ? wordCount >= 40
                 ? "Nội dung từ 40 từ trở lên được đọc nguyên văn như kịch bản; AI chỉ chia cảnh và vẽ minh họa."
                 : "AI sẽ phát triển ý tưởng ngắn thành hook, mạch chuyện, cảnh và lời đọc."
-              : inputMode === "srt"
-              ? "Mỗi dòng phụ đề thành một cảnh. Thời lượng cảnh theo timecode trong file."
-              : "Giữ nguyên câu chữ và dấu tiếng Việt. Thời lượng video theo giọng đọc thực tế."}
+              : "Giữ nguyên câu chữ và dấu tiếng Việt. Có thể dán cả nội dung phụ đề (.srt/.vtt): số thứ tự và mốc thời gian được bỏ, chỉ đọc phần lời."}
           >
             <div className="form-grid">
               <Field label="Cách xử lý nội dung">
-                <select value={inputMode} onChange={(e) => { setInputMode(e.target.value as Project["inputMode"]); setSrtFile(null); }} disabled={busy}>
+                <select value={inputMode} onChange={(e) => setInputMode(e.target.value as Project["inputMode"])} disabled={busy}>
                   <option value="idea">Ý tưởng — AI phát triển thành kịch bản</option>
                   <option value="full-script">Kịch bản — giữ nguyên lời bạn nhập</option>
-                  <option value="srt">File phụ đề .srt — chia cảnh theo timecode</option>
                 </select>
               </Field>
             </div>
-            {inputMode === "srt" ? (
-              <div className="srt-upload-area">
-                <input
-                  type="file"
-                  id="srt-file-input"
-                  accept=".srt,text/plain"
-                  disabled={busy}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null;
-                    setSrtFile(file);
-                  }}
-                  style={{ display: "none" }}
-                />
-                <label htmlFor="srt-file-input" className="srt-upload-label">
-                  {srtFile ? (
-                    <span className="srt-file-chosen">
-                      <FileText size={16} /> {srtFile.name} ({(srtFile.size / 1024).toFixed(1)} KB)
-                    </span>
-                  ) : (
-                    <span className="srt-file-placeholder">
-                      <Upload size={16} /> Chọn file .srt…
-                    </span>
-                  )}
-                </label>
-                {srtFile && (
-                  <button type="button" className="srt-clear-btn" onClick={() => setSrtFile(null)} disabled={busy}>
-                    Xóa
-                  </button>
-                )}
+            <>
+              <textarea
+                aria-label="Nội dung kịch bản"
+                value={sourceText}
+                onChange={(e) => {
+                  setSourceText(e.target.value);
+                  // Subtitles are someone's finished lines: read them as written, never rewrite them as an idea.
+                  if (looksLikeSubtitles(e.target.value)) setInputMode("full-script");
+                }}
+                required
+                minLength={10}
+                maxLength={30000}
+                rows={10}
+                disabled={busy}
+                placeholder={inputMode === "idea" ? "Ví dụ: Một video 30 giây giải thích vì sao cần xác minh tin nhắn chuyển tiền…" : "Dán toàn bộ lời đọc cho video vào đây…"}
+              />
+              <div className="script-meta" aria-live="polite">
+                <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>
+                <span>{wordCount.toLocaleString("vi-VN")} từ</span>
+                {readsAsWritten && wordCount > 0 && <span>≈ {formatDuration(narrationSeconds * 1000)} lời đọc</span>}
               </div>
-            ) : (
-              <>
-                <textarea
-                  aria-label="Nội dung kịch bản"
-                  value={sourceText}
-                  onChange={(e) => setSourceText(e.target.value)}
-                  required
-                  minLength={10}
-                  maxLength={30000}
-                  rows={10}
-                  disabled={busy}
-                  placeholder={inputMode === "idea" ? "Ví dụ: Một video 30 giây giải thích vì sao cần xác minh tin nhắn chuyển tiền…" : "Dán toàn bộ lời đọc cho video vào đây…"}
-                />
-                <div className="script-meta" aria-live="polite">
-                  <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>
-                  <span>{wordCount.toLocaleString("vi-VN")} từ</span>
-                  {readsAsWritten && wordCount > 0 && <span>≈ {formatDuration(narrationSeconds * 1000)} lời đọc</span>}
-                </div>
-                {readsAsWritten && narrationSeconds > 90 && (
-                  <Notice tone="warn">Video sẽ dài khoảng {formatDuration(narrationSeconds * 1000)}. Shorts, Reels và TikTok giữ chân tốt nhất dưới 60–90 giây: nên chia thành nhiều phần (Phần 1, Phần 2…).</Notice>
-                )}
-              </>
-            )}
+              {pastedSubtitles && <Notice tone="info">Đã nhận nội dung phụ đề: bỏ số thứ tự và mốc thời gian, nối các dòng thành câu và đọc nguyên văn.</Notice>}
+              {readsAsWritten && narrationSeconds > 90 && (
+                <Notice tone="warn">Video sẽ dài khoảng {formatDuration(narrationSeconds * 1000)}. Shorts, Reels và TikTok giữ chân tốt nhất dưới 60–90 giây: nên chia thành nhiều phần (Phần 1, Phần 2…).</Notice>
+              )}
+            </>
           </Field>
           <div className="channel-presets" role="radiogroup" aria-label="Mẫu kênh">
             <span className="channel-presets-label">Mẫu kênh</span>
@@ -1508,7 +1474,7 @@ function NewProjectPage() {
                   value={settings.voiceSpeed}
                   onChange={(e) => setSettings((s) => ({ ...s, voiceSpeed: Number(e.target.value) }))}
                 />
-                <small>{settings.voiceSpeed.toFixed(2)}× · video ngắn thường đọc 1.1–1.3×</small>
+                <small>{settings.voiceSpeed.toFixed(2)}× · 1.00× là nhịp chuẩn video ngắn (~3,7 từ/giây)</small>
               </Field>
               <label className="check">
                 <input
@@ -1539,7 +1505,7 @@ function NewProjectPage() {
             </div>
         </section>
         <div className="form-actions">
-          <Button type="button" variant="ghost" disabled={busy || (inputMode !== "srt" && sourceText.trim().length < 10) || (inputMode === "srt" && !srtFile)} onClick={() => void saveDraft()}>
+          <Button type="button" variant="ghost" disabled={busy || sourceText.trim().length < 10} onClick={() => void saveDraft()}>
             <Save size={17} /> Lưu bản nháp
           </Button>
           <Button type="submit" busy={busy} disabled={isDemo}>
@@ -2268,6 +2234,7 @@ function StudioPage() {
   return (
     <div className="studio">
       <div className="studio-top">
+        <h1 className="sr-only">Studio: {project.title}</h1>
         <div>
           <button className="back-link" onClick={() => navigate("/")}>
             <ArrowLeft size={16} /> Dự án
@@ -2773,7 +2740,7 @@ function StudioPage() {
                   value={project.settings.voiceSpeed}
                   onChange={(e) => change({ ...project, settings: { ...project.settings, voiceSpeed: Number(e.target.value) } })}
                 />
-                <small>{project.settings.voiceSpeed.toFixed(2)}× · video kể chuyện ngắn thường đọc nhanh 1.15–1.3×</small>
+                <small>{project.settings.voiceSpeed.toFixed(2)}× · 1.00× là nhịp chuẩn video ngắn (~3,7 từ/giây)</small>
               </Field>
               <Button
                 variant="ghost"

@@ -493,8 +493,22 @@ async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardIn
       if (overlap >= 0.25 || terms.length < 2) break; // on topic: stop asking
     } catch (error) { lastError = error; }
   }
-  if (best && (bestScore >= 0.1 || terms.length < 2)) return best;
+  if (best && (bestScore >= 0.1 || terms.length < 2)) return withQuestionHook(best, input.sourceText);
   throw lastError;
+}
+
+const QUESTION_START = /^(?:vì sao|tại sao|làm sao|làm thế nào|có nên|bạn có biết|điều gì|ai|bao giờ|liệu)\b/iu;
+
+/**
+ * Short-form viewers decide in the first seconds. When the idea is itself a question ("Vì sao uống đủ nước…") and
+ * the written script opens with a flat statement instead, open with the viewer's question.
+ */
+export function withQuestionHook(script: string, idea: string): string {
+  const question = idea.normalize("NFC").trim().replace(/[.!…\s]+$/u, "");
+  const firstSentence = script.trim().split(/(?<=[.!?…])\s+/u)[0] ?? "";
+  const ideaIsQuestion = question.endsWith("?") || QUESTION_START.test(question);
+  if (!ideaIsQuestion || firstSentence.trim().endsWith("?") || contentWords(question).length > 22) return script;
+  return `${question.endsWith("?") ? question : `${question}?`}\n${script.trim()}`;
 }
 
 export async function createFaithfulStoryboard(
@@ -648,6 +662,20 @@ export function imageStyleFor(visualStyle: string, visualPreset?: string): Image
   return /minh họa|tranh|vẽ|anime|illustration|watercolor|màu nước|3d/iu.test(visualStyle)
     ? "illustration"
     : "photo";
+}
+
+const PERSON_NOUN = /\b(?:women|woman|men|man|girls?|boys?|child(?:ren)?|kids?|person|people|mother|father|parents?|family|couple|friends|teenagers?|students?|workers?|farmers?|grandmother|grandfather|grandparents|baby|lady|gentleman)\b/iu;
+const ETHNICITY = /\b(?:vietnamese|asian|american|european|japanese|korean|chinese|thai|indian|african|french|british|english|caucasian)\b/iu;
+
+/**
+ * Stock image models default to Western faces ("a young woman" came out blond). The audience is Vietnamese, so a
+ * person without a stated origin becomes Vietnamese: "A young woman pours" -> "A young Vietnamese woman pours".
+ */
+export function vietnameseByDefault(prompt: string): string {
+  if (ETHNICITY.test(prompt)) return prompt;
+  const match = PERSON_NOUN.exec(prompt);
+  if (!match) return prompt;
+  return `${prompt.slice(0, match.index)}Vietnamese ${prompt.slice(match.index)}`;
 }
 
 /** SDXL reads "older/elder brother" as an old man; siblings stay young as "big/little brother". */

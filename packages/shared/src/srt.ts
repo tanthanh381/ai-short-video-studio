@@ -46,3 +46,32 @@ export function parseSrt(content: string): SrtEntry[] {
   }
   return entries;
 }
+
+const SUBTITLE_TIMECODE = /(?:\d{1,2}:)?\d{1,2}:\d{2}[,.]\d{1,3}\s*-->\s*(?:\d{1,2}:)?\d{1,2}:\d{2}[,.]\d{1,3}/u;
+
+/** True for pasted SRT or WebVTT content (it has "00:00:01,000 --> 00:00:04,000" style cue timings). */
+export function looksLikeSubtitles(text: string): boolean {
+  return SUBTITLE_TIMECODE.test(text);
+}
+
+/**
+ * Pasted subtitles as narration: drop the WEBVTT header, cue numbers, timings and styling tags, and join the cue
+ * texts into sentences. A cue that ends mid-sentence continues on the same line, so the voice does not pause where
+ * the subtitle file merely wrapped.
+ */
+export function subtitlesToScript(text: string): string {
+  const cues = text
+    .replace(/\r\n?/gu, "\n")
+    .split(/\n\s*\n/u)
+    .map((block) => block.split("\n")
+      .filter((line) => !/^\s*(?:WEBVTT.*|NOTE\b.*|\d+)\s*$/u.test(line) && !SUBTITLE_TIMECODE.test(line))
+      .join(" ")
+      .replace(/<[^>]+>|\{[^}]+\}/gu, "")
+      .replace(/\s+/gu, " ")
+      .trim())
+    .filter(Boolean);
+  return cues.reduce((script, cue) => {
+    if (!script) return cue;
+    return /[.!?…:]["'”’)]?$/u.test(script) ? `${script}\n${cue}` : `${script} ${cue}`;
+  }, "");
+}

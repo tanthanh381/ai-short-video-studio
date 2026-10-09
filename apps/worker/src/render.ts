@@ -120,6 +120,17 @@ export function createAss(project: Project) {
   return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Noto Sans,${fontSize},${primary},${assColor(style.fontColor)},${assColor(style.outlineColor)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
 }
 
+/**
+ * Slow push-in on a still. A scene held longer than 6.5 s gets a punch-in cut halfway: a closer framing on the
+ * upper middle (where faces usually are), so the picture changes every 3-6 s without generating another image.
+ */
+export function sceneMotion(seconds: number): string {
+  if (seconds <= 6.5) return "zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1";
+  const cut = Math.round((seconds * 30) / 2);
+  return `zoompan=z='if(lt(on,${cut}),min(1+0.00035*on,1.06),min(1.22+0.0003*(on-${cut}),1.3))'`
+    + `:x='iw/2-iw/zoom/2':y='if(lt(on,${cut}),ih/2-ih/zoom/2,(ih-ih/zoom)*0.3)':d=1`;
+}
+
 export async function durationMs(config: WorkerConfig, path: string) {
   const { stdout } = await exec(
     config.FFPROBE_PATH,
@@ -214,7 +225,7 @@ export async function renderProject(
       const seconds = ms / 1000;
       // Straight cuts preserve measured timing and avoid a black opening/boundaries.
       const monochrome = project.settings.visualPreset === "ink-monochrome" ? ",hue=s=0,eq=contrast=1.04:brightness=0.01" : "";
-      const motionFilter = "zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1";
+      const motionFilter = sceneMotion(seconds);
       const filter = cardFrame
         // Story card: the picture lives in a 16:10 band over the pre-rendered background (input 2).
         ? scene.videoPath

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   eraAppropriateCast,
+  withQuestionHook,
+  vietnameseByDefault,
   youthfulSiblings,
   fallbackImagePrompt,
   imageStyleFor,
@@ -516,7 +518,8 @@ describe("idea mode becomes plain narration then faithful scenes", () => {
     };
     const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "Vì sao buông bỏ giúp lòng nhẹ hơn?" });
     expect(provider.writeScript).toHaveBeenCalledTimes(1);
-    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(script);
+    // the viewer's question opens the video, then the written narration verbatim
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(`Vì sao buông bỏ giúp lòng nhẹ hơn?\n${script}`);
     // every storyboard call is a locked image-prompt batch, never a free-form rewrite
     expect(provider.createStoryboard.mock.calls.every((call) => (call[0] as StoryboardInput).lockedScenes)).toBe(true);
   });
@@ -706,6 +709,35 @@ describe("youthfulSiblings", () => {
       .toBe("The big brother lounges while the little brother works; a big sister watches");
     expect(youthfulSiblings("Older brother smiles")).toBe("Big brother smiles");
     expect(youthfulSiblings("an old man by the well")).toBe("an old man by the well");
+  });
+});
+
+describe("vietnameseByDefault", () => {
+  it("makes an unspecified person Vietnamese, once", () => {
+    expect(vietnameseByDefault("A young woman pours water into her glass at a desk"))
+      .toBe("A young Vietnamese woman pours water into her glass at a desk");
+    expect(vietnameseByDefault("A group of friends gather around a table, one man drinks"))
+      .toBe("A group of Vietnamese friends gather around a table, one man drinks");
+  });
+
+  it("leaves stated origins and scenes without people alone", () => {
+    expect(vietnameseByDefault("A Japanese chef slices fish")).toBe("A Japanese chef slices fish");
+    expect(vietnameseByDefault("two Vietnamese brothers by a hut")).toBe("two Vietnamese brothers by a hut");
+    expect(vietnameseByDefault("A glass of water on a wooden desk")).toBe("A glass of water on a wooden desk");
+    expect(vietnameseByDefault("A manuscript on a shelf")).toBe("A manuscript on a shelf"); // "man" only as a whole word
+  });
+});
+
+describe("withQuestionHook", () => {
+  const script = "Uống đủ nước mỗi ngày giúp bạn tỉnh táo. Ví dụ, mất 2% nước là bạn đã mệt.";
+  it("opens with the viewer's question when the idea asks one", () => {
+    expect(withQuestionHook(script, "Vì sao uống đủ nước giúp bạn tỉnh táo hơn"))
+      .toBe(`Vì sao uống đủ nước giúp bạn tỉnh táo hơn?\n${script}`);
+  });
+  it("keeps a script that already opens with a question, and ideas that are not questions", () => {
+    const asking = "Bạn có biết vì sao? Uống nước giúp tỉnh táo.";
+    expect(withQuestionHook(asking, "Vì sao uống nước")).toBe(asking);
+    expect(withQuestionHook(script, "Lợi ích của việc uống nước")).toBe(script);
   });
 });
 

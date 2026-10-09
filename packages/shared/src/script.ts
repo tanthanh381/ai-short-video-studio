@@ -1,3 +1,5 @@
+import { looksLikeSubtitles, subtitlesToScript } from "./srt";
+
 const TIMING_LABEL = /\*{0,2}\[\s*\d+(?:[.,]\d+)?\s*(?:s|giây)?\s*[–—-]\s*\d+(?:[.,]\d+)?\s*(?:s|giây)?\s*(?:[|,/][^\]\n]{0,60})?\]\*{0,2}/giu;
 const SECTION_LABEL = /\*{0,2}\[\s*(?:hook|cta|ending|intro|outro|mở đầu|kết(?: bài)?|cảnh\s*\d+|scene\s*\d+)\b[^\]\n]{0,60}\]\*{0,2}/giu;
 /** A whole line that only names a production field, e.g. "**Text cuối màn hình:**"; the text after it is kept. */
@@ -9,7 +11,9 @@ const FIELD_LINE = /^[ \t]*[*_#]*[ \t]*(?:text[^:\n]{0,40}|phụ đề[^:\n]{0,3
  * Every word of the actual script is kept as written.
  */
 export function cleanScriptForNarration(text: string): string {
-  const cleaned = text
+  // Pasted subtitles (.srt/.vtt content) become plain narration first.
+  const source = looksLikeSubtitles(text) ? subtitlesToScript(text) : text;
+  const cleaned = source
     .replace(TIMING_LABEL, "")
     .replace(SECTION_LABEL, "")
     .replace(FIELD_LINE, "")

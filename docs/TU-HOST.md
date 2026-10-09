@@ -80,3 +80,10 @@ docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml up -d --b
 ```
 
 Không dùng `down -v` trừ khi chủ động muốn xóa volume file tạm. Media chính nằm trong Supabase Storage, không nằm trong repository.
+
+Khi dừng hoặc dựng lại, worker làm nốt video đang tạo rồi mới thoát (tối đa 45 phút, `stop_grace_period`), nên lệnh có thể chờ lâu nếu đang có video chạy; không nhấn Ctrl+C để ép dừng. Mỗi lần dựng lại để lại image cũ không dùng tới; dọn định kỳ để ổ đĩa không đầy:
+
+```bash
+docker image prune -f
+colima ssh -- sudo fstrim -a
+```

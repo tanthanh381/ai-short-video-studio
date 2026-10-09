@@ -54,6 +54,13 @@ class FakeSpeechProcesses:
         command = [str(item) for item in command]
         executable = Path(command[0]).name
         self.calls.append(command)
+        if executable == "ffmpeg" and "-filter:a" in command:  # pace time-stretch of a phrase already counted
+            with wave.open(command[-1], "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(self.rate)
+                audio.writeframes(b"\x80\x01" * self.synthesized[-1][1])
+            return subprocess.CompletedProcess(command, 0)
         if executable == "ffmpeg":
             count = self.sample_counts[len(self.synthesized) % len(self.sample_counts)]
             self.synthesized.append(("", count))
@@ -168,7 +175,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
              patch.object(self.media.subprocess, "run", side_effect=fake_run):
             result = self.media.tts_aligned("Trăng treo đầu núi.", "co-trang")
         self.assertEqual(sent[0][1]["voice"], "Hải Đăng")
-        self.assertEqual(sent[0][1]["speed"], 0.88)
+        self.assertAlmostEqual(sent[0][1]["speed"], self.media.pace_tempo("co-trang", "vieneu"))
         self.assertEqual(result["durationMs"], 500)
 
     def test_vieneu_receives_sentence_emotion_but_subtitle_keeps_original_text(self):
@@ -204,7 +211,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             "Quốc Tuấn", "Quỳnh Anh", "Thanh Bình", "Thiền Tâm Đức", "Thiện Minh", "Thái Sơn",
             "Thùy Dung", "Thục Đoan", "Trúc Ly", "Xuân Vĩnh", "Đoan Trang", "Đức Trí",
         }
-        self.assertTrue(all(voice in supported for voice, _speed in self.media.VOICE_PRESETS.values()))
+        self.assertTrue(all(voice in supported for voice, _mood, _native in self.media.VOICE_PRESETS.values()))
 
     def test_unknown_engine_is_rejected_instead_of_silently_falling_back(self):
         with patch.object(self.media.subprocess, "run") as process:
@@ -283,6 +290,19 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             calls.clear()
             self.media.local_image("A quiet street at dusk", "9:16", model="sdxl-turbo")
             self.assertFalse(any(url.endswith("/free") for url in calls))  # only once after a Base run
+
+    def test_trims_only_oversized_service_logs_to_their_recent_tail(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            big = Path(folder) / "media.autostart.err"
+            big.write_bytes(b"old line\n" * 2000 + b"recent line\n" * 50)
+            small = Path(folder) / "image.autostart.log"
+            small.write_bytes(b"fine\n")
+            trimmed = self.media.trim_service_logs(folder, max_bytes=4096, keep_bytes=1024)
+            self.assertEqual(trimmed, ["media.autostart.err"])
+            self.assertLessEqual(big.stat().st_size, 1024 + 20)
+            self.assertTrue(big.read_bytes().rstrip().endswith(b"recent line"))
+            self.assertEqual(small.read_bytes(), b"fine\n")
 
     def test_image_quality_guard_adds_face_constraints(self):
         with patch.object(self.media, "image_server_state", return_value="ready"), \
@@ -439,6 +459,16 @@ class LocalSpeechCaptionTests(unittest.TestCase):
              tempfile_dir() as workdir:
             self.media.synth_phrase("Xin chào.", workdir, 0, "doc-truyen", "vieneu", 1.3)
         self.assertTrue(any(f.startswith("atempo=1.3") or f.startswith("atempo=1.2") or f.startswith("atempo=1.4") for f in filters), filters)
+
+    def test_every_voice_reaches_the_short_form_pace_at_normal_speed(self):
+        for voice, (_name, _mood, native) in self.media.VOICE_PRESETS.items():
+            spoken = native * self.media.pace_tempo(voice, "vieneu", 1.0) * self.media.PACE_VIDEO_FACTOR
+            self.assertTrue(3.3 <= spoken <= 4.2, (voice, round(spoken, 2)))
+        # a slow natural voice is sped up, a fast one slowed down, and the video's own speed still counts
+        self.assertGreater(self.media.pace_tempo("doc-truyen", "vieneu"), 1.2)
+        self.assertLess(self.media.pace_tempo("tam-su", "vieneu"), 0.85)
+        self.assertAlmostEqual(self.media.pace_tempo("doc-truyen", "vieneu", 1.2) / self.media.pace_tempo("doc-truyen", "vieneu", 1.0), 1.2)
+        self.assertAlmostEqual(self.media.PIPER_NATIVE_WPS * self.media.pace_tempo("doc-truyen", "piper") * self.media.PACE_VIDEO_FACTOR, 3.7)
 
     def test_normal_pace_leaves_audio_untouched(self):
         self.assertEqual(self.media._time_stretch(Path("/tmp/x.wav"), 1.0), Path("/tmp/x.wav"))

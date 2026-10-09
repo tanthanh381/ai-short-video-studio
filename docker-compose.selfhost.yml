@@ -46,6 +46,9 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     init: true
+    # On stop/rebuild the worker finishes the video it is making before exiting (it stops claiming new jobs
+    # on SIGTERM). Docker's default 10 s then SIGKILL interrupted videos halfway through.
+    stop_grace_period: 45m
     environment:
       NODE_ENV: production
       SUPABASE_URL: ${SUPABASE_URL}

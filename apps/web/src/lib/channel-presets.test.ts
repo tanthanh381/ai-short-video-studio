@@ -9,7 +9,7 @@ describe("channel presets", () => {
       expect(projectSettingsSchema.safeParse(settings).success).toBe(true);
       expect(VOICE_PRESETS.some((voice) => voice.id === settings.voice)).toBe(true);
       expect(settings.autoMusic).toBe(true);
-      expect(settings.voiceSpeed).toBeGreaterThan(1);
+      expect(settings.voiceSpeed).toBe(1); // the voice bridge normalises each voice to the short-form pace
     }
   });
 
@@ -25,7 +25,7 @@ describe("channel presets", () => {
   });
 
   it("estimates narration length from words and reading speed", () => {
-    expect(estimatedNarrationSeconds(309, 1)).toBe(107); // the 105 s "Ăn khế trả vàng" export
-    expect(estimatedNarrationSeconds(309, 1.15)).toBe(93);
+    expect(estimatedNarrationSeconds(309, 1)).toBe(84); // "Ăn khế trả vàng" at the normalised pace
+    expect(estimatedNarrationSeconds(309, 1.2)).toBe(70);
   });
 });

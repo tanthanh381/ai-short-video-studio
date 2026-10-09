@@ -67,18 +67,26 @@ COMFYUI_MODEL_DIR = Path(os.getenv(
 ))
 COMFYUI_TIMEOUT_S = int(os.getenv("COMFYUI_TIMEOUT_S", "900"))
 # Voice presets selectable on the website. Keep ids in sync with packages/shared/src/voices.ts.
-# (VieNeu preset voice, speed).
+# (VieNeu preset voice, mood, native words/second at speed 1.0).
+# Pace is normalised per voice: the voices read at very different natural rates (2.97 w/s for Đức Trí, 4.66 for
+# Trúc Ly), so one fixed multiplier made some videos drag and others race (6 w/s). Every voice is stretched to
+# PACE_TARGET_WPS × mood × the video's own reading speed; mood keeps genre feel (calmer philosophy, brisker ads).
 VOICE_PRESETS = {
-    "doc-truyen": ("Đức Trí", 1.0),
-    "co-trang": ("Hải Đăng", 0.88),
-    "co-trang-nu": ("Mỹ Duyên", 0.9),
-    "triet-ly": ("Minh Triết", 0.85),
-    "tam-su": ("Trúc Ly", 0.92),
-    "tin-tuc": ("Quang Sơn", 1.05),
-    "tin-tuc-nu": ("Ngọc Huyền", 1.05),
-    "thuyet-minh": ("Phạm Tuyên", 1.0),
-    "nang-dong": ("Xuân Vĩnh", 1.12),
+    "doc-truyen": ("Đức Trí", 1.0, 2.97),
+    "co-trang": ("Hải Đăng", 0.93, 4.51),
+    "co-trang-nu": ("Mỹ Duyên", 0.95, 3.10),
+    "triet-ly": ("Minh Triết", 0.92, 4.43),
+    "tam-su": ("Trúc Ly", 0.95, 4.66),
+    "tin-tuc": ("Quang Sơn", 1.05, 3.34),
+    "tin-tuc-nu": ("Ngọc Huyền", 1.05, 4.16),
+    "thuyet-minh": ("Phạm Tuyên", 1.02, 4.10),
+    "nang-dong": ("Xuân Vĩnh", 1.1, 4.30),
 }
+# Short-form narration lands at 3.3-4.2 words/s; 3.7 is the middle. Measured on finished videos, the gaps between
+# phrases make the spoken rate about 4% lower than the raw synthesis rate.
+PACE_TARGET_WPS = float(os.getenv("PACE_TARGET_WPS", "3.7"))
+PACE_VIDEO_FACTOR = 0.96
+PIPER_NATIVE_WPS = 4.31
 # Ordered preference for local Vietnamese engines.
 TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu,piper").split(",") if e in {"vieneu", "piper"}]
 TTS_CONCURRENCY = max(1, min(int(os.getenv("TTS_CONCURRENCY", "2")), 4))
@@ -529,13 +537,22 @@ def select_tts_engine(voice, engine=None):
     raise RuntimeError("Không engine giọng đọc local nào sẵn sàng")
 
 
-def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0):
-    vieneu_voice, vieneu_speed = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0))
+def pace_tempo(voice, engine, speed=1.0, emotion=1.0):
+    """Time-stretch factor that brings this voice to the target pace (see VOICE_PRESETS)."""
     requested_speed = max(0.75, min(float(speed), 1.3))
+    _name, mood, native = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0, None))
+    if engine != "vieneu":
+        mood, native = 1.0, PIPER_NATIVE_WPS
+    if native is None:  # a voice that was never measured keeps its own pace
+        return mood * requested_speed * emotion
+    target = PACE_TARGET_WPS * mood * requested_speed * emotion / PACE_VIDEO_FACTOR
+    return target / native
+
+
+def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0):
+    vieneu_voice = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0, None))[0]
     profile = emotion_profile(phrase, voice) if engine == "vieneu" else None
-    if profile:
-        vieneu_speed *= profile["speed"]
-    vieneu_speed *= requested_speed
+    vieneu_speed = pace_tempo(voice, engine, speed, profile["speed"] if profile else 1.0)
     input_text = expressive_text(phrase, voice) if engine == "vieneu" else phrase
     source = Path(workdir) / f"phrase-{index}-{engine}.wav"
     if engine == "vieneu":
@@ -548,8 +565,7 @@ def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0):
         raise RuntimeError("Engine giọng đọc local không được hỗ trợ")
     # VieNeu v3 Turbo (and Piper) ignore the `speed` field, so pace — the voice preset, the emotion profile and the
     # video's voiceSpeed — is applied here as a pitch-preserving time stretch. Cue timing is still read from the audio.
-    tempo = vieneu_speed if engine == "vieneu" else requested_speed
-    return _time_stretch(_to_pcm22050(source), tempo)
+    return _time_stretch(_to_pcm22050(source), vieneu_speed)
 
 
 def _time_stretch(source, tempo):
@@ -814,6 +830,29 @@ class Handler(BaseHTTPRequestHandler):
         print(f"[local-media] {format % args}", flush=True)
 
 
+SERVICE_LOG_DIR = Path(__file__).resolve().parents[1] / "tmp" / "local-services"
+
+
+def trim_service_logs(directory=SERVICE_LOG_DIR, max_bytes=5 * 1024 * 1024, keep_bytes=1024 * 1024):
+    """launchd appends service logs forever (one crash loop wrote 14 MB); keep only the recent tail of big ones."""
+    trimmed = []
+    for path in sorted(Path(directory).glob("*.log")) + sorted(Path(directory).glob("*.err")):
+        try:
+            if path.stat().st_size <= max_bytes:
+                continue
+            with path.open("rb") as handle:
+                handle.seek(-keep_bytes, os.SEEK_END)
+                tail = handle.read()
+            tail = tail[tail.find(b"\n") + 1:]  # start on a whole line
+            path.write_bytes(b"[log trimmed]\n" + tail)
+            trimmed.append(path.name)
+        except OSError:
+            continue
+    return trimmed
+
+
 if __name__ == "__main__":
+    for name in trim_service_logs():
+        print(f"[local-media] trimmed log {name}", flush=True)
     print(f"Local media server listening on {HOST}:{PORT}", flush=True)
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cleanScriptForNarration, dropRepeatedText } from "./script";
+import { looksLikeSubtitles, subtitlesToScript } from "./srt";
 
 describe("dropRepeatedText", () => {
   const teaser = "Ngày xửa ngày xưa, trong một ngôi làng nhỏ, có hai anh em sống nương tựa vào nhau từ khi cha mẹ mất sớm. Cha mẹ để lại cho họ một ít tài sản...";
@@ -25,3 +26,19 @@ describe("dropRepeatedText", () => {
     expect(dropRepeatedText(script)).toBe(script);
   });
 });
+
+describe("pasted subtitles become narration", () => {
+  const srt = "1\n00:00:00,000 --> 00:00:04,500\nTrăng treo đầu núi, kiếm khách một mình\n\n2\n00:00:04,500 --> 00:00:09,000\nbước giữa sương khuya.\n\n3\n00:00:09,000 --> 00:00:13,500\n<i>Ba năm trước</i>, hắn thua một trận.\n";
+  it("drops numbers, timings and tags and joins a sentence split across cues", () => {
+    expect(looksLikeSubtitles(srt)).toBe(true);
+    expect(subtitlesToScript(srt)).toBe("Trăng treo đầu núi, kiếm khách một mình bước giữa sương khuya.\nBa năm trước, hắn thua một trận.");
+    expect(cleanScriptForNarration(srt)).toBe("Trăng treo đầu núi, kiếm khách một mình bước giữa sương khuya.\nBa năm trước, hắn thua một trận.");
+  });
+
+  it("reads WebVTT too, and leaves an ordinary script alone", () => {
+    const vtt = "WEBVTT\n\n00:00.000 --> 00:02.000\nXin chào các bạn.\n\n00:02.000 --> 00:04.000\nHôm nay mình kể chuyện.";
+    expect(cleanScriptForNarration(vtt)).toBe("Xin chào các bạn.\nHôm nay mình kể chuyện.");
+    expect(looksLikeSubtitles("Năm 2024 lúc 10:30 tôi đi học.")).toBe(false);
+  });
+});
+

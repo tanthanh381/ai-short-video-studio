@@ -29,7 +29,6 @@ describe("withLayoutTemplate", () => {
   it("story card switches to the cartoon look, 9:16 and auto music", () => {
     const next = withLayoutTemplate({ ...DEFAULT_PROJECT_SETTINGS, aspectRatio: "16:9" }, "story-card");
     expect(next).toMatchObject({ layoutTemplate: "story-card", visualPreset: "cartoon", aspectRatio: "9:16", autoMusic: true });
-    expect(next.voiceSpeed).toBeGreaterThanOrEqual(1.15);
   });
 
   it("full-bleed only changes the template", () => {

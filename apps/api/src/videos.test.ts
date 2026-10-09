@@ -99,6 +99,17 @@ describe("one-click video API", () => {
     expect(f.rpc.mock.calls[0]![1].p_input_mode).toBe("idea");
   });
 
+  it("reads pasted subtitles as a full script, also when an older page still sends srt", async () => {
+    const f = fixture();
+    const srt = "1\n00:00:00,000 --> 00:00:04,000\nTrăng treo đầu núi.\n\n2\n00:00:04,000 --> 00:00:08,000\nKiếm khách bước đi.";
+    const response = await request(f.app).post("/v1/videos").set("Authorization", "Bearer test")
+      .send({ sourceText: srt, inputMode: "srt" });
+    expect(response.status).toBe(202);
+    const args = f.rpc.mock.calls[0]![1];
+    expect(args.p_input_mode).toBe("full-script");
+    expect(args.p_title).toBe("Trăng treo đầu núi."); // titled from the spoken text, not the cue number
+  });
+
   it("fails capability preflight before creating projects or jobs", async () => {
     const f = fixture();
     const app = createApp({ ...config, LOCAL_MEDIA_FEATURES_ENABLED: false }, f.db as never);

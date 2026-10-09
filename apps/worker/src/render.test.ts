@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assTime, createAss, karaokeText, renderProject, videoEncoderPreset, videoSize } from "./render";
+import { assTime, createAss, karaokeText, renderProject, sceneMotion, videoEncoderPreset, videoSize } from "./render";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
 
 describe("render helpers", () => {
@@ -182,6 +182,19 @@ describe("karaoke captions", () => {
     expect(plain).not.toContain("\\k");
     expect(karaoke).toContain("{\\k");
     expect(karaoke).toContain("Default,Noto Sans,65,&H004DE1FF,&H00FFFFFF"); // yellow highlight, white before spoken
+  });
+});
+
+describe("scene motion", () => {
+  it("keeps a short scene as one slow push-in", () => {
+    expect(sceneMotion(5)).toBe("zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1");
+  });
+
+  it("cuts a long scene in two framings halfway, so the picture changes within 7 s", () => {
+    const filter = sceneMotion(9);
+    expect(filter).toContain("if(lt(on,135)"); // 9 s * 30 fps / 2
+    expect(filter).toContain("1.22+");
+    expect(filter.endsWith(":d=1")).toBe(true);
   });
 });
 

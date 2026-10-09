@@ -111,6 +111,14 @@ export function estimateCost(project: Project, localMediaFree = false) {
   });
 }
 
+/**
+ * The .srt upload was removed: pasted subtitles are read as a script (their numbers and timings are stripped when
+ * the narration is cleaned). An older page that still sends "srt" gets the same, instead of a database error.
+ */
+function readAsScript(inputMode: "idea" | "full-script" | "srt"): "idea" | "full-script" {
+  return inputMode === "srt" ? "full-script" : inputMode;
+}
+
 function autoTitle(source: string) {
   let text = source;
   try { text = cleanScriptForNarration(source); } catch { /* only labels: fall back to the raw first line */ }
@@ -537,7 +545,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
         user_id: req.userId,
         title: input.title,
         source_text: input.sourceText,
-        input_mode: input.inputMode,
+        input_mode: readAsScript(input.inputMode),
         settings: input.settings,
       })
       .select("*")
@@ -567,7 +575,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       p_user_id: req.userId,
       p_idempotency_key: `create-video:${key}`,
       p_source_text: input.sourceText,
-      p_input_mode: input.inputMode,
+      p_input_mode: readAsScript(input.inputMode),
       p_title: autoTitle(input.sourceText),
       p_settings: settings,
       p_max_concurrent: req.maxConcurrentJobs,

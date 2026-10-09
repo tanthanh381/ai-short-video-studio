@@ -2261,13 +2261,6 @@ a:focus-visible {
 .whiteboard-how-arrow { color: var(--line); font-size: 16px; }
 
 /* SRT file upload area */
-.srt-upload-area { display: flex; align-items: center; gap: 8px; padding: 10px 0; }
-.srt-upload-label { display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1.5px dashed var(--line); border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--muted); transition: border-color .15s, background .15s; flex: 1; }
-.srt-upload-label:hover { border-color: var(--blue); background: #f2f7ff; color: var(--blue); }
-.srt-file-chosen { color: var(--ink); font-weight: 500; }
-.srt-file-placeholder { color: var(--muted); }
-.srt-clear-btn { padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--white); font-size: 12px; cursor: pointer; color: var(--muted); }
-.srt-clear-btn:hover { background: #fef2f2; color: #c53030; border-color: #f5a5a5; }
 
 /* Annotation badge on PenLine icon */
 .annotation-badge { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #16a34a; color: #fff; font-size: 7px; display: grid; place-items: center; line-height: 1; font-weight: 700; border: 1.5px solid var(--white); }
@@ -2330,3 +2323,28 @@ a:focus-visible {
 .channel-presets button:hover { border-color: var(--blue); }
 .channel-presets button.active { background: var(--blue); border-color: var(--blue); color: var(--white); }
 .channel-presets small { flex-basis: 100%; color: var(--muted); font-size: 13px; }
+
+/* Text for screen readers only (page headings where the visible title is an editable field) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Keyboard focus stays visible where a field removes its own outline */
+.search:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(23, 107, 255, 0.18);
+}
+.scene-content input:focus-visible,
+.scene-content textarea:focus-visible {
+  outline: 3px solid rgba(23, 107, 255, 0.28);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

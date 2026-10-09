@@ -23,5 +23,5 @@ export function withVisualPreset(settings: ProjectSettings, visualPreset: Projec
 /** The story card is a flat illustrated look: switch to it together with the matching picture style and music. */
 export function withLayoutTemplate(settings: ProjectSettings, layoutTemplate: ProjectSettings["layoutTemplate"]): ProjectSettings {
   if (layoutTemplate !== "story-card") return { ...settings, layoutTemplate };
-  return { ...withVisualPreset(settings, "cartoon"), layoutTemplate, aspectRatio: "9:16", autoMusic: true, voiceSpeed: Math.max(settings.voiceSpeed, 1.15) };
+  return { ...withVisualPreset(settings, "cartoon"), layoutTemplate, aspectRatio: "9:16", autoMusic: true };
 }
