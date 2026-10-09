@@ -92,10 +92,22 @@ const ROLE_LOOKS = {
   boy: "a little boy with short black hair, a yellow t-shirt and blue shorts",
   woman: "a Vietnamese young woman with long black hair, a white shirt and jeans",
   man: "a Vietnamese young man with short black hair, a gray shirt and jeans",
-  // Never "elder": the image model reads it as an old man with a white beard.
-  elder: "a plump young Vietnamese man with a topknot and a dark red tunic (the older brother)",
-  younger: "a thin Vietnamese teenage boy with short hair and a patched indigo tunic (the younger brother)",
 } as const;
+
+/** True for a folk tale or a story set "in the old days", where modern clothing breaks the picture. */
+export function isOldTimeStory(text: string): boolean {
+  return /(?<![\p{L}])(?:ngày xửa ngày xưa|thuở xưa|ngày xưa|thời xưa|xưa kia|cổ tích|truyện cổ)(?![\p{L}])/iu.test(text.normalize("NFC"));
+}
+
+/**
+ * Two siblings as one short phrase. Short on purpose: the image model reads only 77 tokens, and a long cast left no
+ * room for the action, so every scene became a line-up. Never "elder": the model draws a white-bearded old man.
+ */
+function brothersCast(oldTime: boolean): string {
+  return oldTime
+    ? "two Vietnamese brothers in ancient peasant clothes, the older in a red tunic, the younger in a blue tunic"
+    : "two Vietnamese brothers, the older in a red t-shirt, the younger in a blue t-shirt";
+}
 
 const word = (source: string) => new RegExp(`(?<![\\p{L}])(?:${source})(?![\\p{L}])`, "iu");
 const NOT_A_CHILD = "đường|người|mắt|sông|phố|số|dao|vật|thuyền|tim|ngõ|suối|chim|bướm|mèo|chó|gà|cá|rồng|thú|ốc|nít";
@@ -105,7 +117,7 @@ export function castForScript(text: string): string {
   const source = text.normalize("NFC").toLocaleLowerCase("vi");
   // "Hai anh em", "người anh … người em": a story about two siblings, whatever else it mentions.
   if (word("hai anh em|người anh").test(source) && word("người em|em mình|em trai").test(source))
-    return `${ROLE_LOOKS.elder}, and ${ROLE_LOOKS.younger}`;
+    return brothersCast(isOldTimeStory(source));
   const found: Array<[number, keyof typeof ROLE_LOOKS]> = [];
   const at = (role: keyof typeof ROLE_LOOKS, pattern: RegExp) => {
     const match = pattern.exec(source);

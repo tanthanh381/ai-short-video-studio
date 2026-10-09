@@ -2,6 +2,7 @@ import { z } from "zod";
 import { cleanScriptForNarration } from "@studio/shared";
 import type { Scene } from "@studio/shared";
 import type { generationPresetSchema } from "@studio/shared";
+import { isOldTimeStory } from "./card-layout";
 
 export { cleanScriptForNarration };
 
@@ -295,15 +296,12 @@ export function visualGlossary(text: string): string {
   return [terms.length ? `English names for Vietnamese things in this story: ${terms.join("; ")}.` : "", era].filter(Boolean).join(" ");
 }
 
-/** True for a folk tale or a story set "in the old days", where modern clothing breaks the picture. */
-export function isOldTimeStory(text: string): boolean {
-  return wholeWord("ngày xửa ngày xưa|thuở xưa|ngày xưa|thời xưa|xưa kia|cổ tích|truyện cổ").test(text.normalize("NFC"));
-}
-
 /**
  * The cast description is repeated in every scene, so one modern garment ("green shirt and blue jeans") puts the
  * whole folk tale in today's clothes. Swap modern clothing for traditional peasant clothing in old-time stories.
  */
+export { isOldTimeStory };
+
 export function eraAppropriateCast(cast: string, sourceText: string): string {
   if (!cast.trim() || !isOldTimeStory(sourceText)) return cast;
   const dressed = cast
@@ -313,7 +311,8 @@ export function eraAppropriateCast(cast: string, sourceText: string): string {
     .replace(/\bshorts\b/giu, "short trousers")
     .replace(/\b(?:sneakers|shoes|boots)\b/giu, "straw sandals")
     .replace(/\bskirt\b/giu, "long skirt");
-  return /traditional/iu.test(dressed) ? dressed : `${dressed.replace(/[.\s]+$/u, "")}, in traditional ancient Vietnamese peasant clothing`;
+  // A tunic or robe already reads as old-time; only an unclothed description needs the (long) era phrase.
+  return /traditional|tunic|robe/iu.test(dressed) ? dressed : `${dressed.replace(/[.\s]+$/u, "")}, in traditional ancient Vietnamese peasant clothing`;
 }
 
 /** SDXL's text encoder reads English; a prompt with Vietnamese diacritics is mostly noise to it. */

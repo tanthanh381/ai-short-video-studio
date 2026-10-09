@@ -689,7 +689,7 @@ describe("eraAppropriateCast", () => {
     const cast = eraAppropriateCast("a Vietnamese boy in his 20s with short black hair, wearing a green shirt and blue jeans", tale);
     expect(cast).not.toMatch(/jeans|\bshirt\b/u);
     expect(cast).toContain("green tunic and loose black trousers");
-    expect(cast).toContain("traditional ancient Vietnamese peasant clothing");
+    expect(eraAppropriateCast("a Vietnamese mother with a black bun", tale)).toContain("traditional ancient Vietnamese peasant clothing");
   });
 
   it("keeps the cast of a modern story as written", () => {
