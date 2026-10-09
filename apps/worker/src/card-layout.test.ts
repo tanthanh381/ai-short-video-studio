@@ -141,6 +141,27 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     expect(paperFeatherFilter([10, -10, -5])).toContain("r='clip(r(X,Y)+10,0,255)'");
   });
 
+  it("keeps every picture to the same mascot on bare paper: no places, no camera words", async () => {
+    const { paperStagePrompt, PAPER_MASCOT } = await import("./card-layout");
+    // prompts the storyboard wrote for the first Đạo lý cổ phong test video
+    const written = [
+      "Chibi figure in olive green robe standing alone on dusty village road holding bamboo shoulder pole with two baskets, full body shot low angle wide depth",
+      "a little chibi boy with a topknot hair bun and a long olive headband ribbon, wearing an olive green ancient robe. Close up chibi face in olive green robe, eyes closed, quiet sad smile",
+      "Full body chibi in olive green robe walking alone through misty forest path carrying heavy bamboo shoulder pole with two baskets, low angle wide shot",
+      "Close-up of a chibi figure in olive green robe smiling softly, holding out a small warm cup against grey rain-swept street background, shallow depth of field",
+    ];
+    const prompts = written.map(paperStagePrompt);
+    for (const prompt of prompts) {
+      expect(prompt.startsWith(`${PAPER_MASCOT}, `)).toBe(true);
+      expect(prompt.split(PAPER_MASCOT).length - 1).toBe(1);
+      expect(prompt).not.toMatch(/village|road|forest|street|background|shot|angle|depth of field|close-?up/iu);
+    }
+    expect(prompts[0]).toContain("holding bamboo shoulder pole with two baskets");
+    expect(prompts[1]).toContain("eyes closed, quiet sad smile");
+    expect(prompts[3]).toContain("holding out a small warm cup");
+    expect(paperStagePrompt("Chibi figure sitting cross-legged holding open book while another chibi listens nearby")).toContain("while another small child listens");
+  });
+
   it("puts the captions under the character, small and without a box", async () => {
     const { createAss } = await import("./render");
     const { PAPER } = await import("./card-layout");

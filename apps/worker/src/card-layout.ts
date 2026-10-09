@@ -33,19 +33,48 @@ export const PAPER = {
   width: 1080,
   height: 1920,
   /** The square picture: centred, its bottom edge where the character stands. */
-  // The reference shorts keep the character small (~40-60% of the width) with open paper around it.
-  stage: 640,
+  // The reference shorts keep the character at ~40-60% of the width with open paper around it.
+  stage: 760,
   stageBottom: 1250,
   /** Captions start just under the character. */
   captionTop: 1320,
   /** Share of the picture's side over which its edges fade into the paper. */
-  feather: 0.14,
+  feather: 0.2,
   /** Kraft paper of the reference shorts (measured RGB 211,187,135 through the whole video). */
   paper: [211, 187, 135] as const,
 } as const;
 
-/** The one recurring character of a paper-stage video when the script names nobody. */
-export const PAPER_MASCOT = "a little chibi boy with a topknot hair bun and a long olive headband ribbon, wearing an olive green ancient robe";
+/**
+ * The one recurring character of a paper-stage video. Short on purpose: the image model reads 77 tokens, and the
+ * bridge's style words come first; a 25-word description pushed the scene's action out of the prompt.
+ */
+export const PAPER_MASCOT = "little chibi boy, topknot hair bun, long olive headband ribbon";
+
+/** Told to the storyboard writer for paper-stage videos: one character on bare paper, never a place. */
+export const PAPER_STORYBOARD_STYLE =
+  "one small chibi character on plain kraft paper with no scenery: no room, street, forest, sky or landscape. " +
+  "Describe only the character's pose, facial expression, gesture and at most one simple prop or one small second figure, in under 20 words";
+
+// Places, backdrops and camera words that turn the bare paper into a scene ("on dusty village road",
+// "against grey rain-swept street background", "low angle wide shot", "shallow depth of field").
+const SCENERY = /\b(?:road|street|alley|path|forest|woods|bamboo grove|village|town|city|market|room|indoors?|house|home|kitchen|temple|garden|park|field|mountains?|river|lake|sea|beach|sky|clouds?|rain\w*|snow\w*|mist\w*|fog\w*|sunset|sunrise|night|landscape|scenery|background|backdrop|wall|window|door|lighting|light|shadows?|depth of field|bokeh|shot|angle|close-?up|camera|lens|cinematic|textur\w*|paper|beige)\b/iu;
+
+/**
+ * The scene prompt for a paper-stage picture: the mascot first (every scene, so the character stays the same), then
+ * only the clauses about the character, without places or camera words.
+ */
+export function paperStagePrompt(prompt: string): string {
+  const withoutMascot = prompt.replace(new RegExp(PAPER_MASCOT.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu"), "")
+    .replace(/a little chibi boy with a topknot hair bun and a long olive headband ribbon, wearing an olive green ancient robe\.?/giu, "")
+    .replace(/\b(another|a second|two|other) chibis?\b/giu, "$1 small child")
+    .replace(/\b(?:full[- ]body )?(?:a |the |same )?chibi(?: (?:figure|character|boy|girl|kid))?(?: in (?:an? )?olive green robe)?\b/giu, "he");
+  // Cut before places ("on dusty road") and before each action ("holding…", "carrying…"), so dropping a place
+  // keeps the action that followed it in the same clause.
+  const clauses = withoutMascot.split(/(?<=[,.;])\s+|\s+(?=(?:on|in|at|against|through|along|under|beside|near|inside|outside)\s)|\s+(?=\p{L}+ing\s)/iu)
+    .map((clause) => clause.trim()).filter((clause) => clause && !SCENERY.test(clause));
+  const action = clauses.join(" ").replace(/\s+([,.;])/gu, "$1").replace(/^[,.;\s]+|[,;\s]+$/gu, "").replace(/^he\b\s*/iu, "");
+  return `${PAPER_MASCOT}, ${action || "standing calmly"}`;
+}
 
 export function usesPaperStage(settings: { layoutTemplate?: string; aspectRatio: string }): boolean {
   return settings.layoutTemplate === "paper-stage" && settings.aspectRatio === "9:16";

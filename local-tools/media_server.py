@@ -202,7 +202,7 @@ IMAGE_STYLES = {
     # outlines to follow (sparse specks, then white holes where the background matched the paper), so this look only.
     "whiteboard": "whiteboard doodle illustration, bold black marker outlines, flat pastel colors, plain white background",
     # "Đạo lý cổ phong": one small character on plain kraft paper; the website places the square picture on paper.
-    "chibi": "cute chibi illustration, plain warm beige kraft paper background, ancient Asian robe in muted olive green, soft muted colors, clean ink outlines, centered full body, empty background",
+    "chibi": "cute chibi illustration, plain beige kraft paper background, olive green ancient robe, clean ink outlines, full body, empty background",
 }
 # Drawn looks: photo skin/anatomy wording would pull them back towards photographs.
 STYLIZED_IMAGE_STYLES = {"flat", "ink", "watercolor", "paper-cut", "whiteboard", "chibi"}

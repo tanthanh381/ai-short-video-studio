@@ -12,7 +12,7 @@ import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
-import { castForScript, fallbackCardTitle, PAPER_MASCOT, storyNationality, usesPaperStage, usesStoryCard, withNationality } from "./card-layout";
+import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE, paperStagePrompt, storyNationality, usesPaperStage, usesStoryCard, withNationality } from "./card-layout";
 import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
 import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, imageAspectFor, vietnameseByDefault, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
@@ -350,6 +350,8 @@ async function storyboard(job: JobRow, project: Project) {
     voiceSpeed: project.settings.voiceSpeed,
     visualStyle: drawsByHand(project.settings)
       ? WHITEBOARD_STORYBOARD_STYLE
+      : usesPaperStage(project.settings)
+      ? PAPER_STORYBOARD_STYLE
       : `${project.settings.visualStyle}; ${visualPresetPrompt(project.settings.visualPreset)}`,
     model: project.settings.localModels.storyboard,
   } as const;
@@ -836,6 +838,7 @@ function sceneSeed(project: Project, scene: Scene): number {
 
 /** The scene's picture prompt; a hand-drawn video must not get a second hand inside the picture. */
 function scenePicturePrompt(prompt: string, project: Project): string {
+  if (usesPaperStage(project.settings)) return paperStagePrompt(prompt);
   return drawsByHand(project.settings) ? withoutDrawingHand(prompt) : prompt;
 }
 
