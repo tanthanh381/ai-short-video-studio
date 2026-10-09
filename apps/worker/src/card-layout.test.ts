@@ -74,6 +74,13 @@ describe("story-card captions and audio", () => {
     expect(withNorm.endsWith("alimiter=limit=0.95:level=false:latency=true[a]")).toBe(true);
   });
 
+  it("fixes the channel layout around the loudness chain so mono narration without music can render", () => {
+    const filter = buildAudioMixFilter(false, 0.12, 5000, 1, true);
+    // ffmpeg 5.1 fails "Cannot select channel layout" if aresample feeds alimiter directly, or the input stays a guessed mono.
+    expect(filter.startsWith("[0:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,loudnorm=")).toBe(true);
+    expect(filter).toMatch(/aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,alimiter=/);
+  });
+
   it("synthesises the ambient pad from 16 sine tones in four cross-faded chords", () => {
     const args = buildAmbientMusicArgs("/tmp/pad.wav");
     expect(args.filter((arg) => arg.startsWith("sine=f="))).toHaveLength(16);

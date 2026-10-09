@@ -238,6 +238,26 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             command = [str(item) for item in process.call_args.args[0]]
             self.assertIn("anatomically correct hands", command[2])
 
+    def test_every_visual_preset_has_its_own_leading_style_words(self):
+        prompts = {}
+        for style in ("photo", "historical", "ink", "watercolor", "paper-cut", "flat"):
+            with patch.object(self.media, "image_server_state", return_value="ready"), \
+                 patch.object(self.media.urllib.request, "urlopen") as request:
+                request.return_value.__enter__.return_value.read.return_value = b"PNG"
+                self.media.local_image("Young woman sitting on a park bench at dusk", "9:16", style=style)
+            prompts[style] = json.loads(request.call_args.args[0].data)["prompt"]
+        self.assertEqual(len(set(prompts.values())), 6)
+        for style in ("historical", "ink", "watercolor", "paper-cut"):
+            self.assertTrue(prompts[style].startswith(self.media.IMAGE_STYLES[style]))
+        # Drawn looks must not be pulled back to photographs by skin/anatomy wording.
+        for style in ("ink", "watercolor", "paper-cut", "flat"):
+            self.assertNotIn("natural skin", prompts[style])
+        self.assertIn("natural skin", prompts["historical"])
+
+    def test_unknown_image_style_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.media.local_image("A quiet street", "9:16", style="oil-painting")
+
     def test_image_quality_guard_adds_face_constraints(self):
         with patch.object(self.media, "image_server_state", return_value="ready"), \
              patch.object(self.media.urllib.request, "urlopen") as request:

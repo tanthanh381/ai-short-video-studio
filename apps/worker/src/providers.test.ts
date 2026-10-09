@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  imageStyleFor,
   withCast,
   cleanScriptForNarration,
   repairCreativeStoryboard,
@@ -593,5 +594,22 @@ describe("story-card prompt writer is told to vary composition and not re-descri
     expect(withFamily).toContain("at most two people per scene");
     expect(withFamily).toContain("clearly different composition");
     expect(buildStoryboardInstruction(base)).not.toContain("NEVER describe their faces");
+  });
+});
+
+describe("imageStyleFor", () => {
+  it("gives every website visual preset its own image look", () => {
+    expect(imageStyleFor("Ánh sáng tự nhiên, chiều sâu và màu sắc chân thực.", "cinematic-color")).toBe("photo");
+    expect(imageStyleFor("Vẽ tay đơn giản trên nền giấy, đen và xám mềm.", "ink-monochrome")).toBe("ink");
+    expect(imageStyleFor("Nét viền rõ, hình khối vui tươi, biểu cảm dễ đọc.", "cartoon")).toBe("flat");
+    expect(imageStyleFor("Bối cảnh lịch sử, trang phục truyền thống và chất liệu điện ảnh.", "historical")).toBe("historical");
+    expect(imageStyleFor("Mảng màu loang nhẹ, mềm và giàu cảm xúc.", "watercolor")).toBe("watercolor");
+    expect(imageStyleFor("Các lớp giấy nổi, bóng đổ nhẹ và bố cục tối giản.", "paper-cut")).toBe("paper-cut");
+  });
+
+  it("guesses from custom wording when the default preset is kept or none is set", () => {
+    expect(imageStyleFor("Tranh minh họa phẳng 2D", "cinematic-color")).toBe("flat");
+    expect(imageStyleFor("Tranh minh họa sơn dầu")).toBe("illustration");
+    expect(imageStyleFor("Ảnh chân thực")).toBe("photo");
   });
 });

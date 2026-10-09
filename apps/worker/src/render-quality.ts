@@ -19,7 +19,8 @@ export function validateCaptionTiming(scene: Scene, audioDurationMs: number) {
 
 /** Preserve voice gain; lower the music while speech is present. */
 /** Platform-style loudness target (short-form feeds normalise around −14 LUFS). */
-const LOUDNESS = "loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000";
+// The explicit layout after aresample matters: ffmpeg 5.1 cannot hand aresample's output to alimiter otherwise.
+const LOUDNESS = "loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo";
 
 export function buildAudioMixFilter(hasMusic: boolean, volume: number, durationMs: number, musicInputIndex = 1, normalize = false) {
   if (!Number.isFinite(volume) || volume < 0 || volume > 1)
@@ -29,8 +30,10 @@ export function buildAudioMixFilter(hasMusic: boolean, volume: number, durationM
   // Disable automatic makeup gain and compensate look-ahead latency.
   const limiter = "alimiter=limit=0.95:level=false:latency=true";
   const tail = normalize ? `${LOUDNESS},${limiter}` : limiter;
-  if (!hasMusic) return `[0:a]${tail}[a]`;
   const format = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo";
+  // Mono narration has only a "guessed" channel layout, which loudnorm -> aresample -> alimiter cannot negotiate;
+  // fix it to stereo before the loudness chain.
+  if (!hasMusic) return normalize ? `[0:a]${format},${tail}[a]` : `[0:a]${tail}[a]`;
   const fadeStart = Math.max(0, durationMs / 1000 - 1).toFixed(3);
   return `[0:a]${format},asplit=2[voice][sidechain];`
     + `[${musicInputIndex}:a]${format},volume=${volume},afade=t=out:st=${fadeStart}:d=1[music];`

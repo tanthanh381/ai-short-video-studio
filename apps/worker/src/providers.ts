@@ -71,7 +71,7 @@ export type MediaModelOptions = {
   seed?: number | null;
   /** Base64 PNG reference from the first character scene for local img2img consistency. */
   referenceImageBase64?: string | null;
-  style?: "photo" | "illustration" | "flat";
+  style?: ImageStyle;
   /** Tốc độ đọc (1 = bình thường). */
   speed?: number | null;
   preset?: z.infer<typeof generationPresetSchema>;
@@ -514,8 +514,21 @@ export function imageSeedFor(projectId: string): number {
  * Photographic by default; painted/cartoon looks only when the author's visual style asks for them.
  * "flat" is the 2D picture-book look (cartoon preset or an explicit flat/2D/vector request).
  */
-export function imageStyleFor(visualStyle: string, visualPreset?: string): "photo" | "illustration" | "flat" {
-  if (visualPreset === "cartoon" || /2d|vector|flat|truyện tranh|tranh phẳng|hoạt hình|cartoon/iu.test(visualStyle)) return "flat";
+export type ImageStyle = "photo" | "illustration" | "flat" | "historical" | "ink" | "watercolor" | "paper-cut";
+
+/** Each website preset has its own look in the image bridge; the default (cinematic) and custom wording fall back to a guess. */
+const PRESET_IMAGE_STYLE: Record<string, ImageStyle> = {
+  cartoon: "flat",
+  historical: "historical",
+  "ink-monochrome": "ink",
+  watercolor: "watercolor",
+  "paper-cut": "paper-cut",
+};
+
+export function imageStyleFor(visualStyle: string, visualPreset?: string): ImageStyle {
+  const byPreset = visualPreset ? PRESET_IMAGE_STYLE[visualPreset] : undefined;
+  if (byPreset) return byPreset;
+  if (/2d|vector|flat|truyện tranh|tranh phẳng|hoạt hình|cartoon/iu.test(visualStyle)) return "flat";
   return /minh họa|tranh|vẽ|anime|illustration|watercolor|màu nước|3d/iu.test(visualStyle)
     ? "illustration"
     : "photo";

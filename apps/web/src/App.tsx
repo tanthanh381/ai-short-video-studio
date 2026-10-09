@@ -67,6 +67,7 @@ import {
 import { useAuth } from "./state/AuthContext";
 import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
+import { withLayoutTemplate, withVisualPreset } from "./lib/visual-preset";
 import { projectIsProcessing } from "./lib/video-submission";
 import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
 
@@ -79,32 +80,6 @@ const navItems = [
   { to: "/whiteboard", label: "Annotation vẽ tay", icon: PenLine },
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
-
-/** The story card is a flat illustrated look: switch to it together with the matching picture style and music. */
-function withLayoutTemplate(settings: ProjectSettings, layoutTemplate: ProjectSettings["layoutTemplate"]): ProjectSettings {
-  if (layoutTemplate !== "story-card") return { ...settings, layoutTemplate };
-  return { ...withVisualPreset(settings, "cartoon"), layoutTemplate, aspectRatio: "9:16", autoMusic: true, voiceSpeed: Math.max(settings.voiceSpeed, 1.15) };
-}
-
-function withVisualPreset(settings: ProjectSettings, visualPreset: ProjectSettings["visualPreset"]): ProjectSettings {
-  const option = VISUAL_PRESET_OPTIONS.find((item) => item.id === visualPreset) ?? VISUAL_PRESET_OPTIONS[0]!;
-  if (visualPreset === "ink-monochrome") {
-    return {
-      ...settings,
-      visualPreset,
-      visualStyle: option.description,
-      subtitle: {
-        ...settings.subtitle,
-        preset: "minimal",
-        fontColor: "#171717",
-        outlineColor: "#F5F1E8",
-        backgroundColor: "#F5F1E8",
-        backgroundOpacity: 0.94,
-      },
-    };
-  }
-  return { ...settings, visualPreset, visualStyle: option.description };
-}
 
 function Notice({
   children,

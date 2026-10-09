@@ -184,7 +184,15 @@ IMAGE_STYLES = {
     "illustration": "cinematic illustration, detailed, soft painterly lighting",
     # Picture-book look used by story-card videos; kept short so the 77-token limit does not trim the scene.
     "flat": "flat 2D vector illustration, picture book, bold outlines, muted warm colors, cartoon",
+    # One entry per visual preset of the website. The style words lead the prompt: SDXL reads only the first 77
+    # tokens, so a style placed after the scene text is silently dropped and every preset looks the same.
+    "historical": "cinematic historical period photo, traditional clothing, ancient architecture, warm lantern light",
+    "ink": "ink pen line drawing, bold black outlines, crosshatch shading, off-white paper, monochrome sketch, no color",
+    "watercolor": "delicate watercolor painting, soft bleeding washes, visible paper grain, pastel palette",
+    "paper-cut": "layered paper-cut art, colored paper shapes, clean silhouettes, soft cast shadows",
 }
+# Drawn looks: photo skin/anatomy wording would pull them back towards photographs.
+STYLIZED_IMAGE_STYLES = {"flat", "ink", "watercolor", "paper-cut"}
 IMAGE_ANATOMY_GUARD = os.getenv("IMAGE_ANATOMY_GUARD", "true").lower() not in {"0", "false", "no"}
 IMAGE_NEGATIVE_PROMPT = os.getenv(
     "IMAGE_NEGATIVE_PROMPT",
@@ -293,16 +301,17 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     # Style words first: if the text encoder's 77-token limit forces trimming, the scene detail goes, not the style.
     clean = clean_image_prompt(prompt)
     is_flat = style == "flat"
+    stylized = style in STYLIZED_IMAGE_STYLES
     is_human = bool(HUMAN_PROMPT_RE.search(clean))
     anatomy = (
         "one person only, one face, two aligned eyes, symmetrical natural facial features, natural skin texture, "
         "anatomically correct hands, natural body proportions, complete limbs"
-        if IMAGE_ANATOMY_GUARD and is_human and not is_flat
+        if IMAGE_ANATOMY_GUARD and is_human and not stylized
         else ""
     )
     anatomy_prefix = f", {anatomy}" if anatomy else ""
-    human_detail = ", natural skin, detailed face" if is_human and not is_flat else ""
-    nonhuman_focus = "" if (is_human or is_flat) else ", the described object or environment is the main subject, no people, no human figures, no face"
+    human_detail = ", natural skin, detailed face" if is_human and not stylized else ""
+    nonhuman_focus = "" if (is_human or stylized) else ", the described object or environment is the main subject, no people, no human figures, no face"
     flat_guard = ", only the described characters, no crowd" if is_flat and is_human else ""
     styled = f"{IMAGE_STYLES[style]}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, {clean}, no text, no logo, no watermark"
     if model == COMFYUI_IMAGE_MODEL:
