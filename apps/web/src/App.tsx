@@ -82,7 +82,10 @@ const navItems = [
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
 
-/** Title, caption and hashtags written for the finished video, ready to paste into TikTok, Reels or Shorts. */
+/**
+ * Title, caption and hashtags written for the finished video, ready to paste into TikTok, Reels or Shorts.
+ * Folded by default so it never takes room from the video preview; copying works without opening it.
+ */
 function PostCaptionCard({ project }: { project: Project }) {
   const [copied, setCopied] = useState(false);
   const description = project.suggestedDescription.trim();
@@ -90,25 +93,26 @@ function PostCaptionCard({ project }: { project: Project }) {
   if (!description || project.sourceText.trim().startsWith(description.slice(0, 120))) return null;
   const text = `${project.suggestedTitle.trim()}\n\n${description}`.trim();
   return (
-    <div className="post-caption">
-      <div className="post-caption-head">
-        <strong>Nội dung đăng bài</strong>
+    <details className="post-caption">
+      <summary>
+        <span>Nội dung đăng bài</span>
         <button
           type="button"
-          className="button button-ghost"
-          onClick={() => {
+          className="post-caption-copy"
+          onClick={(event) => {
+            event.preventDefault(); // copy without toggling the panel
             void navigator.clipboard?.writeText(text).then(() => {
               setCopied(true);
               window.setTimeout(() => setCopied(false), 1800);
             });
           }}
         >
-          <Copy size={15} /> {copied ? "Đã sao chép" : "Sao chép"}
+          <Copy size={14} /> {copied ? "Đã sao chép" : "Sao chép"}
         </button>
-      </div>
+      </summary>
       {project.suggestedTitle.trim() && <p className="post-caption-title">{project.suggestedTitle}</p>}
       <p className="post-caption-body">{description}</p>
-    </div>
+    </details>
   );
 }
 

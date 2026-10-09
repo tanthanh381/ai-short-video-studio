@@ -1005,11 +1005,14 @@ a:focus-visible {
   min-height: 0;
   flex: 1;
   display: grid;
+  /* One row exactly as tall as the stage, so the preview can shrink to fit instead of spilling over the panels below. */
+  grid-template-rows: minmax(0, 1fr);
   place-items: center;
   padding: 16px;
 }
 .video-preview {
   height: min(55vh, 650px);
+  max-height: 100%;
   max-width: 90%;
   aspect-ratio: 9/16;
   background: #03090e;
@@ -2269,18 +2272,47 @@ a:focus-visible {
 /* Annotation badge on PenLine icon */
 .annotation-badge { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #16a34a; color: #fff; font-size: 7px; display: grid; place-items: center; line-height: 1; font-weight: 700; border: 1.5px solid var(--white); }
 
-/* Ready-to-post caption under the preview */
+/* Ready-to-post caption under the preview: folded, in the dark panel's colours */
 .post-caption {
-  margin: 12px 0 4px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--white);
+  flex: none;
+  background: #0b1c2a;
+  border-top: 1px solid #294156;
+  color: #c9d6e0;
+  padding: 0 15px;
 }
-.post-caption-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.post-caption-head .button { padding: 6px 10px; font-size: 13px; }
-.post-caption-title { margin: 8px 0 4px; font-weight: 700; }
-.post-caption-body { margin: 0; white-space: pre-line; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.post-caption summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  list-style: none;
+}
+.post-caption summary::-webkit-details-marker { display: none; }
+.post-caption summary > span::before { content: "▸ "; color: #98adbd; }
+.post-caption[open] summary > span::before { content: "▾ "; }
+.post-caption-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #375064;
+  background: #1f3a50;
+  color: #dbe6ee;
+  border-radius: 8px;
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.post-caption-copy:hover { border-color: #6aa2ff; }
+.post-caption[open] { padding-bottom: 12px; max-height: 40vh; overflow-y: auto; }
+.post-caption-title { margin: 2px 0 6px; font-size: 13px; font-weight: 700; color: white; }
+.post-caption-body { margin: 0; white-space: pre-line; font-size: 12px; line-height: 1.55; }
 
 /* One-click channel looks on the create page */
 .channel-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0 6px; }
