@@ -76,11 +76,12 @@ import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } 
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
+  { to: "/new", label: "Tạo video mới", icon: Plus },
   { to: "/dub-subtitle", label: "Lồng tiếng & phụ đề", icon: Subtitles },
-  { to: "/tts", label: "Text to Speech", icon: Mic2 },
+  { to: "/tts", label: "Đọc văn bản (TTS)", icon: Mic2 },
   { to: "/media", label: "Thư viện media", icon: Library },
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
-  { to: "/whiteboard", label: "Annotation vẽ tay", icon: PenLine },
+  { to: "/whiteboard", label: "Video vẽ tay", icon: PenLine },
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
 
@@ -822,7 +823,7 @@ function TextToSpeechPage() {
   }
   const selectedVoice = VOICE_PRESETS.find((item) => item.id === voice)!;
   return (
-    <SimplePage title="Text to Speech tiếng Việt" subtitle="Dán văn bản, chọn giọng đọc và tải MP3 từ máy AI local.">
+    <SimplePage title="Đọc văn bản thành giọng nói" subtitle="Dán văn bản, chọn giọng đọc và tải MP3 từ máy AI local.">
       <div className="tts-page-grid">
         <section className="tts-editor-card">
           <div className="section-heading-row">
@@ -1224,6 +1225,42 @@ function NewProjectPage() {
       </div>
       <form className="creation-form" onSubmit={submit}>
         <section>
+          <div className="mode-switch">
+            <span className="mode-switch-label" id="mode-switch-label">Bạn bắt đầu từ đâu?</span>
+            <div
+              className="mode-switch-options"
+              role="radiogroup"
+              aria-labelledby="mode-switch-label"
+              onKeyDown={(event) => {
+                // Radio group keyboard pattern: arrows move between the two options and select them.
+                if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key) || busy) return;
+                event.preventDefault();
+                const next = inputMode === "idea" ? "full-script" : "idea";
+                setInputMode(next);
+                event.currentTarget.querySelector<HTMLButtonElement>(`[data-mode="${next}"]`)?.focus();
+              }}
+            >
+              {([
+                ["idea", "Một ý tưởng", "AI viết kịch bản, chia cảnh và vẽ minh họa"],
+                ["full-script", "Kịch bản có sẵn", "Giữ nguyên lời bạn viết, dán được cả phụ đề .srt"],
+              ] as const).map(([mode, title, detail]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="radio"
+                  aria-checked={inputMode === mode}
+                  tabIndex={inputMode === mode ? 0 : -1}
+                  data-mode={mode}
+                  className={inputMode === mode ? "active" : ""}
+                  disabled={busy}
+                  onClick={() => setInputMode(mode)}
+                >
+                  <strong>{title}</strong>
+                  <small>{detail}</small>
+                </button>
+              ))}
+            </div>
+          </div>
           <Field
             label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : "Kịch bản hoàn chỉnh"}
             hint={inputMode === "idea"
@@ -1232,14 +1269,6 @@ function NewProjectPage() {
                 : "AI sẽ phát triển ý tưởng ngắn thành hook, mạch chuyện, cảnh và lời đọc."
               : "Giữ nguyên câu chữ và dấu tiếng Việt. Có thể dán cả nội dung phụ đề (.srt/.vtt): số thứ tự và mốc thời gian được bỏ, chỉ đọc phần lời."}
           >
-            <div className="form-grid">
-              <Field label="Cách xử lý nội dung">
-                <select value={inputMode} onChange={(e) => setInputMode(e.target.value as Project["inputMode"])} disabled={busy}>
-                  <option value="idea">Ý tưởng — AI phát triển thành kịch bản</option>
-                  <option value="full-script">Kịch bản — giữ nguyên lời bạn nhập</option>
-                </select>
-              </Field>
-            </div>
             <>
               <textarea
                 aria-label="Nội dung kịch bản"
@@ -1563,11 +1592,15 @@ function SceneCard({
           value={scene.narration}
           onChange={(e) => onChange({ ...scene, narration: e.target.value })}
         />
-        <input
-          aria-label={`Prompt ảnh cảnh ${scene.order + 1}`}
-          value={scene.imagePrompt}
-          onChange={(e) => onChange({ ...scene, imagePrompt: e.target.value })}
-        />
+        <label className="scene-prompt">
+          <span>Mô tả ảnh</span>
+          <textarea
+            rows={2}
+            aria-label={`Mô tả ảnh cảnh ${scene.order + 1}`}
+            value={scene.imagePrompt}
+            onChange={(e) => onChange({ ...scene, imagePrompt: e.target.value })}
+          />
+        </label>
         <details className="scene-repair" onClick={(e) => e.stopPropagation()}>
           <summary>Sửa riêng thành phần</summary>
           <div className="scene-repair-actions">
@@ -1597,6 +1630,7 @@ function SceneCard({
               <Image />
               <input
                 type="file"
+                aria-label={`Tải ảnh thay thế cho cảnh ${scene.order + 1}`}
                 accept="image/jpeg,image/png,image/webp"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -1609,6 +1643,7 @@ function SceneCard({
               <Mic2 />
               <input
                 type="file"
+                aria-label={`Tải audio lời đọc cho cảnh ${scene.order + 1}`}
                 accept="audio/mpeg,audio/wav,audio/mp4,audio/aac"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -1617,13 +1652,14 @@ function SceneCard({
                 }}
               />
             </label>
-            <label className="icon-upload" title={scene.annotationJson !== null ? "Đã có annotation vẽ tay — tải file mới để thay thế" : "Tải annotation JSON vẽ tay"} style={{ position: "relative" }}>
+            <label className="icon-upload" title={scene.annotationJson !== null ? "Đã có file vẽ tay — tải file mới để thay thế" : "Tải file vẽ tay (JSON)"} style={{ position: "relative" }}>
               <PenLine size={18} />
               {scene.annotationJson !== null && (
-                <span className="annotation-badge" title="Đã có annotation">✓</span>
+                <span className="annotation-badge" title="Đã có file vẽ tay">✓</span>
               )}
               <input
                 type="file"
+                aria-label={`Tải file vẽ tay (JSON) cho cảnh ${scene.order + 1}`}
                 accept="application/json,.json"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -1634,7 +1670,9 @@ function SceneCard({
             </label>
             {scene.annotationJson !== null && onClearAnnotation && (
               <button
-                title="Xóa annotation vẽ tay"
+                type="button"
+                title="Xóa file vẽ tay"
+                aria-label="Xóa file vẽ tay"
                 onClick={(e) => { e.stopPropagation(); onClearAnnotation(); }}
               >
                 <X size={16} />
@@ -1642,14 +1680,18 @@ function SceneCard({
             )}
             {scene.imagePath && onDownloadImage && (
               <button
+                type="button"
                 title="Tải ảnh cảnh này về máy"
+                aria-label="Tải ảnh cảnh này về máy"
                 onClick={(e) => { e.stopPropagation(); onDownloadImage(); }}
               >
                 <Download size={16} />
               </button>
             )}
             <button
+              type="button"
               title="Tạo lại riêng cảnh này"
+              aria-label="Tạo lại riêng cảnh này"
               onClick={(e) => {
                 e.stopPropagation();
                 onRegenerate();
@@ -1658,7 +1700,9 @@ function SceneCard({
               <RefreshCw />
             </button>
             <button
+              type="button"
               title="Đưa lên"
+              aria-label="Đưa lên"
               onClick={(e) => {
                 e.stopPropagation();
                 onMove(-1);
@@ -1667,7 +1711,9 @@ function SceneCard({
               <ChevronUp />
             </button>
             <button
+              type="button"
               title="Đưa xuống"
+              aria-label="Đưa xuống"
               onClick={(e) => {
                 e.stopPropagation();
                 onMove(1);
@@ -1676,7 +1722,9 @@ function SceneCard({
               <ChevronDown />
             </button>
             <button
+              type="button"
               title="Xóa cảnh"
+              aria-label="Xóa cảnh"
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete();
@@ -3334,14 +3382,14 @@ function SettingsPage() {
   return (
     <SimplePage
       title="Cài đặt"
-      subtitle="Quản lý hạn mức, dịch vụ AI và chính sách lưu trữ."
+      subtitle="Tình trạng máy AI, hàng đợi video và dịch vụ trả phí tùy chọn."
     >
       <div className="settings-page-grid">
         <section>
           <div className="section-heading-row">
             <div>
-              <h2>Kết nối dịch vụ</h2>
-              <p>Trạng thái được kiểm tra từ backend và worker.</p>
+              <h2>Máy AI của bạn</h2>
+              <p>Video được tạo hoàn toàn trên máy này. Trạng thái kiểm tra từ backend và worker.</p>
             </div>
             <button
               className="button button-ghost"
@@ -3354,103 +3402,31 @@ function SettingsPage() {
               {refreshing ? "Đang kiểm tra" : "Kiểm tra lại"}
             </button>
           </div>
-          <div className="connection-row">
-            <div>
-              <strong>Backend API</strong>
-              <span>Máy chủ đang phục vụ website</span>
-            </div>
-            <b className={apiState.className} title={apiState.detail}>{apiState.label}</b>
-          </div>
-          <div className="connection-row">
-            <div>
-              <strong>Supabase</strong>
-              <span>Đăng nhập, dữ liệu và media</span>
-            </div>
-            <b className={supabaseState.className} title={supabaseState.detail}>{supabaseState.label}</b>
-          </div>
-          <div className="connection-row">
-            <div>
-              <strong>Claude</strong>
-              <span>Chia cảnh và biên tập kịch bản</span>
-            </div>
-            <b className={anthropicState.className} title={anthropicState.detail}>{anthropicState.label}</b>
-          </div>
-          <div className="connection-row">
-            <div>
-              <strong>Ollama</strong>
-              <span>Chia cảnh cục bộ, không gửi nội dung ra ngoài</span>
-            </div>
-            <b className={ollamaState.className} title={ollamaState.detail}>{ollamaState.label}</b>
-          </div>
-          <div className="connection-row">
-            <div>
-              <strong>ChatGPT / OpenAI</strong>
-              <span>Kịch bản, hình ảnh, giọng đọc và đồng bộ phụ đề</span>
-            </div>
-            <b className={openaiState.className} title={openaiState.detail}>{openaiState.label}</b>
-          </div>
-          <div className="connection-row">
-            <div>
-              <strong>Media local</strong>
-              <span>SDXL-Turbo MLX, VieNeu/Piper/Linh và Whisper trên máy này</span>
-            </div>
-            <b className={localMediaState.className} title={localMediaState.detail}>{localMediaState.label}</b>
-          </div>
-          <div className="connection-row">
-            <div>
-              <strong>Worker render</strong>
-              <span>FFmpeg trên máy tự host</span>
-            </div>
-            <b className={workerState.className} title={workerState.detail}>{workerState.label}</b>
-          </div>
-          <div className="connection-row">
-            <div>
-              <strong>Render / FFmpeg</strong>
-              <span>Ghép và xuất MP4</span>
-            </div>
-            <b className={renderState.className} title={renderState.detail}>{renderState.label}</b>
-          </div>
-        </section>
-        <section className="usage-summary">
-          <div className="section-heading-row">
-            <div>
-              <h2>Sử dụng hôm nay</h2>
-              <p>Chi phí và token theo các tác vụ đã hoàn tất.</p>
-            </div>
-            <span className="usage-percent">{settings.usageStats.budgetPercent}%</span>
-          </div>
-          <div className="budget-meter" aria-label={`Đã dùng ${settings.usageStats.budgetPercent}% ngân sách`}>
-            <span style={{ width: `${settings.usageStats.budgetPercent}%` }} />
-          </div>
-          <div className="usage-metrics">
-            <div><span>Đã dùng</span><strong>${settings.usageStats.today.usedUsd.toFixed(2)}</strong></div>
-            <div><span>Còn lại</span><strong>${settings.usageStats.remainingUsd.toFixed(2)}</strong></div>
-            <div><span>Token ước tính</span><strong>{settings.usageStats.today.totalTokens.toLocaleString("vi-VN")}</strong></div>
-            <div><span>Tác vụ</span><strong>{settings.usageStats.today.eventCount}</strong></div>
-          </div>
-          <p className="microcopy">
-            Ngân sách ngày: ${settings.usageStats.budgetUsd.toFixed(2)} · 30 ngày qua: ${settings.usageStats.last30Days.usedUsd.toFixed(2)}.
-            Token hiện là số ước tính từ nội dung, dùng để theo dõi xu hướng.
-          </p>
+          {([
+            ["Backend API", "Máy chủ đang phục vụ website", apiState],
+            ["Supabase", "Đăng nhập, dữ liệu và media", supabaseState],
+            ["Ollama", "Viết và chia cảnh kịch bản, không gửi nội dung ra ngoài", ollamaState],
+            ["Media local", "Vẽ ảnh SDXL, giọng VieNeu/Piper và Whisper trên máy này", localMediaState],
+            ["Worker render", "Nhận việc từ hàng đợi và dựng video", workerState],
+            ["Render / FFmpeg", "Ghép và xuất MP4", renderState],
+          ] as const).map(([name, detail, state]) => (
+            <ConnectionRow key={name} name={name} detail={detail} state={state} />
+          ))}
+          <details className="settings-more">
+            <summary>
+              Dịch vụ trả phí (không bắt buộc)
+              <small>Chỉ dùng khi bạn chọn Claude hoặc OpenAI thay cho AI local</small>
+            </summary>
+            <ConnectionRow name="Claude" detail="Chia cảnh và biên tập kịch bản" state={anthropicState} />
+            <ConnectionRow name="ChatGPT / OpenAI" detail="Kịch bản, hình ảnh, giọng đọc và đồng bộ phụ đề" state={openaiState} />
+          </details>
         </section>
         <section>
-          <h2>Kiểm soát chi phí</h2>
-          <Field label="Ngân sách AI mỗi ngày (USD)">
-            <input
-              type="number"
-              min="0"
-              max="1000"
-              step="0.5"
-              value={settings.dailyBudgetUsd}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  dailyBudgetUsd: Number(event.target.value),
-                })
-              }
-            />
-          </Field>
-          <Field label="Số tác vụ đồng thời">
+          <h2>Hàng đợi và giới hạn</h2>
+          <Field
+            label="Số video tạo cùng lúc"
+            hint="Máy mini xử lý nhanh nhất khi tạo 1 video một lúc; video sau tự xếp hàng."
+          >
             <input
               type="number"
               min="1"
@@ -3464,10 +3440,36 @@ function SettingsPage() {
               }
             />
           </Field>
-          <p className="microcopy">
-            Ước tính được hiển thị trước khi tạo media. Máy chủ chặn tác vụ vượt
-            hạn mức và khóa lần bấm trùng.
-          </p>
+          <details className="settings-more">
+            <summary>
+              Ngân sách cho dịch vụ trả phí
+              <small>Hôm nay đã dùng ${settings.usageStats.today.usedUsd.toFixed(2)} / ${settings.usageStats.budgetUsd.toFixed(2)}</small>
+            </summary>
+            <div className="budget-meter" aria-label={`Đã dùng ${settings.usageStats.budgetPercent}% ngân sách`}>
+              <span style={{ width: `${settings.usageStats.budgetPercent}%` }} />
+            </div>
+            <div className="usage-metrics">
+              <div><span>Đã dùng</span><strong>${settings.usageStats.today.usedUsd.toFixed(2)}</strong></div>
+              <div><span>Còn lại</span><strong>${settings.usageStats.remainingUsd.toFixed(2)}</strong></div>
+              <div><span>Token ước tính</span><strong>{settings.usageStats.today.totalTokens.toLocaleString("vi-VN")}</strong></div>
+              <div><span>Tác vụ</span><strong>{settings.usageStats.today.eventCount}</strong></div>
+            </div>
+            <Field label="Ngân sách mỗi ngày (USD)" hint={`30 ngày qua: $${settings.usageStats.last30Days.usedUsd.toFixed(2)}. AI local không tính phí.`}>
+              <input
+                type="number"
+                min="0"
+                max="1000"
+                step="0.5"
+                value={settings.dailyBudgetUsd}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    dailyBudgetUsd: Number(event.target.value),
+                  })
+                }
+              />
+            </Field>
+          </details>
           {message && (
             <Notice tone={message.startsWith("Đã lưu") ? "success" : "warn"}>
               {message}
@@ -3483,6 +3485,18 @@ function SettingsPage() {
         </section>
       </div>
     </SimplePage>
+  );
+}
+
+function ConnectionRow({ name, detail, state }: { name: string; detail: string; state: { className: string; label: string; detail: string } }) {
+  return (
+    <div className="connection-row">
+      <div>
+        <strong>{name}</strong>
+        <span>{detail}</span>
+      </div>
+      <b className={state.className} title={state.detail}>{state.label}</b>
+    </div>
   );
 }
 
@@ -3517,17 +3531,17 @@ function WhiteboardPage() {
           <h1>Video vẽ tay</h1>
           <p>Chia ảnh của từng cảnh thành các vùng, đặt thứ tự &amp; thời gian vẽ, rồi tải file JSON lên Studio để render animation bàn tay vẽ.</p>
         </div>
-        <div className="whiteboard-how" aria-label="Hướng dẫn nhanh">
+        <div className="whiteboard-how" role="note" aria-label="Hướng dẫn nhanh">
           <span>① Tạo media trong Studio</span>
-          <span className="whiteboard-how-arrow">→</span>
+          <span className="whiteboard-how-arrow" aria-hidden="true">→</span>
           <span>② Phân vùng ảnh ở đây</span>
-          <span className="whiteboard-how-arrow">→</span>
-          <span>③ Upload JSON + bấm "Video vẽ tay"</span>
+          <span className="whiteboard-how-arrow" aria-hidden="true">→</span>
+          <span>③ Tải file JSON vào cảnh trong Studio</span>
         </div>
       </div>
       <iframe
         src={editorSrc}
-        title="Trình soạn thảo annotation vẽ tay"
+        title="Trình phân vùng ảnh cho video vẽ tay"
         className="whiteboard-iframe"
         allow="clipboard-read; clipboard-write"
       />
