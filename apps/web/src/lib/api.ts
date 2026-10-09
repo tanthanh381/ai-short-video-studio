@@ -1,8 +1,14 @@
-import type { Estimate, Job, LocalModelCatalog, Project, RegenerationComponent } from "@studio/shared";
+import { DEFAULT_PROJECT_SETTINGS, type Estimate, type Job, type LocalModelCatalog, type Project, type RegenerationComponent } from "@studio/shared";
 import { appConfig } from "./config";
 import { demoApi } from "./demo";
 import { supabase } from "./supabase";
 import { completeVideoSubmission, videoSubmission, type VideoInput } from "./video-submission";
+
+/** Projects saved (or served by an older API) before a setting existed lack it; fill from defaults so the editor never reads undefined. */
+function withSettingDefaults(project: Project): Project {
+  return { ...project, settings: { ...DEFAULT_PROJECT_SETTINGS, ...project.settings } };
+}
+
 
 export type VideoResult = {
   id: string;
@@ -144,7 +150,7 @@ export const api = {
       body: JSON.stringify(input),
     });
     completeVideoSubmission(submission.storageKey);
-    return project;
+    return withSettingDefaults(project);
   },
   async continueVideo(id: string) {
     const { job } = await request<{ project: Project; job: Job }>(`/v1/projects/${id}/continue`, { method: "POST" });
@@ -158,11 +164,11 @@ export const api = {
   listProjects: () =>
     appConfig.demoMode
       ? demoApi.listProjects()
-      : request<Project[]>("/v1/projects"),
+      : request<Project[]>("/v1/projects").then((projects) => projects.map(withSettingDefaults)),
   getProject: (id: string) =>
     appConfig.demoMode
       ? demoApi.getProject(id)
-      : request<Project>(`/v1/projects/${id}`),
+      : request<Project>(`/v1/projects/${id}`).then(withSettingDefaults),
   createProject: (
     input: Pick<Project, "title" | "sourceText" | "inputMode" | "settings">,
   ) =>
@@ -171,14 +177,14 @@ export const api = {
       : request<Project>("/v1/projects", {
           method: "POST",
           body: JSON.stringify(input),
-        }),
+        }).then(withSettingDefaults),
   updateProject: (project: Project) =>
     appConfig.demoMode
       ? demoApi.updateProject(project)
       : request<Project>(`/v1/projects/${project.id}`, {
           method: "PUT",
           body: JSON.stringify(project),
-        }),
+        }).then(withSettingDefaults),
   deleteProject: (id: string) =>
     appConfig.demoMode
       ? demoApi.deleteProject(id)
@@ -186,7 +192,7 @@ export const api = {
   duplicateProject: (id: string) =>
     appConfig.demoMode
       ? demoApi.duplicateProject(id)
-      : request<Project>(`/v1/projects/${id}/duplicate`, { method: "POST" }),
+      : request<Project>(`/v1/projects/${id}/duplicate`, { method: "POST" }).then(withSettingDefaults),
   getJobs: (id: string) =>
     appConfig.demoMode
       ? demoApi.getJobs(id)

@@ -22,12 +22,22 @@ describe("Video API integration", () => {
     vi.stubGlobal("fetch", fetcher);
     const input = { sourceText: "Lời đọc giữ nguyên cho video kiểm thử." };
     await expect(api.createVideo(input)).rejects.toThrow("kiểm tra máy xử lý đang bật");
-    await expect(api.createVideo(input)).resolves.toEqual({ id: "project-1" });
+    await expect(api.createVideo(input)).resolves.toMatchObject({ id: "project-1" });
     const first = fetcher.mock.calls[0]?.[1] as RequestInit;
     const retry = fetcher.mock.calls[1]?.[1] as RequestInit;
     expect(new Headers(first.headers).get("idempotency-key")).toBe(new Headers(retry.headers).get("idempotency-key"));
     expect(new Headers(retry.headers).get("authorization")).toBe("Bearer test-session");
     expect(JSON.parse(retry.body as string).sourceText).toBe(input.sourceText);
+  });
+
+  it("fills settings an older API did not return, so the editor never reads undefined", async () => {
+    const legacy = { id: "project-1", settings: { voice: "linh", aspectRatio: "9:16" } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(legacy))));
+    const project = await api.getProject("project-1");
+    expect(project.settings.voice).toBe("linh");
+    expect(project.settings.voiceSpeed).toBe(1);
+    expect(project.settings.layoutTemplate).toBe("full-bleed");
+    expect(project.settings.autoMusic).toBe(false);
   });
 
   it("unwraps the resumed job and signs a real export preview", async () => {
