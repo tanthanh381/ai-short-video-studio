@@ -11,7 +11,7 @@ export const VOICE_PRESETS = [
   { id: "tin-tuc", label: "Tin tức (nam)", hint: "Nam, rõ ràng, nhấn mạnh thông tin quan trọng", sample: "Theo thông tin mới nhất, nhiều địa phương đang đẩy nhanh tiến độ các công trình trọng điểm." },
   { id: "tin-tuc-nu", label: "Tin tức (nữ)", hint: "Nữ, rõ ràng, nhịp linh hoạt theo nội dung", sample: "Bản tin hôm nay xin gửi đến quý vị những thông tin nổi bật trong ngày." },
   { id: "thuyet-minh", label: "Thuyết minh / kiến thức", hint: "Nam, tự nhiên, nhấn vào điều cần biết", sample: "Bạn có biết, mỗi giây trôi qua, Trái Đất đã di chuyển hàng chục ki-lô-mét quanh Mặt Trời?" },
-  { id: "nang-dong", label: "Năng động / quảng cáo", hint: "Nữ, tươi sáng, nhịp nhanh ở câu kêu gọi", sample: "Ưu đãi chỉ trong hôm nay! Nhanh tay chọn ngay món bạn thích và nhận quà liền tay!" },
+  { id: "nang-dong", label: "Năng động / quảng cáo", hint: "Nam, tươi sáng, nhịp nhanh ở câu kêu gọi", sample: "Ưu đãi chỉ trong hôm nay! Nhanh tay chọn ngay món bạn thích và nhận quà liền tay!" },
 ] as const;
 
 export type VoicePresetId = (typeof VOICE_PRESETS)[number]["id"];

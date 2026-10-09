@@ -16,8 +16,10 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
   {
     id: "dao-ly-co-phong",
     label: "Đạo lý cổ phong",
-    hint: "Nhân vật chibi cổ trang trên nền giấy kraft, mỗi câu một hình, giọng trầm, phụ đề nhỏ dưới nhân vật",
-    apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), style: "truyen-cam-hung", voice: "triet-ly", voiceSpeed: 1 }),
+    hint: "Nhân vật chibi cổ trang trên nền giấy kraft, giọng nam trầm, phụ đề nhỏ dưới nhân vật",
+    // Đức Trí: median 107 Hz at 3.7 words/s, the closest to the reference short (99 Hz, 3.6 w/s); "triet-ly" measured
+    // 145 Hz and read 14% slower.
+    apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1 }),
   },
   {
     id: "chua-lanh",
