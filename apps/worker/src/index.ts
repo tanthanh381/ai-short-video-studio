@@ -13,7 +13,8 @@ import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
 import { castForScript, fallbackCardTitle, usesStoryCard } from "./card-layout";
-import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, imageAspectFor, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
+import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
+import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, imageAspectFor, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
@@ -360,6 +361,7 @@ async function storyboard(job: JobRow, project: Project) {
     // requests so the consistency guard does not add a full model round-trip.
     [result, cast] = await Promise.all([createFaithfulStoryboard(provider, storyboardInput), describeCast()]);
   }
+  cast = eraAppropriateCast(cast, sourceText);
   checkDeadline(job);
   // Story-card banner: one short promise-style title, written once and stored with the project.
   let suggestedTitle = result.suggestedTitle;
@@ -369,6 +371,13 @@ async function storyboard(job: JobRow, project: Project) {
       ? await provider.writeCardTitle({ sourceText: script, model: project.settings.localModels.storyboard })
       : "") || fallbackCardTitle(script);
   }
+  // Post-ready caption (title, one or two sentences, hashtags) instead of the raw script.
+  const script = cleanScriptForNarration(project.sourceText);
+  const post = (provider.writePostCaption
+    ? await provider.writePostCaption({ sourceText: script, title: project.title, model: project.settings.localModels.storyboard }).catch(() => null)
+    : null) ?? fallbackPostCaption(script, project.title, project.settings.style);
+  const caption = { ...post, hashtags: cleanHashtags(post.hashtags, project.settings.style) };
+  if (project.settings.layoutTemplate !== "story-card") suggestedTitle = caption.title || suggestedTitle;
   if (providerName === "ollama") await ollama.unload(project.settings.localModels.storyboard);
   await setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard");
   const rows = result.scenes.map((scene, index) => ({
@@ -383,7 +392,7 @@ async function storyboard(job: JobRow, project: Project) {
   const { error: saveError } = await db.rpc("replace_storyboard", {
     p_project_id: project.id, p_user_id: project.userId, p_scenes: rows,
     p_hook: result.hook, p_suggested_title: suggestedTitle,
-    p_suggested_description: result.suggestedDescription,
+    p_suggested_description: formatPostCaption(caption),
     p_status: job.job_type === "create_video" ? "queued" : "draft",
   });
   if (saveError) throw saveError;

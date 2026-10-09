@@ -68,6 +68,7 @@ import { useAuth } from "./state/AuthContext";
 import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
 import { withLayoutTemplate, withVisualPreset } from "./lib/visual-preset";
+import { CHANNEL_PRESETS, estimatedNarrationSeconds } from "./lib/channel-presets";
 import { projectIsProcessing } from "./lib/video-submission";
 import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
 
@@ -80,6 +81,36 @@ const navItems = [
   { to: "/whiteboard", label: "Annotation vẽ tay", icon: PenLine },
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
+
+/** Title, caption and hashtags written for the finished video, ready to paste into TikTok, Reels or Shorts. */
+function PostCaptionCard({ project }: { project: Project }) {
+  const [copied, setCopied] = useState(false);
+  const description = project.suggestedDescription.trim();
+  // Older projects stored a copy of the script here; that is not a caption worth offering.
+  if (!description || project.sourceText.trim().startsWith(description.slice(0, 120))) return null;
+  const text = `${project.suggestedTitle.trim()}\n\n${description}`.trim();
+  return (
+    <div className="post-caption">
+      <div className="post-caption-head">
+        <strong>Nội dung đăng bài</strong>
+        <button
+          type="button"
+          className="button button-ghost"
+          onClick={() => {
+            void navigator.clipboard?.writeText(text).then(() => {
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 1800);
+            });
+          }}
+        >
+          <Copy size={15} /> {copied ? "Đã sao chép" : "Sao chép"}
+        </button>
+      </div>
+      {project.suggestedTitle.trim() && <p className="post-caption-title">{project.suggestedTitle}</p>}
+      <p className="post-caption-body">{description}</p>
+    </div>
+  );
+}
 
 function Notice({
   children,
@@ -198,7 +229,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         {isDemo && (
           <div className="demo-bar">
-            <strong>Đang xem chế độ mẫu.</strong> Anh có thể tạo và sửa
+            <strong>Đang xem chế độ mẫu.</strong> Bạn có thể tạo và sửa
             storyboard trên máy này; tạo video cần kết nối máy xử lý thật.
           </div>
         )}
@@ -482,7 +513,7 @@ function ResetPasswordPage() {
           <p>Mật khẩu mới áp dụng cho tài khoản {user.email}.</p>
           {done ? (
             <>
-              <Notice tone="success">Đã cập nhật mật khẩu. Anh có thể đăng nhập lại.</Notice>
+              <Notice tone="success">Đã cập nhật mật khẩu. Bạn có thể đăng nhập lại.</Notice>
               <Button type="button" onClick={() => navigate("/login")}>Về trang đăng nhập</Button>
             </>
           ) : (
@@ -984,7 +1015,7 @@ function DubSubtitlePage() {
       <div className="dub-page-grid">
         <section className="dub-preview-card">
           <div className="section-heading-row">
-            <div><h2>Bản xem trước</h2><p>{file ? file.name : "Video của anh sẽ xuất hiện ở đây"}</p></div>
+            <div><h2>Bản xem trước</h2><p>{file ? file.name : "Video của bạn sẽ xuất hiện ở đây"}</p></div>
             {audioUrl && <span className="ready-chip"><Check size={14} /> Đã có giọng đọc</span>}
           </div>
           <div className="video-preview-frame">
@@ -1123,12 +1154,17 @@ function NewProjectPage() {
   const [inputMode, setInputMode] = useState<Project["inputMode"]>("idea");
   const [srtFile, setSrtFile] = useState<File | null>(null);
   const [settings, setSettings] = useState<ProjectSettings>(
-    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET },
+    // Short-form narration sounds dragged at 1.0x (about 2.9 words/s); 1.1x is the calmest pace that still feels native.
+    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, voiceSpeed: 1.1, captionHighlight: true },
   );
+  const [channelPreset, setChannelPreset] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);
   const localModels = useLocalModels(isDemo || !advanced);
   const submitting = useRef(false);
   const wordCount = sourceText.trim() ? sourceText.trim().split(/\s+/u).length : 0;
+  // Text of 40+ words is read as written (an idea that long is treated as the script), so its length is known now.
+  const readsAsWritten = inputMode === "full-script" || (inputMode === "idea" && wordCount >= 40);
+  const narrationSeconds = estimatedNarrationSeconds(wordCount, settings.voiceSpeed);
   async function getSrtText(): Promise<string> {
     if (!srtFile) throw new Error("Hãy chọn file .srt trước khi tiếp tục.");
     return srtFile.text();
@@ -1182,7 +1218,7 @@ function NewProjectPage() {
       </button>
       <div className="page-heading">
         <div>
-          <h1>Kịch bản của anh, video hoàn chỉnh.</h1>
+          <h1>Kịch bản của bạn, video hoàn chỉnh.</h1>
           <p>Studio tự chia cảnh, tạo ảnh, đọc tiếng Việt, đồng bộ phụ đề và ghép video.</p>
         </div>
       </div>
@@ -1191,7 +1227,9 @@ function NewProjectPage() {
           <Field
             label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : inputMode === "srt" ? "File phụ đề .srt" : "Kịch bản hoàn chỉnh"}
             hint={inputMode === "idea"
-              ? "AI sẽ phát triển ý tưởng thành hook, mạch chuyện, cảnh và lời đọc."
+              ? wordCount >= 40
+                ? "Nội dung từ 40 từ trở lên được đọc nguyên văn như kịch bản; AI chỉ chia cảnh và vẽ minh họa."
+                : "AI sẽ phát triển ý tưởng ngắn thành hook, mạch chuyện, cảnh và lời đọc."
               : inputMode === "srt"
               ? "Mỗi dòng phụ đề thành một cảnh. Thời lượng cảnh theo timecode trong file."
               : "Giữ nguyên câu chữ và dấu tiếng Việt. Thời lượng video theo giọng đọc thực tế."}
@@ -1200,7 +1238,7 @@ function NewProjectPage() {
               <Field label="Cách xử lý nội dung">
                 <select value={inputMode} onChange={(e) => { setInputMode(e.target.value as Project["inputMode"]); setSrtFile(null); }} disabled={busy}>
                   <option value="idea">Ý tưởng — AI phát triển thành kịch bản</option>
-                  <option value="full-script">Kịch bản — giữ nguyên lời anh nhập</option>
+                  <option value="full-script">Kịch bản — giữ nguyên lời bạn nhập</option>
                   <option value="srt">File phụ đề .srt — chia cảnh theo timecode</option>
                 </select>
               </Field>
@@ -1251,10 +1289,32 @@ function NewProjectPage() {
                 <div className="script-meta" aria-live="polite">
                   <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>
                   <span>{wordCount.toLocaleString("vi-VN")} từ</span>
+                  {readsAsWritten && wordCount > 0 && <span>≈ {formatDuration(narrationSeconds * 1000)} lời đọc</span>}
                 </div>
+                {readsAsWritten && narrationSeconds > 90 && (
+                  <Notice tone="warn">Video sẽ dài khoảng {formatDuration(narrationSeconds * 1000)}. Shorts, Reels và TikTok giữ chân tốt nhất dưới 60–90 giây: nên chia thành nhiều phần (Phần 1, Phần 2…).</Notice>
+                )}
               </>
             )}
           </Field>
+          <div className="channel-presets" role="radiogroup" aria-label="Mẫu kênh">
+            <span className="channel-presets-label">Mẫu kênh</span>
+            {CHANNEL_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                role="radio"
+                aria-checked={channelPreset === preset.id}
+                className={channelPreset === preset.id ? "active" : ""}
+                title={preset.hint}
+                disabled={busy}
+                onClick={() => { setChannelPreset(preset.id); setSettings((s) => preset.apply(s)); }}
+              >
+                {preset.label}
+              </button>
+            ))}
+            {channelPreset && <small>{CHANNEL_PRESETS.find((preset) => preset.id === channelPreset)?.hint}</small>}
+          </div>
           <div className="creation-defaults">
             <span><Video size={15} /> Video dọc 1080 × 1920</span>
             <span><Mic2 size={15} /> Giọng tiếng Việt</span>
@@ -1292,6 +1352,15 @@ function NewProjectPage() {
                 }))}
               />
               <span>Chèn phụ đề vào video</span>
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.captionHighlight}
+                disabled={!settings.subtitle.enabled}
+                onChange={(e) => setSettings((s) => ({ ...s, captionHighlight: e.target.checked }))}
+              />
+              <span>Phụ đề sáng dần theo từng từ (kiểu karaoke)</span>
             </label>
             <label className="check">
               <input
@@ -1426,6 +1495,25 @@ function NewProjectPage() {
                 </select>
               </Field>
               <VoicePreview voice={settings.voice} engine={settings.localModels.tts} disabled={isDemo} />
+              <Field label="Tốc độ đọc">
+                <input
+                  type="range"
+                  min="0.8"
+                  max="1.3"
+                  step="0.05"
+                  value={settings.voiceSpeed}
+                  onChange={(e) => setSettings((s) => ({ ...s, voiceSpeed: Number(e.target.value) }))}
+                />
+                <small>{settings.voiceSpeed.toFixed(2)}× · video ngắn thường đọc 1.1–1.3×</small>
+              </Field>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={settings.autoMusic}
+                  onChange={(e) => setSettings((s) => ({ ...s, autoMusic: e.target.checked }))}
+                />
+                <span>Nhạc nền êm tự tạo (không lo bản quyền)</span>
+              </label>
               <LocalModelPicker
                 catalog={localModels}
                 value={settings.localModels}
@@ -2239,7 +2327,7 @@ function StudioPage() {
                 ? "Tạo ảnh, giọng đọc và phụ đề bằng OpenAI"
                 : capabilities?.localMedia
                   ? "Tạo ảnh, giọng đọc và phụ đề local"
-                : "Chế độ 0 đồng API: tải ảnh và audio của anh lên"
+                : "Chế độ 0 đồng API: tải ảnh và audio của bạn lên"
             }
           >
             <Sparkles size={17} />
@@ -2273,7 +2361,7 @@ function StudioPage() {
       {!isDemo && capabilities && zeroCostMode && (
         <div className="studio-notice">
           <Notice tone="info">
-            Đang chạy chế độ 0 đồng API: anh có thể tự viết storyboard, tải ảnh
+            Đang chạy chế độ 0 đồng API: bạn có thể tự viết storyboard, tải ảnh
             và audio lên từng cảnh, sau đó xuất MP4 bằng worker FFmpeg local.
             Không có cuộc gọi OpenAI hoặc Claude nào được tạo.
           </Notice>
@@ -2473,6 +2561,7 @@ function StudioPage() {
             </div>
             {result && <Button onClick={() => void downloadResult()} busy={busyAction === "download"}><Download size={17} /> {project.status === "completed" && !processing && saved ? "Tải MP4" : "Tải bản trước"}</Button>}
           </div>
+          <PostCaptionCard project={project} />
           <div className="timeline">
             <div className="timeline-label">
               <span>Timeline</span>
@@ -2692,7 +2781,7 @@ function StudioPage() {
               <p className="microcopy">
                 {project.settings.mediaProvider === "local" && voiceHint(project.settings.voice)
                   ? `${voiceHint(project.settings.voice)}. Cảnh đã có giọng đọc giữ nguyên; giọng mới áp dụng cho cảnh tạo mới.`
-                  : "Giọng đọc tổng hợp từ kịch bản của anh."}
+                  : "Giọng đọc tổng hợp từ kịch bản của bạn."}
               </p>
             </div>
             <div className="setting-group">
@@ -2718,6 +2807,15 @@ function StudioPage() {
                   }
                 />
                 <span /> Bật phụ đề
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={project.settings.captionHighlight}
+                  disabled={!project.settings.subtitle.enabled}
+                  onChange={(e) => change({ ...project, settings: { ...project.settings, captionHighlight: e.target.checked } })}
+                />
+                <span>Sáng dần theo từng từ (kiểu karaoke)</span>
               </label>
               <Field label="Kiểu chữ">
                 <select
@@ -2842,7 +2940,7 @@ function StudioPage() {
                   ))}
                   {!activeScene.subtitles.length && (
                     <small>
-                      Timestamp sẽ được tạo từ audio thật; anh cũng có thể thêm
+                      Timestamp sẽ được tạo từ audio thật; bạn cũng có thể thêm
                       thủ công.
                     </small>
                   )}

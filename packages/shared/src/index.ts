@@ -44,6 +44,7 @@ export const DEFAULT_PROJECT_SETTINGS = {
   brandName: "",
   voiceSpeed: 1,
   autoMusic: false,
+  captionHighlight: false,
   trimSilence: false,
   subtitle: {
     enabled: true,

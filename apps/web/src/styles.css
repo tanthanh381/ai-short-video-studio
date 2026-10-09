@@ -2268,3 +2268,33 @@ a:focus-visible {
 
 /* Annotation badge on PenLine icon */
 .annotation-badge { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #16a34a; color: #fff; font-size: 7px; display: grid; place-items: center; line-height: 1; font-weight: 700; border: 1.5px solid var(--white); }
+
+/* Ready-to-post caption under the preview */
+.post-caption {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+}
+.post-caption-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.post-caption-head .button { padding: 6px 10px; font-size: 13px; }
+.post-caption-title { margin: 8px 0 4px; font-weight: 700; }
+.post-caption-body { margin: 0; white-space: pre-line; color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+/* One-click channel looks on the create page */
+.channel-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0 6px; }
+.channel-presets-label { font-weight: 700; font-size: 14px; color: var(--ink); margin-right: 4px; }
+.channel-presets button {
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.channel-presets button:hover { border-color: var(--blue); }
+.channel-presets button.active { background: var(--blue); border-color: var(--blue); color: var(--white); }
+.channel-presets small { flex-basis: 100%; color: var(--muted); font-size: 13px; }

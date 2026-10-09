@@ -42,6 +42,37 @@ function assEscape(text: string) {
     .replace(/}/g, "\\}")
     .replace(/\n/g, "\\N");
 }
+/**
+ * One caption with karaoke timing: each word gets a share of the cue proportional to its length, and ASS turns
+ * it from the secondary colour to the primary (highlight) colour when its turn comes. Cue boundaries come from
+ * the measured alignment, so the approximation only spans the two or three seconds of one cue.
+ */
+export function karaokeText(text: string, durationMs: number): string {
+  const parts = text.split(/(\s+)/u);
+  const words = parts.filter((part, index) => index % 2 === 0 && part.length > 0);
+  const weights = words.map((word) => Math.max(1, (word.match(/[\p{L}\p{N}]/gu) ?? []).length));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  const centiseconds = Math.max(words.length, Math.round(durationMs / 10));
+  let used = 0;
+  let wordIndex = 0;
+  return parts.map((part, index) => {
+    if (index % 2 === 1) return assEscape(part.includes("\n") ? "\n" : " ");
+    if (!part) return "";
+    const last = wordIndex === words.length - 1;
+    const share = last ? centiseconds - used : Math.max(1, Math.round((weights[wordIndex]! / total) * centiseconds));
+    used += share;
+    wordIndex++;
+    return `{\\k${share}}${assEscape(part)}`;
+  }).join("");
+}
+
+/** Bright captions get a yellow highlight, dark ones (ink look) a deep red one. */
+function highlightColor(fontColor: string): string {
+  const value = fontColor.replace("#", "");
+  const luminance = (0.299 * parseInt(value.slice(0, 2), 16) + 0.587 * parseInt(value.slice(2, 4), 16) + 0.114 * parseInt(value.slice(4, 6), 16)) / 255;
+  return luminance > 0.5 ? "#FFE14D" : "#B42318";
+}
+
 function assColor(hex: string, alpha = 0) {
   const value = hex.replace("#", "");
   const red = value.slice(0, 2);
@@ -72,17 +103,21 @@ export function createAss(project: Project) {
   const card = usesStoryCard(project.settings);
   const outline = style.preset === "minimal" ? 1 : 2;
   const borderStyle = card ? 1 : style.backgroundOpacity > 0 ? 3 : 1;
+  const highlight = project.settings.captionHighlight === true;
+  // Karaoke: words start in the caption colour (secondary) and switch to the highlight (primary) when spoken.
+  const primary = highlight ? assColor(highlightColor(style.fontColor)) : assColor(style.fontColor);
   let offset = 0;
   const lines: string[] = [];
   for (const scene of project.scenes) {
     for (const cue of scene.subtitles) {
+      const text = highlight ? karaokeText(cue.text, cue.endMs - cue.startMs) : assEscape(cue.text);
       lines.push(
-        `Dialogue: 0,${assTime(offset + cue.startMs)},${assTime(offset + cue.endMs)},Default,,0,0,0,,${assEscape(cue.text)}`,
+        `Dialogue: 0,${assTime(offset + cue.startMs)},${assTime(offset + cue.endMs)},Default,,0,0,0,,${text}`,
       );
     }
     offset += scene.actualDurationMs ?? scene.estimatedDurationMs;
   }
-  return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Noto Sans,${fontSize},${assColor(style.fontColor)},${assColor(style.fontColor)},${assColor(style.outlineColor)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
+  return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Noto Sans,${fontSize},${primary},${assColor(style.fontColor)},${assColor(style.outlineColor)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
 }
 
 export async function durationMs(config: WorkerConfig, path: string) {

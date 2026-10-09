@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  eraAppropriateCast,
+  fallbackImagePrompt,
   imageStyleFor,
+  isEnglishPrompt,
+  visualGlossary,
   withCast,
   cleanScriptForNarration,
   repairCreativeStoryboard,
@@ -565,7 +569,13 @@ describe("visual action anchors do not fire on unrelated words", () => {
 
   it("still grounds genuine actions", () => {
     expect(visualActionPrompt("Cô ngồi viết nhật ký mỗi tối.", base)).toContain("notebook");
-    expect(visualActionPrompt("Anh ăn cơm cùng gia đình.", base)).toContain("plate of food");
+    expect(visualActionPrompt("Cô tưới chậu cây nhỏ bên cửa sổ.", "A woman at a window")).toContain("watering can");
+  });
+
+  it("never turns 'ăn' into a modern plate and fork, and keeps a prompt that already shows the action", () => {
+    // "Ăn khế trả vàng": a folk tale about a bird eating star fruit, not a dinner table.
+    expect(visualActionPrompt("Ăn khế trả vàng, chim đậu xuống ăn hết quả khế.", base)).toBe(base);
+    expect(visualActionPrompt("Cô tưới chậu cây nhỏ.", "A girl watering a small potted plant on a balcony")).toBe("A girl watering a small potted plant on a balcony");
     expect(visualActionPrompt("Cô tưới chậu cây nhỏ bên cửa sổ.", base)).toContain("watering can");
   });
 });
@@ -613,3 +623,79 @@ describe("imageStyleFor", () => {
     expect(imageStyleFor("Ảnh chân thực")).toBe("photo");
   });
 });
+
+describe("English image prompts for Vietnamese stories", () => {
+  const story = "Ngày xửa ngày xưa, có hai anh em. Cây khế trong vườn trĩu quả, một con chim đến ăn khế rồi trả vàng.";
+  const storyInput: StoryboardInput = {
+    title: "Ăn khế trả vàng", sourceText: story, inputMode: "full-script", rewrite: false, audience: "Người xem",
+    style: "ke-chuyen", duration: 60, visualStyle: "cinematic",
+  };
+
+  it("names Vietnamese things in English and sets the era of a folk tale", () => {
+    const glossary = visualGlossary(story);
+    expect(glossary).toContain("khế = star fruit");
+    expect(glossary).toContain("chim = bird");
+    expect(glossary).toContain("ancient rural Vietnam");
+    expect(visualGlossary("Hôm nay tôi đi làm bằng xe máy.")).toBe("");
+  });
+
+  it("tells English from Vietnamese prompts", () => {
+    expect(isEnglishPrompt("Two brothers stand under a star fruit tree beside a thatched hut")).toBe(true);
+    expect(isEnglishPrompt("Người anh lười biếng đang nằm nghỉ trên cành cây khế")).toBe(false);
+  });
+
+  it("retries a Vietnamese batch and keeps the English answer", async () => {
+    let call = 0;
+    const provider = {
+      createStoryboard: vi.fn(async (value: StoryboardInput) => {
+        call++;
+        return {
+          ...generatedStoryboard(value),
+          scenes: value.lockedScenes!.map((_, index) => ({
+            narration: "x", estimatedDurationMs: 4000,
+            imagePrompt: call === 1 ? `Người em chăm chỉ tưới cây khế cảnh ${index}` : `The younger brother picks star fruit, scene ${index}`,
+          })),
+        };
+      }),
+    };
+    const result = await createFaithfulStoryboard(provider, storyInput);
+    expect(provider.createStoryboard).toHaveBeenCalledTimes(2);
+    expect(result.scenes.every((scene) => isEnglishPrompt(scene.imagePrompt))).toBe(true);
+  });
+
+  it("translates prompts the model kept writing in Vietnamese, else falls back to known English things", async () => {
+    const vietnamese = (value: StoryboardInput) => ({
+      ...generatedStoryboard(value),
+      scenes: value.lockedScenes!.map((_, index) => ({ narration: "x", estimatedDurationMs: 4000, imagePrompt: `Con chim ăn khế trong vườn nhỏ cảnh ${index}` })),
+    });
+    const translating = {
+      createStoryboard: vi.fn(async (value: StoryboardInput) => vietnamese(value)),
+      translateImagePrompt: vi.fn(async () => "A large bird eats yellow star fruit in a small garden, morning light"),
+    };
+    const translated = await createFaithfulStoryboard(translating, storyInput);
+    expect(translating.createStoryboard).toHaveBeenCalledTimes(3);
+    expect(translated.scenes[0]!.imagePrompt).toContain("star fruit");
+
+    const silent = { createStoryboard: vi.fn(async (value: StoryboardInput) => vietnamese(value)) };
+    const fallback = await createFaithfulStoryboard(silent, storyInput);
+    expect(fallback.scenes.every((scene) => isEnglishPrompt(scene.imagePrompt))).toBe(true);
+    expect(fallbackImagePrompt("Một con chim đến ăn khế.", visualGlossary(story))).toMatch(/ancient rural Vietnam showing star fruit .*bird/);
+  });
+});
+
+describe("eraAppropriateCast", () => {
+  const tale = "Ngày xửa ngày xưa, có hai anh em sống trong một ngôi làng nhỏ.";
+  it("dresses a folk tale cast in traditional clothing", () => {
+    const cast = eraAppropriateCast("a Vietnamese boy in his 20s with short black hair, wearing a green shirt and blue jeans", tale);
+    expect(cast).not.toMatch(/jeans|\bshirt\b/u);
+    expect(cast).toContain("green tunic and loose black trousers");
+    expect(cast).toContain("traditional ancient Vietnamese peasant clothing");
+  });
+
+  it("keeps the cast of a modern story as written", () => {
+    const cast = "a Vietnamese young woman with long black hair, a white shirt and jeans";
+    expect(eraAppropriateCast(cast, "Hôm nay cô ấy đi làm muộn vì kẹt xe.")).toBe(cast);
+    expect(eraAppropriateCast("", tale)).toBe("");
+  });
+});
+

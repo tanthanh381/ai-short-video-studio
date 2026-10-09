@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assTime, createAss, renderProject, videoEncoderPreset, videoSize } from "./render";
+import { assTime, createAss, karaokeText, renderProject, videoEncoderPreset, videoSize } from "./render";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
 
 describe("render helpers", () => {
@@ -153,3 +153,35 @@ describe("render helpers", () => {
     ).rejects.toThrow("Cảnh 1 chưa có đủ media và giọng đọc");
   });
 });
+
+describe("karaoke captions", () => {
+  it("splits the cue time over the words by length and keeps line breaks", () => {
+    const text = karaokeText("Ăn khế\ntrả vàng", 2000);
+    // 200 cs over letter weights 2/3/3/4; the last word takes the remainder so the cue ends exactly on time.
+    expect(text).toBe("{\\k33}Ăn {\\k50}khế\\N{\\k50}trả {\\k67}vàng");
+    const shares = [...text.matchAll(/\{\\k(\d+)\}/gu)].map((match) => Number(match[1]));
+    expect(shares.reduce((sum, share) => sum + share, 0)).toBe(200);
+  });
+
+  it("escapes braces inside words", () => {
+    expect(karaokeText("a{b}", 500)).toBe("{\\k50}a\\{b\\}");
+  });
+
+  it("uses the highlight as primary colour only when karaoke captions are on", () => {
+    const base = {
+      id: crypto.randomUUID(), userId: crypto.randomUUID(), title: "t", sourceText: "x", inputMode: "idea", hook: "",
+      suggestedTitle: "", suggestedDescription: "", status: "draft", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      scenes: [{
+        id: crypto.randomUUID(), order: 0, narration: "Xin chào", imagePrompt: "x", estimatedDurationMs: 2000, actualDurationMs: 2000,
+        imagePath: "a", videoPath: null, audioPath: "b", thumbnailUrl: null, mediaStatus: "ready", errorMessage: null, annotationJson: null,
+        subtitles: [{ id: crypto.randomUUID(), startMs: 0, endMs: 2000, text: "Xin chào" }],
+      }],
+    } as const;
+    const plain = createAss({ ...base, settings: DEFAULT_PROJECT_SETTINGS } as unknown as Project);
+    const karaoke = createAss({ ...base, settings: { ...DEFAULT_PROJECT_SETTINGS, captionHighlight: true } } as unknown as Project);
+    expect(plain).not.toContain("\\k");
+    expect(karaoke).toContain("{\\k");
+    expect(karaoke).toContain("Default,Noto Sans,65,&H004DE1FF,&H00FFFFFF"); // yellow highlight, white before spoken
+  });
+});
+

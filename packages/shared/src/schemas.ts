@@ -143,6 +143,8 @@ export const projectSettingsSchema = z.object({
   voiceSpeed: z.number().min(0.8).max(1.3).default(1),
   /** Tự tạo nhạc nền êm khi chưa tải nhạc riêng. */
   autoMusic: z.boolean().default(false),
+  /** Captions light up word by word as they are spoken (karaoke style). */
+  captionHighlight: z.boolean().default(false),
   trimSilence: z.boolean().default(false),
   subtitle: subtitleStyleSchema.default({
     enabled: true,
