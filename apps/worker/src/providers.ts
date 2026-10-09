@@ -474,8 +474,9 @@ const IDEA_AS_SCRIPT_WORDS = 40;
 
 /** Ask for narration up to three times; keep the best acceptable draft rather than failing the video. */
 async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardInput): Promise<string> {
+  // The voice reads about 3.7 words/s; allow some slack above the target length before trimming.
   const minimumWords = Math.round(input.duration * 1.2);
-  const maximumWords = Math.round(input.duration * 3.4);
+  const maximumWords = Math.round(input.duration * 4.4);
   const terms = importantTerms(input.sourceText);
   let best = "";
   let bestScore = -Infinity;
@@ -483,10 +484,11 @@ async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardIn
   let lastError: unknown = new Error("AI chưa viết được lời đọc từ ý tưởng; hãy thử lại");
   for (let attempt = 0; attempt < BATCH_ATTEMPTS; attempt++) {
     try {
-      const draft = cleanScriptForNarration(await provider.writeScript!({
+      // A draft that runs long is trimmed at a sentence end rather than thrown away (qwen3.5 tends to write long).
+      const draft = trimToWords(cleanScriptForNarration(await provider.writeScript!({
         title: input.title, sourceText: input.sourceText, duration: input.duration,
         audience: input.audience, style: input.style, model: input.model ?? null, attempt,
-      }));
+      })), maximumWords);
       const words = contentWords(draft);
       if (words.length < minimumWords || words.length > maximumWords) continue;
       const overlap = terms.length >= 2 ? overlapRatio(terms, new Set(words)) : 1;
@@ -499,6 +501,19 @@ async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardIn
   }
   if (best && (bestOverlap >= 0.1 || terms.length < 2)) return withQuestionHook(best, input.sourceText);
   throw lastError;
+}
+
+/** Whole sentences from the start of `script` while they fit in `maximum` words (unchanged if it already fits). */
+export function trimToWords(script: string, maximum: number): string {
+  if (contentWords(script).length <= maximum) return script;
+  const sentences = script.trim().split(/(?<=[.!?…])\s+/u);
+  let kept = "";
+  for (const sentence of sentences) {
+    const next = kept ? `${kept} ${sentence}` : sentence;
+    if (contentWords(next).length > maximum) break;
+    kept = next;
+  }
+  return kept || script;
 }
 
 // Consonant clusters a Vietnamese syllable can start or end with; anything else ("dr" in "hydrate", "nc" in

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   eraAppropriateCast,
+  trimToWords,
   foreignWords,
   withQuestionHook,
   vietnameseByDefault,
@@ -765,6 +766,14 @@ describe("foreignWords", () => {
     expect(foreignWords("Đầu óc sẽ minh mẫn sau khi hydrate, tinh thần sẽ bouncier.")).toEqual(["hydrate", "bouncier"]);
     expect(foreignWords("Trong nhanh chong, khoang thanh minh nghieng ngang.")).toEqual([]);
     expect(foreignWords("Cổ phiếu Coinbase và Bitcoin cùng giảm.")).toEqual([]);
+  });
+});
+
+describe("trimToWords", () => {
+  it("keeps whole sentences that fit, and leaves a script that already fits", () => {
+    const script = "Câu một có bốn từ. Câu hai cũng có năm từ. Câu ba dài hơn một chút nữa.";
+    expect(trimToWords(script, 9)).toBe("Câu một có bốn từ.");
+    expect(trimToWords(script, 100)).toBe(script);
   });
 });
 

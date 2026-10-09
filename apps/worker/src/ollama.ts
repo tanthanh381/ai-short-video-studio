@@ -101,7 +101,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
   async writeScript(input: {
     title: string; sourceText: string; duration: number; audience: string; style: string; model?: string | null; attempt?: number;
   }): Promise<string> {
-    const target = Math.round(input.duration * 2.3);
+    const target = Math.round(input.duration * 3.3); // the voice reads ~3.7 words/s; leave room for pauses
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
       method: "POST",
       signal: AbortSignal.timeout(180_000),
