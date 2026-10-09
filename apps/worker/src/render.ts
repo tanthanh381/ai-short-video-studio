@@ -131,6 +131,23 @@ export function sceneMotion(seconds: number): string {
     + `:x='iw/2-iw/zoom/2':y='if(lt(on,${cut}),ih/2-ih/zoom/2,(ih-ih/zoom)*0.3)':d=1`;
 }
 
+/** How many scene segments ffmpeg renders at once (bounded by the Docker VM's CPUs). */
+const SEGMENT_CONCURRENCY = Math.max(1, Math.min(Number(process.env.RENDER_CONCURRENCY ?? "3") || 3, 6));
+
+/** Like Promise.all over `items`, but at most `limit` running at a time; results keep the input order. */
+export async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await worker(items[index]!, index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 export async function durationMs(config: WorkerConfig, path: string) {
   const { stdout } = await exec(
     config.FFPROBE_PATH,
@@ -206,10 +223,8 @@ export async function renderProject(
     const { width, height } = videoSize(project.settings.aspectRatio);
     const encoderPreset = videoEncoderPreset(project.settings.generationPreset);
     const cardFrame = usesStoryCard(project.settings) ? await buildCardFrame(config, workdir, project) : null;
-    const segments: string[] = [];
-    const timelineScenes: Scene[] = [];
     let done = 0;
-    for (const scene of project.scenes) {
+    const renderSegment = async (scene: Scene) => {
       if ((!scene.imagePath && !scene.videoPath) || !scene.audioPath)
         throw new Error(`Cảnh ${scene.order + 1} chưa có đủ media và giọng đọc`);
       const imagePath = join(workdir, `scene-${scene.order}.png`);
@@ -253,10 +268,12 @@ export async function renderProject(
           "1:a:0",
           "-c:v",
           "libx264",
+          // Intermediate only: the final pass re-encodes every frame, so encode fast and near-lossless here
+          // instead of compressing twice (CRF 22 then CRF 21 lost detail and took twice the CPU).
           "-preset",
-          encoderPreset,
+          "ultrafast",
           "-crf",
-          "22",
+          "16",
           "-c:a",
           "pcm_s16le",
           "-ar",
@@ -272,14 +289,18 @@ export async function renderProject(
       // Concat starts the next scene at the encoded segment boundary (30 fps).
       // Use that measured boundary for caption offsets, retaining true audio
       // duration on the stored scene. No estimated target duration is used.
-      timelineScenes.push({ ...scene, actualDurationMs: await durationMs(config, segmentPath) });
-      segments.push(segmentPath);
+      const timelineScene = { ...scene, actualDurationMs: await durationMs(config, segmentPath) };
       done++;
       await onProgress(
         15 + Math.round((done / project.scenes.length) * 55),
         `Đã dựng cảnh ${done}/${project.scenes.length}`,
       );
-    }
+      return { segmentPath, timelineScene };
+    };
+    // Scenes are independent until the concat: render a few at once (zoompan and x264 each leave cores idle).
+    const rendered = await mapWithConcurrency(project.scenes, SEGMENT_CONCURRENCY, renderSegment);
+    const segments = rendered.map((item) => item.segmentPath);
+    const timelineScenes: Scene[] = rendered.map((item) => item.timelineScene);
     const concatList = join(workdir, "concat.txt");
     await writeFile(
       concatList,

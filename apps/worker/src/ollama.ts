@@ -109,6 +109,8 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
       body: JSON.stringify({
         model: input.model || this.model,
         stream: false,
+        // Thinking models (qwen3.5) otherwise spend the whole budget reasoning and return an empty script.
+        think: false,
         keep_alive: "30s",
         options: { temperature: Math.min(0.6 + 0.1 * (input.attempt ?? 0), 0.9), num_ctx: 4096, num_predict: 900 },
         system:
@@ -152,6 +154,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
           body: JSON.stringify({
             model: input.model || this.model,
             stream: false,
+            think: false,
             keep_alive: "30s",
             format: { type: "object", additionalProperties: false, required: ["title"], properties: { title: { type: "string" } } },
             options: { temperature: 0.2 + 0.25 * attempt, num_ctx: 4096, num_predict: 80 },

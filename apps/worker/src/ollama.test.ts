@@ -211,3 +211,27 @@ describe("OllamaStoryboardAdapter.writeCardTitle", () => {
     expect(mock).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("thinking models", () => {
+  it("every Ollama call turns reasoning off, so qwen3.5 answers instead of spending its budget thinking", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      bodies.push(body);
+      const response = body.format && JSON.stringify(body.format).includes("title")
+        ? JSON.stringify({ title: "Mẹ không nói nhiều", description: "Mô tả đủ dài cho bài đăng tiếng Việt.", hashtags: [] })
+        : body.format && JSON.stringify(body.format).includes("prompt")
+          ? JSON.stringify({ prompt: "A mother cooking rice in a small kitchen at dawn" })
+          : "Mẹ không nói nhiều. Tình thương không cần lời.";
+      return new Response(JSON.stringify({ response }));
+    }));
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b");
+    await adapter.writeScript({ title: "t", sourceText: "Tình mẹ", duration: 30, audience: "a", style: "ke-chuyen" });
+    await adapter.writeCardTitle({ sourceText: "Mẹ không nói nhiều. Tình thương không cần lời." });
+    await adapter.writePostCaption({ sourceText: "Mẹ không nói nhiều.", title: "t" });
+    await adapter.translateImagePrompt({ narration: "Mẹ nấu cơm.", draft: "Mẹ nấu cơm", glossary: "" });
+    expect(bodies.length).toBeGreaterThanOrEqual(4);
+    expect(bodies.every((body) => body.think === false)).toBe(true);
+  });
+});
+

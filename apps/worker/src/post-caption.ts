@@ -17,9 +17,26 @@ export function normalizeHashtag(tag: string): string {
   return body.length >= 2 && body.length <= 30 ? `#${body}` : "";
 }
 
-export function cleanHashtags(tags: unknown[], style: string): string[] {
+/** Every run of 1-4 consecutive words of the text, written as a hashtag body ("tiết kiệm tiền" -> "tietkiemtien"). */
+function phraseTags(text: string): Set<string> {
+  const words = text.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/giu, "d").toLowerCase().match(/[a-z0-9]+/gu) ?? [];
+  const tags = new Set<string>();
+  for (let i = 0; i < words.length; i++)
+    for (let n = 1; n <= 4 && i + n <= words.length; n++) tags.add(words.slice(i, i + n).join(""));
+  return tags;
+}
+
+/**
+ * Clean, de-duplicated hashtags plus the style's own tags. With the script given, a model tag is kept only when it
+ * is a phrase of the script or title: small models invent garbled tags ("#tienvucap") that hurt reach.
+ */
+export function cleanHashtags(tags: unknown[], style: string, text?: string): string[] {
   const unique = new Set<string>();
-  for (const tag of tags) if (typeof tag === "string") { const clean = normalizeHashtag(tag); if (clean) unique.add(clean); }
+  const known = text ? phraseTags(text) : null;
+  for (const tag of tags) if (typeof tag === "string") {
+    const clean = normalizeHashtag(tag);
+    if (clean && (!known || known.has(clean.slice(1)))) unique.add(clean);
+  }
   for (const tag of STYLE_TAGS[style] ?? []) unique.add(tag);
   return [...unique].slice(0, 6);
 }

@@ -148,7 +148,7 @@ COMFYUI_IMAGE_PRESETS = {
     "balanced": {"steps": 25, "cfg": 6.5},
     "quality": {"steps": 35, "cfg": 7.0},
 }
-IMAGE_FACE_PRESET = os.getenv("IMAGE_FACE_PRESET", "quality")
+IMAGE_PERSON_STEPS = max(2, min(int(os.getenv("IMAGE_PERSON_STEPS", "6")), 8))
 IMAGE_STEPS_OVERRIDE = os.getenv("IMAGE_STEPS")
 VIENEU_STEPS = int(os.getenv("VIENEU_STEPS", "16"))
 TTS_BREAK_WORDS = int(os.getenv("TTS_BREAK_WORDS", "18"))
@@ -360,11 +360,16 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
             IMAGE_ENGINE["comfy_used"] = True
             return comfyui_image(styled, negative, width, height, seed, preset)
     release_comfy_model()
-    # SDXL-Turbo is most likely to deform anatomy at low step counts. Promote
-    # every human scene in the balanced preset; explicit fast remains fast.
-    if is_human and selected_preset == "balanced" and IMAGE_FACE_PRESET in IMAGE_PRESETS:
-        selected_preset = IMAGE_FACE_PRESET
-        preset_options = IMAGE_PRESETS[selected_preset]
+    # SDXL-Turbo is distilled to work without guidance. A negative prompt only takes effect with CFG > 1, which runs
+    # the UNet twice per step: 8 steps + negative took 20.9 s per image against 6.9 s for 4 plain steps, with no
+    # visible gain in faces or hands (side-by-side check, photo and flat). Drawn looks get the 4 steps they are made
+    # for, a realistic person 6; only the explicit "quality" preset keeps 8 steps with the anatomy negative.
+    steps = preset_options["steps"]
+    turbo_negative = ""
+    if selected_preset == "quality":
+        turbo_negative = IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else ""
+    elif is_human and not stylized and selected_preset == "balanced":
+        steps = IMAGE_PERSON_STEPS
     # The server may still be importing/loading the model (minutes). Wait for it rather than loading a
     # second 7 GB copy through the one-shot script, which only runs if the server never comes up.
     deadline, down_since = time.time() + IMAGE_TIMEOUT_S, None
@@ -378,9 +383,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         time.sleep(5)
     if state == "ready":  # model kept loaded in memory: seconds per image
         recycle_if_bloated("image", IMAGE_SERVER_URL)  # a restart reloads the model (~1 min) but frees GBs of cache
-        payload = {"prompt": styled, "model": model, "seed": seed, "steps": int(IMAGE_STEPS_OVERRIDE or preset_options["steps"]), "preset": selected_preset,
-                   "width": width, "height": height,
-                   "negativePrompt": IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else ""}
+        payload = {"prompt": styled, "model": model, "seed": seed, "steps": int(IMAGE_STEPS_OVERRIDE or steps), "preset": selected_preset,
+                   "width": width, "height": height, "negativePrompt": turbo_negative}
         if reference_image_base64 and is_human:
             payload["referenceImage"] = reference_image_base64
         request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps(payload).encode(),

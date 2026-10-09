@@ -379,7 +379,7 @@ async function storyboard(job: JobRow, project: Project) {
   const post = (provider.writePostCaption
     ? await provider.writePostCaption({ sourceText: script, title: project.title, model: project.settings.localModels.storyboard }).catch(() => null)
     : null) ?? fallbackPostCaption(script, project.title, project.settings.style);
-  const caption = { ...post, hashtags: cleanHashtags(post.hashtags, project.settings.style) };
+  const caption = { ...post, hashtags: cleanHashtags(post.hashtags, project.settings.style, `${project.title} ${script}`) };
   if (project.settings.layoutTemplate !== "story-card") suggestedTitle = caption.title || suggestedTitle;
   if (providerName === "ollama") await ollama.unload(project.settings.localModels.storyboard);
   await setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard");

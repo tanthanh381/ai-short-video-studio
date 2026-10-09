@@ -315,16 +315,29 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             self.assertTrue(big.read_bytes().rstrip().endswith(b"recent line"))
             self.assertEqual(small.read_bytes(), b"fine\n")
 
-    def test_image_quality_guard_adds_face_constraints(self):
+    def _turbo_payload(self, prompt, **options):
         with patch.object(self.media, "image_server_state", return_value="ready"), \
+             patch.object(self.media, "recycle_if_bloated", return_value=False), \
              patch.object(self.media.urllib.request, "urlopen") as request:
-            response = request.return_value.__enter__.return_value
-            response.read.return_value = b"PNG"
-            self.media.local_image("Portrait close-up of a young woman", "9:16", preset="balanced")
-        payload = json.loads(request.call_args.args[0].data)
-        self.assertEqual(payload["preset"], "quality")
+            request.return_value.__enter__.return_value.read.return_value = b"PNG"
+            self.media.local_image(prompt, "9:16", **options)
+        return json.loads(request.call_args.args[0].data)
+
+    def test_image_quality_guard_adds_face_constraints(self):
+        payload = self._turbo_payload("Portrait close-up of a young woman", preset="balanced")
         self.assertIn("symmetrical natural facial features", payload["prompt"])
-        self.assertIn("melted face", payload["negativePrompt"])
+
+    def test_turbo_runs_without_guidance_and_with_few_steps_unless_quality_is_chosen(self):
+        # A realistic person: 6 steps, no negative prompt (CFG would double the time for no visible gain).
+        person = self._turbo_payload("Portrait close-up of a young woman", preset="balanced")
+        self.assertEqual((person["steps"], person["negativePrompt"]), (6, ""))
+        # A drawn look keeps Turbo's native 4 steps.
+        drawn = self._turbo_payload("A young woman reading by a window", preset="balanced", style="flat")
+        self.assertEqual((drawn["steps"], drawn["negativePrompt"]), (4, ""))
+        # Choosing "quality" on the website buys the slower 8-step render with the anatomy negative.
+        quality = self._turbo_payload("Portrait close-up of a young woman", preset="quality")
+        self.assertEqual(quality["steps"], 8)
+        self.assertIn("melted face", quality["negativePrompt"])
 
     def test_character_reference_is_forwarded_only_for_human_scenes(self):
         class ImageResponse:

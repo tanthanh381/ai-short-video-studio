@@ -576,6 +576,12 @@ describe("visual action anchors do not fire on unrelated words", () => {
     expect(visualActionPrompt("Cô tưới chậu cây nhỏ bên cửa sổ.", "A woman at a window")).toContain("watering can");
   });
 
+  it("leaves a comparison with coffee and a walk to the model's own depiction", () => {
+    const prompt = "Close-up of a hand pressing an alarm clock button on a wooden nightstand at dawn";
+    expect(visualActionPrompt("Ánh sáng buổi sớm giúp cơ thể tỉnh táo hơn cả một ly cà phê.", prompt)).toBe(prompt);
+    expect(visualActionPrompt("Chỉ mười phút đi bộ mỗi sáng có thể thay đổi cả ngày của bạn.", prompt)).toBe(prompt);
+  });
+
   it("never turns 'ăn' into a modern plate and fork, and keeps a prompt that already shows the action", () => {
     // "Ăn khế trả vàng": a folk tale about a bird eating star fruit, not a dinner table.
     expect(visualActionPrompt("Ăn khế trả vàng, chim đậu xuống ăn hết quả khế.", base)).toBe(base);

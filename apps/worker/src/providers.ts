@@ -592,22 +592,22 @@ export function visualActionPrompt(narration: string, prompt: string) {
     [word("điện thoại|tin nhắn|gọi điện|smartphone"), "a smartphone held in the foreground with a visible message interface but no readable text, over-the-shoulder shot"],
     [word("máy tính|laptop|bàn phím"), "an open laptop on a desk as the main foreground object, hands using the keyboard, screen without readable text"],
     [word("nấu ăn|nấu|chiên|xào|bếp"), "a pot, pan and ingredients clearly visible on a kitchen counter, hands stirring the food"],
-    [word("uống|ly nước|cốc nước|cà phê"), "a glass or cup visibly held in the foreground while the person drinks, liquid and rim clearly visible"],
+    // Only the verb: "tỉnh táo hơn cả một ly cà phê" is a comparison, not someone drinking.
+    [word("uống"), "a glass or cup visibly held in the foreground while the person drinks, liquid and rim clearly visible"],
     [word("mở cửa|kéo cửa"), "a hand visibly turning the door handle and opening a door, doorway and room beyond clearly visible"],
     [word("đóng cửa"), "a hand visibly pulling a door closed, door handle and doorway clearly visible"],
     [word("trồng cây|gieo hạt|trồng hoa"), "hands placing a small seedling into visible soil in a pot, gardening tools beside it"],
     [word("lau nhà|dọn dẹp|quét nhà"), "a cleaning cloth, broom or mop visibly touching the floor, the cleaned room clearly visible"],
-    [word("đi bộ|bước đi|chạy|đạp xe"), "a full-body person visibly moving along the described path, feet and surrounding environment in frame"],
   ];
   const anchor = anchors.find(([pattern]) => pattern.test(text))?.[1];
   if (!anchor) return prompt;
   // Only ground a prompt that misses the action: one that already names it keeps its own subject first.
-  const key = anchor.match(/\b(watering can|book|smartphone|laptop|pot|glass|door|seedling|broom|moving)\b/u)?.[1];
+  const key = anchor.match(/\b(watering can|book|smartphone|laptop|pot|glass|door|seedling|broom)\b/u)?.[1];
   const covered: Record<string, RegExp> = {
     "watering can": /\bwater(?:s|ing)?\b/iu, book: /\b(?:book|reads?|reading)\b/iu, smartphone: /\b(?:phone|smartphone)\b/iu,
     laptop: /\b(?:laptop|computer|keyboard)\b/iu, pot: /\b(?:cook|cooks|cooking|pot|pan|stove)\b/iu,
     glass: /\b(?:drink|drinks|drinking|cup|glass|tea|coffee)\b/iu, door: /\bdoor\b/iu, seedling: /\b(?:plant|plants|planting|seedling)\b/iu,
-    broom: /\b(?:clean|cleans|cleaning|sweep|sweeps|sweeping|broom|mop)\b/iu, moving: /\b(?:walk|walks|walking|run|runs|running|ride|rides|riding)\b/iu,
+    broom: /\b(?:clean|cleans|cleaning|sweep|sweeps|sweeping|broom|mop)\b/iu,
   };
   if (key && covered[key]?.test(prompt)) return prompt;
   return `${anchor}, ${prompt}`.slice(0, 2000);

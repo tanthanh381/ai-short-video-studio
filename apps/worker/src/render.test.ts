@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assTime, createAss, karaokeText, renderProject, sceneMotion, videoEncoderPreset, videoSize } from "./render";
+import { assTime, createAss, karaokeText, mapWithConcurrency, renderProject, sceneMotion, videoEncoderPreset, videoSize } from "./render";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
 
 describe("render helpers", () => {
@@ -195,6 +195,22 @@ describe("scene motion", () => {
     expect(filter).toContain("if(lt(on,135)"); // 9 s * 30 fps / 2
     expect(filter).toContain("1.22+");
     expect(filter.endsWith(":d=1")).toBe(true);
+  });
+});
+
+describe("mapWithConcurrency", () => {
+  it("keeps the scene order and never runs more than the limit at once", async () => {
+    let running = 0;
+    let peak = 0;
+    const result = await mapWithConcurrency([30, 5, 20, 1, 10], 3, async (delay, index) => {
+      running++;
+      peak = Math.max(peak, running);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      running--;
+      return index;
+    });
+    expect(result).toEqual([0, 1, 2, 3, 4]);
+    expect(peak).toBe(3);
   });
 });
 

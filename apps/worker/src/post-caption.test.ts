@@ -15,4 +15,11 @@ describe("post caption", () => {
     expect(caption.description).toBe("Ngày xửa ngày xưa có hai anh em. Người anh tham lam. Người em hiền lành.");
     expect(formatPostCaption(caption)).toBe(`${caption.description}\n\n#kechuyen #truyenhay`);
   });
+
+  it("keeps only model hashtags that are phrases of the script or title", () => {
+    const script = "Bí quyết tiết kiệm tiền cho người mới đi làm: lập ngân sách mỗi tháng.";
+    expect(cleanHashtags(["#tiếtkiệmtiền", "#tienvucap", "#NgânSách", "#nguoindodam"], "kien-thuc", script))
+      .toEqual(["#tietkiemtien", "#ngansach", "#kienthuc", "#bancobiet"]);
+  });
 });
+
