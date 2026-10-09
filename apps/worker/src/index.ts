@@ -12,7 +12,7 @@ import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
-import { castForScript, fallbackCardTitle, usesStoryCard } from "./card-layout";
+import { castForScript, fallbackCardTitle, storyNationality, usesStoryCard, withNationality } from "./card-layout";
 import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
 import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, imageAspectFor, vietnameseByDefault, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
@@ -360,24 +360,30 @@ async function storyboard(job: JobRow, project: Project) {
   const captionDraft = provider.writePostCaption && project.inputMode === "full-script"
     ? provider.writePostCaption({ sourceText: draftScript, title: project.title, model: project.settings.localModels.storyboard }).catch(() => null)
     : Promise.resolve(null);
+  // Vietnamese unless the script is about another people ("người Nhật", "Hàn Quốc"): the cast and every prompt follow it.
+  const describedPeople = storyNationality(`${project.title}\n${sourceText}`);
   const describeCast = () => provider.describeCast
-    ? provider.describeCast({ title: project.title, sourceText, model: project.settings.localModels.storyboard, cartoon: cardMode })
+    ? provider.describeCast({ title: project.title, sourceText, model: project.settings.localModels.storyboard, cartoon: cardMode, people: describedPeople.people })
     : Promise.resolve("");
+  // A picture that showed another scene's narration is asked for again; say so, so a model that drifts more often shows up in the logs.
+  const notes = { realigned: (event: { misaligned: number[]; repaired: number[] }) => log.warn({ jobId: job.id, projectId: project.id, ...event }, "storyboard_prompts_realigned") };
   let cast = "";
   let result;
   if (cardMode) {
     // The prompt writer must know the family up front so every scene shows the same two characters.
-    cast = castForScript(sourceText) || await describeCast();
-    result = await createFaithfulStoryboard(provider, { ...storyboardInput, cast });
+    cast = castForScript(sourceText, describedPeople) || await describeCast();
+    result = await createFaithfulStoryboard(provider, { ...storyboardInput, cast }, notes);
   } else {
     // Cast extraction is independent of scene splitting; overlap the two Ollama
     // requests so the consistency guard does not add a full model round-trip.
     // Fixed role looks (mother in red, two brothers…) keep people recognisable better than a model-written cast.
-    const scriptCast = castForScript(sourceText);
-    [result, cast] = await Promise.all([createFaithfulStoryboard(provider, storyboardInput), scriptCast ? Promise.resolve(scriptCast) : describeCast()]);
+    const scriptCast = castForScript(sourceText, describedPeople);
+    [result, cast] = await Promise.all([createFaithfulStoryboard(provider, storyboardInput, notes), scriptCast ? Promise.resolve(scriptCast) : describeCast()]);
   }
+  // An idea's script is only written now, so the people it names count too; the model-written cast says "Vietnamese" by habit.
+  const nationality = storyNationality(`${project.title}\n${sourceText}\n${result.narration}`);
   // The "Cổ trang" look is a period story even when the script never says "ngày xưa".
-  cast = eraAppropriateCast(cast, sourceText, project.settings.visualPreset === "historical");
+  cast = eraAppropriateCast(withNationality(cast, nationality), sourceText, project.settings.visualPreset === "historical", nationality);
   checkDeadline(job);
   // One short promise-style title, written once: the story card's banner, or the hook over the first seconds of
   // a full-frame video. It is stored as the project's hook (which used to hold a copy of the script's start).
@@ -404,7 +410,7 @@ async function storyboard(job: JobRow, project: Project) {
     project_id: project.id,
     scene_order: index,
     narration: scene.narration,
-    image_prompt: withCast(cast, vietnameseByDefault(youthfulSiblings(scene.imagePrompt)), scene.narration, cardMode),
+    image_prompt: withCast(cast, vietnameseByDefault(youthfulSiblings(scene.imagePrompt), nationality), scene.narration, cardMode),
     estimated_duration_ms: scene.estimatedDurationMs,
     media_status: "pending",
     subtitles: [],

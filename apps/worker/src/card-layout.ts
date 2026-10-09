@@ -94,6 +94,77 @@ const ROLE_LOOKS = {
   man: "a Vietnamese young man with short black hair, a gray shirt and jeans",
 } as const;
 
+/** The people a story is about: the English word an image model reads ("Japanese") and their country ("Japan"). */
+export type Nationality = { people: string; country: string };
+export const VIETNAMESE: Nationality = { people: "Vietnamese", country: "Vietnam" };
+
+type Origin = Nationality & { named: RegExp; after: RegExp | null };
+
+// A country is only a country after a word that introduces one ("người Nhật", "ở Pháp"): "Chủ Nhật" is Sunday and
+// "pháp luật" is law. The first letter of that word may be a capital at the start of a sentence.
+const BEFORE_COUNTRY = "(?:[Nn]gười|[Nn]ước|[Dd]ân|[Xx]ứ|[Đđ]ất|[Ởở]|[Tt]ại|[Ss]ang|[Đđ]ến|[Vv]ề|[Cc]ủa|[Vv]ăn hóa|[Ẩẩ]m thực|[Mm]ón|[Nn]ền)";
+
+/**
+ * `names` are unambiguous in any letter case ("Nhật Bản"). `proper` is a short name that is also an ordinary Vietnamese
+ * word (nhật = diary/day, mỹ = beauty, đức = virtue): it counts only capitalised and right after a word like "người".
+ */
+function origin(people: string, country: string, names: string, proper?: string): Origin {
+  return {
+    people,
+    country,
+    named: new RegExp(`(?<![\\p{L}])(?:${names})(?![\\p{L}])`, "giu"),
+    // Not "Nhật Bản" / "Hàn Quốc": `names` already counts those, and one mention must not count twice.
+    after: proper ? new RegExp(`(?<![\\p{L}])${BEFORE_COUNTRY}\\s+(?:${proper})(?![\\p{L}])(?!\\s+(?:Quốc|Bản)(?![\\p{L}]))`, "gu") : null,
+  };
+}
+
+const ORIGINS: Origin[] = [
+  origin("Vietnamese", "Vietnam", "việt nam|người việt|đất việt|nước ta|đất nước ta|dân ta|hà nội|sài gòn"),
+  origin("Japanese", "Japan", "nhật bản|tokyo|osaka|kyoto|okinawa|hokkaido", "Nhật"),
+  origin("Korean", "Korea", "hàn quốc|triều tiên|seoul|busan", "Hàn"),
+  origin("Chinese", "China", "trung quốc|trung hoa|bắc kinh|thượng hải|quảng châu"),
+  origin("American", "the United States", "hoa kỳ|new york|california|washington|silicon valley", "Mỹ"),
+  origin("French", "France", "paris|pháp quốc", "Pháp"),
+  origin("German", "Germany", "berlin|munich", "Đức"),
+  origin("Italian", "Italy", "ý đại lợi|rome", "Ý"),
+  origin("Russian", "Russia", "liên xô|moscow", "Nga"),
+  origin("British", "Britain", "vương quốc anh|anh quốc|london"),
+  origin("Thai", "Thailand", "thái lan|bangkok"),
+  origin("Indian", "India", "ấn độ|mumbai|delhi"),
+  origin("Australian", "Australia", "nước úc|australia|sydney", "Úc"),
+  origin("Spanish", "Spain", "tây ban nha|madrid"),
+  origin("Brazilian", "Brazil", "brazil|brasil"),
+];
+
+/**
+ * Who the story is about, read from the countries and peoples its Vietnamese script names ("người Nhật", "Hàn Quốc",
+ * "nước Mỹ"). The most mentioned wins; Vietnamese stays the default when none is named or Vietnam is named as often.
+ */
+export function storyNationality(text: string): Nationality {
+  const source = text.normalize("NFC");
+  const count = (pattern: RegExp | null) => (pattern ? source.match(pattern)?.length ?? 0 : 0);
+  let best = ORIGINS[0]!;
+  let bestCount = count(best.named);
+  for (const candidate of ORIGINS.slice(1)) {
+    const mentions = count(candidate.named) + count(candidate.after);
+    if (mentions > bestCount) { best = candidate; bestCount = mentions; }
+  }
+  return { people: best.people, country: best.country };
+}
+
+/**
+ * Puts the story's people where a description says "Vietnamese" ("a Vietnamese mother" -> "an American mother"):
+ * the character descriptions and the image model's own habit both default to Vietnamese. Vietnamese things
+ * ("Vietnamese ao dai") keep their word.
+ */
+export function withNationality(text: string, nationality: Nationality): string {
+  if (nationality.people === VIETNAMESE.people) return text;
+  const article = /^[aeiou]/iu.test(nationality.people) ? "n" : "";
+  return text
+    .replace(/\b(a)n?(\s+)Vietnamese\b(?!\s+(?:ao dai|pagoda|temple))/giu, (_all, a: string, space: string) => `${a}${article}${space}${nationality.people}`)
+    .replace(/\bVietnamese\b(?!\s+(?:ao dai|pagoda|temple))/gu, nationality.people);
+}
+
 /** True for a folk tale or a story set "in the old days", where modern clothing breaks the picture. */
 export function isOldTimeStory(text: string): boolean {
   // Folk tales, and wuxia/court stories that never say "ngày xưa" but are just as much set in the past.
@@ -114,8 +185,15 @@ function brothersCast(oldTime: boolean): string {
 const word = (source: string) => new RegExp(`(?<![\\p{L}])(?:${source})(?![\\p{L}])`, "iu");
 const NOT_A_CHILD = "đường|người|mắt|sông|phố|số|dao|vật|thuyền|tim|ngõ|suối|chim|bướm|mèo|chó|gà|cá|rồng|thú|ốc|nít";
 
-/** Up to two recurring characters, in story order, or "" when the script names no clear role. */
-export function castForScript(text: string): string {
+/**
+ * Up to two recurring characters, in story order, or "" when the script names no clear role. They are Vietnamese
+ * unless the script is about another people (see storyNationality).
+ */
+export function castForScript(text: string, nationality: Nationality = storyNationality(text)): string {
+  return withNationality(roleCast(text), nationality);
+}
+
+function roleCast(text: string): string {
   const source = text.normalize("NFC").toLocaleLowerCase("vi");
   // "Hai anh em", "người anh … người em": a story about two siblings, whatever else it mentions.
   if (word("hai anh em|người anh").test(source) && word("người em|em mình|em trai").test(source))

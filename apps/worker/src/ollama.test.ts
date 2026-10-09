@@ -109,8 +109,10 @@ describe("Ollama locked visual-prompt response", () => {
       minItems: lockedInput.lockedScenes!.length,
       maxItems: lockedInput.lockedScenes!.length,
     }));
-    expect(payload.format.properties.scenes.items.required).toEqual(["imagePrompt"]);
-    expect(Object.keys(payload.format.properties.scenes.items.properties)).toEqual(["imagePrompt"]);
+    // The beat is written first so every picture stays on the narration at its own index.
+    expect(payload.format.properties.scenes.items.required).toEqual(["beat", "imagePrompt"]);
+    expect(Object.keys(payload.format.properties.scenes.items.properties)).toEqual(["beat", "imagePrompt"]);
+    expect(payload.options.num_predict).toBe(1400);
     expect(JSON.parse(payload.prompt)).toEqual({
       title: lockedInput.title,
       storyContext: lockedInput.sourceText,

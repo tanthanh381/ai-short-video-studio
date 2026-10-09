@@ -11,6 +11,7 @@ import {
   isEnglishPrompt,
   visualGlossary,
   withCast,
+  misalignedScenes,
   cleanScriptForNarration,
   repairCreativeStoryboard,
   alignKnownText,
@@ -27,6 +28,7 @@ import {
   type StoryboardResult,
   type WordTimestamp,
 } from "./providers";
+import { castForScript, storyNationality, VIETNAMESE, withNationality } from "./card-layout";
 
 const input = {
   title: "Một câu chuyện ngắn",
@@ -789,3 +791,183 @@ describe("trimToWords", () => {
   });
 });
 
+
+describe("stories about other peoples keep their nationality", () => {
+  const japan = storyNationality("Vì sao người Nhật sống lâu nhất thế giới? Người già ở Nhật không nghỉ hưu hẳn.");
+  const japanese = { people: "Japanese", country: "Japan" };
+
+  it("reads the people a Vietnamese script is about", () => {
+    expect(japan).toEqual(japanese);
+    expect(storyNationality("Gia đình tôi sống ở Hàn Quốc đã mười năm, người Hàn rất chăm chỉ.").people).toBe("Korean");
+    expect(storyNationality("Công ty ở Trung Quốc vừa ra mắt mẫu xe mới.").people).toBe("Chinese");
+    expect(storyNationality("Người Mỹ thường ăn sáng rất nhanh ở nước Mỹ.").people).toBe("American");
+    expect(storyNationality("Ở Pháp, người Pháp ăn bánh mì mỗi sáng.").people).toBe("French");
+    expect(storyNationality("Tokyo về đêm sáng rực.").country).toBe("Japan");
+  });
+
+  it("stays Vietnamese when no country is named or a word only looks like one", () => {
+    expect(storyNationality("Mỗi buổi sáng tôi uống một ly nước ấm rồi đi làm.")).toEqual(VIETNAMESE);
+    // Chủ Nhật = Sunday, nhật ký = diary, mỹ phẩm = cosmetics, pháp luật = law, đạo đức = ethics.
+    expect(storyNationality("Chủ Nhật tôi viết nhật ký, rồi mua mỹ phẩm đúng pháp luật và đạo đức.")).toEqual(VIETNAMESE);
+    // "người Hàn Quốc" is one mention, so naming Vietnam as often keeps the default.
+    expect(storyNationality("Người Hàn Quốc và người Việt cùng nấu kim chi.")).toEqual(VIETNAMESE);
+    expect(storyNationality("Ngày xưa nước ta bị quân Trung Quốc xâm lược. Dân ta đứng lên đánh giặc.")).toEqual(VIETNAMESE);
+  });
+
+  it("names the story's people instead of Vietnamese in the prompts, once", () => {
+    // The QA video: "the same elderly person's plate" became "the same elderly Vietnamese person's plate".
+    expect(vietnameseByDefault("Side view of the same elderly person's plate filled with vegetables and beans", japanese))
+      .toBe("Side view of the same elderly Japanese person's plate filled with vegetables and beans");
+    expect(vietnameseByDefault("A young woman pours tea at a low table", { people: "Korean", country: "Korea" }))
+      .toBe("A young Korean woman pours tea at a low table");
+    expect(vietnameseByDefault("A man walks past a bakery", { people: "American", country: "the United States" }))
+      .toBe("An American man walks past a bakery");
+    // The writer sometimes says "Vietnamese" out of habit; the model's own stated origin is kept.
+    expect(vietnameseByDefault("A Vietnamese woman cooks rice", japanese)).toBe("A Japanese woman cooks rice");
+    expect(vietnameseByDefault("A French chef slices bread", japanese)).toBe("A French chef slices bread");
+  });
+
+  it("keeps Vietnamese as the default and leaves Vietnamese things alone", () => {
+    expect(vietnameseByDefault("A young woman pours tea")).toBe("A young Vietnamese woman pours tea");
+    expect(withNationality("A Vietnamese ao dai hangs beside a Vietnamese pagoda", japanese)).toBe("A Vietnamese ao dai hangs beside a Vietnamese pagoda");
+  });
+
+  it("gives the recurring cast the story's people", () => {
+    const cast = castForScript("Ở Nhật, mẹ nấu cơm cho con gái mỗi tối.");
+    expect(cast).toMatch(/^a Japanese mother with a black bun/u);
+    expect(cast).not.toContain("Vietnamese");
+    expect(castForScript("Mẹ nấu cơm cho con gái mỗi tối.")).toMatch(/^a Vietnamese mother/u);
+    expect(withNationality("a Vietnamese mother with a black bun", { people: "American", country: "the United States" }))
+      .toBe("an American mother with a black bun");
+    expect(withNationality("A Vietnamese king", japanese)).toBe("A Japanese king");
+  });
+
+  it("dresses an old-time story in the clothing of its own people, and describes its own country", () => {
+    const tale = "Ngày xưa ở Nhật Bản, có một bà mẹ nghèo sống bên bờ biển.";
+    expect(eraAppropriateCast("a mother with a black bun", tale)).toContain("traditional ancient Japanese peasant clothing");
+    const glossary = visualGlossary(`${tale} Nhà vua nghe tin.`);
+    expect(glossary).toContain("ancient rural Japan:");
+    expect(glossary).toContain("vua = ancient Japanese king");
+    expect(glossary).not.toMatch(/ancient Vietnamese|rural Vietnam/u);
+    expect(fallbackImagePrompt("Vua cưỡi ngựa.", glossary, japanese)).toMatch(/^A story scene in ancient rural Japan showing ancient Japanese king/u);
+    expect(fallbackImagePrompt("Hôm nay trời đẹp.", "", japanese)).toMatch(/^A story scene in Japan,/u);
+  });
+
+  it("tells the prompt writer who the people are, only when they are not Vietnamese", () => {
+    const locked = (sourceText: string) => buildStoryboardInstruction({
+      ...input, title: "Vì sao người Nhật sống lâu?", sourceText, lockedScenes: ["Cảnh một.", "Cảnh hai."], sceneOffset: 0, totalScenes: 2,
+    });
+    expect(locked("Người Nhật ăn rất nhiều cá và rau.")).toContain('Everyone in this story is Japanese: say "Japanese"');
+    expect(buildStoryboardInstruction({ ...input, lockedScenes: ["Cảnh một."], sceneOffset: 0, totalScenes: 1 })).not.toContain("Everyone in this story");
+  });
+
+  it("falls back to the right country when the writer never produced an English prompt", async () => {
+    const script = "Người Nhật ăn rất nhiều cá và rau mỗi ngày. Họ dừng đũa khi no tám phần.";
+    const vietnamese = { createStoryboard: vi.fn(async (value: StoryboardInput) => ({
+      ...generatedStoryboard(value),
+      scenes: value.lockedScenes!.map(() => ({ narration: "x", estimatedDurationMs: 4000, imagePrompt: "Người già ăn cá và rau trong bữa cơm" })),
+    })) };
+    const result = await createFaithfulStoryboard(vietnamese, { ...input, title: "Người Nhật", sourceText: script });
+    expect(result.scenes.every((scene) => /in Japan[ ,]/u.test(scene.imagePrompt) && !scene.imagePrompt.includes("Vietnam"))).toBe(true);
+  });
+});
+
+describe("every image prompt stays about its own narration", () => {
+  // The QA video "Vì sao người Nhật sống lâu nhất thế giới?" (2026-10-09): scene 3 (the meal) was drawn as scene 4's walk.
+  const script = [
+    "Vì sao người Nhật sống lâu nhất thế giới?",
+    "Bí mật đầu tiên nằm trong bữa ăn: họ chỉ ăn no tám phần, rồi dừng đũa.",
+    "Bữa ăn của họ nhiều cá, rau và đậu, rất ít đồ chiên và đồ ngọt.",
+    "Bí mật thứ hai là vận động nhẹ mỗi ngày: đi bộ, làm vườn, đạp xe đi chợ.",
+    "Thứ ba, người già ở Nhật không nghỉ hưu hẳn, họ luôn có một lý do để thức dậy mỗi sáng.",
+    "Và cuối cùng, họ giữ những người bạn thân suốt cả cuộc đời.",
+    "Bạn muốn bắt đầu từ bí mật nào trước?",
+  ];
+  const sourceText = script.map((line) => `${line}\n`).join("");
+  const picture = (narration: string) =>
+    narration.includes("ăn no tám phần") ? "Close-up of hands lowering chopsticks beside a small bowl of rice, soft daylight"
+    : narration.includes("cá, rau và đậu") ? "A plate of grilled fish, green vegetables and beans with almost no fried food, side view"
+    : narration.includes("vận động nhẹ") ? "An elderly man cycles past a garden on his way to the market, wide shot"
+    : narration.includes("lý do để thức dậy") ? "An energetic older woman wakes at sunrise and opens her bedroom window, medium shot"
+    : narration.includes("bạn thân") ? "Two elderly friends laugh together on a park bench, medium close-up"
+    : "A simple drawing of a smiling elder holding a cup of tea, plain background";
+  const walking = "An older Japanese man walks briskly along a sunny park path holding a shopping bag, medium shot";
+  const storyInput = { ...input, title: script[0]!, sourceText, duration: 30 };
+  const answering = (misplaced: boolean) => vi.fn(async (value: StoryboardInput) => ({
+    ...generatedStoryboard(value),
+    scenes: value.lockedScenes!.map((narration) => ({
+      narration, estimatedDurationMs: 4000,
+      // Only an answer for the whole list loses its place; one scene asked alone is answered about its own narration.
+      imagePrompt: misplaced && value.lockedScenes!.length > 1 && narration.includes("cá, rau và đậu") ? walking : picture(narration),
+    })),
+  }));
+
+  it("asks the prompt writer to say what each narration means before it draws it", () => {
+    const schema = lockedVisualStoryboardJsonSchema(2).properties.scenes.items;
+    expect(schema.required).toEqual(["beat", "imagePrompt"]);
+    expect(Object.keys(schema.properties)).toEqual(["beat", "imagePrompt"]);
+    const plain = buildStoryboardInstruction({ ...input, lockedScenes: ["Cảnh một.", "Cảnh hai."], sceneOffset: 0, totalScenes: 2 });
+    const card = buildStoryboardInstruction({ ...input, cast: "a Vietnamese mother", lockedScenes: ["Cảnh một.", "Cảnh hai."], sceneOffset: 0, totalScenes: 2 });
+    for (const instruction of [plain, card]) {
+      expect(instruction).toContain("beat, then imagePrompt");
+      expect(instruction).toContain("each containing beat and imagePrompt");
+    }
+  });
+
+  it("recognises the picture of a neighbouring scene, and only that", () => {
+    const prompts = script.map(picture);
+    expect(misalignedScenes(script, prompts)).toEqual([]);
+    expect(misalignedScenes(script, prompts.map((prompt, index) => (index === 2 ? walking : prompt)))).toEqual([2]);
+    // A scrambled batch (the title scene shows chopsticks, the garden walk belongs to scene 4, the friends to scene 6).
+    expect(misalignedScenes(script.slice(1, 6), [picture(script[5]!), picture(script[3]!), picture(script[4]!), picture(script[1]!), picture(script[2]!)]))
+      .toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("does not judge what it has no evidence about", () => {
+    // A generic picture, a narration with no known topic, and a topic nobody else in the batch speaks of.
+    expect(misalignedScenes(script, script.map(() => "A quiet street at dusk, wide shot"))).toEqual([]);
+    expect(misalignedScenes(["Một câu chuyện không rõ chủ đề.", "Họ ăn cơm."], ["Two friends laugh together", "A bowl of rice"])).toEqual([]);
+    expect(misalignedScenes(["Họ ăn cơm.", "Họ đi ngủ."], ["A plate of rice", "A wizard casts a spell"])).toEqual([]);
+  });
+
+  it("asks again for the one scene that got its neighbour's picture and keeps the narration", async () => {
+    const provider = { createStoryboard: answering(true) };
+    const realigned = vi.fn();
+    const result = await createFaithfulStoryboard(provider, storyInput, { realigned });
+    expect(realigned).toHaveBeenCalledExactlyOnceWith({ misaligned: [3], repaired: [3] }); // 1-based, for the worker log
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(sourceText);
+    expect(result.scenes[2]!.imagePrompt).toContain("plate of grilled fish");
+    expect(result.scenes.map((scene) => scene.imagePrompt)).not.toContain(walking);
+    const alone = provider.createStoryboard.mock.calls.map(([value]) => value).filter((value) => value.lockedScenes?.length === 1 && value.sceneOffset === 2);
+    expect(alone).toHaveLength(1);
+    expect(alone[0]).toMatchObject({ lockedScenes: [`${script[2]}\n`], totalScenes: 7, attempt: 0 });
+    expect(provider.createStoryboard).toHaveBeenCalledTimes(3); // two batches (6 + 1 scenes) and one repair
+  });
+
+  it("makes no extra call when every picture already matches", async () => {
+    const provider = { createStoryboard: answering(false) };
+    const realigned = vi.fn();
+    await createFaithfulStoryboard(provider, storyInput, { realigned });
+    expect(provider.createStoryboard).toHaveBeenCalledTimes(2);
+    expect(realigned).not.toHaveBeenCalled();
+  });
+
+  it("keeps the first prompt, and never fails the video, when asking again does not help or errors", async () => {
+    const stubborn = { createStoryboard: vi.fn(async (value: StoryboardInput) => ({
+      ...generatedStoryboard(value),
+      scenes: value.lockedScenes!.map((narration) => ({ narration, estimatedDurationMs: 4000, imagePrompt: narration.includes("cá, rau và đậu") ? walking : picture(narration) })),
+    })) };
+    const realigned = vi.fn();
+    const stuck = await createFaithfulStoryboard(stubborn, storyInput, { realigned });
+    expect(realigned).toHaveBeenCalledExactlyOnceWith({ misaligned: [3], repaired: [] }); // visible in the log: asking again did not help
+    expect(stuck.scenes[2]!.imagePrompt).toBe(walking);
+    expect(stubborn.createStoryboard).toHaveBeenCalledTimes(4); // two batches and two bounded repair attempts
+    expect(stuck.scenes.map((scene) => scene.narration).join("")).toBe(sourceText);
+
+    const answer = answering(true);
+    const flaky = { createStoryboard: vi.fn(async (value: StoryboardInput) => { if (value.lockedScenes!.length === 1 && value.sceneOffset === 2) throw new Error("Ollama trả lỗi 500"); return answer(value); }) };
+    const kept = await createFaithfulStoryboard(flaky, storyInput);
+    expect(kept.scenes[2]!.imagePrompt).toBe(walking);
+    expect(kept.scenes).toHaveLength(7);
+  });
+});
