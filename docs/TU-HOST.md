@@ -48,6 +48,17 @@ Trong màn hình tạo video, preset ảnh local có ba mức: **Fast** (2 bư�
 
 Cầu nối chỉ bind localhost; worker Docker truy cập qua `host.docker.internal`, không công khai endpoint media.
 
+### Máy vẽ tay (phong cách "Vẽ tay bảng trắng")
+
+Video chọn phong cách **Vẽ tay bảng trắng** được worker gửi từng cảnh tới `local-tools/whiteboard_server.py` (cổng 8766) để bàn tay vẽ nét viền rồi tô màu. Máy này cần môi trường Python riêng và ffmpeg trong `PATH`:
+
+```bash
+/opt/homebrew/bin/python3.12 -m venv "$LOCAL_AI_ROOT/wb-venv"
+"$LOCAL_AI_ROOT/wb-venv/bin/pip" install opencv-python-headless numpy Pillow
+```
+
+LaunchAgent `~/Library/LaunchAgents/com.ai-short-video.whiteboard.plist` chạy server bằng `wb-venv` khi đăng nhập và tự bật lại nếu tắt. Trạng thái hiện ở Cài đặt → "Máy vẽ tay". Khi máy này tắt, video vẽ tay báo lỗi ngay từ đầu thay vì sau khi đã tạo ảnh và giọng.
+
 ## Khởi động
 
 ```bash

@@ -65,6 +65,7 @@ import {
   type Scene,
   type RegenerationComponent,
   VISUAL_PRESET_OPTIONS,
+  drawsByHand,
   visualPresetPrompt,
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
@@ -82,7 +83,6 @@ const navItems = [
   { to: "/tts", label: "Đọc văn bản (TTS)", icon: Mic2 },
   { to: "/media", label: "Thư viện media", icon: Library },
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
-  { to: "/whiteboard", label: "Video vẽ tay", icon: PenLine },
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
 
@@ -1560,6 +1560,7 @@ function SceneCard({
   scene,
   selected,
   isLast,
+  handDrawn,
   onSelect,
   onChange,
   onDelete,
@@ -1573,6 +1574,7 @@ function SceneCard({
   scene: Scene;
   selected: boolean;
   isLast: boolean;
+  handDrawn: boolean;
   onSelect(): void;
   onChange(next: Scene): void;
   onDelete(): void;
@@ -1617,7 +1619,7 @@ function SceneCard({
                 ? "Tạo lỗi"
                 : "Chưa tạo media"}
           </span>
-          {scene.annotationJson !== null && <span className="media-state ready">Vẽ tay ✓</span>}
+          {handDrawn && scene.annotationJson !== null && <span className="media-state ready">Vùng vẽ riêng ✓</span>}
           <div>
             <button
               type="button"
@@ -1633,6 +1635,7 @@ function SceneCard({
             <SceneMoreMenu
               scene={scene}
               isLast={isLast}
+              handDrawn={handDrawn}
               onDelete={onDelete}
               onMove={onMove}
               onUpload={onUpload}
@@ -1652,6 +1655,7 @@ function SceneCard({
 function SceneMoreMenu({
   scene,
   isLast,
+  handDrawn,
   onDelete,
   onMove,
   onUpload,
@@ -1662,6 +1666,7 @@ function SceneMoreMenu({
 }: {
   scene: Scene;
   isLast: boolean;
+  handDrawn: boolean;
   onDelete(): void;
   onMove(direction: -1 | 1): void;
   onUpload(file: File, kind: "image" | "audio"): void;
@@ -1672,6 +1677,7 @@ function SceneMoreMenu({
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const number = scene.order + 1;
   useEffect(() => {
     if (!open) return;
@@ -1740,9 +1746,15 @@ function SceneMoreMenu({
           <span>Dùng file của bạn</span>
           {upload("Tải ảnh thay thế…", "image/jpeg,image/png,image/webp", (file) => onUpload(file, "image"))}
           {upload("Tải audio lời đọc…", "audio/mpeg,audio/wav,audio/mp4,audio/aac", (file) => onUpload(file, "audio"))}
-          {upload(scene.annotationJson !== null ? "Thay file vẽ tay (JSON)…" : "Tải file vẽ tay (JSON)…", "application/json,.json", onUploadAnnotation)}
-          {scene.annotationJson !== null && onClearAnnotation && item("Bỏ file vẽ tay", onClearAnnotation)}
           {scene.imagePath && onDownloadImage && item("Tải ảnh cảnh về máy", onDownloadImage)}
+          {handDrawn && (
+            <>
+              <span>Vẽ tay (nâng cao)</span>
+              {item("Chia vùng vẽ theo thứ tự…", () => navigate("/whiteboard"))}
+              {upload(scene.annotationJson !== null ? "Thay file vùng vẽ (JSON)…" : "Tải file vùng vẽ (JSON)…", "application/json,.json", onUploadAnnotation)}
+              {scene.annotationJson !== null && onClearAnnotation && item("Bỏ vùng vẽ riêng, vẽ toàn cảnh", onClearAnnotation)}
+            </>
+          )}
           <span>Sắp xếp</span>
           {item("Đưa lên", () => onMove(-1), scene.order === 0)}
           {item("Đưa xuống", () => onMove(1), isLast)}
@@ -2391,14 +2403,6 @@ function StudioPage() {
           >
             <Video size={17} /> Xuất video
           </Button>
-          <Button
-            onClick={() => void runAction("render_whiteboard")}
-            busy={busyAction === "render_whiteboard"}
-            disabled={processing || Boolean(busyAction) || (!isDemo && (!project.scenes.length || !capabilities?.render))}
-            title={!project.scenes.length ? "Hãy tạo ít nhất một cảnh trước" : "Render video vẽ tay (whiteboard animation)"}
-          >
-            <PenLine size={17} /> Video vẽ tay
-          </Button>
             </div>
           </details>
         </div>
@@ -2522,6 +2526,7 @@ function StudioPage() {
                   scene={scene}
                   selected={index === selected}
                   isLast={index === project.scenes.length - 1}
+                  handDrawn={drawsByHand(project.settings)}
                   onSelect={() => setSelected(index)}
                   onChange={(next) => updateScene(index, next)}
                   onDelete={() => deleteScene(index)}
@@ -3307,6 +3312,7 @@ function SettingsPage() {
     anthropic: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     ollama: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     localMedia: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
+    whiteboard: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     worker: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     render: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
   };
@@ -3411,6 +3417,7 @@ function SettingsPage() {
   const anthropicState = serviceState("anthropic", settings.capabilities.anthropic);
   const ollamaState = serviceState("ollama", settings.capabilities.ollama);
   const localMediaState = serviceState("localMedia", settings.capabilities.localMedia);
+  const whiteboardState = serviceState("whiteboard", settings.capabilities.render);
   const workerState = serviceState("worker", settings.capabilities.render);
   const renderState = serviceState("render", settings.capabilities.render);
   return (
@@ -3442,6 +3449,7 @@ function SettingsPage() {
             ["Ollama", "Viết và chia cảnh kịch bản, không gửi nội dung ra ngoài", ollamaState],
             ["Media local", "Vẽ ảnh SDXL, giọng VieNeu/Piper và Whisper trên máy này", localMediaState],
             ["Worker dựng video", "Nhận việc từ hàng đợi, ghép và xuất MP4 bằng FFmpeg", worseState(workerState, renderState)],
+            ["Máy vẽ tay", "Vẽ từng nét cho phong cách Vẽ tay bảng trắng", whiteboardState],
           ] as const).map(([name, detail, state]) => (
             <ConnectionRow key={name} name={name} detail={detail} state={state} />
           ))}
@@ -3557,24 +3565,31 @@ function SimplePage({
 
 function WhiteboardPage() {
   const editorSrc = `${import.meta.env.BASE_URL}whiteboard-editor.html`;
+  const navigate = useNavigate();
   return (
     <div className="page whiteboard-page">
+      <button className="back-link" onClick={() => navigate(-1)}>
+        <ArrowLeft size={16} /> Quay lại
+      </button>
       <div className="page-heading">
         <div>
-          <h1>Video vẽ tay</h1>
-          <p>Chia ảnh của từng cảnh thành các vùng, đặt thứ tự &amp; thời gian vẽ, rồi tải file JSON lên Studio để render animation bàn tay vẽ.</p>
+          <h1>Chia vùng vẽ (nâng cao)</h1>
+          <p>
+            Chọn phong cách <strong>Vẽ tay bảng trắng</strong> là đủ: studio tự vẽ toàn cảnh, nét viền trước rồi tô màu.
+            Trang này chỉ dùng khi bạn muốn quyết định vùng nào được vẽ trước và trong bao lâu.
+          </p>
         </div>
-        <div className="whiteboard-how" role="note" aria-label="Hướng dẫn nhanh">
-          <span>① Tạo media trong Studio</span>
+        <div className="whiteboard-how" role="note" aria-label="Các bước">
+          <span>① Tải ảnh cảnh về máy (menu ⋯ của cảnh)</span>
           <span className="whiteboard-how-arrow" aria-hidden="true">→</span>
-          <span>② Phân vùng ảnh ở đây</span>
+          <span>② Chia vùng và lưu JSON ở đây</span>
           <span className="whiteboard-how-arrow" aria-hidden="true">→</span>
-          <span>③ Tải file JSON vào cảnh trong Studio</span>
+          <span>③ "Tải file vùng vẽ" vào cảnh, bấm Tạo video</span>
         </div>
       </div>
       <iframe
         src={editorSrc}
-        title="Trình phân vùng ảnh cho video vẽ tay"
+        title="Trình chia vùng vẽ cho video vẽ tay"
         className="whiteboard-iframe"
         allow="clipboard-read; clipboard-write"
       />

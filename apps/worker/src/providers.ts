@@ -688,7 +688,7 @@ export function imageSeedFor(projectId: string): number {
  * Photographic by default; painted/cartoon looks only when the author's visual style asks for them.
  * "flat" is the 2D picture-book look (cartoon preset or an explicit flat/2D/vector request).
  */
-export type ImageStyle = "photo" | "illustration" | "flat" | "historical" | "ink" | "watercolor" | "paper-cut";
+export type ImageStyle = "photo" | "illustration" | "flat" | "historical" | "ink" | "watercolor" | "paper-cut" | "whiteboard";
 
 /** Each website preset has its own look in the image bridge; the default (cinematic) and custom wording fall back to a guess. */
 const PRESET_IMAGE_STYLE: Record<string, ImageStyle> = {
@@ -697,6 +697,7 @@ const PRESET_IMAGE_STYLE: Record<string, ImageStyle> = {
   "ink-monochrome": "ink",
   watercolor: "watercolor",
   "paper-cut": "paper-cut",
+  whiteboard: "whiteboard",
 };
 
 export function imageStyleFor(visualStyle: string, visualPreset?: string): ImageStyle {

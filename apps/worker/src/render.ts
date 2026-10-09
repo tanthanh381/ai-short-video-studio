@@ -3,10 +3,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { Project, Scene } from "@studio/shared";
+import { drawsByHand, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
 import { buildAudioMixFilter, buildAmbientMusicArgs, validateCaptionTiming } from "./render-quality";
 import { CARD, brandInitials, cardFooterLines, cardTitleFontSize, fallbackCardTitle, splitCardTitle, usesStoryCard } from "./card-layout";
+import { drawSceneByHand } from "./whiteboard";
 
 const exec = promisify(execFile);
 export type RenderFiles = {
@@ -270,19 +271,33 @@ export async function renderProject(
       const seconds = ms / 1000;
       // Straight cuts preserve measured timing and avoid a black opening/boundaries.
       const monochrome = project.settings.visualPreset === "ink-monochrome" ? ",hue=s=0,eq=contrast=1.04:brightness=0.01" : "";
+      // Whiteboard: the hand renderer draws the still at the segment's size; that clip replaces the camera move and is
+      // then treated like an uploaded scene video (held on its last frame if it ends before the voice).
+      const handDrawn = drawsByHand(project.settings) && !scene.videoPath;
+      if (handDrawn) {
+        const size = cardFrame ? { width: CARD.width, height: CARD.bandH } : { width, height };
+        const stillPath = join(workdir, `scene-${scene.order}-still.png`);
+        await exec(config.FFMPEG_PATH, ["-y", "-i", imagePath, "-vf",
+          `scale=${size.width}:${size.height}:force_original_aspect_ratio=increase:flags=lanczos,crop=${size.width}:${size.height},unsharp=5:5:0.6:5:5:0.0`,
+          "-frames:v", "1", stillPath], { timeout: 60_000 });
+        await drawSceneByHand(config, scene, stillPath, size, ms, motionPath);
+      }
+      const clip = Boolean(scene.videoPath) || handDrawn;
+      // An uploaded clip loops to cover the voice; a drawing must not start over, so it holds its finished frame.
+      const clipFrames = handDrawn ? "fps=30,tpad=stop_mode=clone:stop_duration=2" : "fps=30";
       const motionFilter = sceneMotion(seconds, scene.order);
       // Stills are scaled to twice the output before the camera move: zoompan rounds positions to whole pixels,
       // which made slow pans stutter (frame-to-frame motion stdev 1.39 -> 0.87); then a light sharpen for the upscale.
       const sharpen = ",unsharp=5:5:0.5:5:5:0.0";
       const filter = cardFrame
         // Story card: the picture lives in a 16:10 band over the pre-rendered background (input 2).
-        ? scene.videoPath
-          ? `[0:v]scale=${CARD.width}:${CARD.bandH}:force_original_aspect_ratio=increase,crop=${CARD.width}:${CARD.bandH},fps=30,format=yuv420p[band];[2:v]format=yuv420p[bg];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
+        ? clip
+          ? `[0:v]scale=${CARD.width}:${CARD.bandH}:force_original_aspect_ratio=increase,crop=${CARD.width}:${CARD.bandH},${clipFrames},format=yuv420p[band];[2:v]format=yuv420p[bg];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
           : `[0:v]scale=${CARD.width * 2}:${CARD.bandH * 2}:force_original_aspect_ratio=increase,crop=${CARD.width * 2}:${CARD.bandH * 2}${monochrome},${motionFilter}:s=${CARD.width}x${CARD.bandH}:fps=30${sharpen}[band];[2:v]format=yuv420p[bg];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
-        : scene.videoPath
-          ? `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=30,format=yuv420p[v]`
+        : clip
+          ? `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${clipFrames},format=yuv420p[v]`
           : `[0:v]scale=${width * 2}:${height * 2}:force_original_aspect_ratio=increase,crop=${width * 2}:${height * 2}${monochrome},${motionFilter}:s=${width}x${height}:fps=30${sharpen},format=yuv420p[v]`;
-      const videoInput = scene.videoPath ? ["-stream_loop", "-1", "-i", motionPath] : ["-loop", "1", "-framerate", "30", "-i", imagePath];
+      const videoInput = scene.videoPath ? ["-stream_loop", "-1", "-i", motionPath] : handDrawn ? ["-i", motionPath] : ["-loop", "1", "-framerate", "30", "-i", imagePath];
       await exec(
         config.FFMPEG_PATH,
         [
@@ -440,12 +455,15 @@ export async function renderProject(
       timeout: config.RENDER_TIMEOUT_MS ?? 900_000,
     });
     const thumbnail = join(workdir, "thumbnail.jpg");
+    // A hand-drawn video opens on blank paper: take the first scene once its drawing is finished.
+    const firstSceneMs = timelineScenes[0]?.actualDurationMs ?? 0;
+    const thumbnailAt = drawsByHand(project.settings) && firstSceneMs > 1500 ? (firstSceneMs - 300) / 1000 : Math.min(0.5, total / 2000);
     await exec(
       config.FFMPEG_PATH,
       [
         "-y",
         "-ss",
-        Math.min(0.5, total / 2000).toFixed(3),
+        thumbnailAt.toFixed(3),
         "-i",
         output,
         "-frames:v",

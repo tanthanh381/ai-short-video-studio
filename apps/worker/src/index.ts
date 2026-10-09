@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
-import { parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
+import { drawsByHand, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
 import { getConfig } from "./config";
 import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OllamaStoryboardAdapter } from "./ollama";
@@ -18,7 +18,7 @@ import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, cr
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
-import { renderWhiteboardVideo } from "./whiteboard";
+import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, whiteboardReady, withoutDrawingHand } from "./whiteboard";
 
 const config = getConfig();
 const log = pino({
@@ -82,10 +82,11 @@ async function probeRender(): Promise<boolean> {
 }
 
 async function workerHealth() {
-  const [ollamaReady, mediaReady, renderReady] = await Promise.all([
+  const [ollamaReady, mediaReady, renderReady, whiteboardUp] = await Promise.all([
     probeJson(`${config.OLLAMA_BASE_URL.replace(/\/$/, "")}/api/tags`),
     probeJson(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/models`),
     probeRender(),
+    whiteboardReady(config),
   ]);
   const configured = (available: boolean, ready: boolean, name: string): HealthItem => ({
     state: available ? (ready ? "healthy" : "offline") : "offline",
@@ -109,6 +110,7 @@ async function workerHealth() {
       anthropic: { state: anthropic ? "configured" as const : "offline" as const, detail: anthropic ? "Đã có API key; chưa gọi thử để tránh phát sinh phí" : "Chưa có API key" },
       ollama: configured(true, ollamaReady, "Ollama"),
       localMedia: configured(true, mediaReady, "Media local"),
+      whiteboard: configured(true, whiteboardUp, "Máy vẽ tay"),
     } satisfies Record<string, HealthItem>,
   };
 }
@@ -343,7 +345,9 @@ async function storyboard(job: JobRow, project: Project) {
     audience: project.settings.targetAudience,
     style: project.settings.style,
     duration: project.settings.targetDurationSec,
-    visualStyle: `${project.settings.visualStyle}; ${visualPresetPrompt(project.settings.visualPreset)}`,
+    visualStyle: drawsByHand(project.settings)
+      ? WHITEBOARD_STORYBOARD_STYLE
+      : `${project.settings.visualStyle}; ${visualPresetPrompt(project.settings.visualPreset)}`,
     model: project.settings.localModels.storyboard,
   } as const;
   const cardMode = usesStoryCard(project.settings);
@@ -484,7 +488,7 @@ async function generateMedia(job: JobRow, project: Project) {
       await updateScene(scene.id, { media_status: "processing", error_message: null });
       await progress(job, Math.round((index / pendingImages.length) * 42), `Đang tạo ảnh cảnh ${scene.order + 1}`);
       const image = await media.createImage(
-        buildProductionImagePrompt(scene.imagePrompt, visualPresetPrompt(project.settings.visualPreset)),
+        buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project), visualPresetPrompt(project.settings.visualPreset)),
         imageAspectFor(project.settings),
         {
           ...project.settings.localModels,
@@ -540,7 +544,7 @@ async function generateMedia(job: JobRow, project: Project) {
         );
         const image = await media.createImage(
           buildProductionImagePrompt(
-            scene.imagePrompt,
+            scenePicturePrompt(scene.imagePrompt, project),
             visualPresetPrompt(project.settings.visualPreset),
           ),
           imageAspectFor(project.settings),
@@ -787,8 +791,16 @@ async function renderDub(job: JobRow, project: Project) {
   }
 }
 
+/** The scene's picture prompt; a hand-drawn video must not get a second hand inside the picture. */
+function scenePicturePrompt(prompt: string, project: Project): string {
+  return drawsByHand(project.settings) ? withoutDrawingHand(prompt) : prompt;
+}
+
 async function run(job: JobRow) {
   const project = await getProject(job.project_id);
+  // Fail before minutes of images and voices are spent, not at the render step.
+  const draws = job.job_type === "render_whiteboard" || (drawsByHand(project.settings) && ["create_video", "render_video"].includes(job.job_type));
+  if (draws && !(await whiteboardReady(config))) throw new Error(WHITEBOARD_DOWN);
   if (job.job_type === "create_video") {
     if (project.settings.textProvider !== "ollama" || project.settings.mediaProvider !== "local")
       throw new Error("Tạo video tự động chỉ dùng Ollama và media local để tránh phát sinh phí.");
@@ -812,17 +824,9 @@ async function run(job: JobRow) {
     await generateMedia(job, project);
   else if (job.job_type === "render_video") await render(job, project);
   else if (job.job_type === "dub_video") await renderDub(job, project);
+  // Older "Video vẽ tay" button: the same render, drawn by hand.
   else if (job.job_type === "render_whiteboard")
-    await renderWhiteboardVideo(job.id, project, {
-      config,
-      db,
-      download,
-      upload,
-      updateProject,
-      updateScene,
-      setProgress: (id, value, stage) => setProgress(id, value, stage),
-      checkDeadline: () => checkDeadline(job),
-    });
+    await render(job, { ...project, settings: { ...project.settings, visualPreset: "whiteboard" } });
 }
 async function finish(job: JobRow, error?: unknown) {
   if (!error) {

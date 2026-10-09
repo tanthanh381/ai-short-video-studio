@@ -5,8 +5,9 @@ Whiteboard Render Server  —  cổng 8766
 GET  /health          → {"ok": true}
 POST /render          JSON: {image_b64, annotation, total_ms, fps?}  → video/mp4
 
-Yêu cầu: opencv-python  numpy  av  Pillow
-  pip install opencv-python numpy av Pillow
+Yêu cầu: opencv-python-headless  numpy  Pillow  (+ ffmpeg trên máy)
+  Chạy bằng ~/Developer/local-ai/wb-venv/bin/python (LaunchAgent com.ai-short-video.whiteboard).
+Nhiều cảnh được vẽ cùng lúc: mỗi yêu cầu chạy trong một tiến trình riêng.
 """
 from __future__ import annotations
 
@@ -16,13 +17,17 @@ import os
 import subprocess
 import sys
 import tempfile
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 PORT = int(os.environ.get("WHITEBOARD_PORT", "8766"))
 SCRIPT_DIR = Path(__file__).resolve().parent / "whiteboard"
 RENDER_SCRIPT = SCRIPT_DIR / "render_stream_whiteboard.py"
-HAND_PNG = Path(__file__).resolve().parent / "assets" / "drawing-hand.png"
+# The hand picture ships with the website; local-tools/assets/ may hold a custom one.
+HAND_PNG = next((path for path in (
+    Path(__file__).resolve().parent / "assets" / "drawing-hand.png",
+    Path(__file__).resolve().parents[1] / "apps" / "web" / "public" / "drawing-hand.png",
+) if path.exists()), None)
 PYTHON = sys.executable
 
 
@@ -39,7 +44,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
-            self._send(200, json.dumps({"ok": True, "server": "whiteboard"}).encode())
+            self._send(200, json.dumps({"ok": True, "server": "whiteboard", "hand": HAND_PNG is not None}).encode())
         else:
             self._send(404, b'{"error":"Not found"}')
 
@@ -57,6 +62,9 @@ class Handler(BaseHTTPRequestHandler):
             annotation: dict = data["annotation"]
             total_ms: int = int(data.get("total_ms", 5000))
             fps: int = int(data.get("fps", 30))
+            # Draw at the size the worker sends (the video's size); the script's default caps the long edge at 1080.
+            cap_long_edge = data.get("cap_long_edge")
+            hand_height = data.get("hand_height")
         except Exception as exc:
             self._send(400, str(exc).encode(), "text/plain")
             return
@@ -78,9 +86,13 @@ class Handler(BaseHTTPRequestHandler):
                 json.dump(annotation, f, ensure_ascii=False)
 
             cmd = [PYTHON, str(RENDER_SCRIPT), img_path, ann_path, out_path]
-            if HAND_PNG.exists():
+            if HAND_PNG is not None:
                 cmd.append(str(HAND_PNG))
             cmd += ["--total-ms", str(total_ms), "--fps", str(fps)]
+            if cap_long_edge:
+                cmd += ["--cap-long-edge", str(int(cap_long_edge))]
+            if hand_height:
+                cmd += ["--hand-height", str(int(hand_height))]
 
             result = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=600,
@@ -109,6 +121,6 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
         sys.exit(1)
-    server = HTTPServer(("127.0.0.1", PORT), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Whiteboard render server: http://127.0.0.1:{PORT}/", flush=True)
     server.serve_forever()

@@ -62,7 +62,7 @@ const accountSettingsSchema = z.object({
 type ServiceState = "healthy" | "configured" | "offline" | "disabled" | "unknown";
 type ServiceStatus = { state: ServiceState; detail: string; checkedAt: string };
 type WorkerHealthPayload = {
-  services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia", { state: ServiceState; detail: string }>>;
+  services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia" | "whiteboard", { state: ServiceState; detail: string }>>;
 };
 type LocalMediaHealthPayload = { video?: boolean; videoState?: string; videoDetail?: string };
 
@@ -244,6 +244,8 @@ export function createApp(config: AppConfig, db: AdminClient) {
             : "Không kết nối được media server"
           : "Tính năng media local đang tắt",
       ),
+      // The worker reaches the hand-drawing server; the API container does not need to.
+      whiteboard: fromWorker("whiteboard", status(config.RENDER_WORKER_ENABLED ? "unknown" : "disabled", config.RENDER_WORKER_ENABLED ? "Chưa kiểm tra được worker" : "Worker render đang tắt")),
       openai: fromWorker("openai", status(config.OPENAI_FEATURES_ENABLED ? "unknown" : "disabled", config.OPENAI_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng OpenAI đang tắt")),
       anthropic: fromWorker("anthropic", status(config.ANTHROPIC_FEATURES_ENABLED ? "unknown" : "disabled", config.ANTHROPIC_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng Claude đang tắt")),
     };

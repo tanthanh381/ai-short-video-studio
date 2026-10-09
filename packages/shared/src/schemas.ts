@@ -16,6 +16,7 @@ export const visualPresetSchema = z.enum([
   "historical",
   "watercolor",
   "paper-cut",
+  "whiteboard",
 ]);
 export type VisualPreset = z.infer<typeof visualPresetSchema>;
 export const projectStatusSchema = z.enum([

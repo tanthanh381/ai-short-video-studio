@@ -185,11 +185,18 @@ class RegionStreamRenderer:
 
     # ── 落墨（限制在 allowed 内）──
     def _reveal_ink_segment(self, a: tuple[int, int], b: tuple[int, int], allowed: np.ndarray) -> None:
-        seg = np.zeros((self.out_h, self.out_w), dtype=np.uint8)
+        # Work only on the segment's bounding box: a full-frame mask per segment took ~95% of render time.
         thick = max(1, self.cfg.ink_reveal_radius * 2 + 1)
-        cv2.line(seg, a, b, 255, thickness=thick, lineType=cv2.LINE_AA)
-        revealed = (seg > 0) & self.ink_pixels & allowed
-        self.drawn[revealed] = self.ink_paint[revealed]
+        pad = thick + 2
+        x0, x1 = max(0, min(a[0], b[0]) - pad), min(self.out_w, max(a[0], b[0]) + pad + 1)
+        y0, y1 = max(0, min(a[1], b[1]) - pad), min(self.out_h, max(a[1], b[1]) + pad + 1)
+        if x1 <= x0 or y1 <= y0:
+            return
+        seg = np.zeros((y1 - y0, x1 - x0), dtype=np.uint8)
+        cv2.line(seg, (a[0] - x0, a[1] - y0), (b[0] - x0, b[1] - y0), 255, thickness=thick, lineType=cv2.LINE_AA)
+        revealed = (seg > 0) & self.ink_pixels[y0:y1, x0:x1] & allowed[y0:y1, x0:x1]
+        target = self.drawn[y0:y1, x0:x1]
+        target[revealed] = self.ink_paint[y0:y1, x0:x1][revealed]
 
     def _ink_stamp_cell(self, cell: tuple[int, int], allowed: np.ndarray) -> None:
         r, c = cell
@@ -471,6 +478,7 @@ def _parse_args(argv=None):
     p.add_argument("--fps", type=int, default=None)
     p.add_argument("--grid-edge", type=int, default=None)
     p.add_argument("--brush-radius", type=int, default=None)
+    p.add_argument("--hand-height", type=int, default=None, help="Hand height in output pixels (default 493, sized for 1080p)")
     p.add_argument("--cap-long-edge", type=int, default=None,
                    help="输出长边像素上限（预览可调小加速，默认 1080）")
     return p.parse_args(argv)
@@ -486,6 +494,8 @@ def _build_cfg(args) -> sr.Config:
         kw["brush_radius"] = args.brush_radius
     if args.cap_long_edge is not None:
         kw["cap_long_edge"] = args.cap_long_edge
+    if args.hand_height is not None:
+        kw["target_hand_height"] = args.hand_height
     kw["ink_path_mode"] = args.ink_path
     kw["color_fill"] = args.color_fill
     kw["pause_mode"] = args.pause

@@ -13,7 +13,13 @@ export const VISUAL_PRESET_OPTIONS: Array<{ id: VisualPreset; label: string; des
   { id: "historical", label: "Cổ trang", description: "Bối cảnh lịch sử, trang phục truyền thống và chất liệu điện ảnh.", prompt: "historical period illustration, accurate traditional clothing and architecture, cinematic warm light, detailed fabric and environment, respectful authentic setting" },
   { id: "watercolor", label: "Màu nước", description: "Mảng màu loang nhẹ, mềm và giàu cảm xúc.", prompt: "delicate watercolor illustration, visible paper grain, soft bleeding edges, translucent layered washes, gentle natural palette" },
   { id: "paper-cut", label: "Cắt giấy", description: "Các lớp giấy nổi, bóng đổ nhẹ và bố cục tối giản.", prompt: "layered paper-cut illustration, tactile colored paper shapes, clean silhouettes, subtle cast shadows, handcrafted dimensional composition" },
+  { id: "whiteboard", label: "Vẽ tay bảng trắng", description: "Bàn tay vẽ từng nét bút dạ rồi tô màu trên nền trắng.", prompt: "whiteboard doodle illustration, bold black marker outlines, flat pastel colors, plain white background, simple shapes" },
 ];
+
+/** Whiteboard videos are drawn stroke by stroke by the hand renderer instead of a camera move over the still. */
+export function drawsByHand(settings: { visualPreset: VisualPreset }): boolean {
+  return settings.visualPreset === "whiteboard";
+}
 
 export function visualPresetPrompt(preset: VisualPreset): string {
   return VISUAL_PRESET_OPTIONS.find((item) => item.id === preset)?.prompt ?? VISUAL_PRESET_OPTIONS[0]!.prompt;

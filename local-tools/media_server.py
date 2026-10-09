@@ -198,9 +198,12 @@ IMAGE_STYLES = {
     "ink": "ink pen line drawing, bold black outlines, crosshatch shading, off-white paper, monochrome sketch, no color",
     "watercolor": "delicate watercolor painting, soft bleeding washes, visible paper grain, pastel palette",
     "paper-cut": "layered paper-cut art, colored paper shapes, clean silhouettes, soft cast shadows",
+    # Drawn by the hand renderer: it inks the dark outlines first, then washes in the flat colours. Photos have no
+    # outlines to follow (sparse specks, then white holes where the background matched the paper), so this look only.
+    "whiteboard": "whiteboard doodle illustration, bold black marker outlines, flat pastel colors, plain white background",
 }
 # Drawn looks: photo skin/anatomy wording would pull them back towards photographs.
-STYLIZED_IMAGE_STYLES = {"flat", "ink", "watercolor", "paper-cut"}
+STYLIZED_IMAGE_STYLES = {"flat", "ink", "watercolor", "paper-cut", "whiteboard"}
 IMAGE_ANATOMY_GUARD = os.getenv("IMAGE_ANATOMY_GUARD", "true").lower() not in {"0", "false", "no"}
 IMAGE_NEGATIVE_PROMPT = os.getenv(
     "IMAGE_NEGATIVE_PROMPT",

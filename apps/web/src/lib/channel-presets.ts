@@ -37,6 +37,12 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     hint: "Ảnh chân thực, giọng thuyết minh nhanh, nhạc nền",
     apply: (s) => ({ ...withVisualPreset(s, "cinematic-color"), layoutTemplate: "full-bleed", style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
+  {
+    id: "ve-tay",
+    label: "Giải thích vẽ tay",
+    hint: "Bàn tay vẽ từng cảnh trên nền trắng, giọng thuyết minh, nhạc nền",
+    apply: (s) => ({ ...withVisualPreset(s, "whiteboard"), layoutTemplate: "full-bleed", style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
+  },
 ];
 
 /** The voice bridge reads every voice at about 3.7 words per second at 1.0x, pauses included. */
