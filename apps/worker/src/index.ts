@@ -363,7 +363,8 @@ async function storyboard(job: JobRow, project: Project) {
     const scriptCast = castForScript(sourceText);
     [result, cast] = await Promise.all([createFaithfulStoryboard(provider, storyboardInput), scriptCast ? Promise.resolve(scriptCast) : describeCast()]);
   }
-  cast = eraAppropriateCast(cast, sourceText);
+  // The "Cổ trang" look is a period story even when the script never says "ngày xưa".
+  cast = eraAppropriateCast(cast, sourceText, project.settings.visualPreset === "historical");
   checkDeadline(job);
   // Story-card banner: one short promise-style title, written once and stored with the project.
   let suggestedTitle = result.suggestedTitle;

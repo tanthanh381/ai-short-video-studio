@@ -96,7 +96,8 @@ const ROLE_LOOKS = {
 
 /** True for a folk tale or a story set "in the old days", where modern clothing breaks the picture. */
 export function isOldTimeStory(text: string): boolean {
-  return /(?<![\p{L}])(?:ngày xửa ngày xưa|thuở xưa|ngày xưa|thời xưa|xưa kia|cổ tích|truyện cổ)(?![\p{L}])/iu.test(text.normalize("NFC"));
+  // Folk tales, and wuxia/court stories that never say "ngày xưa" but are just as much set in the past.
+  return /(?<![\p{L}])(?:ngày xửa ngày xưa|thuở xưa|ngày xưa|thời xưa|xưa kia|cổ tích|truyện cổ|kiếm khách|kiếm hiệp|giang hồ|võ lâm|sư môn|sư phụ|triều đình|hoàng thượng|hoàng đế|thái tử|quan lại|lão gia|tiểu thư|cung điện|phong kiến)(?![\p{L}])/iu.test(text.normalize("NFC"));
 }
 
 /**

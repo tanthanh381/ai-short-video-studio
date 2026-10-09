@@ -696,6 +696,12 @@ describe("eraAppropriateCast", () => {
     expect(eraAppropriateCast("a Vietnamese mother with a black bun", tale)).toContain("traditional ancient Vietnamese peasant clothing");
   });
 
+  it("treats wuxia vocabulary and the period look as an old-time story", () => {
+    const wuxia = "Trăng treo đầu núi, kiếm khách một mình bước giữa sương khuya. Ba năm trước, hắn mất cả sư môn.";
+    expect(eraAppropriateCast("a Vietnamese man in his 30s, a white sleeveless shirt and a leather vest", wuxia)).toContain("tunic");
+    expect(eraAppropriateCast("a man in a grey shirt", "Hắn bước đi một mình.", true)).toBe("a man in a grey tunic");
+  });
+
   it("keeps the cast of a modern story as written", () => {
     const cast = "a Vietnamese young woman with long black hair, a white shirt and jeans";
     expect(eraAppropriateCast(cast, "Hôm nay cô ấy đi làm muộn vì kẹt xe.")).toBe(cast);
@@ -718,6 +724,12 @@ describe("vietnameseByDefault", () => {
       .toBe("A young Vietnamese woman pours water into her glass at a desk");
     expect(vietnameseByDefault("A group of friends gather around a table, one man drinks"))
       .toBe("A group of Vietnamese friends gather around a table, one man drinks");
+  });
+
+  it("drops the writer's prompt counters", () => {
+    expect(vietnameseByDefault("A man in a suit at a desk with a frown, 1/6, wide shot"))
+      .toBe("A Vietnamese man in a suit at a desk with a frown, wide shot");
+    expect(vietnameseByDefault("Oil price chart rises to 100 USD/barrel")).toBe("Oil price chart rises to 100 USD/barrel");
   });
 
   it("leaves stated origins and scenes without people alone", () => {

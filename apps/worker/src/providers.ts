@@ -302,8 +302,8 @@ export function visualGlossary(text: string): string {
  */
 export { isOldTimeStory };
 
-export function eraAppropriateCast(cast: string, sourceText: string): string {
-  if (!cast.trim() || !isOldTimeStory(sourceText)) return cast;
+export function eraAppropriateCast(cast: string, sourceText: string, periodLook = false): string {
+  if (!cast.trim() || !(periodLook || isOldTimeStory(sourceText))) return cast;
   const dressed = cast
     .replace(/\b(?:blue |black |ripped |denim )?jeans\b/giu, "loose black trousers")
     .replace(/\b(?:t-shirt|tee shirt|polo shirt|hoodie|jacket|blazer|sweater)\b/giu, "traditional tunic")
@@ -672,6 +672,8 @@ const ETHNICITY = /\b(?:vietnamese|asian|american|european|japanese|korean|chine
  * person without a stated origin becomes Vietnamese: "A young woman pours" -> "A young Vietnamese woman pours".
  */
 export function vietnameseByDefault(prompt: string): string {
+  // The writer sometimes numbers its prompts ("…frown, 1/6, wide shot"): noise that costs image-model tokens.
+  prompt = prompt.replace(/(?:^|,\s*)\d{1,2}\/\d{1,2}(?=\s*,|\s*$)/gu, "").replace(/^\s*,\s*/u, "");
   if (ETHNICITY.test(prompt)) return prompt;
   const match = PERSON_NOUN.exec(prompt);
   if (!match) return prompt;
