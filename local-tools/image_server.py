@@ -241,6 +241,8 @@ class Handler(BaseHTTPRequestHandler):
                     options["reference_image_bytes"] = raw
                 except Exception as error:
                     raise ValueError("bad reference image") from error
+                if body.get("referenceStrength") is not None:
+                    options["reference_strength"] = float(body["referenceStrength"])
             self._send(200, "image/png", generate(prompt, body.get("seed"), **options))
         except ValueError as error:
             print(f"[image] bad request: {error}", flush=True)

@@ -116,7 +116,7 @@ class RegionStreamRenderer:
                 ax, ay = 0.5, 0.70
             self.tip = sr.TipOverlay(hand_data[0], hand_data[1], tip_anchor_x=ax, tip_anchor_y=ay)
 
-    # 采样原图四角，把接近背景色的像素替换为画布底色
+    # Sample the picture's four corners; a light backdrop becomes the paper colour
     def _match_original_background(self) -> None:
         img = self.color_img
         h, w = img.shape[:2]
@@ -124,8 +124,12 @@ class RegionStreamRenderer:
         samples = [img[:margin, :margin], img[:margin, -margin:],
                    img[-margin:, :margin], img[-margin:, -margin:]]
         bg = np.median(np.concatenate([s.reshape(-1, 3) for s in samples]), axis=0)
-        diff = np.abs(img.astype(np.int16) - bg.astype(np.int16)).sum(axis=2)
-        img[diff < self.cfg.match_bg_threshold] = self.canvas_bgr
+        # The paper takes the picture's own light backdrop, so the outline stage and the coloured picture share one
+        # background. Recolouring the picture instead (every pixel near the corner colour -> paper) also hit skin
+        # highlights and light walls: faces ended with paper-coloured holes, ~9% of pixels off by more than 40 levels.
+        # A dark or colourful backdrop keeps the cream paper; the colour stage then washes the picture in over it.
+        if bg.min() >= 200 and bg.max() - bg.min() <= 40:
+            self.canvas_bgr = bg.astype(self.canvas_bgr.dtype)
 
     def _cell_center(self, cell: tuple[int, int]) -> tuple[int, int]:
         r, c = cell
