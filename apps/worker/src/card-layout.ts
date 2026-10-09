@@ -92,8 +92,9 @@ const ROLE_LOOKS = {
   boy: "a little boy with short black hair, a yellow t-shirt and blue shorts",
   woman: "a Vietnamese young woman with long black hair, a white shirt and jeans",
   man: "a Vietnamese young man with short black hair, a gray shirt and jeans",
-  elder: "a plump Vietnamese elder brother with a topknot and a dark red tunic",
-  younger: "a thin Vietnamese younger brother with short hair and a patched indigo tunic",
+  // Never "elder": the image model reads it as an old man with a white beard.
+  elder: "a plump young Vietnamese man with a topknot and a dark red tunic (the older brother)",
+  younger: "a thin Vietnamese teenage boy with short hair and a patched indigo tunic (the younger brother)",
 } as const;
 
 const word = (source: string) => new RegExp(`(?<![\\p{L}])(?:${source})(?![\\p{L}])`, "iu");
