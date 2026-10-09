@@ -276,7 +276,9 @@ export function createApp(config: AppConfig, db: AdminClient) {
   app.use(
     rateLimit({
       windowMs: 60_000,
-      limit: 90,
+      // The studio polls job status while a video is made (2 requests every 4 s) and signs media previews;
+      // 90/min was reached by one open studio tab alone and answered the owner with HTTP 429.
+      limit: 300,
       standardHeaders: "draft-8",
       legacyHeaders: false,
     }),

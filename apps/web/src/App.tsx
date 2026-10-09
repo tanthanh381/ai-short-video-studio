@@ -1758,9 +1758,10 @@ function StudioPage() {
         .catch(() => active && setError("Mất kết nối tạm thời. Tác vụ vẫn được lưu; studio sẽ tiếp tục cập nhật khi kết nối trở lại."))
         .finally(() => { refreshing = false; });
     };
-    // Refresh immediately after a job starts or the page is reopened.
+    // Refresh immediately after a job starts or the page is reopened; every 4 s is enough for a job that takes
+    // minutes and keeps the studio far below the API rate limit.
     refresh();
-    const timer = window.setInterval(refresh, 2000);
+    const timer = window.setInterval(refresh, 4000);
     return () => { active = false; clearInterval(timer); };
   }, [id, isDemo, processing]);
   useEffect(() => {
@@ -1778,8 +1779,11 @@ function StudioPage() {
     return startSignedPreviewRefresh(() => api.getResult(id), (next) => { freshResult.current = next; freshResultSignedAt.current = Date.now(); });
   }, [id, isDemo, processing, result?.id]);
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+  // Sign the preview only when the picture itself changes: every status refresh replaces `project.scenes`, and
+  // re-signing on each one (a request every 2 s) pushed the studio into the API's rate limit (HTTP 429).
+  const activeImagePath = project?.scenes[selected]?.imagePath ?? null;
   useEffect(() => {
-    const path = project?.scenes[selected]?.imagePath;
+    const path = activeImagePath;
     if (!path || isDemo) {
       setPreviewUrl(null);
       return;
@@ -1792,7 +1796,7 @@ function StudioPage() {
     return () => {
       active = false;
     };
-  }, [id, isDemo, project?.scenes, selected]);
+  }, [id, isDemo, activeImagePath]);
   useEffect(() => {
     const path = project?.settings.logoPath;
     if (!path || isDemo) {
