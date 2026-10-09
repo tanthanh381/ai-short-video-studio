@@ -708,7 +708,7 @@ export function imageStyleFor(visualStyle: string, visualPreset?: string): Image
     : "photo";
 }
 
-const PERSON_NOUN = /\b(?:women|woman|men|man|girls?|boys?|child(?:ren)?|kids?|person|people|mother|father|parents?|family|couple|friends|teenagers?|students?|workers?|farmers?|grandmother|grandfather|grandparents|baby|lady|gentleman)\b/iu;
+const PERSON_NOUN = /\b(?:women|woman|men|man|girls?|boys?|child(?:ren)?|kids?|person|people|mother|father|parents?|family|couple|friends|teenagers?|students?|workers?|farmers?|grandmother|grandfather|grandparents|baby|lady|gentleman|drivers?|doctors?|nurses?|teachers?|chefs?|cooks?|athletes?|runners?|employees?|colleagues|businessm[ae]n|businesswom[ae]n|villagers?|swordsm[ae]n|warriors?|soldiers?|monks?|vendors?|customers?|shoppers?|travell?ers?|patients?)\b/iu;
 const ETHNICITY = /\b(?:vietnamese|asian|american|european|japanese|korean|chinese|thai|indian|african|french|british|english|caucasian)\b/iu;
 
 /**

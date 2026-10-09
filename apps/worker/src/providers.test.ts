@@ -741,6 +741,11 @@ describe("vietnameseByDefault", () => {
       .toBe("A group of Vietnamese friends gather around a table, one man drinks");
   });
 
+  it("recognises people named by their role", () => {
+    expect(vietnameseByDefault("Medium shot of a car tire spinning as the driver grips the wheel"))
+      .toBe("Medium shot of a car tire spinning as the Vietnamese driver grips the wheel");
+  });
+
   it("drops the writer's prompt counters", () => {
     expect(vietnameseByDefault("A man in a suit at a desk with a frown, 1/6, wide shot"))
       .toBe("A Vietnamese man in a suit at a desk with a frown, wide shot");
