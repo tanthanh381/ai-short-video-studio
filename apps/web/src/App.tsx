@@ -4,6 +4,7 @@ import {
   BookOpenText,
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   CircleAlert,
   Clapperboard,
@@ -710,7 +711,7 @@ function DashboardPage() {
                   aria-label={`Mở ${project.title}`}
                   onClick={() => navigate(`/studio/${project.id}`)}
                 >
-                  <MoreHorizontal size={19} />
+                  <ChevronRight size={19} />
                 </button>
               </div>
             </article>
@@ -1558,6 +1559,7 @@ function NewProjectPage() {
 function SceneCard({
   scene,
   selected,
+  isLast,
   onSelect,
   onChange,
   onDelete,
@@ -1570,6 +1572,7 @@ function SceneCard({
 }: {
   scene: Scene;
   selected: boolean;
+  isLast: boolean;
   onSelect(): void;
   onChange(next: Scene): void;
   onDelete(): void;
@@ -1601,17 +1604,6 @@ function SceneCard({
             onChange={(e) => onChange({ ...scene, imagePrompt: e.target.value })}
           />
         </label>
-        <details className="scene-repair" onClick={(e) => e.stopPropagation()}>
-          <summary>Sửa riêng thành phần</summary>
-          <div className="scene-repair-actions">
-            <button type="button" disabled={!scene.audioPath || !scene.actualDurationMs}
-              onClick={() => onRegenerate("image")}>Tạo lại ảnh</button>
-            <button type="button" disabled={!scene.imagePath}
-              onClick={() => onRegenerate("audio")}>Tạo lại giọng và phụ đề</button>
-            <button type="button" disabled={!scene.imagePath || !scene.audioPath}
-              onClick={() => onRegenerate("subtitles")}>Đồng bộ lại phụ đề</button>
-          </div>
-        </details>
         <div className="scene-foot">
           <span>
             {formatDuration(
@@ -1625,117 +1617,141 @@ function SceneCard({
                 ? "Tạo lỗi"
                 : "Chưa tạo media"}
           </span>
+          {scene.annotationJson !== null && <span className="media-state ready">Vẽ tay ✓</span>}
           <div>
-            <label className="icon-upload" title="Tải ảnh thay thế">
-              <Image />
-              <input
-                type="file"
-                aria-label={`Tải ảnh thay thế cho cảnh ${scene.order + 1}`}
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) onUpload(file, "image");
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <label className="icon-upload" title="Tải audio lời đọc">
-              <Mic2 />
-              <input
-                type="file"
-                aria-label={`Tải audio lời đọc cho cảnh ${scene.order + 1}`}
-                accept="audio/mpeg,audio/wav,audio/mp4,audio/aac"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) onUpload(file, "audio");
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <label className="icon-upload" title={scene.annotationJson !== null ? "Đã có file vẽ tay — tải file mới để thay thế" : "Tải file vẽ tay (JSON)"} style={{ position: "relative" }}>
-              <PenLine size={18} />
-              {scene.annotationJson !== null && (
-                <span className="annotation-badge" title="Đã có file vẽ tay">✓</span>
-              )}
-              <input
-                type="file"
-                aria-label={`Tải file vẽ tay (JSON) cho cảnh ${scene.order + 1}`}
-                accept="application/json,.json"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) onUploadAnnotation(file);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            {scene.annotationJson !== null && onClearAnnotation && (
-              <button
-                type="button"
-                title="Xóa file vẽ tay"
-                aria-label="Xóa file vẽ tay"
-                onClick={(e) => { e.stopPropagation(); onClearAnnotation(); }}
-              >
-                <X size={16} />
-              </button>
-            )}
-            {scene.imagePath && onDownloadImage && (
-              <button
-                type="button"
-                title="Tải ảnh cảnh này về máy"
-                aria-label="Tải ảnh cảnh này về máy"
-                onClick={(e) => { e.stopPropagation(); onDownloadImage(); }}
-              >
-                <Download size={16} />
-              </button>
-            )}
             <button
               type="button"
-              title="Tạo lại riêng cảnh này"
-              aria-label="Tạo lại riêng cảnh này"
+              className="scene-regenerate"
+              title="Tạo lại ảnh, giọng đọc và phụ đề của cảnh này"
               onClick={(e) => {
                 e.stopPropagation();
                 onRegenerate();
               }}
             >
-              <RefreshCw />
+              <RefreshCw /> Tạo lại
             </button>
-            <button
-              type="button"
-              title="Đưa lên"
-              aria-label="Đưa lên"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMove(-1);
-              }}
-            >
-              <ChevronUp />
-            </button>
-            <button
-              type="button"
-              title="Đưa xuống"
-              aria-label="Đưa xuống"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMove(1);
-              }}
-            >
-              <ChevronDown />
-            </button>
-            <button
-              type="button"
-              title="Xóa cảnh"
-              aria-label="Xóa cảnh"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-            >
-              <Trash2 />
-            </button>
+            <SceneMoreMenu
+              scene={scene}
+              isLast={isLast}
+              onDelete={onDelete}
+              onMove={onMove}
+              onUpload={onUpload}
+              onRegenerate={onRegenerate}
+              onUploadAnnotation={onUploadAnnotation}
+              onDownloadImage={onDownloadImage}
+              onClearAnnotation={onClearAnnotation}
+            />
           </div>
         </div>
       </div>
     </article>
+  );
+}
+
+/** The less frequent scene actions, behind one "⋯" button so a card shows its text and two actions. */
+function SceneMoreMenu({
+  scene,
+  isLast,
+  onDelete,
+  onMove,
+  onUpload,
+  onRegenerate,
+  onUploadAnnotation,
+  onDownloadImage,
+  onClearAnnotation,
+}: {
+  scene: Scene;
+  isLast: boolean;
+  onDelete(): void;
+  onMove(direction: -1 | 1): void;
+  onUpload(file: File, kind: "image" | "audio"): void;
+  onRegenerate(component?: RegenerationComponent): void;
+  onUploadAnnotation(file: File): void;
+  onDownloadImage?: (() => void) | undefined;
+  onClearAnnotation?: (() => void) | undefined;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const number = scene.order + 1;
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      root.current?.querySelector<HTMLButtonElement>(".scene-menu-trigger")?.focus();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    root.current?.querySelector(".scene-menu-list")?.scrollIntoView({ block: "nearest" });
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  const item = (label: string, action: () => void, disabled = false, danger = false) => (
+    <button
+      type="button"
+      className={danger ? "danger" : undefined}
+      disabled={disabled}
+      onClick={() => {
+        setOpen(false);
+        action();
+      }}
+    >
+      {label}
+    </button>
+  );
+  const upload = (label: string, accept: string, handle: (file: File) => void) => (
+    <label className="scene-menu-upload">
+      {label}
+      <input
+        type="file"
+        accept={accept}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handle(file);
+          e.target.value = "";
+          setOpen(false);
+        }}
+      />
+    </label>
+  );
+  return (
+    <div className="scene-menu" ref={root} onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        className="scene-menu-trigger"
+        aria-label={`Thao tác khác cho cảnh ${number}`}
+        title="Thao tác khác"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <MoreHorizontal />
+      </button>
+      {open && (
+        <div className="scene-menu-list">
+          <span>Tạo lại riêng</span>
+          {item("Ảnh", () => onRegenerate("image"), !scene.audioPath || !scene.actualDurationMs)}
+          {item("Giọng đọc và phụ đề", () => onRegenerate("audio"), !scene.imagePath)}
+          {item("Đồng bộ lại phụ đề", () => onRegenerate("subtitles"), !scene.imagePath || !scene.audioPath)}
+          <span>Dùng file của bạn</span>
+          {upload("Tải ảnh thay thế…", "image/jpeg,image/png,image/webp", (file) => onUpload(file, "image"))}
+          {upload("Tải audio lời đọc…", "audio/mpeg,audio/wav,audio/mp4,audio/aac", (file) => onUpload(file, "audio"))}
+          {upload(scene.annotationJson !== null ? "Thay file vẽ tay (JSON)…" : "Tải file vẽ tay (JSON)…", "application/json,.json", onUploadAnnotation)}
+          {scene.annotationJson !== null && onClearAnnotation && item("Bỏ file vẽ tay", onClearAnnotation)}
+          {scene.imagePath && onDownloadImage && item("Tải ảnh cảnh về máy", onDownloadImage)}
+          <span>Sắp xếp</span>
+          {item("Đưa lên", () => onMove(-1), scene.order === 0)}
+          {item("Đưa xuống", () => onMove(1), isLast)}
+          {item("Xóa cảnh", () => {
+            if (window.confirm(`Xóa cảnh ${number}? Lời đọc và media của cảnh này sẽ mất.`)) onDelete();
+          }, false, true)}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1748,6 +1764,8 @@ function StudioPage() {
   const [selected, setSelected] = useState(0);
   const [sourceDraft, setSourceDraft] = useState("");
   const [optionsOpen, setOptionsOpen] = useState(false);
+  // Phones show the scene list or the preview, not both stacked; a finished video opens on the preview.
+  const [phoneTab, setPhoneTab] = useState<"scenes" | "preview" | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [saved, setSaved] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -2291,6 +2309,7 @@ function StudioPage() {
   const zeroCostMode = Boolean(
     capabilities && !capabilities.ai && !capabilities.localMedia && capabilities.render,
   );
+  const shownTab = phoneTab ?? (result ? "preview" : "scenes");
   return (
     <div className="studio">
       <div className="studio-top">
@@ -2448,7 +2467,15 @@ function StudioPage() {
           </Button>
         </div>
       )}
-      <div className={`studio-grid ${optionsOpen ? "" : "studio-basic"}`}>
+      <div className="studio-tabs" role="group" aria-label="Chọn phần hiển thị">
+        <button type="button" aria-pressed={shownTab === "scenes"} onClick={() => setPhoneTab("scenes")}>
+          Cảnh <span>{project.scenes.length}</span>
+        </button>
+        <button type="button" aria-pressed={shownTab === "preview"} onClick={() => setPhoneTab("preview")}>
+          {result ? "Video" : "Xem trước"} {activeScene && !result && <span>Cảnh {selected + 1}</span>}
+        </button>
+      </div>
+      <div className={`studio-grid ${optionsOpen ? "" : "studio-basic"} phone-${shownTab}`}>
         <section className="scene-panel">
           <div className="panel-heading">
             <div>
@@ -2494,6 +2521,7 @@ function StudioPage() {
                   key={scene.id}
                   scene={scene}
                   selected={index === selected}
+                  isLast={index === project.scenes.length - 1}
                   onSelect={() => setSelected(index)}
                   onChange={(next) => updateScene(index, next)}
                   onDelete={() => deleteScene(index)}
@@ -3371,6 +3399,12 @@ function SettingsPage() {
     }[status?.state ?? (fallbackEnabled ? "unknown" : "disabled")];
     return { ...meta, detail: status?.detail ?? "Chưa có dữ liệu kiểm tra" };
   };
+  // Worker and FFmpeg are one machine to the user: show the worse of the two.
+  const worseState = (a: ReturnType<typeof serviceState>, b: ReturnType<typeof serviceState>) => {
+    const rank = { off: 0, unknown: 1, configured: 2, on: 3 } as Record<string, number>;
+    const worse = (rank[a.className] ?? 1) <= (rank[b.className] ?? 1) ? a : b;
+    return { ...worse, detail: a.detail === b.detail ? a.detail : `${a.detail} · ${b.detail}` };
+  };
   const apiState = serviceState("api", true);
   const supabaseState = serviceState("supabase", settings.capabilities.supabase);
   const openaiState = serviceState("openai", settings.capabilities.openai);
@@ -3407,8 +3441,7 @@ function SettingsPage() {
             ["Supabase", "Đăng nhập, dữ liệu và media", supabaseState],
             ["Ollama", "Viết và chia cảnh kịch bản, không gửi nội dung ra ngoài", ollamaState],
             ["Media local", "Vẽ ảnh SDXL, giọng VieNeu/Piper và Whisper trên máy này", localMediaState],
-            ["Worker render", "Nhận việc từ hàng đợi và dựng video", workerState],
-            ["Render / FFmpeg", "Ghép và xuất MP4", renderState],
+            ["Worker dựng video", "Nhận việc từ hàng đợi, ghép và xuất MP4 bằng FFmpeg", worseState(workerState, renderState)],
           ] as const).map(([name, detail, state]) => (
             <ConnectionRow key={name} name={name} detail={detail} state={state} />
           ))}
