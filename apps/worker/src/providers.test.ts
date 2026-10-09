@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   eraAppropriateCast,
+  foreignWords,
   withQuestionHook,
   vietnameseByDefault,
   youthfulSiblings,
@@ -756,6 +757,14 @@ describe("withQuestionHook", () => {
     const asking = "Bạn có biết vì sao? Uống nước giúp tỉnh táo.";
     expect(withQuestionHook(asking, "Vì sao uống nước")).toBe(asking);
     expect(withQuestionHook(script, "Lợi ích của việc uống nước")).toBe(script);
+  });
+});
+
+describe("foreignWords", () => {
+  it("finds English slipped into Vietnamese narration but not Vietnamese without accents or names", () => {
+    expect(foreignWords("Đầu óc sẽ minh mẫn sau khi hydrate, tinh thần sẽ bouncier.")).toEqual(["hydrate", "bouncier"]);
+    expect(foreignWords("Trong nhanh chong, khoang thanh minh nghieng ngang.")).toEqual([]);
+    expect(foreignWords("Cổ phiếu Coinbase và Bitcoin cùng giảm.")).toEqual([]);
   });
 });
 

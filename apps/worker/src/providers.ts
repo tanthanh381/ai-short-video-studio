@@ -478,7 +478,8 @@ async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardIn
   const maximumWords = Math.round(input.duration * 3.4);
   const terms = importantTerms(input.sourceText);
   let best = "";
-  let bestScore = -1;
+  let bestScore = -Infinity;
+  let bestOverlap = 0;
   let lastError: unknown = new Error("AI chưa viết được lời đọc từ ý tưởng; hãy thử lại");
   for (let attempt = 0; attempt < BATCH_ATTEMPTS; attempt++) {
     try {
@@ -489,12 +490,30 @@ async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardIn
       const words = contentWords(draft);
       if (words.length < minimumWords || words.length > maximumWords) continue;
       const overlap = terms.length >= 2 ? overlapRatio(terms, new Set(words)) : 1;
-      if (overlap > bestScore) { best = draft; bestScore = overlap; }
-      if (overlap >= 0.25 || terms.length < 2) break; // on topic: stop asking
+      // An English word in Vietnamese narration ("sau khi hydrate") is read out oddly: prefer a clean draft.
+      const english = foreignWords(draft).length;
+      const score = overlap - 0.3 * english;
+      if (score > bestScore) { best = draft; bestScore = score; bestOverlap = overlap; }
+      if ((overlap >= 0.25 || terms.length < 2) && english === 0) break; // on topic and all Vietnamese: stop asking
     } catch (error) { lastError = error; }
   }
-  if (best && (bestScore >= 0.1 || terms.length < 2)) return withQuestionHook(best, input.sourceText);
+  if (best && (bestOverlap >= 0.1 || terms.length < 2)) return withQuestionHook(best, input.sourceText);
   throw lastError;
+}
+
+// Consonant clusters a Vietnamese syllable can start or end with; anything else ("dr" in "hydrate", "nc" in
+// "bouncier") marks a foreign word.
+const VI_CLUSTERS = new Set(["b", "c", "ch", "d", "g", "gh", "gi", "h", "k", "kh", "l", "m", "n", "ng", "ngh", "nh", "p", "ph", "q", "qu", "r", "s", "t", "th", "tr", "v", "x"]);
+
+/** Lower-case words in a Vietnamese script that cannot be Vietnamese (English slipped in). Names are skipped. */
+export function foreignWords(script: string): string[] {
+  const found = new Set<string>();
+  for (const word of script.normalize("NFC").match(/[\p{L}]+/gu) ?? []) {
+    if (word.length < 4 || word[0] !== word[0]!.toLowerCase() || /[^a-z]/u.test(word)) continue; // accents = Vietnamese
+    const clusters = word.match(/[^aeiouy]+/gu) ?? [];
+    if (/[fjwz]/u.test(word) || clusters.some((cluster) => !VI_CLUSTERS.has(cluster))) found.add(word);
+  }
+  return [...found];
 }
 
 const QUESTION_START = /^(?:vì sao|tại sao|làm sao|làm thế nào|có nên|bạn có biết|điều gì|ai|bao giờ|liệu)\b/iu;
