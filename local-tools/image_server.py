@@ -7,6 +7,7 @@ in memory. Run it with the toolkit's venv python (it has mlx installed):
 """
 
 import base64
+import gc
 import io
 import json
 import math
@@ -52,24 +53,31 @@ NEGATIVE_PROMPT = os.getenv(
 )
 
 LOCK = threading.Lock()
-STATE = {"sd": None, "error": None}
+STATE = {"sd": None, "error": None, "unloaded": False}
+# Queued instead of a prompt: drop the model so SDXL Base (ComfyUI) can use the memory; the next render reloads it.
+UNLOAD = object()
 
 
 JOBS = queue.Queue()
+
+
+def load_model():
+    sd = StableDiffusionXL("stabilityai/sdxl-turbo", float16=True)
+    nn.quantize(sd.text_encoder_1, class_predicate=lambda _, m: isinstance(m, nn.Linear))
+    nn.quantize(sd.text_encoder_2, class_predicate=lambda _, m: isinstance(m, nn.Linear))
+    nn.quantize(sd.unet, group_size=32, bits=8)
+    sd.ensure_models_are_loaded()
+    # MLX keeps freed GPU buffers cached for reuse; across many 576x1024 renders that grew to 11 GB and
+    # pushed the other models into swap. A small cache keeps the speed and the memory bounded.
+    mx.set_cache_limit(int(os.getenv("IMAGE_CACHE_LIMIT_MB", "768")) * 1024 * 1024)
+    return sd
 
 
 def model_thread():
     """MLX GPU streams belong to the thread that created them: load the model and run every
     generation in this one thread; HTTP handler threads only submit jobs and wait."""
     try:
-        sd = StableDiffusionXL("stabilityai/sdxl-turbo", float16=True)
-        nn.quantize(sd.text_encoder_1, class_predicate=lambda _, m: isinstance(m, nn.Linear))
-        nn.quantize(sd.text_encoder_2, class_predicate=lambda _, m: isinstance(m, nn.Linear))
-        nn.quantize(sd.unet, group_size=32, bits=8)
-        sd.ensure_models_are_loaded()
-        # MLX keeps freed GPU buffers cached for reuse; across many 576x1024 renders that grew to 11 GB and
-        # pushed the other models into swap. A small cache keeps the speed and the memory bounded.
-        mx.set_cache_limit(int(os.getenv("IMAGE_CACHE_LIMIT_MB", "768")) * 1024 * 1024)
+        sd = load_model()
         STATE["sd"] = sd
         print("[image] model ready", flush=True)
     except Exception as error:
@@ -77,8 +85,21 @@ def model_thread():
         print(f"[image] load failed: {error}", flush=True)
         return
     while True:
-        prompt, seed, options, future = JOBS.get()
+        job = JOBS.get()
+        if job is UNLOAD:
+            if sd is not None:
+                sd = None
+                STATE["sd"], STATE["unloaded"] = None, True
+                gc.collect()
+                mx.clear_cache()
+                print("[image] model unloaded to free memory", flush=True)
+            continue
+        prompt, seed, options, future = job
         try:
+            if sd is None:  # unloaded for SDXL Base earlier: reload on demand (about half a minute)
+                sd = load_model()
+                STATE["sd"], STATE["unloaded"] = sd, False
+                print("[image] model reloaded", flush=True)
             future.set_result(render(sd, prompt, seed, **options))
         except Exception as error:  # reported to the waiting request
             future.set_exception(error)
@@ -168,17 +189,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            ready = STATE["sd"] is not None
+            # Unloaded on purpose still counts as ready: the next request reloads the model.
+            ready = STATE["sd"] is not None or STATE["unloaded"]
             self._send(200 if ready else 503, "application/json",
                        json.dumps({"ok": ready, "error": STATE["error"]}).encode())
         else:
             self._send(404, "application/json", b"{}")
 
     def do_POST(self):
+        if self.path == "/unload":
+            if STATE["sd"] is not None:
+                JOBS.put(UNLOAD)
+            self._send(202, "application/json", b'{"ok":true}')
+            return
         if self.path != "/generate":
             self._send(404, "application/json", b"{}")
             return
-        if STATE["sd"] is None:
+        if STATE["sd"] is None and not STATE["unloaded"]:
             self._send(503, "application/json", b'{"error":"model loading"}')
             return
         try:

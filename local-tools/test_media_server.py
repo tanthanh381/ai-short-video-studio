@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import unittest
+import unittest.mock
 import wave
 from pathlib import Path
 from unittest.mock import patch
@@ -257,6 +258,31 @@ class LocalSpeechCaptionTests(unittest.TestCase):
     def test_unknown_image_style_is_rejected(self):
         with self.assertRaises(ValueError):
             self.media.local_image("A quiet street", "9:16", style="oil-painting")
+
+    def test_sdxl_base_and_turbo_take_turns_with_memory(self):
+        calls = []
+
+        def fake_urlopen(request, timeout=None):
+            url = request if isinstance(request, str) else request.full_url
+            calls.append(url)
+            response = unittest.mock.MagicMock()
+            response.__enter__.return_value.read.return_value = b"PNG"
+            response.__enter__.return_value.status = 200
+            return response
+
+        with patch.object(self.media, "available_image_models", return_value={"sdxl-turbo": "t", self.media.COMFYUI_IMAGE_MODEL: "b"}), \
+             patch.object(self.media, "comfyui_image", return_value=b"PNG") as comfy, \
+             patch.object(self.media, "image_server_state", return_value="ready"), \
+             patch.object(self.media.urllib.request, "urlopen", side_effect=fake_urlopen):
+            self.media.local_image("A young woman sits on a bench", "9:16", model=self.media.COMFYUI_IMAGE_MODEL)
+            self.assertTrue(any(url.endswith("/unload") for url in calls))  # Turbo released for SDXL Base
+            self.assertIn("crowd", comfy.call_args.args[1])  # real CFG: negative prompt keeps the cast small
+            calls.clear()
+            self.media.local_image("A young woman sits on a bench", "9:16", model="sdxl-turbo")
+            self.assertTrue(any(url.endswith("/free") for url in calls))  # SDXL Base released for Turbo
+            calls.clear()
+            self.media.local_image("A quiet street at dusk", "9:16", model="sdxl-turbo")
+            self.assertFalse(any(url.endswith("/free") for url in calls))  # only once after a Base run
 
     def test_image_quality_guard_adds_face_constraints(self):
         with patch.object(self.media, "image_server_state", return_value="ready"), \

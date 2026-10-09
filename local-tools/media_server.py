@@ -85,9 +85,9 @@ TTS_CONCURRENCY = max(1, min(int(os.getenv("TTS_CONCURRENCY", "2")), 4))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/ggml-base.bin"))
 # Image models the toolkit has installed (id -> label). image_server.py serves them.
-IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo (MLX, nhanh)"}
+IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo — nhanh (~15–25 giây/ảnh)"}
 COMFYUI_IMAGE_MODEL = "sdxl-base-1.0-comfyui"
-COMFYUI_IMAGE_LABEL = "SDXL Base 1.0 (ComfyUI local)"
+COMFYUI_IMAGE_LABEL = "SDXL Base 1.0 — đẹp hơn, ít người thừa, chậm (~1–1,5 phút/ảnh)"
 TTS_ENGINE_LABELS = {"vieneu": "VieNeu-TTS v3 Turbo (ONNX/CPU)", "piper": "Piper (giọng Việt nhẹ)"}
 SAMPLE_RATE = 22050
 IMAGE_LOCK = threading.Lock()  # one MLX/Metal job at a time on a 16 GB machine
@@ -231,6 +231,33 @@ def available_image_models():
     return models
 
 
+# Only one image model fits next to the rest of the stack on a 16 GB Mac: SDXL Base (ComfyUI) and SDXL-Turbo
+# (MLX) each take several GB. Using one asks the other to release its memory; the released one reloads on demand.
+IMAGE_ENGINE = {"comfy_used": False}
+
+
+def release_turbo_model():
+    try:
+        request = urllib.request.Request(f"{IMAGE_SERVER_URL}/unload", data=b"{}", headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=5):
+            pass
+    except Exception:
+        pass  # best effort: generation still works, only with less free memory
+
+
+def release_comfy_model():
+    if not IMAGE_ENGINE["comfy_used"]:
+        return
+    try:
+        body = json.dumps({"unload_models": True, "free_memory": True}).encode()
+        request = urllib.request.Request(f"{COMFYUI_URL.rstrip('/')}/free", data=body, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=10):
+            pass
+        IMAGE_ENGINE["comfy_used"] = False
+    except Exception:
+        pass
+
+
 def comfyui_image(prompt, negative_prompt, width, height, seed, preset):
     """Run a small, deterministic SDXL txt2img workflow through ComfyUI's local API."""
     selected = preset if preset in COMFYUI_IMAGE_PRESETS else "balanced"
@@ -317,8 +344,14 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     if model == COMFYUI_IMAGE_MODEL:
         if reference_image_base64:
             raise ValueError("SDXL Base qua ComfyUI hiện hỗ trợ text-to-image; hãy bỏ ảnh tham chiếu hoặc chọn SDXL-Turbo")
+        negative = IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else "text, logo, watermark"
+        if is_human:  # SDXL Base honours a negative prompt (real CFG), unlike Turbo: keep scenes to their cast
+            negative += ", crowd, group of people, extra people, duplicate person, clones"
         with COMFYUI_LOCK:
-            return comfyui_image(styled, IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else "", width, height, seed, preset)
+            release_turbo_model()
+            IMAGE_ENGINE["comfy_used"] = True
+            return comfyui_image(styled, negative, width, height, seed, preset)
+    release_comfy_model()
     # SDXL-Turbo is most likely to deform anatomy at low step counts. Promote
     # every human scene in the balanced preset; explicit fast remains fast.
     if is_human and selected_preset == "balanced" and IMAGE_FACE_PRESET in IMAGE_PRESETS:
