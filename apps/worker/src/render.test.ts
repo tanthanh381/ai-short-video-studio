@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assTime, createAss, karaokeText, mapWithConcurrency, renderProject, sceneMotion, videoEncoderPreset, videoSize } from "./render";
+import { assTime, createAss, hookOverlayFilters, karaokeText, mapWithConcurrency, renderProject, sceneMotion, videoEncoderPreset, videoSize } from "./render";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
 
 describe("render helpers", () => {
@@ -186,12 +186,16 @@ describe("karaoke captions", () => {
 });
 
 describe("scene motion", () => {
-  it("keeps a short scene as one slow push-in", () => {
-    expect(sceneMotion(5)).toBe("zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1");
+  it("cycles camera moves so consecutive stills never move the same way", () => {
+    const moves = [0, 1, 2, 3, 4].map((index) => sceneMotion(5, index));
+    expect(new Set(moves).size).toBe(5);
+    expect(moves[0]).toBe("zoompan=z='1+0.06*(on/150)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1");
+    expect(moves[2]).toContain("x='(iw-iw/zoom)*(on/150)'"); // pan left to right
+    expect(sceneMotion(5, 5)).toBe(moves[0]);
   });
 
   it("cuts a long scene in two framings halfway, so the picture changes within 7 s", () => {
-    const filter = sceneMotion(9);
+    const filter = sceneMotion(9, 2);
     expect(filter).toContain("if(lt(on,135)"); // 9 s * 30 fps / 2
     expect(filter).toContain("1.22+");
     expect(filter.endsWith(":d=1")).toBe(true);
@@ -211,6 +215,19 @@ describe("mapWithConcurrency", () => {
     });
     expect(result).toEqual([0, 1, 2, 3, 4]);
     expect(peak).toBe(3);
+  });
+});
+
+describe("hook title overlay", () => {
+  it("draws each line from its text file, fades out by 3 s and fits long lines", () => {
+    const filters = hookOverlayFilters(["/tmp/h0.txt", "/tmp/h1.txt"], ["VÌ SAO UỐNG NƯỚC", "GIÚP BẠN TỈNH TÁO"], 1080, 1920);
+    expect(filters).toHaveLength(2);
+    expect(filters[0]).toContain("textfile=/tmp/h0.txt");
+    expect(filters[1]).toContain("textfile=/tmp/h1.txt");
+    expect(filters[0]).toContain("enable='lt(t,3)'");
+    const size = Number(filters[0]!.match(/fontsize=(\d+)/u)![1]);
+    expect(size).toBeLessThanOrEqual(92);
+    expect(size * 0.62 * 17).toBeLessThanOrEqual(1080 * 0.88 + size); // the longest line fits the width
   });
 });
 

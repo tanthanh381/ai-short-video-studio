@@ -120,15 +120,29 @@ export function createAss(project: Project) {
   return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Noto Sans,${fontSize},${primary},${assColor(style.fontColor)},${assColor(style.outlineColor)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
 }
 
+/** Camera moves cycled across scenes so consecutive stills never move the same way. */
+const CAMERA_MOVES = ["push", "pull", "panRight", "panLeft", "rise"] as const;
+
 /**
- * Slow push-in on a still. A scene held longer than 6.5 s gets a punch-in cut halfway: a closer framing on the
- * upper middle (where faces usually are), so the picture changes every 3-6 s without generating another image.
+ * Camera motion on a still: push-in, pull-out, pan left/right or rise, chosen by scene order. A scene held longer
+ * than 6.5 s also gets a punch-in cut halfway (closer framing on the upper middle, where faces usually are), so the
+ * picture changes every 3-6 s without generating another image. Expressions use the output frame number `on`.
  */
-export function sceneMotion(seconds: number): string {
-  if (seconds <= 6.5) return "zoompan=z='min(max(zoom,pzoom)+0.00035,1.06)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1";
-  const cut = Math.round((seconds * 30) / 2);
-  return `zoompan=z='if(lt(on,${cut}),min(1+0.00035*on,1.06),min(1.22+0.0003*(on-${cut}),1.3))'`
-    + `:x='iw/2-iw/zoom/2':y='if(lt(on,${cut}),ih/2-ih/zoom/2,(ih-ih/zoom)*0.3)':d=1`;
+export function sceneMotion(seconds: number, index = 0): string {
+  const frames = Math.max(1, Math.round(seconds * 30));
+  const progress = `(on/${frames})`;
+  const centreX = "iw/2-iw/zoom/2";
+  const centreY = "ih/2-ih/zoom/2";
+  const move = CAMERA_MOVES[index % CAMERA_MOVES.length];
+  const [z, x, y] = move === "pull" ? [`1.08-0.07*${progress}`, centreX, centreY]
+    : move === "panRight" ? ["1.1", `(iw-iw/zoom)*${progress}`, centreY]
+    : move === "panLeft" ? ["1.1", `(iw-iw/zoom)*(1-${progress})`, centreY]
+    : move === "rise" ? ["1.1", centreX, `(ih-ih/zoom)*(1-${progress})`]
+    : [`1+0.06*${progress}`, centreX, centreY];
+  if (seconds <= 6.5) return `zoompan=z='${z}':x='${x}':y='${y}':d=1`;
+  const cut = Math.round(frames / 2);
+  return `zoompan=z='if(lt(on,${cut}),${z},min(1.22+0.0003*(on-${cut}),1.3))'`
+    + `:x='if(lt(on,${cut}),${x},${centreX})':y='if(lt(on,${cut}),${y},(ih-ih/zoom)*0.3)':d=1`;
 }
 
 /** How many scene segments ffmpeg renders at once (bounded by the Docker VM's CPUs). */
@@ -146,6 +160,22 @@ export async function mapWithConcurrency<T, R>(items: T[], limit: number, worker
   });
   await Promise.all(runners);
   return results;
+}
+
+/**
+ * Big title over the first seconds of a full-frame video: viewers decide within ~3 s whether to keep watching. Two
+ * balanced upper-case lines in yellow with a dark outline, faded out between 2.4 s and 3 s. Text comes from files.
+ */
+export function hookOverlayFilters(lineFiles: string[], lines: string[], width: number, height: number): string[] {
+  const longest = Math.max(1, ...lines.map((line) => line.length));
+  const size = Math.max(40, Math.min(Math.round(Math.min(width, height) * 0.085), Math.floor((width * 0.88) / (longest * 0.62))));
+  // High enough to clear most faces (portraits put eyes at 15-30%), with a translucent box so it reads on any picture.
+  const top = Math.round(height * 0.09);
+  return lineFiles.map((file, index) =>
+    `drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${size}:fontcolor=0xFFE14D:borderw=5:bordercolor=0x101010`
+    + `:box=1:boxcolor=0x000000@0.38:boxborderw=14`
+    + `:x=(w-text_w)/2:y=${top + index * Math.round(size * 1.3)}`
+    + `:enable='lt(t,3)':alpha='if(lt(t,2.4),1,max(0,(3-t)/0.6))'`);
 }
 
 export async function durationMs(config: WorkerConfig, path: string) {
@@ -240,15 +270,18 @@ export async function renderProject(
       const seconds = ms / 1000;
       // Straight cuts preserve measured timing and avoid a black opening/boundaries.
       const monochrome = project.settings.visualPreset === "ink-monochrome" ? ",hue=s=0,eq=contrast=1.04:brightness=0.01" : "";
-      const motionFilter = sceneMotion(seconds);
+      const motionFilter = sceneMotion(seconds, scene.order);
+      // Stills are scaled to twice the output before the camera move: zoompan rounds positions to whole pixels,
+      // which made slow pans stutter (frame-to-frame motion stdev 1.39 -> 0.87); then a light sharpen for the upscale.
+      const sharpen = ",unsharp=5:5:0.5:5:5:0.0";
       const filter = cardFrame
         // Story card: the picture lives in a 16:10 band over the pre-rendered background (input 2).
         ? scene.videoPath
           ? `[0:v]scale=${CARD.width}:${CARD.bandH}:force_original_aspect_ratio=increase,crop=${CARD.width}:${CARD.bandH},fps=30,format=yuv420p[band];[2:v]format=yuv420p[bg];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
-          : `[0:v]scale=${CARD.width}:${CARD.bandH}:force_original_aspect_ratio=increase,crop=${CARD.width}:${CARD.bandH}${monochrome},${motionFilter}:s=${CARD.width}x${CARD.bandH}:fps=30[band];[2:v]format=yuv420p[bg];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
+          : `[0:v]scale=${CARD.width * 2}:${CARD.bandH * 2}:force_original_aspect_ratio=increase,crop=${CARD.width * 2}:${CARD.bandH * 2}${monochrome},${motionFilter}:s=${CARD.width}x${CARD.bandH}:fps=30${sharpen}[band];[2:v]format=yuv420p[bg];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
         : scene.videoPath
           ? `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=30,format=yuv420p[v]`
-          : `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}${monochrome},${motionFilter}:s=${width}x${height}:fps=30,format=yuv420p[v]`;
+          : `[0:v]scale=${width * 2}:${height * 2}:force_original_aspect_ratio=increase,crop=${width * 2}:${height * 2}${monochrome},${motionFilter}:s=${width}x${height}:fps=30${sharpen},format=yuv420p[v]`;
       const videoInput = scene.videoPath ? ["-stream_loop", "-1", "-i", motionPath] : ["-loop", "1", "-framerate", "30", "-i", imagePath];
       await exec(
         config.FFMPEG_PATH,
@@ -355,7 +388,17 @@ export async function renderProject(
       .replace(/'/g, "\\'");
     // Use the explicit `filename` option: FFmpeg 8/9 parses a quoted filename
     // followed by `fontsdir` differently from older builds.
-    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}format=yuv420p[base]`;
+    // Older projects kept a copy of the script's start in `hook`: fall back to a short title from the script.
+    const hookText = project.hook.trim().split(/\s+/u).length <= 10 && project.hook.trim() ? project.hook : fallbackCardTitle(project.sourceText);
+    const hookLines = !usesStoryCard(project.settings) && project.settings.hookTitle ? splitCardTitle(hookText, 16) : [];
+    const hookFiles: string[] = [];
+    for (const [index, line] of hookLines.entries()) {
+      const file = join(workdir, `hook-${index}.txt`);
+      await writeFile(file, line, "utf8");
+      hookFiles.push(file);
+    }
+    const hook = hookFiles.length ? `${hookOverlayFilters(hookFiles, hookLines, width, height).join(",")},` : "";
+    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}${hook}format=yuv420p[base]`;
     if (logoPath) {
       const margin = Math.round(width * 0.04);
       const x = project.settings.logoPosition === "top-center" ? "(W-w)/2" : project.settings.logoPosition.endsWith("right") ? `W-w-${margin}` : `${margin}`;

@@ -1161,7 +1161,7 @@ function NewProjectPage() {
   const [inputMode, setInputMode] = useState<Project["inputMode"]>("idea");
   const [settings, setSettings] = useState<ProjectSettings>(
     // 1.0x is already the short-form pace: the voice bridge brings every voice to about 3.7 words per second.
-    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, captionHighlight: true },
+    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, captionHighlight: true, hookTitle: true },
   );
   const [channelPreset, setChannelPreset] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);
@@ -1331,6 +1331,14 @@ function NewProjectPage() {
                 onChange={(e) => setSettings((s) => ({ ...s, captionHighlight: e.target.checked }))}
               />
               <span>Phụ đề sáng dần theo từng từ (kiểu karaoke)</span>
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.hookTitle}
+                onChange={(e) => setSettings((s) => ({ ...s, hookTitle: e.target.checked }))}
+              />
+              <span>Tiêu đề lớn ở 3 giây đầu (giữ chân người xem)</span>
             </label>
             <label className="check">
               <input
@@ -2791,6 +2799,15 @@ function StudioPage() {
                   onChange={(e) => change({ ...project, settings: { ...project.settings, captionHighlight: e.target.checked } })}
                 />
                 <span>Sáng dần theo từng từ (kiểu karaoke)</span>
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={project.settings.hookTitle}
+                  disabled={project.settings.layoutTemplate === "story-card"}
+                  onChange={(e) => change({ ...project, settings: { ...project.settings, hookTitle: e.target.checked } })}
+                />
+                <span>Tiêu đề lớn ở 3 giây đầu{project.settings.layoutTemplate === "story-card" ? " (thẻ truyện đã có tiêu đề)" : ""}</span>
               </label>
               <Field label="Kiểu chữ">
                 <select

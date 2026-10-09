@@ -145,6 +145,8 @@ export const projectSettingsSchema = z.object({
   autoMusic: z.boolean().default(false),
   /** Captions light up word by word as they are spoken (karaoke style). */
   captionHighlight: z.boolean().default(false),
+  /** Big title over the first seconds of a full-frame video (the story card already has a title banner). */
+  hookTitle: z.boolean().default(false),
   trimSilence: z.boolean().default(false),
   subtitle: subtitleStyleSchema.default({
     enabled: true,

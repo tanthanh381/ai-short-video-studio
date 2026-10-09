@@ -347,6 +347,15 @@ async function storyboard(job: JobRow, project: Project) {
     model: project.settings.localModels.storyboard,
   } as const;
   const cardMode = usesStoryCard(project.settings);
+  // The banner/hook title and the post caption depend only on the script: draft them while the storyboard is written.
+  const draftScript = cleanScriptForNarration(project.sourceText);
+  const draftTitle = cardMode ? !project.settings.cardTitle.trim() : project.settings.hookTitle;
+  const titleDraft = draftTitle && provider.writeCardTitle && project.inputMode === "full-script"
+    ? provider.writeCardTitle({ sourceText: draftScript, model: project.settings.localModels.storyboard }).catch(() => "")
+    : Promise.resolve("");
+  const captionDraft = provider.writePostCaption && project.inputMode === "full-script"
+    ? provider.writePostCaption({ sourceText: draftScript, title: project.title, model: project.settings.localModels.storyboard }).catch(() => null)
+    : Promise.resolve(null);
   const describeCast = () => provider.describeCast
     ? provider.describeCast({ title: project.title, sourceText, model: project.settings.localModels.storyboard, cartoon: cardMode })
     : Promise.resolve("");
@@ -366,17 +375,21 @@ async function storyboard(job: JobRow, project: Project) {
   // The "Cổ trang" look is a period story even when the script never says "ngày xưa".
   cast = eraAppropriateCast(cast, sourceText, project.settings.visualPreset === "historical");
   checkDeadline(job);
-  // Story-card banner: one short promise-style title, written once and stored with the project.
+  // One short promise-style title, written once: the story card's banner, or the hook over the first seconds of
+  // a full-frame video. It is stored as the project's hook (which used to hold a copy of the script's start).
+  // A pasted script is final from the start (its drafts ran alongside the storyboard); an idea's script is the
+  // narration the model just wrote, so its title and caption are written from that now.
+  const fromScript = project.inputMode === "full-script";
+  const script = fromScript ? draftScript : result.narration;
+  const shortTitle = draftTitle
+    ? (fromScript ? await titleDraft : provider.writeCardTitle
+      ? await provider.writeCardTitle({ sourceText: script, model: project.settings.localModels.storyboard }).catch(() => "")
+      : "") || fallbackCardTitle(script)
+    : "";
   let suggestedTitle = result.suggestedTitle;
-  if (project.settings.layoutTemplate === "story-card" && !project.settings.cardTitle.trim()) {
-    const script = cleanScriptForNarration(project.sourceText);
-    suggestedTitle = (provider.writeCardTitle
-      ? await provider.writeCardTitle({ sourceText: script, model: project.settings.localModels.storyboard })
-      : "") || fallbackCardTitle(script);
-  }
+  if (cardMode && shortTitle) suggestedTitle = shortTitle;
   // Post-ready caption (title, one or two sentences, hashtags) instead of the raw script.
-  const script = cleanScriptForNarration(project.sourceText);
-  const post = (provider.writePostCaption
+  const post = (fromScript ? await captionDraft : provider.writePostCaption
     ? await provider.writePostCaption({ sourceText: script, title: project.title, model: project.settings.localModels.storyboard }).catch(() => null)
     : null) ?? fallbackPostCaption(script, project.title, project.settings.style);
   const caption = { ...post, hashtags: cleanHashtags(post.hashtags, project.settings.style, `${project.title} ${script}`) };
@@ -394,7 +407,7 @@ async function storyboard(job: JobRow, project: Project) {
   }));
   const { error: saveError } = await db.rpc("replace_storyboard", {
     p_project_id: project.id, p_user_id: project.userId, p_scenes: rows,
-    p_hook: result.hook, p_suggested_title: suggestedTitle,
+    p_hook: shortTitle, p_suggested_title: suggestedTitle,
     p_suggested_description: formatPostCaption(caption),
     p_status: job.job_type === "create_video" ? "queued" : "draft",
   });
@@ -431,6 +444,40 @@ async function generateMedia(job: JobRow, project: Project) {
   const mediaProgress = (done: number) => prepass
     ? 42 + Math.round((done / scenes.length) * 43)
     : Math.round((done / scenes.length) * 85);
+  const speak = async (scene: Scene) => {
+    const aligned = media.createSpeechAligned
+      ? await media.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, speed: project.settings.voiceSpeed })
+      : null;
+    let audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed: project.settings.voiceSpeed });
+    let subtitles = aligned?.cues ?? [];
+    if (project.settings.trimSilence) {
+      audio = await trimAudioSilence(audio);
+      subtitles = [];
+    }
+    const actualDurationMs = aligned?.durationMs ?? await probeAudioDuration(audio);
+    const extension = aligned?.contentType === "audio/wav" ? "wav" : "mp3";
+    const audioPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.${extension}`;
+    await upload(audioPath, audio, aligned?.contentType ?? "audio/mpeg");
+    // Save measured timing together with audio so retries do not transcribe
+    // already aligned speech or regenerate a successful scene.
+    await updateScene(scene.id, { audio_path: audioPath, subtitles, actual_duration_ms: actualDurationMs });
+    return { audio, audioPath, subtitles, actualDurationMs };
+  };
+  // Voices are synthesised on the CPU while images render on the GPU: the two used to run one after the other
+  // (the image model and the voice model fought for RAM while Ollama was still loaded; it is unloaded by now).
+  const voicePrepass = prepass && !targetId
+    ? (async () => {
+      for (const scene of scenes.filter((item) => !item.audioPath)) {
+        try {
+          const voiced = await speak(scene);
+          Object.assign(scene, { audioPath: voiced.audioPath, subtitles: voiced.subtitles, actualDurationMs: voiced.actualDurationMs });
+        } catch (error) {
+          // Not fatal: the per-scene pass below synthesises this voice again and records a clear failure.
+          log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "voice_prepass_failed");
+        }
+      }
+    })()
+    : Promise.resolve();
   for (const [index, scene] of pendingImages.entries()) {
     checkDeadline(job);
     try {
@@ -455,6 +502,7 @@ async function generateMedia(job: JobRow, project: Project) {
       log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "image_prepass_failed");
     }
   }
+  await voicePrepass;
   for (const scene of scenes) {
     checkDeadline(job);
     try {
@@ -472,6 +520,7 @@ async function generateMedia(job: JobRow, project: Project) {
       if (!regenerateImage && !regenerateAudio && !plan.subtitles &&
         (!project.settings.localModels.video || Boolean(scene.videoPath)) &&
         sceneMediaReady(scene, project.settings.subtitle.enabled)) {
+        await updateScene(scene.id, { media_status: "ready", error_message: null });
         finished++;
         await progress(job, Math.round((finished / scenes.length) * 100), `Đã giữ media cảnh ${scene.order + 1}`);
         continue;
@@ -534,22 +583,7 @@ async function generateMedia(job: JobRow, project: Project) {
           mediaProgress(finished) + 4,
           `Đang tạo giọng đọc cảnh ${scene.order + 1}`,
         );
-        const aligned = media.createSpeechAligned
-          ? await media.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, speed: project.settings.voiceSpeed })
-          : null;
-        audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed: project.settings.voiceSpeed });
-        subtitles = aligned?.cues ?? [];
-        if (project.settings.trimSilence) {
-          audio = await trimAudioSilence(audio);
-          subtitles = [];
-        }
-        actualDurationMs = aligned?.durationMs ?? await probeAudioDuration(audio);
-        const extension = aligned?.contentType === "audio/wav" ? "wav" : "mp3";
-        audioPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.${extension}`;
-        await upload(audioPath, audio, aligned?.contentType ?? "audio/mpeg");
-        // Save measured timing together with audio so retries do not transcribe
-        // already aligned speech or regenerate a successful scene.
-        await updateScene(scene.id, { audio_path: audioPath, subtitles, actual_duration_ms: actualDurationMs });
+        ({ audio, audioPath, subtitles, actualDurationMs } = await speak(scene));
       } else {
         audio = await download(audioPath);
         actualDurationMs = await probeAudioDuration(audio);

@@ -576,20 +576,27 @@ export async function createFaithfulStoryboard(
     catch (error) { if (!isUnusableModelAnswer(error)) throw error; }
   }
   const slices = splitScript(input.sourceText);
-  const scenes: StoryboardResult["scenes"] = [];
-  // Small batches fit the installed local model without truncating long scripts.
-  for (let offset = 0; offset < slices.length; offset += 6) {
-    const lockedScenes = slices.slice(offset, offset + 6);
-    const generated = await createLockedBatch(provider, input, lockedScenes, offset, slices.length);
-    for (let index = 0; index < lockedScenes.length; index++) {
-      const narration = lockedScenes[index]!;
-      scenes.push({
+  // Small batches fit the installed local model without truncating long scripts. Each batch already carries the
+  // whole story as context, so two run at once (Ollama serves two sequences in parallel); order is kept.
+  const offsets = Array.from({ length: Math.ceil(slices.length / 6) }, (_, batch) => batch * 6);
+  const batches: Array<StoryboardResult["scenes"]> = new Array(offsets.length);
+  let nextBatch = 0;
+  let failed = false;
+  await Promise.all(Array.from({ length: Math.min(2, offsets.length) }, async () => {
+    while (nextBatch < offsets.length && !failed) { // after a failed batch, start no more (the video fails anyway)
+      const batch = nextBatch++;
+      const offset = offsets[batch]!;
+      const lockedScenes = slices.slice(offset, offset + 6);
+      const generated = await createLockedBatch(provider, input, lockedScenes, offset, slices.length)
+        .catch((error: unknown) => { failed = true; throw error; });
+      batches[batch] = lockedScenes.map((narration, index) => ({
         narration,
         imagePrompt: visualActionPrompt(narration, generated.scenes[index]!.imagePrompt),
         estimatedDurationMs: Math.min(15000, Math.max(2000, Math.round(narration.trim().split(/\s+/u).length / 2.5 * 1000))),
-      });
+      }));
     }
-  }
+  }));
+  const scenes: StoryboardResult["scenes"] = batches.flat();
   if (scenes.map((scene) => scene.narration).join("") !== input.sourceText)
     throw new Error("Không thể bảo toàn kịch bản; tác vụ đã dừng trước khi tạo media");
   return {

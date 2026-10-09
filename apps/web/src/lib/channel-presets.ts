@@ -11,31 +11,31 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     id: "co-tich",
     label: "Truyện cổ tích",
     hint: "Thẻ truyện, tranh hoạt hình, giọng đọc truyện, nhạc nền",
-    apply: (s) => ({ ...withLayoutTemplate(s, "story-card"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true }),
+    apply: (s) => ({ ...withLayoutTemplate(s, "story-card"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
   {
     id: "chua-lanh",
     label: "Triết lý · chữa lành",
     hint: "Tranh màu nước, giọng trầm, nhịp vừa, nhạc nền",
-    apply: (s) => ({ ...withVisualPreset(s, "watercolor"), layoutTemplate: "full-bleed", style: "truyen-cam-hung", voice: "triet-ly", voiceSpeed: 1, autoMusic: true, captionHighlight: true }),
+    apply: (s) => ({ ...withVisualPreset(s, "watercolor"), layoutTemplate: "full-bleed", style: "truyen-cam-hung", voice: "triet-ly", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
   {
     id: "co-trang",
     label: "Cổ trang · kiếm hiệp",
     hint: "Bối cảnh cổ trang điện ảnh, giọng cổ trang, nhạc nền",
-    apply: (s) => ({ ...withVisualPreset(s, "historical"), layoutTemplate: "full-bleed", style: "ke-chuyen", voice: "co-trang", voiceSpeed: 1, autoMusic: true, captionHighlight: true }),
+    apply: (s) => ({ ...withVisualPreset(s, "historical"), layoutTemplate: "full-bleed", style: "ke-chuyen", voice: "co-trang", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
   {
     id: "tam-su",
     label: "Tâm sự · cảm xúc",
     hint: "Tranh cắt giấy, giọng nữ ấm, nhạc nền",
-    apply: (s) => ({ ...withVisualPreset(s, "paper-cut"), layoutTemplate: "full-bleed", style: "truyen-cam-hung", voice: "tam-su", voiceSpeed: 1, autoMusic: true, captionHighlight: true }),
+    apply: (s) => ({ ...withVisualPreset(s, "paper-cut"), layoutTemplate: "full-bleed", style: "truyen-cam-hung", voice: "tam-su", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
   {
     id: "kien-thuc",
     label: "Kiến thức · mẹo hay",
     hint: "Ảnh chân thực, giọng thuyết minh nhanh, nhạc nền",
-    apply: (s) => ({ ...withVisualPreset(s, "cinematic-color"), layoutTemplate: "full-bleed", style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true }),
+    apply: (s) => ({ ...withVisualPreset(s, "cinematic-color"), layoutTemplate: "full-bleed", style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
 ];
 
