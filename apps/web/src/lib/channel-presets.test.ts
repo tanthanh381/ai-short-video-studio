@@ -24,8 +24,9 @@ describe("channel presets", () => {
     expect(knowledge).toMatchObject({ layoutTemplate: "full-bleed", visualPreset: "cinematic-color" });
   });
 
-  it("estimates narration length from words and reading speed", () => {
-    expect(estimatedNarrationSeconds(309, 1)).toBe(84); // "Ăn khế trả vàng" at the normalised pace
-    expect(estimatedNarrationSeconds(309, 1.2)).toBe(70);
+  it("estimates narration length from words, the voice's pace and reading speed", () => {
+    expect(estimatedNarrationSeconds(309, "doc-truyen", 1)).toBe(84); // "Ăn khế trả vàng" at the normalised pace
+    expect(estimatedNarrationSeconds(309, "doc-truyen", 1.2)).toBe(70);
+    expect(estimatedNarrationSeconds(309, "triet-ly", 1)).toBe(91); // a calmer voice takes longer
   });
 });

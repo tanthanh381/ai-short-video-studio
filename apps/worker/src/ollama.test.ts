@@ -237,3 +237,40 @@ describe("thinking models", () => {
   });
 });
 
+
+describe("OllamaStoryboardAdapter.writeScript", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks for the chosen length with an outline, and tells a retry how long the last draft was", async () => {
+    const bodies: Array<{ system: string; options: { num_predict: number; num_ctx: number } }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ response: "Lời đọc." }));
+    }));
+    const { contentPlan } = await import("@studio/shared");
+    const plan = contentPlan(90, "kien-thuc", "thuyet-minh", 1);
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b");
+    await adapter.writeScript({ title: "t", sourceText: "Ngủ đủ giấc", duration: 90, audience: "a", style: "kien-thuc", plan });
+    await adapter.writeScript({ title: "t", sourceText: "Ngủ đủ giấc", duration: 90, audience: "a", style: "kien-thuc", plan, previousWords: 180 });
+    const [first, retry] = bodies;
+    expect(first!.system).toContain("video 1 phút 30 giây");
+    expect(first!.system).toContain(`khoảng ${plan.words.target} từ, không dưới ${plan.words.min} và không quá ${plan.words.max} từ`);
+    expect(first!.system).toContain("4. Ý 3 (khoảng");
+    expect(first!.system).toContain("phát triển bằng ví dụ");
+    expect(first!.options.num_predict).toBeGreaterThanOrEqual(Math.ceil(plan.words.max * 2.6));
+    expect(retry!.system).toContain("Bản trước chỉ có 180 từ, quá ngắn");
+  });
+
+  it("condenses a long source and widens the context for it", async () => {
+    const bodies: Array<{ system: string; options: { num_ctx: number } }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ response: "Lời đọc." }));
+    }));
+    const story = Array.from({ length: 700 }, () => "chữ").join(" ");
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b");
+    await adapter.writeScript({ title: "t", sourceText: story, duration: 30, audience: "a", style: "ke-chuyen" });
+    expect(bodies[0]!.system).toContain("lược bớt chi tiết phụ");
+    expect(bodies[0]!.options.num_ctx).toBe(8192);
+  });
+});

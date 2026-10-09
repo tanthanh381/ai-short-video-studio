@@ -1,4 +1,4 @@
-import type { ProjectSettings } from "@studio/shared";
+import { narrationSeconds, type ProjectSettings } from "@studio/shared";
 import { withLayoutTemplate, withVisualPreset } from "./visual-preset";
 
 /**
@@ -45,7 +45,7 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
   },
 ];
 
-/** The voice bridge reads every voice at about 3.7 words per second at 1.0x, pauses included. */
-export function estimatedNarrationSeconds(wordCount: number, voiceSpeed: number): number {
-  return Math.round(wordCount / (3.7 * Math.max(0.5, voiceSpeed)));
+/** Seconds a script takes to read with this voice (the bridge's pace: 3.7 words/s × the voice's mood × speed). */
+export function estimatedNarrationSeconds(wordCount: number, voice: string, voiceSpeed: number): number {
+  return Math.round(narrationSeconds(wordCount, voice, voiceSpeed));
 }

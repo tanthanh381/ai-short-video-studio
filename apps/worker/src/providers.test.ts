@@ -513,45 +513,87 @@ describe("production labels are not spoken", () => {
 });
 
 describe("idea mode becomes plain narration then faithful scenes", () => {
+  // 60 s with a mood-1.0 voice: 222 words, accepted from 199 to 245 (packages/shared/src/duration.ts).
   const ideaInput: StoryboardInput = { ...input, inputMode: "idea", rewrite: false, duration: 60 };
-  const script = Array.from({ length: 12 }, (_, i) => `Câu số ${i + 1} nói về việc buông bỏ để lòng nhẹ hơn mỗi ngày.`).join(" ");
+  const sentences = (count: number) => Array.from({ length: count }, (_, i) => `Câu số ${i + 1} nói về việc buông bỏ để lòng nhẹ hơn mỗi ngày.`).join(" ");
+  const script = sentences(15); // 210 words: inside the 60-second window
   const promptsFor = (value: StoryboardInput) => generatedStoryboard(value);
+  const idea = "Vì sao buông bỏ giúp lòng nhẹ hơn?";
 
-  it("writes narration for a short idea, keeps it verbatim and only asks the model for image prompts", async () => {
+  it("writes narration for an idea to the chosen length and only asks the model for image prompts", async () => {
     const provider = {
-      writeScript: vi.fn(async () => script),
+      writeScript: vi.fn(async (_request: unknown) => script),
       createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)),
     };
-    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "Vì sao buông bỏ giúp lòng nhẹ hơn?" });
+    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: idea });
     expect(provider.writeScript).toHaveBeenCalledTimes(1);
+    // the writer is given the word budget and the outline for 60 seconds
+    expect(provider.writeScript.mock.calls[0]![0]).toMatchObject({ plan: { words: { target: 222, min: 199, max: 245 } } });
     // the viewer's question opens the video, then the written narration verbatim
-    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(`Vì sao buông bỏ giúp lòng nhẹ hơn?\n${script}`);
-    // every storyboard call is a locked image-prompt batch, never a free-form rewrite
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(`${idea}\n${script}`);
     expect(provider.createStoryboard.mock.calls.every((call) => (call[0] as StoryboardInput).lockedScenes)).toBe(true);
   });
 
-  it("treats substantial text as the author's script without calling the writer", async () => {
+  it("sizes the budget to the voice: a calmer voice gets fewer words for the same minute", async () => {
+    const provider = { writeScript: vi.fn(async (_request: unknown) => script), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
+    await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: idea, voice: "triet-ly" });
+    expect(provider.writeScript.mock.calls[0]![0]).toMatchObject({ plan: { words: { target: 204 } } });
+  });
+
+  it("keeps text that already reads at the chosen length word for word", async () => {
     const provider = { writeScript: vi.fn(async () => "không dùng"), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
     const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: script });
     expect(provider.writeScript).not.toHaveBeenCalled();
     expect(result.scenes.map((scene) => scene.narration).join("")).toBe(script);
   });
 
-  it("retries a draft that is too short, then accepts an on-topic one", async () => {
-    const drafts = ["Quá ngắn.", script];
-    const provider = {
-      writeScript: vi.fn(async () => drafts.shift() ?? script),
-      createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)),
-    };
-    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "Vì sao buông bỏ giúp lòng nhẹ hơn?" });
-    expect(provider.writeScript).toHaveBeenCalledTimes(2);
-    expect(result.scenes.length).toBeGreaterThan(0);
+  it("rewrites a story longer than the chosen length instead of reading all of it", async () => {
+    // "Ăn khế trả vàng" pasted as an idea with 30 seconds chosen came out at 68 seconds.
+    const story = sentences(26); // 364 words
+    const short = sentences(8); // 112 words: inside 30 seconds (100-122)
+    const provider = { writeScript: vi.fn(async () => short), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
+    const result = await createFaithfulStoryboard(provider, { ...ideaInput, duration: 30, sourceText: story });
+    expect(provider.writeScript).toHaveBeenCalledTimes(1);
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(short);
   });
 
-  it("fails clearly when the writer never produces usable narration", async () => {
-    const provider = { writeScript: vi.fn(async () => "Quá ngắn."), createStoryboard: vi.fn() };
-    await expect(createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "Vì sao buông bỏ giúp lòng nhẹ hơn?" })).rejects.toThrow();
-    expect(provider.writeScript).toHaveBeenCalledTimes(3);
+  it("asks again with the last draft's length when it is too short, then accepts the right length", async () => {
+    const drafts = [sentences(9), script]; // 126 words, then 210
+    const provider = {
+      writeScript: vi.fn(async (_request: unknown) => drafts.shift() ?? script),
+      createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)),
+    };
+    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: idea });
+    expect(provider.writeScript).toHaveBeenCalledTimes(2);
+    expect(provider.writeScript.mock.calls[1]![0]).toMatchObject({ previousWords: 126 });
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(`${idea}\n${script}`);
+  });
+
+  it("cuts a long draft from the body and keeps the opening and the ending", async () => {
+    const long = `Mở đầu bằng một câu hỏi?\n${sentences(20)}\nCâu kết đọng lại trong lòng người xem.`;
+    const provider = { writeScript: vi.fn(async () => long), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
+    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "buông bỏ" });
+    const narration = result.scenes.map((scene) => scene.narration).join("");
+    expect(narration.startsWith("Mở đầu bằng một câu hỏi?")).toBe(true);
+    expect(narration.endsWith("Câu kết đọng lại trong lòng người xem.")).toBe(true);
+    const words = narration.match(/[\p{L}\p{N}]+/gu)!.length;
+    expect(words).toBeGreaterThanOrEqual(199);
+    expect(words).toBeLessThanOrEqual(245);
+  });
+
+  it("drops outline labels the model writes at the start of paragraphs", async () => {
+    const labelled = `Mở đầu: Vì sao lòng ta nặng?\n\nÝ 1 (khoảng 40 từ): ${sentences(7)}\n\n**Kết**: ${sentences(7)}`;
+    const provider = { writeScript: vi.fn(async () => labelled), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
+    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "buông bỏ" });
+    const narration = result.scenes.map((scene) => scene.narration).join("");
+    expect(narration).not.toMatch(/Mở đầu:|Ý 1|Kết\*\*|khoảng 40 từ/u);
+    expect(narration.startsWith("Vì sao lòng ta nặng?")).toBe(true);
+  });
+
+  it("fails clearly, naming the length, when the writer stays far too short", async () => {
+    const provider = { writeScript: vi.fn(async () => sentences(5)), createStoryboard: vi.fn() };
+    await expect(createFaithfulStoryboard(provider, { ...ideaInput, sourceText: idea })).rejects.toThrow(/AI chỉ viết được \d+ từ cho video 1 phút \(cần khoảng 222 từ\)/u);
+    expect(provider.writeScript).toHaveBeenCalledTimes(4);
     expect(provider.createStoryboard).not.toHaveBeenCalled();
   });
 

@@ -50,6 +50,9 @@ import {
 import {
   cleanScriptForNarration,
   DEFAULT_PROJECT_SETTINGS,
+  DURATION_OPTIONS,
+  contentPlan,
+  durationLabel,
   formatDuration,
   looksLikeSubtitles,
   humanStatus,
@@ -1173,9 +1176,10 @@ function NewProjectPage() {
   const pastedSubtitles = looksLikeSubtitles(sourceText);
   const spokenText = (() => { try { return cleanScriptForNarration(sourceText); } catch { return ""; } })();
   const wordCount = spokenText.trim() ? spokenText.trim().split(/\s+/u).length : 0;
-  // Text of 40+ words is read as written (an idea that long is treated as the script), so its length is known now.
-  const readsAsWritten = inputMode === "full-script" || (inputMode === "idea" && wordCount >= 40);
-  const narrationSeconds = estimatedNarrationSeconds(wordCount, settings.voiceSpeed);
+  // A script is read as written, so its length is known now; an idea is written to the chosen duration.
+  const readsAsWritten = inputMode === "full-script";
+  const narrationSeconds = estimatedNarrationSeconds(wordCount, settings.voice, settings.voiceSpeed);
+  const plan = contentPlan(settings.targetDurationSec, settings.style, settings.voice, settings.voiceSpeed);
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (submitting.current) return;
@@ -1265,9 +1269,7 @@ function NewProjectPage() {
           <Field
             label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : "Kịch bản hoàn chỉnh"}
             hint={inputMode === "idea"
-              ? wordCount >= 40
-                ? "Nội dung từ 40 từ trở lên được đọc nguyên văn như kịch bản; AI chỉ chia cảnh và vẽ minh họa."
-                : "AI sẽ phát triển ý tưởng ngắn thành hook, mạch chuyện, cảnh và lời đọc."
+              ? "Một câu chủ đề, vài ý chính hay cả một câu chuyện dài: AI viết lại thành lời đọc vừa đúng thời lượng bạn chọn bên dưới."
               : "Giữ nguyên câu chữ và dấu tiếng Việt. Có thể dán cả nội dung phụ đề (.srt/.vtt): số thứ tự và mốc thời gian được bỏ, chỉ đọc phần lời."}
           >
             <>
@@ -1284,7 +1286,7 @@ function NewProjectPage() {
                 maxLength={30000}
                 rows={10}
                 disabled={busy}
-                placeholder={inputMode === "idea" ? "Ví dụ: Một video 30 giây giải thích vì sao cần xác minh tin nhắn chuyển tiền…" : "Dán toàn bộ lời đọc cho video vào đây…"}
+                placeholder={inputMode === "idea" ? "Ví dụ: Vì sao cần xác minh tin nhắn chuyển tiền trước khi bấm chuyển…" : "Dán toàn bộ lời đọc cho video vào đây…"}
               />
               <div className="script-meta" aria-live="polite">
                 <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>
@@ -1297,6 +1299,39 @@ function NewProjectPage() {
               )}
             </>
           </Field>
+          {inputMode === "idea" && (
+            <div className="duration-picker">
+              <span className="duration-picker-label" id="duration-label">Thời lượng video</span>
+              <div className="duration-options" role="radiogroup" aria-labelledby="duration-label">
+                {DURATION_OPTIONS.map((seconds) => (
+                  <button
+                    key={seconds}
+                    type="button"
+                    role="radio"
+                    aria-checked={settings.targetDurationSec === seconds}
+                    className={settings.targetDurationSec === seconds ? "active" : ""}
+                    disabled={busy}
+                    onClick={() => setSettings((s) => ({ ...s, targetDurationSec: seconds }))}
+                  >
+                    {durationLabel(seconds)}
+                  </button>
+                ))}
+              </div>
+              <div className="duration-plan" aria-live="polite">
+                <strong>Dàn ý AI sẽ viết: {plan.summary}</strong>
+                <span>Khoảng {plan.words.target} từ lời đọc · {plan.scenes} cảnh · theo giọng và thể loại đang chọn</span>
+                <details>
+                  <summary>Xem dàn ý chi tiết</summary>
+                  <ol>
+                    {plan.beats.map((beat) => <li key={beat.label}><b>{beat.label}</b> · {beat.words} từ: {beat.brief}</li>)}
+                  </ol>
+                </details>
+              </div>
+              {settings.targetDurationSec > 90 && (
+                <small className="duration-note">Shorts, Reels và TikTok giữ chân tốt nhất dưới 60–90 giây; video dài hợp với YouTube hoặc chia thành nhiều phần.</small>
+              )}
+            </div>
+          )}
           <div className="channel-presets" role="radiogroup" aria-label="Mẫu kênh">
             <span className="channel-presets-label">Mẫu kênh</span>
             {CHANNEL_PRESETS.map((preset) => (
@@ -1434,21 +1469,6 @@ function NewProjectPage() {
                 />
               </Field>
             )}
-            <Field label="Nhịp chia cảnh" hint="Chỉ tham khảo khi chia cảnh. Thời lượng xuất luôn theo audio thực tế.">
-              <select
-                value={settings.targetDurationSec}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    targetDurationSec: Number(e.target.value) as 30 | 60 | 90,
-                  }))
-                }
-              >
-                <option value={30}>30 giây</option>
-                <option value={60}>60 giây</option>
-                <option value={90}>90 giây</option>
-              </select>
-            </Field>
             <Field label="Tỷ lệ">
               <select
                 value={settings.aspectRatio}
@@ -2322,6 +2342,11 @@ function StudioPage() {
     capabilities && !capabilities.ai && !capabilities.localMedia && capabilities.render,
   );
   const shownTab = phoneTab ?? (result ? "preview" : "scenes");
+  // An idea is written to the chosen length: once the voices exist, show how close the real narration came.
+  const voiced = project.scenes.length > 0 && project.scenes.every((scene) => scene.actualDurationMs);
+  const targetCheck = project.inputMode === "idea" && voiced
+    ? { off: Math.abs(totalMs / 1000 - project.settings.targetDurationSec) > project.settings.targetDurationSec * 0.15 }
+    : null;
   return (
     <div className="studio">
       <div className="studio-top">
@@ -2486,6 +2511,11 @@ function StudioPage() {
               <h2>Kịch bản & cảnh</h2>
               <span>
                 {project.scenes.length} cảnh · {formatDuration(totalMs)}
+                {targetCheck && (
+                  <b className={targetCheck.off ? "duration-off" : "duration-ok"} title="Thời lượng lời đọc thật so với thời lượng bạn chọn khi tạo video">
+                    {" "}/ mục tiêu {durationLabel(project.settings.targetDurationSec)}
+                  </b>
+                )}
               </span>
             </div>
             <button onClick={addScene} disabled={processing || Boolean(busyAction)}>

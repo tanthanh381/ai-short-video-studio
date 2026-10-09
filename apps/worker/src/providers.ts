@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { cleanScriptForNarration } from "@studio/shared";
+import { cleanScriptForNarration, contentPlan, durationLabel, type ContentPlan } from "@studio/shared";
 import type { Scene } from "@studio/shared";
 import type { generationPresetSchema } from "@studio/shared";
 import { isOldTimeStory, storyNationality, VIETNAMESE, withNationality, type Nationality } from "./card-layout";
@@ -35,6 +35,9 @@ export type StoryboardInput = {
   audience: string;
   style: string;
   duration: number;
+  /** Voice and reading speed: an idea's narration is sized to how fast this voice reads (shared/duration.ts). */
+  voice?: string;
+  voiceSpeed?: number;
   visualStyle: string;
   lockedScenes?: string[];
   /** Zero-based position of the first locked scene in the complete story. */
@@ -59,7 +62,11 @@ export interface StoryboardProvider {
    */
   /** A short banner title (4-8 words) that states the video's promise, e.g. for story-card videos. */
   writeCardTitle?(input: { sourceText: string; model?: string | null }): Promise<string>;
-    writeScript?(input: { title: string; sourceText: string; duration: number; audience: string; style: string; model?: string | null; attempt?: number }): Promise<string>;
+    writeScript?(input: {
+      title: string; sourceText: string; duration: number; audience: string; style: string; model?: string | null; attempt?: number;
+      /** Word budget and outline for the chosen length; `previousWords` tells a retry how long the last draft was. */
+      plan?: ContentPlan; previousWords?: number;
+    }): Promise<string>;
   /** Title, caption and hashtags to post the finished video with. */
   writePostCaption?(input: { sourceText: string; title: string; model?: string | null }): Promise<{ title: string; description: string; hashtags: string[] } | null>;
   /** Rewrite one scene as an English image prompt when the storyboard model answered in Vietnamese. */
@@ -586,38 +593,70 @@ function promptFlaws(prompts: string[]): number {
   return prompts.filter((prompt) => !isEnglishPrompt(prompt)).length * 2 + repeated;
 }
 
-/** At or above this many words an "idea" is treated as the author's own script. */
-const IDEA_AS_SCRIPT_WORDS = 40;
+/** Drafts asked for before settling on the closest one: length misses are retried with the previous word count. */
+const LENGTH_ATTEMPTS = 4;
 
-/** Ask for narration up to three times; keep the best acceptable draft rather than failing the video. */
+/** The plan for an idea's narration at the project's duration, voice and style. */
+export function ideaPlan(input: StoryboardInput): ContentPlan {
+  return contentPlan(input.duration, input.style, input.voice ?? "", input.voiceSpeed ?? 1);
+}
+
+/** Outline labels a model sometimes writes at the start of a paragraph ("Mở đầu:", "Ý 2 –", "**Kết**:"). */
+const BEAT_LABEL = /^(?:\*\*)?\s*(?:Mở đầu|Bối cảnh|Diễn biến \d+|Bước ngoặt|Suy ngẫm \d+|Ý \d+|Kết(?: luận)?|Đoạn \d+)\s*(?:\*\*)?\s*(?:\([^)]*\))?\s*[:：–—-]\s*/gimu;
+
+export function withoutBeatLabels(script: string): string {
+  return script.replace(BEAT_LABEL, "").trim();
+}
+
+/**
+ * Narration for an idea, sized to the chosen duration (±10%). The model writes to an outline with words per part;
+ * a short draft is asked again with its length, a long one loses body sentences (never the opening or the ending).
+ */
 async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardInput): Promise<string> {
-  // The voice reads about 3.7 words/s; allow some slack above the target length before trimming.
-  const minimumWords = Math.round(input.duration * 1.2);
-  const maximumWords = Math.round(input.duration * 4.4);
+  const plan = ideaPlan(input);
+  const { target, min, max } = plan.words;
   const terms = importantTerms(input.sourceText);
-  let best = "";
-  let bestScore = -Infinity;
-  let bestOverlap = 0;
+  let best = { draft: "", score: -Infinity, overlap: 0, words: 0 };
+  let previousWords: number | undefined;
   let lastError: unknown = new Error("AI chưa viết được lời đọc từ ý tưởng; hãy thử lại");
-  for (let attempt = 0; attempt < BATCH_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < LENGTH_ATTEMPTS; attempt++) {
     try {
-      // A draft that runs long is trimmed at a sentence end rather than thrown away (qwen3.5 tends to write long).
-      const draft = trimToWords(cleanScriptForNarration(await provider.writeScript!({
+      const raw = withoutBeatLabels(cleanScriptForNarration(await provider.writeScript!({
         title: input.title, sourceText: input.sourceText, duration: input.duration,
-        audience: input.audience, style: input.style, model: input.model ?? null, attempt,
-      })), maximumWords);
-      const words = contentWords(draft);
-      if (words.length < minimumWords || words.length > maximumWords) continue;
-      const overlap = terms.length >= 2 ? overlapRatio(terms, new Set(words)) : 1;
+        audience: input.audience, style: input.style, model: input.model ?? null, attempt, plan,
+        ...(previousWords !== undefined ? { previousWords } : {}),
+      })));
+      previousWords = contentWords(raw).length;
+      const draft = fitToWords(withQuestionHook(raw, input.sourceText), max);
+      const words = contentWords(draft).length;
+      const overlap = terms.length >= 2 ? overlapRatio(terms, new Set(contentWords(draft))) : 1;
       // An English word in Vietnamese narration ("sau khi hydrate") is read out oddly: prefer a clean draft.
       const english = foreignWords(draft).length;
-      const score = overlap - 0.3 * english;
-      if (score > bestScore) { best = draft; bestScore = score; bestOverlap = overlap; }
-      if ((overlap >= 0.25 || terms.length < 2) && english === 0) break; // on topic and all Vietnamese: stop asking
+      // Being long enough weighs most: a 60-second video must not come out at 40 seconds.
+      const length = words >= min ? 1 : words / min;
+      const score = overlap - 0.3 * english + 2 * length;
+      if (score > best.score) best = { draft, score, overlap, words };
+      if (words >= min && (overlap >= 0.25 || terms.length < 2) && english === 0) break; // right length, on topic, all Vietnamese
     } catch (error) { lastError = error; }
   }
-  if (best && (bestOverlap >= 0.1 || terms.length < 2)) return withQuestionHook(best, input.sourceText);
+  if (best.draft && (best.overlap >= 0.1 || terms.length < 2) && best.words >= Math.round(target * 0.75)) return best.draft;
+  if (best.draft)
+    throw new Error(`AI chỉ viết được ${best.words} từ cho video ${durationLabel(input.duration)} (cần khoảng ${target} từ). ` +
+      "Hãy thử lại, thêm vài ý vào ý tưởng hoặc chọn thời lượng ngắn hơn.");
   throw lastError;
+}
+
+/**
+ * Cuts a script that runs over `maximum` words by dropping whole body sentences from the end of the body: the opening
+ * (the hook) and the last sentence (the ending) stay, so a trimmed script still lands its point.
+ */
+export function fitToWords(script: string, maximum: number): string {
+  if (contentWords(script).length <= maximum) return script;
+  const sentences = script.trim().split(/(?<=[.!?…])\s+/u);
+  if (sentences.length < 3) return trimToWords(script, maximum);
+  const kept = [...sentences];
+  while (kept.length > 2 && contentWords(kept.join(" ")).length > maximum) kept.splice(kept.length - 2, 1);
+  return contentWords(kept.join(" ")).length <= maximum ? kept.join(" ") : trimToWords(script, maximum);
 }
 
 /** Whole sentences from the start of `script` while they fit in `maximum` words (unchanged if it already fits). */
@@ -668,10 +707,13 @@ export async function createFaithfulStoryboard(
   notes?: StoryboardNotes,
 ): Promise<StoryboardResult> {
   if (input.inputMode !== "full-script") {
-    // Substantial text is already a script: keep the author's words and only split it into scenes.
-    if (contentWords(input.sourceText).length >= IDEA_AS_SCRIPT_WORDS)
+    // Text that already reads at the chosen length is kept word for word; anything shorter or longer (a topic, a
+    // few points, a whole story) is written to the length, so a 30-second idea never becomes a 68-second video.
+    const { min, max } = ideaPlan(input).words;
+    const sourceWords = contentWords(cleanScriptForNarration(input.sourceText)).length;
+    if (sourceWords >= min && sourceWords <= max)
       return createFaithfulStoryboard(provider, { ...input, inputMode: "full-script", rewrite: false }, notes);
-    // A short idea: let the model write plain narration first, then split it like any pasted script.
+    // Let the model write plain narration first, then split it like any pasted script.
     if (provider.writeScript) {
       const script = await writeIdeaScript(provider, input);
       return createFaithfulStoryboard(provider, { ...input, inputMode: "full-script", rewrite: false, sourceText: script }, notes);

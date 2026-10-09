@@ -345,6 +345,8 @@ async function storyboard(job: JobRow, project: Project) {
     audience: project.settings.targetAudience,
     style: project.settings.style,
     duration: project.settings.targetDurationSec,
+    voice: project.settings.voice,
+    voiceSpeed: project.settings.voiceSpeed,
     visualStyle: drawsByHand(project.settings)
       ? WHITEBOARD_STORYBOARD_STYLE
       : `${project.settings.visualStyle}; ${visualPresetPrompt(project.settings.visualPreset)}`,

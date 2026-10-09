@@ -118,8 +118,9 @@ export const projectSettingsSchema = z.object({
   mediaProvider: z.enum(["local", "openai"]).default("local"),
   targetAudience: z.string().max(500).default("Người xem Việt Nam"),
   style: videoStyleSchema.default("ke-chuyen"),
+  // Length of the video written from an idea (packages/shared/src/duration.ts DURATION_OPTIONS).
   targetDurationSec: z
-    .union([z.literal(30), z.literal(60), z.literal(90)])
+    .union([z.literal(15), z.literal(30), z.literal(45), z.literal(60), z.literal(90), z.literal(120), z.literal(180)])
     .default(60),
   aspectRatio: aspectRatioSchema.default("9:16"),
   generationPreset: generationPresetSchema.default("balanced"),

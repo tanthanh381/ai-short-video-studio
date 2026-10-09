@@ -3,6 +3,7 @@ export * from "./voices";
 export * from "./script";
 export * from "./regeneration";
 export * from "./srt";
+export * from "./duration";
 
 import type { VisualPreset } from "./schemas";
 
