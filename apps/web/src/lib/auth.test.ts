@@ -4,6 +4,7 @@ import {
   authRedirectUrl,
   clearAuthCallbackParams,
   readAuthCallbackError,
+  resetPasswordView,
 } from "./auth";
 
 describe("Google OAuth helpers", () => {
@@ -30,5 +31,15 @@ describe("Google OAuth helpers", () => {
     expect(clearAuthCallbackParams("https://example.test/app/?code=abc&keep=1#error=oops&keep=2")).toBe(
       "/app/?keep=1#keep=2",
     );
+  });
+});
+
+describe("password reset page", () => {
+  it("waits for the emailed link to sign the person in instead of bouncing to the login page", () => {
+    // Before: loading + no user went to /login, the session then arrived, and the login page opened the dashboard.
+    expect(resetPasswordView({ loading: true, user: null, isDemo: false })).toBe("wait");
+    expect(resetPasswordView({ loading: false, user: { id: "u" }, isDemo: false })).toBe("form");
+    expect(resetPasswordView({ loading: false, user: null, isDemo: false })).toBe("login"); // expired or missing link
+    expect(resetPasswordView({ loading: false, user: { id: "u" }, isDemo: true })).toBe("login");
   });
 });

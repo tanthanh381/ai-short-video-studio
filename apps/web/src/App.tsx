@@ -74,6 +74,7 @@ import {
 import { useAuth } from "./state/AuthContext";
 import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
+import { resetPasswordView } from "./lib/auth";
 import { withLayoutTemplate, withVisualPreset } from "./lib/visual-preset";
 import { CHANNEL_PRESETS, estimatedNarrationSeconds } from "./lib/channel-presets";
 import { projectIsProcessing } from "./lib/video-submission";
@@ -466,7 +467,7 @@ function LoginPage() {
 }
 
 function ResetPasswordPage() {
-  const { updatePassword, signOut, user, isDemo } = useAuth();
+  const { updatePassword, signOut, user, isDemo, loading } = useAuth();
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -496,7 +497,15 @@ function ResetPasswordPage() {
     await signOut();
   }
 
-  if (isDemo || !user) {
+  const view = resetPasswordView({ loading, user, isDemo });
+  if (view === "wait")
+    return (
+      <div className="center-page">
+        <LoaderCircle className="spin" />
+        <span>Đang xác nhận liên kết đặt lại mật khẩu…</span>
+      </div>
+    );
+  if (view === "login" || !user) {
     return <Navigate to="/login" replace />;
   }
   return (

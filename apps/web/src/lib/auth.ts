@@ -70,3 +70,14 @@ export function clearAuthCallbackParams(href: string) {
   url.hash = nextHash ? `#${nextHash}` : "";
   return `${url.pathname}${url.search}${url.hash}`;
 }
+
+/**
+ * What /reset-password shows. The emailed link signs the person in asynchronously, so the page must wait for the
+ * session check to finish: it used to bounce a not-yet-signed-in visitor to /login at once, the session then arrived,
+ * the login page sent the signed-in person to the dashboard, and the new-password form never appeared.
+ */
+export function resetPasswordView(state: { loading: boolean; user: unknown; isDemo: boolean }): "wait" | "login" | "form" {
+  if (state.isDemo) return "login";
+  if (state.loading) return "wait";
+  return state.user ? "form" : "login";
+}
