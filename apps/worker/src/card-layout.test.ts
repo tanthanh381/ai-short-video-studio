@@ -134,6 +134,10 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     // breathing and swaying differ in phase from scene to scene
     expect(paperStageFilter(1)).not.toBe(paperStageFilter(0));
     expect(paperFeatherFilter()).toContain(`scale=${PAPER.stage}:${PAPER.stage}`);
+    // the sheet is flat: a vignette (smaller angle = stronger) once darkened its corners by 11%
+    const { paperCanvasArgs, PAPER_HEX } = await import("./card-layout");
+    expect(paperCanvasArgs("/tmp/p.png").join(" ")).not.toMatch(/vignette/);
+    expect(PAPER_HEX).toBe("d3bb87"); // RGB 211,187,135 measured from the reference short
     // every picture is shifted onto the same kraft: measured from its lightest corner (hair or a prop is darker)
     const { paperShift } = await import("./card-layout");
     expect(paperShift([[60, 70, 40], [201, 197, 140], [190, 185, 130], [90, 80, 60]])).toEqual([10, -10, -5]);

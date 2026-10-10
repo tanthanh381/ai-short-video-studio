@@ -112,10 +112,13 @@ export function paperStageFilter(index: number): string {
     `[2:v]format=yuv420p[paper];[paper][character]overlay=x='(W-w)/2':y='${PAPER.stageBottom}-h':eval=frame:format=auto,fps=30,format=yuv420p[v]`;
 }
 
-/** The kraft sheet: fine grain and a faint vignette. */
+/**
+ * The kraft sheet: one flat colour with fine grain. No vignette: ffmpeg's `vignette` takes a lens angle where a SMALLER
+ * angle is stronger, and PI/14 darkened the corners by 11% (RGB 188,167,120 against the reference's 211,187,135, found
+ * by the feature QA). The reference sheet is uniform to within 4 levels from corner to corner.
+ */
 export function paperCanvasArgs(output: string, color: string = PAPER_HEX): string[] {
-  // A strong vignette darkened the sheet around the picture, whose own paper then showed as a light square.
-  return ["-y", "-f", "lavfi", "-i", `color=c=0x${color}:s=${PAPER.width}x${PAPER.height}:d=1,noise=alls=5:allf=u,vignette=PI/14`,
+  return ["-y", "-f", "lavfi", "-i", `color=c=0x${color}:s=${PAPER.width}x${PAPER.height}:d=1,noise=alls=5:allf=u`,
     "-frames:v", "1", "-update", "1", output];
 }
 
