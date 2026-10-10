@@ -387,6 +387,50 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertIn("no people", payload["prompt"])
         self.assertNotIn("detailed face", payload["prompt"])
 
+    def test_turbo_pictures_are_drawn_at_the_size_it_was_trained_for_not_at_the_video_resolution(self):
+        # At 576x1024 SDXL-Turbo drew a second man above the first (5 of 8 seeds), stretched bodies and extra limbs.
+        ratios = {"9:16": 9 / 16, "1:1": 1.0, "16:9": 16 / 9, "16:10": 1.6}
+        sent = []
+
+        class ImageResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b"PNG"
+
+        def fake_urlopen(request, timeout=None):
+            sent.append(json.loads(request.data))
+            return ImageResponse()
+
+        with patch.object(self.media, "image_server_state", return_value="ready"), \
+             patch.object(self.media.urllib.request, "urlopen", side_effect=fake_urlopen):
+            for aspect, ratio in ratios.items():
+                self.media.local_image("A young woman sits on a bench", aspect, style="flat")
+                width, height = sent[-1]["width"], sent[-1]["height"]
+                self.assertEqual((width % 64, height % 64), (0, 0), aspect)  # the image server only takes multiples of 64
+                self.assertLessEqual(width * height, 460_000, aspect)  # Turbo is distilled at 262k px
+                self.assertLess(abs(width / height / ratio - 1), 0.036, aspect)  # the video crops at most 3.6% of the picture
+        self.assertEqual(self.media.image_size("9:16"), (512, 896))
+
+    def test_sdxl_base_keeps_its_larger_sizes(self):
+        calls = []
+        with patch.object(self.media, "available_image_models", return_value={"sdxl-turbo": "t", self.media.COMFYUI_IMAGE_MODEL: "b"}), \
+             patch.object(self.media, "comfyui_image", side_effect=lambda *args: calls.append(args) or b"PNG"), \
+             patch.object(self.media, "release_turbo_model"):
+            self.media.local_image("A young woman sits on a bench", "9:16", model=self.media.COMFYUI_IMAGE_MODEL)
+        self.assertEqual(calls[0][2:4], (704, 1216))
+        # about a million pixels is what SDXL Base is trained at: 590k stacked two scenes in one picture, 856k did not
+        ratios = {"9:16": 9 / 16, "1:1": 1.0, "16:9": 16 / 9, "16:10": 1.6}
+        for aspect, ratio in ratios.items():
+            width, height = self.media.image_size(aspect, self.media.COMFYUI_IMAGE_MODEL)
+            self.assertEqual((width % 64, height % 64), (0, 0), aspect)
+            self.assertTrue(700_000 <= width * height <= 1_050_000, aspect)
+            self.assertLess(abs(width / height / ratio - 1), 0.036, aspect)
+
     def test_image_preset_forwards_quality_steps_to_warm_server(self):
         class ImageResponse:
             def __enter__(self):

@@ -135,8 +135,23 @@ def clean_image_prompt(prompt):
     return text
 
 
-# Native portrait/landscape sizes (multiples of 64): no square crop, so nothing is cut or upscaled much.
-IMAGE_SIZES = {"9:16": (576, 1024), "1:1": (704, 704), "16:9": (1024, 576), "16:10": (1024, 640)}
+# Pictures are drawn at the size the model was trained for and scaled to the video afterwards (multiples of 64, aspect within 3.6%).
+# SDXL-Turbo is distilled at 512x512 (262k px). Above that it draws people twice: stacked in a tall frame, side by side in a wide one,
+# with stretched bodies and extra arms and legs. Measured on 8 prompts x 4 seeds of people facing the camera, pictures with MORE
+# faces than people asked for: 9:16 at 576x1024 9 of 32, at 512x896 4 of 32; 16:9 at 1024x576 25 of 32, at 896x512 15, at 768x448 9;
+# square at 704x704 8 of 32, at 576x576 5. For one bench scene, 576x1024 drew a second man above the first in 5 of 8 seeds, 512x896 in 0 of 8.
+TURBO_IMAGE_SIZES = {"9:16": (512, 896), "1:1": (576, 576), "16:9": (768, 448), "16:10": (704, 448)}
+# SDXL Base is trained at about a million pixels, and 576x1024 (590k) is below that: two of four bench pictures came out as two
+# scenes stacked in one. 704x1216 (856k) gave four clean pictures in 145 s each (768x1344: also clean, 199 s; 576x1024: 116 s).
+BASE_IMAGE_SIZES = {"9:16": (704, 1216), "1:1": (896, 896), "16:9": (1216, 704), "16:10": (1088, 704)}
+IMAGE_SIZES = TURBO_IMAGE_SIZES  # the aspect ratios both tables answer to
+
+
+def image_size(aspect_ratio, model=None):
+    """Width and height to draw a picture of this aspect ratio with this model."""
+    return (BASE_IMAGE_SIZES if model == COMFYUI_IMAGE_MODEL else TURBO_IMAGE_SIZES)[aspect_ratio]
+
+
 IMAGE_PRESET = os.getenv("IMAGE_PRESET", "balanced")
 IMAGE_PRESETS = {
     "fast": {"steps": 2, "cfg": 1.1},
@@ -402,7 +417,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         raise ValueError("Phong cách ảnh không hợp lệ")
     if seed is not None:
         seed = int(seed) % (2**31)
-    width, height = IMAGE_SIZES[aspect_ratio]
+    width, height = image_size(aspect_ratio, model)
     selected_preset = preset if preset in IMAGE_PRESETS else IMAGE_PRESET
     preset_options = IMAGE_PRESETS.get(selected_preset, IMAGE_PRESETS["balanced"])
     # Style words first: if the text encoder's 77-token limit forces trimming, the scene detail goes, not the style.

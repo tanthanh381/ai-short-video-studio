@@ -39,6 +39,8 @@ echo "API_KEYS_SECRET=$(openssl rand -base64 36 | tr -d '\n=+/' | cut -c1-48)" >
 
 Máy kiểm thử đã cài Python 3.12, MLX Stable Diffusion với cache SDXL-Turbo và model Whisper trong các thư mục bị `.gitignore`. VieNeu/Piper cung cấp giọng tiếng Việt local. Image server bật anatomy guard + negative prompt để hạn chế mặt, tay và cơ thể biến dạng; dùng `IMAGE_CFG_WEIGHT=0` nếu ưu tiên tốc độ tối đa hơn chất lượng. Đây là phần mềm/model có thể dùng miễn phí; không phát sinh API charge, nhưng thời gian tạo ảnh phụ thuộc phần cứng.
 
+**Kích thước ảnh.** Ảnh được vẽ ở kích thước model đã được huấn luyện rồi mới co giãn ra khung video, không vẽ thẳng ở độ phân giải của video: SDXL-Turbo chỉ được chưng cất ở 512×512, vẽ lớn hơn thì người bị vẽ hai lần (xếp chồng trong khung dọc, đứng cạnh nhau trong khung ngang), thân dài bất thường, thừa tay chân. Video dọc 9:16 vẽ ở 512×896, vuông 1:1 ở 576×576, ngang 16:9 ở 768×448, 16:10 ở 704×448 (bảng `TURBO_IMAGE_SIZES` trong `local-tools/media_server.py`; có số đo ở đó). SDXL Base có bảng riêng (`BASE_IMAGE_SIZES`, dọc 704×1216) vì nó được huấn luyện ở khoảng một triệu điểm ảnh; vẽ nhỏ hơn thì nó xếp hai cảnh chồng lên nhau trong một ảnh. Vẽ ở 704×1216 chậm hơn khoảng 25% so với 576×1024.
+
 Khởi động các tiến trình local trước khi bật worker Docker:
 
 ```bash
