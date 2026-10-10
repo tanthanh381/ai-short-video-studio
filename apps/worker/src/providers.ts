@@ -443,6 +443,120 @@ export function alignKnownText(text: string, timestamps: WordTimestamp[]): WordT
   });
 }
 
+/** Share of the narration's words Whisper must have heard (exactly or nearly) before an audio counts as this narration. */
+export const MIN_SPEECH_COVERAGE = 0.4;
+
+const foldWord = (word: string) => word.normalize("NFD").toLocaleLowerCase("vi").replace(/đ/gu, "d").replace(/\p{M}/gu, "").replace(/[^\p{L}\p{N}]/gu, "");
+const plainWord = (word: string) => word.normalize("NFC").toLocaleLowerCase("vi").replace(/[^\p{L}\p{N}]/gu, "");
+
+function editDistanceAtMostOne(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (i === a.length && i === b.length) return true;
+  return a.slice(i + 1) === b.slice(i) || a.slice(i) === b.slice(i + 1) || a.slice(i + 1) === b.slice(i + 1);
+}
+
+/** 3 = same word, 2 = same word without tone marks, 1 = one letter apart, -1 = a different word. */
+function wordSimilarity(said: string, heard: string): number {
+  if (plainWord(said) === plainWord(heard)) return 3;
+  const a = foldWord(said);
+  const b = foldWord(heard);
+  if (a === b) return 2;
+  return a.length >= 3 && b.length >= 3 && editDistanceAtMostOne(a, b) ? 1 : -1;
+}
+
+/**
+ * Times the narration's own words from what Whisper heard in an audio of it (an uploaded voice-over, or "Đồng bộ lại phụ đề").
+ * Whisper base misreads one to three words of a scene even in clean synthetic speech: of 20 scenes read by two voices none
+ * matched word for word, so the strict alignKnownText rejected every uploaded voice and every re-sync. Here the narration's
+ * words are aligned to the heard words (a global sequence alignment); each gets the time Whisper gave the word in its slot,
+ * and words nobody heard share the gap between their neighbours by length. The subtitle text is always the narration.
+ * Throws only when too little of the narration was heard: the audio is not this narration.
+ */
+export function alignSpeechToScript(text: string, timestamps: WordTimestamp[], minCoverage = MIN_SPEECH_COVERAGE): { words: WordTimestamp[]; matched: number; total: number } {
+  const original = text.match(/\S+\s*/gu) ?? [];
+  const spoken: string[] = [];
+  let prefix = "";
+  for (const token of original) {
+    if (plainWord(token)) {
+      spoken.push(prefix + token);
+      prefix = "";
+    } else if (spoken.length) spoken[spoken.length - 1] += token;
+    else prefix += token;
+  }
+  if (prefix && spoken.length) spoken[spoken.length - 1] += prefix;
+  let previousEnd = 0;
+  const heard = timestamps.filter((word) => plainWord(word.word) && Number.isFinite(word.start) && Number.isFinite(word.end)).map((word) => {
+    const start = Math.max(word.start, previousEnd);
+    const end = Math.max(word.end, start + 0.02);
+    previousEnd = end;
+    return { ...word, start, end };
+  });
+  const n = spoken.length;
+  const m = heard.length;
+  if (!n || !m) throw new Error("Audio không khớp lời đọc của cảnh: không nghe ra được từ nào. Hãy kiểm tra audio đã tải lên đúng cảnh và đúng nội dung.");
+  // Needleman-Wunsch: rows = narration words, columns = heard words.
+  const GAP = -1;
+  const score: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = 1; i <= n; i++) score[i]![0] = i * GAP;
+  for (let j = 1; j <= m; j++) score[0]![j] = j * GAP;
+  for (let i = 1; i <= n; i++)
+    for (let j = 1; j <= m; j++)
+      score[i]![j] = Math.max(
+        score[i - 1]![j - 1]! + wordSimilarity(spoken[i - 1]!, heard[j - 1]!.word),
+        score[i - 1]![j]! + GAP,
+        score[i]![j - 1]! + GAP,
+      );
+  const slot: Array<number | null> = new Array(n).fill(null);
+  let matched = 0;
+  for (let i = n, j = m; i > 0 && j > 0;) {
+    const similarity = wordSimilarity(spoken[i - 1]!, heard[j - 1]!.word);
+    if (score[i]![j] === score[i - 1]![j - 1]! + similarity) {
+      slot[i - 1] = j - 1;
+      if (similarity > 0) matched++;
+      i--; j--;
+    } else if (score[i]![j] === score[i - 1]![j]! + GAP) i--;
+    else j--;
+  }
+  if (matched / n < minCoverage)
+    throw new Error(`Audio không khớp lời đọc của cảnh: chỉ nghe ra được khoảng ${Math.round((100 * matched) / n)}% số từ. Hãy kiểm tra audio đã tải lên đúng cảnh và đúng nội dung.`);
+  const times: Array<{ start: number; end: number }> = new Array(n);
+  let cursor = heard[0]!.start; // words before the first heard slot start where the speech starts
+  for (let i = 0; i < n;) {
+    const j = slot[i];
+    if (j !== null && j !== undefined) {
+      times[i] = { start: heard[j]!.start, end: heard[j]!.end };
+      cursor = heard[j]!.end;
+      i++;
+      continue;
+    }
+    let k = i;
+    while (k < n && (slot[k] === null || slot[k] === undefined)) k++;
+    const nextSlot = k < n ? slot[k] : null;
+    const gapEnd = nextSlot !== null && nextSlot !== undefined ? heard[nextSlot]!.start : heard[m - 1]!.end;
+    const span = Math.max(gapEnd - cursor, 0.04 * (k - i));
+    const weights = spoken.slice(i, k).map((word) => Math.max(1, plainWord(word).length));
+    const total = weights.reduce((sum, weight) => sum + weight, 0);
+    let at = cursor;
+    for (let q = i; q < k; q++) {
+      const length = (span * weights[q - i]!) / total;
+      times[q] = { start: at, end: at + length };
+      at += length;
+    }
+    cursor = at;
+    i = k;
+  }
+  let last = 0;
+  const words = spoken.map((word, index) => {
+    const start = Math.max(times[index]!.start, last);
+    const end = Math.max(times[index]!.end, start + 0.03);
+    last = end;
+    return { word: word.trim(), start, end };
+  });
+  return { words, matched, total: n };
+}
+
 const BATCH_ATTEMPTS = 3;
 
 function isUnusableModelAnswer(error: unknown) {

@@ -1,0 +1,1952 @@
+[
+{
+"engine": "vieneu",
+"narration": "Bạn có bao giờ cảm thấy đầu óc như bị mây mù dù đã ngủ đầy chưa? ",
+"words": [
+{
+"word": "Bạn",
+"start": 0.07,
+"end": 0.22
+},
+{
+"word": "có",
+"start": 0.22,
+"end": 0.37
+},
+{
+"word": "bao",
+"start": 0.37,
+"end": 0.59
+},
+{
+"word": "giờ",
+"start": 0.59,
+"end": 0.81
+},
+{
+"word": "cảm",
+"start": 0.81,
+"end": 0.94
+},
+{
+"word": "thấy",
+"start": 1.02,
+"end": 1.33
+},
+{
+"word": "đầu",
+"start": 1.33,
+"end": 1.55
+},
+{
+"word": "óc",
+"start": 1.55,
+"end": 1.69
+},
+{
+"word": "như",
+"start": 1.69,
+"end": 1.91
+},
+{
+"word": "bị",
+"start": 1.91,
+"end": 2.06
+},
+{
+"word": "may",
+"start": 2.06,
+"end": 2.28
+},
+{
+"word": "muồn",
+"start": 2.28,
+"end": 2.57
+},
+{
+"word": "dù",
+"start": 2.57,
+"end": 2.71
+},
+{
+"word": "đảm",
+"start": 2.71,
+"end": 2.91
+},
+{
+"word": "ngủ",
+"start": 2.92,
+"end": 3.14
+},
+{
+"word": "đ",
+"start": 3.14,
+"end": 3.21
+},
+{
+"word": "ầy",
+"start": 3.21,
+"end": 3.35
+},
+{
+"word": "chưa?",
+"start": 3.35,
+"end": 3.72
+}
+]
+},
+{
+"engine": "vieneu",
+"narration": "Khi cơ thể thiếu nước, não bộ sẽ hoạt động chậm chạp giống như một chiếc xe cộ đang chạy trên đường trơn trượt. ",
+"words": [
+{
+"word": "khi",
+"start": 0.13,
+"end": 0.22
+},
+{
+"word": "cơ",
+"start": 0.22,
+"end": 0.36
+},
+{
+"word": "thể",
+"start": 0.36,
+"end": 0.58
+},
+{
+"word": "thiếu",
+"start": 0.58,
+"end": 0.95
+},
+{
+"word": "nước,",
+"start": 0.95,
+"end": 1.42
+},
+{
+"word": "náo",
+"start": 1.49,
+"end": 1.63
+},
+{
+"word": "bộ",
+"start": 1.63,
+"end": 1.77
+},
+{
+"word": "sẽ",
+"start": 1.77,
+"end": 1.9
+},
+{
+"word": "hoạt",
+"start": 1.91,
+"end": 2.19
+},
+{
+"word": "động",
+"start": 2.19,
+"end": 2.46
+},
+{
+"word": "chậm",
+"start": 2.52,
+"end": 2.72
+},
+{
+"word": "chạp",
+"start": 2.8,
+"end": 3.06
+},
+{
+"word": "giống",
+"start": 3.2,
+"end": 3.4
+},
+{
+"word": "như",
+"start": 3.4,
+"end": 3.59
+},
+{
+"word": "một",
+"start": 3.59,
+"end": 3.78
+},
+{
+"word": "chức",
+"start": 3.78,
+"end": 4.04
+},
+{
+"word": "xe",
+"start": 4.04,
+"end": 4.16
+},
+{
+"word": "cộ",
+"start": 4.16,
+"end": 4.3
+},
+{
+"word": "đang",
+"start": 4.32,
+"end": 4.53
+},
+{
+"word": "chạy",
+"start": 4.53,
+"end": 4.72
+},
+{
+"word": "trên",
+"start": 4.76,
+"end": 4.94
+},
+{
+"word": "đường",
+"start": 4.94,
+"end": 5.16
+},
+{
+"word": "trơn",
+"start": 5.23,
+"end": 5.39
+},
+{
+"word": "trường.",
+"start": 5.44,
+"end": 5.76
+}
+]
+},
+{
+"engine": "vieneu",
+"narration": "Hãy thử tưởng tượng bạn vừa dậy sớm nhưng quên mang chai nước đến văn phòng; trong lúc đó, ",
+"words": [
+{
+"word": "Hãy",
+"start": 0.07,
+"end": 0.22
+},
+{
+"word": "thử",
+"start": 0.22,
+"end": 0.44
+},
+{
+"word": "tượng",
+"start": 0.44,
+"end": 0.82
+},
+{
+"word": "tượng",
+"start": 0.82,
+"end": 1.2
+},
+{
+"word": "bạn",
+"start": 1.2,
+"end": 1.43
+},
+{
+"word": "vừa",
+"start": 1.43,
+"end": 1.63
+},
+{
+"word": "dậy",
+"start": 1.67,
+"end": 1.87
+},
+{
+"word": "sớm,",
+"start": 1.87,
+"end": 2.25
+},
+{
+"word": "nhưng",
+"start": 2.41,
+"end": 2.53
+},
+{
+"word": "quên",
+"start": 2.53,
+"end": 2.76
+},
+{
+"word": "mang",
+"start": 2.76,
+"end": 3.0
+},
+{
+"word": "trai",
+"start": 3.0,
+"end": 3.22
+},
+{
+"word": "nước",
+"start": 3.23,
+"end": 3.39
+},
+{
+"word": "đến",
+"start": 3.46,
+"end": 3.64
+},
+{
+"word": "văn",
+"start": 3.67,
+"end": 3.78
+},
+{
+"word": "phòng,",
+"start": 3.87,
+"end": 4.25
+},
+{
+"word": "trong",
+"start": 4.37,
+"end": 4.61
+},
+{
+"word": "lúc",
+"start": 4.69,
+"end": 4.92
+},
+{
+"word": "đó.",
+"start": 4.92,
+"end": 5.16
+}
+]
+},
+{
+"engine": "vieneu",
+"narration": "sự tập trung của bạn nhanh chóng tan biến khiến các ý tưởng hay không còn đọng lại được. ",
+"words": [
+{
+"word": "Sự",
+"start": 0.05,
+"end": 0.15
+},
+{
+"word": "tập",
+"start": 0.18,
+"end": 0.35
+},
+{
+"word": "trung",
+"start": 0.35,
+"end": 0.7
+},
+{
+"word": "của",
+"start": 0.7,
+"end": 0.89
+},
+{
+"word": "bạn",
+"start": 0.95,
+"end": 1.12
+},
+{
+"word": "ngành",
+"start": 1.12,
+"end": 1.47
+},
+{
+"word": "trống",
+"start": 1.47,
+"end": 1.82
+},
+{
+"word": "tan",
+"start": 1.82,
+"end": 2.03
+},
+{
+"word": "biến",
+"start": 2.03,
+"end": 2.31
+},
+{
+"word": "khiến",
+"start": 2.31,
+"end": 2.66
+},
+{
+"word": "các",
+"start": 2.66,
+"end": 2.87
+},
+{
+"word": "ý",
+"start": 2.87,
+"end": 2.9
+},
+{
+"word": "tưởng",
+"start": 2.99,
+"end": 3.29
+},
+{
+"word": "hay",
+"start": 3.29,
+"end": 3.5
+},
+{
+"word": "không",
+"start": 3.5,
+"end": 3.83
+},
+{
+"word": "còn",
+"start": 3.88,
+"end": 4.06
+},
+{
+"word": "động",
+"start": 4.06,
+"end": 4.24
+},
+{
+"word": "lại",
+"start": 4.49,
+"end": 4.5
+},
+{
+"word": "được.",
+"start": 4.49,
+"end": 4.5
+}
+]
+},
+{
+"engine": "vieneu",
+"narration": "Hôm nay hãy thử uống một cốc nước lọc ngay khi vừa mở mắt dậy để cảm nhận sự tỉnh táo khác biệt trong từng hành động của mình.",
+"words": [
+{
+"word": "Hôm",
+"start": 0.07,
+"end": 0.21
+},
+{
+"word": "nay",
+"start": 0.21,
+"end": 0.41
+},
+{
+"word": "hãy",
+"start": 0.42,
+"end": 0.63
+},
+{
+"word": "thử",
+"start": 0.63,
+"end": 0.84
+},
+{
+"word": "uống",
+"start": 0.84,
+"end": 1.12
+},
+{
+"word": "một",
+"start": 1.12,
+"end": 1.33
+},
+{
+"word": "công",
+"start": 1.33,
+"end": 1.61
+},
+{
+"word": "nước",
+"start": 1.61,
+"end": 1.89
+},
+{
+"word": "lọc,",
+"start": 1.89,
+"end": 2.31
+},
+{
+"word": "ngay",
+"start": 2.31,
+"end": 2.61
+},
+{
+"word": "khi",
+"start": 2.61,
+"end": 2.82
+},
+{
+"word": "vừa",
+"start": 2.83,
+"end": 3.05
+},
+{
+"word": "mở",
+"start": 3.05,
+"end": 3.18
+},
+{
+"word": "mắt",
+"start": 3.18,
+"end": 3.35
+},
+{
+"word": "giải",
+"start": 3.45,
+"end": 3.61
+},
+{
+"word": "để",
+"start": 3.87,
+"end": 3.88
+},
+{
+"word": "cảm",
+"start": 3.9,
+"end": 4.0
+},
+{
+"word": "nhận",
+"start": 4.07,
+"end": 4.26
+},
+{
+"word": "sự",
+"start": 4.26,
+"end": 4.36
+},
+{
+"word": "tình",
+"start": 4.39,
+"end": 4.56
+},
+{
+"word": "tạo",
+"start": 4.64,
+"end": 4.75
+},
+{
+"word": "khác",
+"start": 4.75,
+"end": 4.97
+},
+{
+"word": "biệt",
+"start": 4.97,
+"end": 5.19
+},
+{
+"word": "trong",
+"start": 5.19,
+"end": 5.44
+},
+{
+"word": "từng",
+"start": 5.57,
+"end": 5.69
+},
+{
+"word": "hàng",
+"start": 5.69,
+"end": 5.9
+},
+{
+"word": "động",
+"start": 5.91,
+"end": 6.13
+},
+{
+"word": "của",
+"start": 6.13,
+"end": 6.3
+},
+{
+"word": "mình.",
+"start": 6.3,
+"end": 6.56
+}
+]
+},
+{
+"engine": "vieneu",
+"narration": "Bạn có tin rằng, người giữ cho cả gia đình bình yên chính là người mẹ?\n",
+"words": [
+{
+"word": "Bạn",
+"start": 0.16,
+"end": 0.49
+},
+{
+"word": "có",
+"start": 0.49,
+"end": 0.65
+},
+{
+"word": "tin",
+"start": 0.94,
+"end": 1.27
+},
+{
+"word": "rằng",
+"start": 1.37,
+"end": 1.84
+},
+{
+"word": "người",
+"start": 2.18,
+"end": 2.37
+},
+{
+"word": "dữ",
+"start": 2.37,
+"end": 2.46
+},
+{
+"word": "cho",
+"start": 2.53,
+"end": 2.7
+},
+{
+"word": "cả",
+"start": 2.73,
+"end": 2.83
+},
+{
+"word": "gia",
+"start": 2.9,
+"end": 3.06
+},
+{
+"word": "đình",
+"start": 3.12,
+"end": 3.39
+},
+{
+"word": "bình",
+"start": 3.39,
+"end": 3.66
+},
+{
+"word": "yên",
+"start": 3.71,
+"end": 3.89
+},
+{
+"word": "chính",
+"start": 3.89,
+"end": 4.26
+},
+{
+"word": "là",
+"start": 4.26,
+"end": 4.41
+},
+{
+"word": "người",
+"start": 4.41,
+"end": 4.67
+},
+{
+"word": "mẹ.",
+"start": 4.77,
+"end": 4.96
+}
+]
+},
+{
+"engine": "vieneu",
+"narration": "Mẹ không nói nhiều, nhưng mỗi việc mẹ làm đều dạy ta cách sống.\n",
+"words": [
+{
+"word": "Mẹ",
+"start": 0.07,
+"end": 0.14
+},
+{
+"word": "không",
+"start": 0.14,
+"end": 0.52
+},
+{
+"word": "nói",
+"start": 0.52,
+"end": 0.75
+},
+{
+"word": "nhiều,",
+"start": 0.75,
+"end": 1.33
+},
+{
+"word": "nhưng",
+"start": 1.5,
+"end": 1.68
+},
+{
+"word": "mỗi",
+"start": 1.68,
+"end": 1.89
+},
+{
+"word": "việc",
+"start": 1.89,
+"end": 2.17
+},
+{
+"word": "mẹ",
+"start": 2.17,
+"end": 2.28
+},
+{
+"word": "làm",
+"start": 2.31,
+"end": 2.51
+},
+{
+"word": "điều",
+"start": 2.51,
+"end": 2.78
+},
+{
+"word": "dạy",
+"start": 2.81,
+"end": 3.02
+},
+{
+"word": "ta",
+"start": 3.01,
+"end": 3.12
+},
+{
+"word": "cách",
+"start": 3.18,
+"end": 3.43
+},
+{
+"word": "sống.",
+"start": 3.43,
+"end": 3.83
+}
+]
+},
+{
+"engine": "vieneu",
+"narration": "Mẹ nhường cơm cho con, nhưng chưa bao giờ kể rằng mình đã đói.\n",
+"words": [
+{
+"word": "Mẹ",
+"start": 0.01,
+"end": 0.02
+},
+{
+"word": "nhường",
+"start": 0.04,
+"end": 0.35
+},
+{
+"word": "cơm",
+"start": 0.35,
+"end": 0.54
+},
+{
+"word": "cho",
+"start": 0.59,
+"end": 0.76
+},
+{
+"word": "con,",
+"start": 0.8,
+"end": 1.17
+},
+{
+"word": "nhưng",
+"start": 1.17,
+"end": 1.56
+},
+{
+"word": "chưa",
+"start": 1.56,
+"end": 1.86
+},
+{
+"word": "bao",
+"start": 1.88,
+"end": 2.1
+},
+{
+"word": "giờ",
+"start": 2.1,
+"end": 2.3
+},
+{
+"word": "kể",
+"start": 2.38,
+"end": 2.47
+},
+{
+"word": "rằng",
+"start": 2.47,
+"end": 2.78
+},
+{
+"word": "mình",
+"start": 2.78,
+"end": 3.09
+},
+{
+"word": "đã",
+"start": 3.09,
+"end": 3.24
+},
+{
+"word": "đ",
+"start": 3.24,
+"end": 3.31
+},
+{
+"word": "ối.",
+"start": 3.31,
+"end": 3.56
+}
+]
+},
+{
+"engine": "vieneu",
+"narration": "Mẹ thức khuya mỗi đêm, chỉ để con ngủ yên một giấc.\n",
+"words": [
+{
+"word": "Mẹ",
+"start": 0.08,
+"end": 0.16
+},
+{
+"word": "thức",
+"start": 0.16,
+"end": 0.49
+},
+{
+"word": "khuya",
+"start": 0.63,
+"end": 0.89
+},
+{
+"word": "mỗi",
+"start": 0.93,
+"end": 1.18
+},
+{
+"word": "đêm",
+"start": 1.18,
+"end": 1.44
+},
+{
+"word": "chỉ",
+"start": 1.62,
+"end": 1.69
+},
+{
+"word": "để",
+"start": 1.69,
+"end": 1.86
+},
+{
+"word": "con",
+"start": 1.86,
+"end": 2.12
+},
+{
+"word": "ngủ",
+"start": 2.12,
+"end": 2.37
+},
+{
+"word": "iên",
+"start": 2.37,
+"end": 2.62
+},
+{
+"word": "một",
+"start": 2.62,
+"end": 2.84
+},
+{
+"word": "giấc.",
+"start": 2.95,
+"end": 3.33
+}
+]
+},
+{
+"engine": "vieneu",
+"narration": "Đến khi con lớn, con mới hiểu: tình thương không cần lời, chỉ cần nhớ về mẹ.",
+"words": [
+{
+"word": "Điện",
+"start": 0.07,
+"end": 0.27
+},
+{
+"word": "khi",
+"start": 0.37,
+"end": 0.52
+},
+{
+"word": "con",
+"start": 0.52,
+"end": 0.75
+},
+{
+"word": "lớn,",
+"start": 0.75,
+"end": 1.14
+},
+{
+"word": "con",
+"start": 1.19,
+"end": 1.33
+},
+{
+"word": "10",
+"start": 1.33,
+"end": 1.72
+},
+{
+"word": "hiểu,",
+"start": 1.72,
+"end": 2.09
+},
+{
+"word": "tình",
+"start": 2.09,
+"end": 2.2
+},
+{
+"word": "thương",
+"start": 2.28,
+"end": 2.55
+},
+{
+"word": "không",
+"start": 2.55,
+"end": 2.79
+},
+{
+"word": "cần",
+"start": 2.79,
+"end": 2.93
+},
+{
+"word": "lời",
+"start": 2.93,
+"end": 3.03
+},
+{
+"word": "chỉ",
+"start": 3.25,
+"end": 3.37
+},
+{
+"word": "cần",
+"start": 3.41,
+"end": 3.68
+},
+{
+"word": "nhớ",
+"start": 3.68,
+"end": 3.94
+},
+{
+"word": "về",
+"start": 3.94,
+"end": 4.1
+},
+{
+"word": "mẹ.",
+"start": 4.13,
+"end": 4.32
+}
+]
+},
+{
+"engine": "piper",
+"narration": "Bạn có bao giờ cảm thấy đầu óc như bị mây mù dù đã ngủ đầy chưa? ",
+"words": [
+{
+"word": "Bạn",
+"start": 0.02,
+"end": 0.21
+},
+{
+"word": "có",
+"start": 0.28,
+"end": 0.41
+},
+{
+"word": "bao",
+"start": 0.47,
+"end": 0.64
+},
+{
+"word": "giờ",
+"start": 0.71,
+"end": 0.89
+},
+{
+"word": "cảm",
+"start": 0.99,
+"end": 1.14
+},
+{
+"word": "thấy",
+"start": 1.22,
+"end": 1.54
+},
+{
+"word": "đấuốc",
+"start": 1.54,
+"end": 2.0
+},
+{
+"word": "như",
+"start": 2.0,
+"end": 2.2
+},
+{
+"word": "bị",
+"start": 2.2,
+"end": 2.33
+},
+{
+"word": "mềm",
+"start": 2.33,
+"end": 2.52
+},
+{
+"word": "mùi",
+"start": 2.52,
+"end": 2.66
+},
+{
+"word": "dù",
+"start": 2.72,
+"end": 2.84
+},
+{
+"word": "đánh",
+"start": 2.84,
+"end": 3.11
+},
+{
+"word": "ngủ",
+"start": 3.11,
+"end": 3.29
+},
+{
+"word": "đ",
+"start": 3.3,
+"end": 3.37
+},
+{
+"word": "ầy",
+"start": 3.37,
+"end": 3.49
+},
+{
+"word": "chưa.",
+"start": 3.49,
+"end": 3.83
+}
+]
+},
+{
+"engine": "piper",
+"narration": "Khi cơ thể thiếu nước, não bộ sẽ hoạt động chậm chạp giống như một chiếc xe cộ đang chạy trên đường trơn trượt. ",
+"words": [
+{
+"word": "khi",
+"start": 0.04,
+"end": 0.12
+},
+{
+"word": "cơ",
+"start": 0.21,
+"end": 0.29
+},
+{
+"word": "thể",
+"start": 0.29,
+"end": 0.47
+},
+{
+"word": "thiếu",
+"start": 0.47,
+"end": 0.76
+},
+{
+"word": "nước,",
+"start": 0.76,
+"end": 1.14
+},
+{
+"word": "náo",
+"start": 1.14,
+"end": 1.36
+},
+{
+"word": "bộ",
+"start": 1.36,
+"end": 1.5
+},
+{
+"word": "sẽ",
+"start": 1.5,
+"end": 1.6
+},
+{
+"word": "hoạt",
+"start": 1.7,
+"end": 1.95
+},
+{
+"word": "động",
+"start": 1.95,
+"end": 2.24
+},
+{
+"word": "chậm",
+"start": 2.3,
+"end": 2.53
+},
+{
+"word": "chạp",
+"start": 2.57,
+"end": 2.81
+},
+{
+"word": "sống",
+"start": 2.9,
+"end": 3.2
+},
+{
+"word": "như",
+"start": 3.2,
+"end": 3.39
+},
+{
+"word": "một",
+"start": 3.39,
+"end": 3.58
+},
+{
+"word": "chiếc",
+"start": 3.58,
+"end": 3.89
+},
+{
+"word": "xe",
+"start": 3.89,
+"end": 3.96
+},
+{
+"word": "cộ",
+"start": 4.06,
+"end": 4.16
+},
+{
+"word": "đăng",
+"start": 4.16,
+"end": 4.48
+},
+{
+"word": "trạy",
+"start": 4.48,
+"end": 4.68
+},
+{
+"word": "trên",
+"start": 4.68,
+"end": 4.88
+},
+{
+"word": "đường",
+"start": 4.88,
+"end": 5.13
+},
+{
+"word": "chân",
+"start": 5.13,
+"end": 5.33
+},
+{
+"word": "trượt.",
+"start": 5.33,
+"end": 5.65
+}
+]
+},
+{
+"engine": "piper",
+"narration": "Hãy thử tưởng tượng bạn vừa dậy sớm nhưng quên mang chai nước đến văn phòng; trong lúc đó, ",
+"words": [
+{
+"word": "Hãy",
+"start": 0.03,
+"end": 0.2
+},
+{
+"word": "thử",
+"start": 0.29,
+"end": 0.42
+},
+{
+"word": "tượng",
+"start": 0.42,
+"end": 0.76
+},
+{
+"word": "tượng",
+"start": 0.84,
+"end": 1.12
+},
+{
+"word": "bạn",
+"start": 1.12,
+"end": 1.33
+},
+{
+"word": "vừa",
+"start": 1.33,
+"end": 1.54
+},
+{
+"word": "dậy",
+"start": 1.54,
+"end": 1.75
+},
+{
+"word": "sớm",
+"start": 1.75,
+"end": 2.0
+},
+{
+"word": "nhưng",
+"start": 2.0,
+"end": 2.34
+},
+{
+"word": "quân",
+"start": 2.34,
+"end": 2.6
+},
+{
+"word": "mang",
+"start": 2.6,
+"end": 2.83
+},
+{
+"word": "trài",
+"start": 2.89,
+"end": 3.13
+},
+{
+"word": "nước",
+"start": 3.13,
+"end": 3.26
+},
+{
+"word": "đến",
+"start": 3.41,
+"end": 3.6
+},
+{
+"word": "phân",
+"start": 3.6,
+"end": 3.84
+},
+{
+"word": "phòng",
+"start": 3.93,
+"end": 4.18
+},
+{
+"word": "trong",
+"start": 4.19,
+"end": 4.46
+},
+{
+"word": "lúc",
+"start": 4.57,
+"end": 4.73
+},
+{
+"word": "đó.",
+"start": 4.73,
+"end": 4.94
+}
+]
+},
+{
+"engine": "piper",
+"narration": "sự tập trung của bạn nhanh chóng tan biến khiến các ý tưởng hay không còn đọng lại được. ",
+"words": [
+{
+"word": "sự",
+"start": 0.04,
+"end": 0.12
+},
+{
+"word": "tập",
+"start": 0.12,
+"end": 0.3
+},
+{
+"word": "trung",
+"start": 0.3,
+"end": 0.6
+},
+{
+"word": "của",
+"start": 0.6,
+"end": 0.78
+},
+{
+"word": "bạn",
+"start": 0.78,
+"end": 0.92
+},
+{
+"word": "nhành",
+"start": 1.0,
+"end": 1.26
+},
+{
+"word": "trắng",
+"start": 1.26,
+"end": 1.54
+},
+{
+"word": "tăng",
+"start": 1.62,
+"end": 1.8
+},
+{
+"word": "biến",
+"start": 1.8,
+"end": 2.04
+},
+{
+"word": "khiến",
+"start": 2.17,
+"end": 2.34
+},
+{
+"word": "các",
+"start": 2.34,
+"end": 2.47
+},
+{
+"word": "ý",
+"start": 2.55,
+"end": 2.58
+},
+{
+"word": "t",
+"start": 2.58,
+"end": 2.64
+},
+{
+"word": "ưởng",
+"start": 2.64,
+"end": 3.0
+},
+{
+"word": "hay",
+"start": 3.0,
+"end": 3.21
+},
+{
+"word": "không",
+"start": 3.21,
+"end": 3.49
+},
+{
+"word": "còn",
+"start": 3.58,
+"end": 3.76
+},
+{
+"word": "đọng",
+"start": 3.76,
+"end": 4.02
+},
+{
+"word": "lại",
+"start": 4.02,
+"end": 4.23
+},
+{
+"word": "được.",
+"start": 4.23,
+"end": 4.49
+}
+]
+},
+{
+"engine": "piper",
+"narration": "Hôm nay hãy thử uống một cốc nước lọc ngay khi vừa mở mắt dậy để cảm nhận sự tỉnh táo khác biệt trong từng hành động của mình.",
+"words": [
+{
+"word": "Hôm",
+"start": 0.03,
+"end": 0.21
+},
+{
+"word": "nay",
+"start": 0.21,
+"end": 0.42
+},
+{
+"word": "hãy",
+"start": 0.42,
+"end": 0.56
+},
+{
+"word": "thửủng",
+"start": 0.65,
+"end": 1.05
+},
+{
+"word": "một",
+"start": 1.05,
+"end": 1.24
+},
+{
+"word": "cốc",
+"start": 1.33,
+"end": 1.4
+},
+{
+"word": "nước",
+"start": 1.54,
+"end": 1.67
+},
+{
+"word": "lọc",
+"start": 1.77,
+"end": 1.97
+},
+{
+"word": "ngày",
+"start": 1.97,
+"end": 2.16
+},
+{
+"word": "khi",
+"start": 2.27,
+"end": 2.45
+},
+{
+"word": "vừa",
+"start": 2.45,
+"end": 2.66
+},
+{
+"word": "mở",
+"start": 2.66,
+"end": 2.78
+},
+{
+"word": "mắt",
+"start": 2.8,
+"end": 2.89
+},
+{
+"word": "d",
+"start": 3.04,
+"end": 3.08
+},
+{
+"word": "ậy",
+"start": 3.08,
+"end": 3.19
+},
+{
+"word": "để",
+"start": 3.28,
+"end": 3.46
+},
+{
+"word": "cằm",
+"start": 3.56,
+"end": 3.8
+},
+{
+"word": "dẫn",
+"start": 3.8,
+"end": 4.0
+},
+{
+"word": "sự",
+"start": 4.11,
+"end": 4.24
+},
+{
+"word": "tìm",
+"start": 4.34,
+"end": 4.65
+},
+{
+"word": "táo",
+"start": 4.65,
+"end": 5.0
+},
+{
+"word": "khác",
+"start": 5.0,
+"end": 5.16
+},
+{
+"word": "biệt",
+"start": 5.16,
+"end": 5.31
+},
+{
+"word": "trong",
+"start": 5.44,
+"end": 5.65
+},
+{
+"word": "tường",
+"start": 5.74,
+"end": 5.99
+},
+{
+"word": "hành",
+"start": 5.99,
+"end": 6.2
+},
+{
+"word": "động",
+"start": 6.2,
+"end": 6.27
+},
+{
+"word": "của",
+"start": 6.43,
+"end": 6.59
+},
+{
+"word": "mình.",
+"start": 6.59,
+"end": 6.8
+}
+]
+},
+{
+"engine": "piper",
+"narration": "Bạn có tin rằng, người giữ cho cả gia đình bình yên chính là người mẹ?\n",
+"words": [
+{
+"word": "bạn",
+"start": 0.01,
+"end": 0.19
+},
+{
+"word": "có",
+"start": 0.19,
+"end": 0.31
+},
+{
+"word": "tình",
+"start": 0.31,
+"end": 0.56
+},
+{
+"word": "sàng",
+"start": 0.56,
+"end": 0.81
+},
+{
+"word": "người",
+"start": 0.81,
+"end": 1.13
+},
+{
+"word": "giữ",
+"start": 1.13,
+"end": 1.31
+},
+{
+"word": "trọng",
+"start": 1.31,
+"end": 1.55
+},
+{
+"word": "cả",
+"start": 1.64,
+"end": 1.73
+},
+{
+"word": "gia",
+"start": 1.73,
+"end": 1.92
+},
+{
+"word": "đình",
+"start": 1.92,
+"end": 2.17
+},
+{
+"word": "bình",
+"start": 2.17,
+"end": 2.38
+},
+{
+"word": "yên",
+"start": 2.46,
+"end": 2.6
+},
+{
+"word": "chính",
+"start": 2.6,
+"end": 2.92
+},
+{
+"word": "là",
+"start": 2.93,
+"end": 3.04
+},
+{
+"word": "người",
+"start": 3.04,
+"end": 3.36
+},
+{
+"word": "mẹ.",
+"start": 3.36,
+"end": 3.49
+}
+]
+},
+{
+"engine": "piper",
+"narration": "Mẹ không nói nhiều, nhưng mỗi việc mẹ làm đều dạy ta cách sống.\n",
+"words": [
+{
+"word": "Mẹ",
+"start": 0.06,
+"end": 0.12
+},
+{
+"word": "không",
+"start": 0.12,
+"end": 0.45
+},
+{
+"word": "nói",
+"start": 0.45,
+"end": 0.65
+},
+{
+"word": "nhiều,",
+"start": 0.65,
+"end": 1.07
+},
+{
+"word": "nhưng",
+"start": 1.2,
+"end": 1.44
+},
+{
+"word": "mỗi",
+"start": 1.44,
+"end": 1.61
+},
+{
+"word": "việc",
+"start": 1.7,
+"end": 1.9
+},
+{
+"word": "mẹ",
+"start": 1.9,
+"end": 2.02
+},
+{
+"word": "làm",
+"start": 2.02,
+"end": 2.22
+},
+{
+"word": "điều",
+"start": 2.22,
+"end": 2.49
+},
+{
+"word": "sạch",
+"start": 2.49,
+"end": 2.68
+},
+{
+"word": "ta",
+"start": 2.77,
+"end": 2.86
+},
+{
+"word": "cách",
+"start": 2.86,
+"end": 3.12
+},
+{
+"word": "sống.",
+"start": 3.17,
+"end": 3.64
+}
+]
+},
+{
+"engine": "piper",
+"narration": "Mẹ nhường cơm cho con, nhưng chưa bao giờ kể rằng mình đã đói.\n",
+"words": [
+{
+"word": "Nẹ",
+"start": 0.01,
+"end": 0.13
+},
+{
+"word": "nhừng",
+"start": 0.18,
+"end": 0.45
+},
+{
+"word": "cầm",
+"start": 0.54,
+"end": 0.7
+},
+{
+"word": "cho",
+"start": 0.7,
+"end": 0.86
+},
+{
+"word": "con,",
+"start": 0.97,
+"end": 1.29
+},
+{
+"word": "nhưng",
+"start": 1.29,
+"end": 1.62
+},
+{
+"word": "chưa",
+"start": 1.62,
+"end": 1.82
+},
+{
+"word": "bao",
+"start": 1.89,
+"end": 2.07
+},
+{
+"word": "giờ",
+"start": 2.08,
+"end": 2.28
+},
+{
+"word": "kể",
+"start": 2.28,
+"end": 2.35
+},
+{
+"word": "rằng",
+"start": 2.42,
+"end": 2.66
+},
+{
+"word": "mình",
+"start": 2.66,
+"end": 2.92
+},
+{
+"word": "đã",
+"start": 2.92,
+"end": 3.05
+},
+{
+"word": "đo",
+"start": 3.05,
+"end": 3.17
+},
+{
+"word": "áy.",
+"start": 3.17,
+"end": 3.39
+}
+]
+},
+{
+"engine": "piper",
+"narration": "Mẹ thức khuya mỗi đêm, chỉ để con ngủ yên một giấc.\n",
+"words": [
+{
+"word": "Nãy",
+"start": 0.0,
+"end": 0.16
+},
+{
+"word": "thức",
+"start": 0.26,
+"end": 0.36
+},
+{
+"word": "quýa",
+"start": 0.51,
+"end": 0.73
+},
+{
+"word": "mụi",
+"start": 0.73,
+"end": 0.93
+},
+{
+"word": "đêm",
+"start": 0.93,
+"end": 1.12
+},
+{
+"word": "chỉ",
+"start": 1.12,
+"end": 1.33
+},
+{
+"word": "để",
+"start": 1.33,
+"end": 1.47
+},
+{
+"word": "công",
+"start": 1.47,
+"end": 1.71
+},
+{
+"word": "gủ",
+"start": 1.81,
+"end": 1.87
+},
+{
+"word": "yên",
+"start": 1.87,
+"end": 2.07
+},
+{
+"word": "mục",
+"start": 2.07,
+"end": 2.26
+},
+{
+"word": "dớt.",
+"start": 2.27,
+"end": 2.67
+}
+]
+},
+{
+"engine": "piper",
+"narration": "Đến khi con lớn, con mới hiểu: tình thương không cần lời, chỉ cần nhớ về mẹ.",
+"words": [
+{
+"word": "Đến",
+"start": 0.04,
+"end": 0.18
+},
+{
+"word": "ký",
+"start": 0.18,
+"end": 0.31
+},
+{
+"word": "còn",
+"start": 0.3,
+"end": 0.49
+},
+{
+"word": "lưỡng,",
+"start": 0.49,
+"end": 1.05
+},
+{
+"word": "còn",
+"start": 1.08,
+"end": 1.23
+},
+{
+"word": "mới",
+"start": 1.23,
+"end": 1.41
+},
+{
+"word": "hiểu",
+"start": 1.49,
+"end": 1.66
+},
+{
+"word": "tình",
+"start": 1.66,
+"end": 1.91
+},
+{
+"word": "thương",
+"start": 1.91,
+"end": 2.23
+},
+{
+"word": "không",
+"start": 2.31,
+"end": 2.6
+},
+{
+"word": "cần",
+"start": 2.6,
+"end": 2.79
+},
+{
+"word": "lời",
+"start": 2.79,
+"end": 3.01
+},
+{
+"word": "chỉ",
+"start": 3.15,
+"end": 3.3
+},
+{
+"word": "cần",
+"start": 3.3,
+"end": 3.52
+},
+{
+"word": "giữa",
+"start": 3.52,
+"end": 3.82
+},
+{
+"word": "về",
+"start": 3.82,
+"end": 3.97
+},
+{
+"word": "mẹ.",
+"start": 3.97,
+"end": 4.13
+}
+]
+}
+]

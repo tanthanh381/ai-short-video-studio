@@ -14,7 +14,7 @@ import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
 import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE, paperStagePrompt, storyNationality, usesPaperStage, usesStoryCard, withNationality } from "./card-layout";
 import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
-import { alignKnownText, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, imageAspectFor, vietnameseByDefault, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
+import { alignSpeechToScript, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, imageAspectFor, vietnameseByDefault, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
@@ -639,7 +639,10 @@ async function generateMedia(job: JobRow, project: Project) {
       );
       if (!subtitles.length && project.settings.subtitle.enabled) {
         const words = await media.transcribe(audio, project.settings.localModels);
-        subtitles = groupWords(alignKnownText(scene.narration, words));
+        // Whisper misreads a word or two of almost every scene, so the narration is aligned to what was heard, not demanded to equal it.
+        const aligned = alignSpeechToScript(scene.narration, words);
+        if (aligned.matched < aligned.total) log.info({ jobId: job.id, sceneId: scene.id, heard: aligned.matched, words: aligned.total }, "subtitles_aligned_to_speech");
+        subtitles = groupWords(aligned.words);
       }
       checkDeadline(job);
       await updateScene(scene.id, {
