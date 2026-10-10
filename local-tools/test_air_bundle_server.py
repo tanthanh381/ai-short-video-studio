@@ -148,6 +148,19 @@ class Installer(Fixture):
         self.assertIn("models.tar?image=yes", result.stdout)
         self.assertIn("Xong. Máy 'air'", result.stdout)
 
+    def test_piped_into_bash_a_command_that_reads_stdin_does_not_eat_the_rest_of_the_script(self):
+        # `curl … | bash` on the Air stopped after step 2: brew read the pipe and swallowed steps 3-7
+        home = Path(self.tmp.name) / "air-home"
+        home.mkdir()
+        script = bundle_server.render_installer((REPO / "scripts/air-node/install-air-node.sh").read_text(), "http://mini:8899/secret", "node-token-123", "air")
+        env = {**os.environ, "AIR_NODE_HOME": str(home), "AIR_NODE_DRY_RUN": "1", "AIR_NODE_TOOLKIT": str(REPO / "local-tools/toolkit"),
+               "AIR_NODE_TEST_READ_STDIN": "1", "NODE_IMAGE": "yes"}
+        result = subprocess.run(["bash"], input=script, capture_output=True, text=True, env=env, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("7/7 Bật máy phụ", result.stdout)
+        self.assertIn("Xong. Máy 'air'", result.stdout)
+        self.assertTrue((home / ".studio-node-token").exists())
+
     def test_a_small_machine_gets_no_picture_model_and_the_main_machine_keeps_the_pictures(self):
         _, result = self.run_installer(NODE_IMAGE="no")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
