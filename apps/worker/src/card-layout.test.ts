@@ -198,7 +198,8 @@ describe("paper stage (Đạo lý cổ phong)", () => {
         const sums = [0, 0, 0], squares = [0, 0, 0];
         for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) for (let c = 0; c < 3; c++) {
           const v = raw[(y * PAPER.width + x) * 3 + c]!;
-          sums[c] += v; squares[c] += v * v;
+          sums[c] = sums[c]! + v;
+          squares[c] = squares[c]! + v * v;
         }
         const n = w * h;
         return sums.map((sum, c) => ({ mean: sum / n, std: Math.sqrt(squares[c]! / n - (sum / n) ** 2) }));
