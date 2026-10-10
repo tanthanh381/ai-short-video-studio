@@ -20,7 +20,14 @@ import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import node_status  # noqa: E402
+
 PORT = int(os.environ.get("WHITEBOARD_PORT", "8766"))
+# Loopback by default. A second Mac that draws part of the scenes binds its Tailscale address and sets NODE_TOKEN
+# (the same one as the media bridge); /health stays open, /render needs `Authorization: Bearer <NODE_TOKEN>`.
+HOST = os.environ.get("WHITEBOARD_HOST", "127.0.0.1")
+NODE_TOKEN = os.environ.get("NODE_TOKEN", "")
 SCRIPT_DIR = Path(__file__).resolve().parent / "whiteboard"
 RENDER_SCRIPT = SCRIPT_DIR / "render_stream_whiteboard.py"
 # The hand picture ships with the website; local-tools/assets/ may hold a custom one.
@@ -49,6 +56,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b'{"error":"Not found"}')
 
     def do_POST(self) -> None:  # noqa: N802
+        if not node_status.token_ok(self.headers.get("Authorization"), NODE_TOKEN):
+            self._send(401, b'{"error":"Thieu hoac sai NODE_TOKEN"}')
+            return
         if self.path != "/render":
             self._send(404, b'{"error":"Not found"}')
             return
@@ -121,6 +131,7 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
         sys.exit(1)
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"Whiteboard render server: http://127.0.0.1:{PORT}/", flush=True)
+    node_status.require_token_for_host(HOST, NODE_TOKEN, os.environ.get("NODE_ALLOW_NO_TOKEN") == "1")
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    print(f"Whiteboard render server: http://{HOST}:{PORT}/", flush=True)
     server.serve_forever()

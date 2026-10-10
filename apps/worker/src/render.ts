@@ -7,7 +7,7 @@ import { drawsByHand, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
 import { EXPORT_LIMIT_BYTES, buildAudioMixFilter, buildAmbientMusicArgs, exportRateArgs, exportTooLargeMessage, validateCaptionTiming } from "./render-quality";
 import { CARD, PAPER, brandInitials, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
-import { drawSceneByHand } from "./whiteboard";
+import { drawSceneByHand, type WhiteboardRunner } from "./whiteboard";
 
 const exec = promisify(execFile);
 export type RenderFiles = {
@@ -250,6 +250,8 @@ export async function renderProject(
   project: Project,
   getFile: (path: string) => Promise<Uint8Array>,
   onProgress: (value: number, stage: string) => Promise<void>,
+  /** Where scenes are drawn by hand; the load balancer spreads them over machines. Default: this machine's server. */
+  options: { whiteboard?: WhiteboardRunner } = {},
 ): Promise<RenderFiles> {
   if (!project.scenes.length) throw new Error("Dự án chưa có cảnh");
   const orders = project.scenes.map((scene) => scene.order);
@@ -289,7 +291,7 @@ export async function renderProject(
         await exec(config.FFMPEG_PATH, ["-y", "-i", imagePath, "-vf",
           `scale=${size.width}:${size.height}:force_original_aspect_ratio=increase:flags=lanczos,crop=${size.width}:${size.height},unsharp=5:5:0.6:5:5:0.0`,
           "-frames:v", "1", stillPath], { timeout: 60_000 });
-        await drawSceneByHand(config, scene, stillPath, size, ms, motionPath);
+        await drawSceneByHand(config, scene, stillPath, size, ms, motionPath, options.whiteboard);
       }
       // Paper stage: the character on a paper of its own backdrop colour (input 2), breathing; see card-layout.ts.
       let paperCanvas: string | null = null;

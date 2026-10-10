@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
+import { NodeHttpError } from "./node-errors";
 
 export const WHITEBOARD_DOWN =
   "Máy vẽ tay (cổng 8766) chưa chạy trên máy mini. Hãy mở lại máy tạo video, hoặc chọn phong cách hình ảnh khác rồi bấm Tiếp tục.";
@@ -73,6 +74,10 @@ export async function whiteboardReady(config: WorkerConfig): Promise<boolean> {
   }
 }
 
+export type WhiteboardTarget = { url: string; token?: string | undefined };
+/** Runs `work` against one hand-drawing server; the load balancer picks which machine's. */
+export type WhiteboardRunner = <R>(work: (target: WhiteboardTarget) => Promise<R>) => Promise<R>;
+
 /**
  * Draws one scene by hand. `stillPath` is already cropped to the segment's size, so the server draws at full output
  * resolution and a region annotation (made on the original picture) scales with it.
@@ -84,30 +89,36 @@ export async function drawSceneByHand(
   size: { width: number; height: number },
   sceneMs: number,
   outputPath: string,
+  run: WhiteboardRunner = (work) => work({ url: config.WHITEBOARD_SERVER_URL }),
 ): Promise<void> {
   const annotation = (scene.annotationJson as object | null) ?? autoAnnotation(scene.id, size.width, size.height, sceneMs);
-  let response: Response;
-  try {
-    response = await fetch(`${config.WHITEBOARD_SERVER_URL.replace(/\/$/, "")}/render`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        image_b64: (await readFile(stillPath)).toString("base64"),
-        annotation,
-        total_ms: sceneMs,
-        fps: 30,
-        cap_long_edge: Math.max(size.width, size.height),
-        // The hand is sized for a 1080-wide frame; the story card's picture band is shorter, so shrink it with the band.
-        hand_height: Math.round(HAND_HEIGHT_1080 * Math.min(size.width, size.height) / 1080),
-      }),
-      signal: AbortSignal.timeout(config.RENDER_TIMEOUT_MS ?? 900_000),
-    });
-  } catch {
-    throw new Error(WHITEBOARD_DOWN);
-  }
-  if (!response.ok) {
-    const detail = (await response.text().catch(() => "")).trim().split("\n").slice(-2).join(" ").slice(0, 300);
-    throw new Error(`Máy vẽ tay lỗi ở cảnh ${scene.order + 1}${detail ? `: ${detail}` : ""}`);
-  }
-  await writeFile(outputPath, new Uint8Array(await response.arrayBuffer()));
+  const body = JSON.stringify({
+    image_b64: (await readFile(stillPath)).toString("base64"),
+    annotation,
+    total_ms: sceneMs,
+    fps: 30,
+    cap_long_edge: Math.max(size.width, size.height),
+    // The hand is sized for a 1080-wide frame; the story card's picture band is shorter, so shrink it with the band.
+    hand_height: Math.round(HAND_HEIGHT_1080 * Math.min(size.width, size.height) / 1080),
+  });
+  const video = await run(async (target) => {
+    let response: Response;
+    try {
+      response = await fetch(`${target.url.replace(/\/$/, "")}/render`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(target.token ? { Authorization: `Bearer ${target.token}` } : {}) },
+        body,
+        signal: AbortSignal.timeout(config.RENDER_TIMEOUT_MS ?? 900_000),
+      });
+    } catch {
+      // Not reachable: the same words as before, but marked so the load balancer can hand the scene to another machine.
+      throw new NodeHttpError(WHITEBOARD_DOWN, 503);
+    }
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => "")).trim().split("\n").slice(-2).join(" ").slice(0, 300);
+      throw new NodeHttpError(`Máy vẽ tay lỗi ở cảnh ${scene.order + 1}${detail ? `: ${detail}` : ""}`, response.status);
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  });
+  await writeFile(outputPath, video);
 }

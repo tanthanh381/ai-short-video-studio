@@ -11,7 +11,10 @@ import { getConfig } from "./config";
 import { AnthropicStoryboardAdapter } from "./anthropic";
 import { loadUserKey } from "./user-keys";
 import { OllamaStoryboardAdapter } from "./ollama";
-import { LocalMediaAdapter } from "./local-media";
+import { markFatal } from "./node-errors";
+import type { Lane, LaneRequest } from "./node-plan";
+import { createProbe, NodePool, parseNodeSpecs, type Outcome } from "./node-pool";
+import { PooledMediaAdapter } from "./pooled-media";
 import { groupWords, OpenAIAdapter } from "./openai";
 import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE, paperStagePrompt, storyNationality, usesPaperStage, usesStoryCard, withNationality } from "./card-layout";
 import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
@@ -20,7 +23,7 @@ import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
 import { trimWavSilence } from "./silence";
-import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, whiteboardReady, withoutDrawingHand } from "./whiteboard";
+import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, whiteboardReady, withoutDrawingHand, type WhiteboardRunner } from "./whiteboard";
 
 const config = getConfig();
 const log = pino({
@@ -54,12 +57,45 @@ async function anthropicFor(userId: string): Promise<AnthropicStoryboardAdapter 
   const key = await loadUserKey(db, config.API_KEYS_SECRET, userId, "anthropic");
   return key ? new AnthropicStoryboardAdapter(key, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL) : anthropic;
 }
-const ollama = new OllamaStoryboardAdapter(
-  config.OLLAMA_BASE_URL,
-  config.OLLAMA_MODEL,
-  { numCtx: config.OLLAMA_NUM_CTX, keepAlive: config.OLLAMA_KEEP_ALIVE },
-);
-const localMedia = new LocalMediaAdapter(config.LOCAL_MEDIA_BASE_URL);
+// This machine and, when AI_NODES lists them, other Macs that share the AI work. Without AI_NODES the pool only
+// forwards to this machine: same calls, same order, no probing.
+const pool = new NodePool(parseNodeSpecs(config), {
+  mode: config.AI_BALANCE_MODE,
+  strict: config.AI_NODES_STRICT,
+  minBatteryPercent: config.AI_NODE_MIN_BATTERY,
+  probe: createProbe(),
+  log,
+});
+const ollamaAdapters = new Map<string, OllamaStoryboardAdapter>();
+/** The Ollama adapter of one machine; its requests give up when the machine is declared down. */
+function ollamaOn(id: string): OllamaStoryboardAdapter {
+  let adapter = ollamaAdapters.get(id);
+  if (!adapter) {
+    adapter = new OllamaStoryboardAdapter(
+      pool.spec(id).ollamaUrl,
+      config.OLLAMA_MODEL,
+      { numCtx: config.OLLAMA_NUM_CTX, keepAlive: config.OLLAMA_KEEP_ALIVE },
+      (input, init) => fetch(input, { ...init, signal: AbortSignal.any([...(init?.signal ? [init.signal] : []), pool.downSignal(id)]) }),
+    );
+    ollamaAdapters.set(id, adapter);
+  }
+  return adapter;
+}
+const localMedia = new PooledMediaAdapter(pool);
+/** Hand-drawing runs on whichever machine the balancer picks for each scene. */
+const whiteboard: WhiteboardRunner = (work) =>
+  pool.runOne("whiteboard", (node) => {
+    const spec = pool.spec(node.id);
+    return work({ url: spec.whiteboardUrl, token: spec.token });
+  });
+/** Work around a machine's answer (database, storage): its failures are not the machine's. */
+async function local<T>(step: () => Promise<T>): Promise<T> {
+  try {
+    return await step();
+  } catch (error) {
+    throw markFatal(error);
+  }
+}
 const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
 type HealthState = "healthy" | "configured" | "offline";
@@ -119,6 +155,7 @@ async function workerHealth() {
       localMedia: configured(true, mediaReady, "Media local"),
       whiteboard: configured(true, whiteboardUp, "Máy vẽ tay"),
     } satisfies Record<string, HealthItem>,
+    balancer: pool.summary(),
   };
 }
 
@@ -331,6 +368,18 @@ async function storyboard(job: JobRow, project: Project) {
     if (saveError) throw saveError;
     return;
   }
+  // Ollama can run on any machine that has the model: the balancer picks one, and moves the whole stage to another
+  // if that machine goes away (nothing is saved before the very end of the stage).
+  if (project.settings.textProvider === "ollama")
+    return pool.runOne(
+      "llm",
+      (node) => writeStoryboard(job, project, ollamaOn(node.id)),
+      { llmModel: project.settings.localModels.storyboard || config.OLLAMA_MODEL },
+    );
+  return writeStoryboard(job, project, null);
+}
+
+async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStoryboardAdapter | null) {
   const providerName = project.settings.textProvider;
   const provider: StoryboardProvider | null =
     providerName === "openai"
@@ -347,7 +396,7 @@ async function storyboard(job: JobRow, project: Project) {
           : "Chưa có khóa API Claude. Hãy dán khóa của bạn ở Cài đặt (mục Dịch vụ trả phí), hoặc chọn Ollama trong Tùy chọn.",
     );
   }
-  await setProgress(job.id, job.job_type === "create_video" ? 3 : 10, "Đang phân tích nội dung");
+  await local(() => setProgress(job.id, job.job_type === "create_video" ? 3 : 10, "Đang phân tích nội dung"));
   const sourceText = cleanScriptForNarration(project.sourceText);
   const storyboardInput = {
     title: project.title,
@@ -423,8 +472,8 @@ async function storyboard(job: JobRow, project: Project) {
     : null) ?? fallbackPostCaption(script, project.title, project.settings.style);
   const caption = { ...post, hashtags: cleanHashtags(post.hashtags, project.settings.style, `${project.title} ${script}`) };
   if (project.settings.layoutTemplate !== "story-card") suggestedTitle = caption.title || suggestedTitle;
-  if (providerName === "ollama") await ollama.unload(project.settings.localModels.storyboard);
-  await setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard");
+  if (providerName === "ollama" && ollama) await ollama.unload(project.settings.localModels.storyboard);
+  await local(() => setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard"));
   const rows = result.scenes.map((scene, index) => ({
     project_id: project.id,
     scene_order: index,
@@ -473,49 +522,80 @@ async function generateMedia(job: JobRow, project: Project) {
   const mediaProgress = (done: number) => prepass
     ? 42 + Math.round((done / scenes.length) * 43)
     : Math.round((done / scenes.length) * 85);
-  const speak = async (scene: Scene, speedFactor = 1) => {
-    const speed = project.settings.voiceSpeed * speedFactor;
-    const aligned = media.createSpeechAligned
-      ? await media.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, speed })
-      : null;
-    let audio = aligned?.audio ?? await media.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed });
-    let subtitles = aligned?.cues ?? [];
-    let alignedDurationMs = aligned?.durationMs;
-    if (project.settings.trimSilence) {
-      if (aligned?.contentType === "audio/wav") {
-        // Cut on the bridge's WAV and move the cues with it: re-transcribing never matched Vietnamese word for word.
-        const trimmed = trimWavSilence(audio, subtitles);
-        audio = trimmed.wav;
-        subtitles = trimmed.cues;
-        alignedDurationMs = trimmed.durationMs;
-      } else {
-        audio = await trimAudioSilence(audio);
-        subtitles = [];
-        alignedDurationMs = undefined;
+  // Scenes that still lack a picture or a voice are made on every machine the balancer selects, one scene at a time on
+  // each (a faster machine simply takes more of them). A single provider (OpenAI) just goes one after another.
+  const pooled = media instanceof PooledMediaAdapter ? media : null;
+  const batch = async <T, R>(
+    lane: Lane,
+    items: T[],
+    work: (item: T, provider: MediaProvider, machine: string) => Promise<R>,
+    request: LaneRequest,
+    watchDeadline: boolean,
+  ): Promise<Array<Outcome<R>>> => {
+    if (pooled)
+      return pooled.distribute(lane, items, (item, provider, node) => work(item, provider, node.id), {
+        request,
+        ...(watchDeadline ? { beforeItem: () => checkDeadline(job) } : {}),
+      });
+    const outcomes: Array<Outcome<R>> = [];
+    for (const item of items) {
+      if (watchDeadline) checkDeadline(job);
+      try {
+        outcomes.push({ ok: true, value: await work(item, media, "api"), nodeId: "api" });
+      } catch (error) {
+        outcomes.push({ ok: false, error: error instanceof Error ? error : new Error(String(error)) });
       }
     }
-    const actualDurationMs = alignedDurationMs ?? await probeAudioDuration(audio);
-    const extension = aligned?.contentType === "audio/wav" ? "wav" : "mp3";
-    const audioPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.${extension}`;
-    await upload(audioPath, audio, aligned?.contentType ?? "audio/mpeg");
-    // Save measured timing together with audio so retries do not transcribe
-    // already aligned speech or regenerate a successful scene.
-    await updateScene(scene.id, { audio_path: audioPath, subtitles, actual_duration_ms: actualDurationMs });
-    return { audio, audioPath, subtitles, actualDurationMs };
+    return outcomes;
   };
+  const onMachine = (machine: string) => (pooled?.distributed ? ` · máy ${machine}` : "");
+  const speak = async (scene: Scene, speedFactor = 1, provider: MediaProvider = media) => {
+    const speed = project.settings.voiceSpeed * speedFactor;
+    const aligned = provider.createSpeechAligned
+      ? await provider.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, speed })
+      : null;
+    let audio = aligned?.audio ?? await provider.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed });
+    // From here on the machine has answered: a failure saving it is not the machine's.
+    return local(async () => {
+      let subtitles = aligned?.cues ?? [];
+      let alignedDurationMs = aligned?.durationMs;
+      if (project.settings.trimSilence) {
+        if (aligned?.contentType === "audio/wav") {
+          // Cut on the bridge's WAV and move the cues with it: re-transcribing never matched Vietnamese word for word.
+          const trimmed = trimWavSilence(audio, subtitles);
+          audio = trimmed.wav;
+          subtitles = trimmed.cues;
+          alignedDurationMs = trimmed.durationMs;
+        } else {
+          audio = await trimAudioSilence(audio);
+          subtitles = [];
+          alignedDurationMs = undefined;
+        }
+      }
+      const actualDurationMs = alignedDurationMs ?? await probeAudioDuration(audio);
+      const extension = aligned?.contentType === "audio/wav" ? "wav" : "mp3";
+      const audioPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.${extension}`;
+      await upload(audioPath, audio, aligned?.contentType ?? "audio/mpeg");
+      // Save measured timing together with audio so retries do not transcribe
+      // already aligned speech or regenerate a successful scene.
+      await updateScene(scene.id, { audio_path: audioPath, subtitles, actual_duration_ms: actualDurationMs });
+      return { audio, audioPath, subtitles, actualDurationMs };
+    });
+  };
+  const ttsRequest: LaneRequest = { ttsEngine: project.settings.localModels.tts ?? null };
   // Voices are synthesised on the CPU while images render on the GPU: the two used to run one after the other
   // (the image model and the voice model fought for RAM while Ollama was still loaded; it is unloaded by now).
   const voicePrepass = prepass && !targetId
     ? (async () => {
-      for (const scene of scenes.filter((item) => !item.audioPath)) {
-        try {
-          const voiced = await speak(scene);
-          Object.assign(scene, { audioPath: voiced.audioPath, subtitles: voiced.subtitles, actualDurationMs: voiced.actualDurationMs });
-        } catch (error) {
-          // Not fatal: the per-scene pass below synthesises this voice again and records a clear failure.
-          log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "voice_prepass_failed");
-        }
-      }
+      const firstPass = scenes.filter((item) => !item.audioPath);
+      const voices = await batch("tts", firstPass, async (scene, provider) => {
+        const voiced = await speak(scene, 1, provider);
+        Object.assign(scene, { audioPath: voiced.audioPath, subtitles: voiced.subtitles, actualDurationMs: voiced.actualDurationMs });
+      }, ttsRequest, false);
+      voices.forEach((voice, index) => {
+        // Not fatal: the per-scene pass below synthesises this voice again and records a clear failure.
+        if (!voice.ok) log.warn({ jobId: job.id, sceneId: firstPass[index]!.id, err: voice.error.message }, "voice_prepass_failed");
+      });
       // An idea is written to a chosen length, but voices read 3.8-4.1 words/s depending on the script. Measure the
       // voiced total and, when it misses by more than 8%, read every scene again at a corrected speed (still on the
       // CPU while the GPU draws), so "1 phút" comes out near a minute.
@@ -524,40 +604,43 @@ async function generateMedia(job: JobRow, project: Project) {
         ? paceCorrection(voicedMs, project.settings.targetDurationSec) : null;
       if (!factor) return;
       log.info({ jobId: job.id, voicedMs, targetSec: project.settings.targetDurationSec, factor }, "voice_pace_corrected");
-      for (const scene of scenes) {
-        try {
-          const voiced = await speak(scene, factor);
-          Object.assign(scene, { audioPath: voiced.audioPath, subtitles: voiced.subtitles, actualDurationMs: voiced.actualDurationMs });
-        } catch (error) {
-          log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "voice_pace_retry_failed");
-        }
-      }
-    })()
+      const retimed = await batch("tts", scenes, async (scene, provider) => {
+        const voiced = await speak(scene, factor, provider);
+        Object.assign(scene, { audioPath: voiced.audioPath, subtitles: voiced.subtitles, actualDurationMs: voiced.actualDurationMs });
+      }, ttsRequest, false);
+      retimed.forEach((voice, index) => {
+        if (!voice.ok) log.warn({ jobId: job.id, sceneId: scenes[index]!.id, err: voice.error.message }, "voice_pace_retry_failed");
+      });
+    })().catch((error: unknown) => log.warn({ jobId: job.id, err: error instanceof Error ? error.message : String(error) }, "voice_prepass_aborted"))
     : Promise.resolve();
-  for (const [index, scene] of pendingImages.entries()) {
-    checkDeadline(job);
-    try {
+  let imagesDone = 0;
+  const images = await batch("image", pendingImages, async (scene, provider, machine) => {
+    await local(async () => {
       await updateScene(scene.id, { media_status: "processing", error_message: null });
-      await progress(job, Math.round((index / pendingImages.length) * 42), `Đang tạo ảnh cảnh ${scene.order + 1}`);
-      const image = await media.createImage(
-        buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project), visualPresetPrompt(project.settings.visualPreset)),
-        imageAspectFor(project.settings),
-        {
-          ...project.settings.localModels,
-          seed: sceneSeed(project, scene),
-          style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
-          preset: project.settings.generationPreset,
-        },
-      );
+      await progress(job, Math.round((imagesDone / pendingImages.length) * 42), `Đang tạo ảnh cảnh ${scene.order + 1}${onMachine(machine)}`);
+    });
+    const image = await provider.createImage(
+      buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project), visualPresetPrompt(project.settings.visualPreset)),
+      imageAspectFor(project.settings),
+      {
+        ...project.settings.localModels,
+        seed: sceneSeed(project, scene),
+        style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
+        preset: project.settings.generationPreset,
+      },
+    );
+    await local(async () => {
       const imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
       await upload(imagePath, image, "image/png");
       await updateScene(scene.id, { image_path: imagePath });
       (scene as { imagePath: string | null }).imagePath = imagePath;
-    } catch (error) {
-      // Not fatal: the per-scene pass below retries this image once more and records a clear failure.
-      log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "image_prepass_failed");
-    }
-  }
+      imagesDone += 1;
+    });
+  }, { imageModel: project.settings.localModels.image ?? null }, true);
+  images.forEach((image, index) => {
+    // Not fatal: the per-scene pass below retries this image once more and records a clear failure.
+    if (!image.ok) log.warn({ jobId: job.id, sceneId: pendingImages[index]!.id, err: image.error.message }, "image_prepass_failed");
+  });
   await voicePrepass;
   for (const scene of scenes) {
     checkDeadline(job);
@@ -758,6 +841,7 @@ async function render(job: JobRow, project: Project) {
       checkDeadline(job);
       return setProgress(job.id, job.job_type === "create_video" ? Math.min(99, 76 + Math.round(value * 0.23)) : value, stage);
     },
+    { whiteboard },
   );
   try {
     const outputPath = `${project.userId}/${project.id}/exports/${job.id}.mp4`;
@@ -828,6 +912,7 @@ async function renderDub(job: JobRow, project: Project) {
     dubProject,
     async (path) => path === "memory://dubbing-audio" ? aligned.audio : download(path),
     (value, stage) => setProgress(job.id, value, stage),
+    { whiteboard },
   );
   try {
     const outputPath = `${project.userId}/${project.id}/exports/${job.id}.mp4`;
@@ -861,7 +946,7 @@ async function run(job: JobRow) {
   const project = await getProject(job.project_id);
   // Fail before minutes of images and voices are spent, not at the render step.
   const draws = job.job_type === "render_whiteboard" || (drawsByHand(project.settings) && ["create_video", "render_video"].includes(job.job_type));
-  if (draws && !(await whiteboardReady(config))) throw new Error(WHITEBOARD_DOWN);
+  if (draws && !pool.laneAvailable("whiteboard") && !(await whiteboardReady(config))) throw new Error(WHITEBOARD_DOWN);
   if (job.job_type === "create_video") {
     if (project.settings.textProvider !== "ollama" || project.settings.mediaProvider !== "local")
       throw new Error("Tạo video tự động chỉ dùng Ollama và media local để tránh phát sinh phí.");
@@ -959,15 +1044,20 @@ async function poll() {
 let stopping = false;
 process.on("SIGTERM", () => {
   stopping = true;
+  pool.stop();
   healthServer.close();
 });
 process.on("SIGINT", () => {
   stopping = true;
+  pool.stop();
   healthServer.close();
 });
+await pool.start(); // the first look at every machine, so the log and the first job already know who is available
 log.info(
   {
     workerId,
+    machines: pool.distributed ? pool.summary().nodes.map((node) => ({ id: node.id, role: node.role, state: node.state })) : [{ id: pool.primary.id, role: "primary" }],
+    balanceMode: config.AI_BALANCE_MODE,
     providers: {
       anthropicStoryboard: Boolean(anthropic),
       openaiStoryboardAndMedia: Boolean(openai),

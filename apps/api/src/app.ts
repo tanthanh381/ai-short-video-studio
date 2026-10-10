@@ -23,6 +23,7 @@ import {
   projectSchema,
   projectSettingsSchema,
   subtitleStyleSchema,
+  type BalancerSummary,
   type Project,
   voiceSample,
 } from "@studio/shared";
@@ -67,6 +68,8 @@ const accountSettingsSchema = z.object({
 type ServiceState = "healthy" | "configured" | "offline" | "disabled" | "unknown";
 type ServiceStatus = { state: ServiceState; detail: string; checkedAt: string };
 type WorkerHealthPayload = {
+  /** The machines sharing the AI work (empty when the worker only has its own). */
+  balancer?: BalancerSummary;
   services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia" | "whiteboard", { state: ServiceState; detail: string }>>;
 };
 type LocalMediaHealthPayload = { video?: boolean; videoState?: string; videoDetail?: string; faceDetail?: boolean; faceDetailDetail?: string };
@@ -136,6 +139,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     .map((x) => x.trim())
     .filter(Boolean);
   let serviceStatusCache: { expiresAt: number; value: Record<string, ServiceStatus> } | null = null;
+  let balancerSnapshot: BalancerSummary | null = null;
   const keyVault = createKeyVault(db, config);
 
   async function getUsageStats(userId: string, budgetUsd: number): Promise<UsageStats> {
@@ -262,6 +266,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       openai: fromWorker("openai", status(config.OPENAI_FEATURES_ENABLED ? "unknown" : "disabled", config.OPENAI_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng OpenAI đang tắt")),
       anthropic: fromWorker("anthropic", status(config.ANTHROPIC_FEATURES_ENABLED ? "unknown" : "disabled", config.ANTHROPIC_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng Claude đang tắt")),
     };
+    balancerSnapshot = workerResponse?.balancer && workerResponse.balancer.nodes.length > 1 ? workerResponse.balancer : null;
     serviceStatusCache = { expiresAt: Date.now() + 5_000, value };
     return value;
   }
@@ -470,6 +475,8 @@ export function createApp(config: AppConfig, db: AdminClient) {
         render: config.RENDER_WORKER_ENABLED,
       },
       serviceStatuses,
+      // Other Macs that share the work and what the balancer last decided; null while only this machine is used.
+      balancer: balancerSnapshot,
     };
   }
 

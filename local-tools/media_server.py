@@ -10,7 +10,9 @@ import io
 import os
 import re
 import shutil
+import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -25,8 +27,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import traceback
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import node_status  # noqa: E402  (sibling module; also imported when this file is loaded by path in tests)
 
 HOST = os.getenv("LOCAL_MEDIA_HOST", "127.0.0.1")
+# Set when this bridge is reachable from other machines (a second Mac that takes part of the work): every request except
+# /health must then carry `Authorization: Bearer <NODE_TOKEN>`. The main machine sends it as AI_NODES_TOKEN.
+NODE_TOKEN = os.getenv("NODE_TOKEN", "")
+NODE_NAME = os.getenv("NODE_NAME", socket.gethostname().split(".")[0])
+METRICS = node_status.Metrics()
 # Services are often started from launchers (launchd, IDE agents) whose PATH is only /usr/bin:/bin.
 # Make Homebrew tools reachable for this process and every child it spawns.
 for _dir in ("/usr/local/bin", "/opt/homebrew/bin"):
@@ -882,8 +891,86 @@ def check_choice(kind, value, allowed):
     return value
 
 
+def image_server_info():
+    """(state, config) of the MLX image server; the config (steps, cfg weight, preset) comes from its /health body."""
+    try:
+        with urllib.request.urlopen(f"{IMAGE_SERVER_URL}/health", timeout=3) as response:
+            return "ready", json.load(response).get("config") or {}
+    except urllib.error.HTTPError as error:
+        try:
+            return "loading", json.loads(error.read().decode()).get("config") or {}
+        except Exception:
+            return "loading", {}
+    except Exception:
+        return "down", {}
+
+
+def tts_engines_up():
+    return [e for e in TTS_ENGINES if service_up({"vieneu": VIENEU_URL, "piper": PIPER_URL}.get(e, ""), "/health")]
+
+
+NODE_STATUS_SOURCES = [Path(__file__).resolve(), Path(__file__).with_name("image_server.py")]
+_NODE_STATUS_CACHE = {"at": 0.0, "value": None}
+_NODE_STATUS_LOCK = threading.Lock()
+KIND_BY_PATH = {"/image": "image", "/video": "video", "/tts": "tts", "/tts-aligned": "tts", "/transcribe": "transcribe"}
+
+
+def node_status_payload(max_age_s=3.0):
+    """Everything the main machine's balancer needs to decide whether to hand this Mac some scenes (GET /node-status)."""
+    with _NODE_STATUS_LOCK:
+        now = time.monotonic()
+        if _NODE_STATUS_CACHE["value"] is not None and now - _NODE_STATUS_CACHE["at"] < max_age_s:
+            return _NODE_STATUS_CACHE["value"]
+        image_state, image_config = image_server_info()
+        comfy_ready, _ = comfyui_state()
+        image_models = list(available_image_models())
+        engines = tts_engines_up()
+        ffmpeg_ready = find_binary("ffmpeg", "FFMPEG_PATH") is not None
+        ltx_ready, _ = ltx_state()
+        settings = {
+            "IMAGE_PRESET": IMAGE_PRESET, "IMAGE_STEPS": IMAGE_STEPS_OVERRIDE or "", "IMAGE_PERSON_STEPS": IMAGE_PERSON_STEPS,
+            "VIENEU_STEPS": VIENEU_STEPS, "TTS_BREAK_WORDS": TTS_BREAK_WORDS, "TTS_ENGINES": ",".join(TTS_ENGINES),
+            "PACE_TARGET_WPS": PACE_TARGET_WPS, "VIENEU_VOICE": VIENEU_VOICE, "FACE_DETAIL": FACE_DETAIL,
+            "IMAGE_ANATOMY_GUARD": IMAGE_ANATOMY_GUARD, "IMAGE_NEGATIVE_PROMPT": IMAGE_NEGATIVE_PROMPT,
+            # A machine without the face model draws faces the other machine would have redrawn.
+            "FACE_DETAIL_READY": face_detail_state()[0],
+            **{f"image_server.{key}": value for key, value in image_config.items()},
+        }
+        value = {
+            "node": NODE_NAME,
+            "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "accepting": not node_status.paused(),
+            "capabilities": {
+                "image": image_state != "down" or comfy_ready == "ready",
+                "tts": ffmpeg_ready and bool(engines),
+                "transcribe": service_up(WHISPER_URL, "/"),
+                "video": ltx_ready == "ready",
+            },
+            "image": {"state": image_state, "models": image_models, "defaultModel": image_models[0] if image_models else None},
+            "tts": {"engines": engines, "defaultEngine": engines[0] if engines else None},
+            "resources": node_status.read_resources(),
+            "active": METRICS.active(),
+            "perf": METRICS.perf(),
+            "fingerprint": node_status.fingerprint(settings, NODE_STATUS_SOURCES),
+        }
+        _NODE_STATUS_CACHE.update(at=now, value=value)
+        return value
+
+
 class Handler(BaseHTTPRequestHandler):
+    def _authorised(self):
+        """/health stays open (liveness only); everything else needs the node token when one is set."""
+        if self.path == "/health" or node_status.token_ok(self.headers.get("Authorization"), NODE_TOKEN):
+            return True
+        json_response(self, 401, {"error": "Thiếu hoặc sai NODE_TOKEN"})
+        return False
+
     def do_GET(self):
+        if not self._authorised():
+            return
+        if self.path == "/node-status":
+            json_response(self, 200, node_status_payload())
+            return
         if self.path == "/health":
             comfy_ready, _ = comfyui_state()
             image_ready = image_server_state() != "down" or comfy_ready == "ready" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
@@ -909,6 +996,11 @@ class Handler(BaseHTTPRequestHandler):
         json_response(self, 404, {"error": "Không tìm thấy endpoint"})
 
     def do_POST(self):
+        if not self._authorised():
+            return
+        kind = KIND_BY_PATH.get(self.path.split("?")[0])
+        started = METRICS.begin(kind) if kind else None
+        served = False
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0 or length > 25 * 1024 * 1024:
@@ -939,12 +1031,16 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, 200, {"words": transcribe(body, urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("model", [None])[0])})
             else:
                 json_response(self, 404, {"error": "Không tìm thấy endpoint"})
+            served = True
         except ValueError as error:
             json_response(self, 400, {"error": str(error)[:200]})
         except Exception:
             traceback.print_exc()  # the real cause goes to the service log, never to the client
             # Never include a subprocess command (which contains the private script).
             json_response(self, 500, {"error": "Không hoàn thành xử lý media local; kiểm tra máy và thử lại"})
+        finally:
+            if kind:
+                METRICS.end(kind, started, ok=served)
 
     def log_message(self, format, *args):
         print(f"[local-media] {format % args}", flush=True)
@@ -974,5 +1070,6 @@ def trim_service_logs(directory=SERVICE_LOG_DIR, max_bytes=5 * 1024 * 1024, keep
 if __name__ == "__main__":
     for name in trim_service_logs():
         print(f"[local-media] trimmed log {name}", flush=True)
-    print(f"Local media server listening on {HOST}:{PORT}", flush=True)
+    node_status.require_token_for_host(HOST, NODE_TOKEN, os.getenv("NODE_ALLOW_NO_TOKEN") == "1")
+    print(f"Local media server '{NODE_NAME}' listening on {HOST}:{PORT}" + (" (token required)" if NODE_TOKEN else ""), flush=True)
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

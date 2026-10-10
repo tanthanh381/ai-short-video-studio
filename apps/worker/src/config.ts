@@ -27,6 +27,20 @@ const schema = z.object({
   OLLAMA_KEEP_ALIVE: z.string().default("10m"),
   LOCAL_MEDIA_BASE_URL: z.string().url().default("http://host.docker.internal:8765"),
   WHITEBOARD_SERVER_URL: z.string().url().default("http://host.docker.internal:8766"),
+  // Other Macs that share the AI work: "air=100.101.102.103,studio=studio.tailnet.ts.net". Empty = this machine only.
+  AI_NODES: z.string().default(""),
+  // The same secret as NODE_TOKEN on those Macs (their media bridge and hand-drawing server demand it).
+  AI_NODES_TOKEN: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().min(8).optional(),
+  ),
+  AI_PRIMARY_NODE: z.string().regex(/^[a-z0-9][a-z0-9-]{0,23}$/u, "chữ thường, số và dấu gạch ngang").default("mini"),
+  // auto: the worker decides per batch whether a second machine pays off; single: only the main machine (others stand by); parallel: always all.
+  AI_BALANCE_MODE: z.enum(["auto", "single", "parallel"]).default("auto"),
+  // A second machine must match the main one's image/voice settings and code before it makes pictures or voices.
+  AI_NODES_STRICT: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+  // A laptop on battery below this percentage takes no work.
+  AI_NODE_MIN_BATTERY: z.coerce.number().int().min(0).max(100).default(30),
   OPENAI_TEXT_MODEL: z.string().default("gpt-5-mini"),
   OPENAI_IMAGE_MODEL: z.string().default("gpt-image-2.5-sunburst"),
   OPENAI_TTS_MODEL: z.string().default("gpt-4o-mini-tts"),
