@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { KeyProvider } from "@studio/shared";
-import { VAULT_BUCKET, emptyVault, openKey, parseVault, vaultPath } from "@studio/shared/secret-box";
+import { VAULT_BUCKET, emptyVault, isMissingStorageObject, openKey, parseVault, vaultPath } from "@studio/shared/secret-box";
 
 /**
  * The owner's own API key for `provider`, opened from the encrypted file the website saved for them; null when they
@@ -11,8 +11,7 @@ export async function loadUserKey(db: SupabaseClient, secret: string | undefined
   if (!secret) return null;
   const { data, error } = await db.storage.from(VAULT_BUCKET).download(vaultPath(userId));
   if (error) {
-    const status = String((error as { statusCode?: unknown; status?: unknown }).statusCode ?? (error as { status?: unknown }).status ?? "");
-    if (status === "404" || /not found|does not exist/iu.test(error.message)) return null; // no key saved
+    if (await isMissingStorageObject(error)) return null; // no key saved
     throw new Error("Không đọc được khóa API đã lưu lúc này. Hãy thử lại sau ít phút.");
   }
   const sealed = parseVault(await data.text() || JSON.stringify(emptyVault())).keys[provider];

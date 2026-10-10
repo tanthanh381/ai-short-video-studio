@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cleanApiKey, keyFormatError, lastFour, maskedKey } from "./api-keys";
-import { emptyVault, openKey, parseVault, sealKey, summarizeVault, withKey, withoutKey } from "./secret-box";
+import { emptyVault, isMissingStorageObject, openKey, parseVault, sealKey, summarizeVault, withKey, withoutKey } from "./secret-box";
 
 const SECRET = "test-secret-with-more-than-thirty-two-characters";
 const OPENAI_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd";
@@ -87,5 +87,29 @@ describe("checking a pasted key before anything is sent", () => {
     expect(lastFour(` ${OPENAI_KEY} `)).toBe("abcd");
     expect(maskedKey({ saved: true, last4: "wxyz" })).toBe("…wxyz");
     expect(maskedKey({ saved: false })).toBe("");
+  });
+});
+
+describe("telling a missing key file from a storage failure", () => {
+  const response = (status: number, body: unknown) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
+
+  it("recognises the error the real Supabase client returns for a missing file or bucket", async () => {
+    const missing = (code: string) => ({ name: "StorageUnknownError", message: "{}", originalError: response(400, { statusCode: "404", error: "not_found", code }) });
+    expect(await isMissingStorageObject(missing("NoSuchKey"))).toBe(true);
+    expect(await isMissingStorageObject(missing("NoSuchBucket"))).toBe(true);
+  });
+
+  it("also accepts a plain 404 status or message", async () => {
+    expect(await isMissingStorageObject({ statusCode: "404", message: "x" })).toBe(true);
+    expect(await isMissingStorageObject({ status: 404, message: "x" })).toBe(true);
+    expect(await isMissingStorageObject({ message: "Object not found" })).toBe(true);
+  });
+
+  it("does not mistake an outage, a denial or garbage for a missing file", async () => {
+    expect(await isMissingStorageObject({ name: "StorageUnknownError", message: "{}", originalError: response(502, "bad gateway") })).toBe(false);
+    expect(await isMissingStorageObject({ name: "StorageUnknownError", message: "{}", originalError: response(403, { statusCode: "403", error: "Unauthorized" }) })).toBe(false);
+    expect(await isMissingStorageObject({ message: "gateway timeout", statusCode: "504" })).toBe(false);
+    expect(await isMissingStorageObject(null)).toBe(false);
+    expect(await isMissingStorageObject("boom")).toBe(false);
   });
 });

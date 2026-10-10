@@ -83,3 +83,23 @@ export function summarizeVault(vault: KeyVault, enabled: boolean): ApiKeySummary
 /** Where the vault lives: a private bucket of its own (no client policy, service role only), one small file per user. */
 export const VAULT_BUCKET = "app-secrets";
 export const vaultPath = (userId: string) => `${userId}/api-keys.json`;
+
+/**
+ * True when a Supabase Storage download failed only because the file (or its bucket) does not exist yet. The real client
+ * reports it as a `StorageUnknownError` with the message "{}", an HTTP 400 and the "404" only inside the response body, so
+ * the status and message alone cannot tell "no key saved" from "storage is down".
+ */
+export async function isMissingStorageObject(error: unknown): Promise<boolean> {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { statusCode?: unknown; status?: unknown; message?: unknown; originalError?: unknown };
+  if ([e.statusCode, e.status].some((value) => String(value ?? "") === "404")) return true;
+  if (/not found|does not exist|NoSuchKey|NoSuchBucket/iu.test(String(e.message ?? ""))) return true;
+  const response = e.originalError as { clone?: () => { text: () => Promise<string> }; text?: () => Promise<string> } | undefined;
+  try {
+    const raw = await (typeof response?.clone === "function" ? response.clone().text() : response?.text?.());
+    const body = JSON.parse(raw ?? "") as { statusCode?: unknown; code?: unknown };
+    return String(body.statusCode ?? "") === "404" || body.code === "NoSuchKey" || body.code === "NoSuchBucket";
+  } catch {
+    return false;
+  }
+}

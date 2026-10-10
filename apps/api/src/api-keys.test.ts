@@ -4,6 +4,13 @@ import { createApp } from "./app";
 import { checkKeyWithProvider } from "./api-keys";
 import type { AppConfig } from "./config";
 
+/** What the real Supabase client returns for a file that is not there: HTTP 400, message "{}", the 404 only in the body. */
+const missingObjectError = () => ({
+  name: "StorageUnknownError",
+  message: "{}",
+  originalError: new Response(JSON.stringify({ statusCode: "404", error: "not_found", message: "Object not found", code: "NoSuchKey" }), { status: 400 }),
+});
+
 const userId = "8d5f3a6e-0e53-4c45-9d3a-1d6dbf5a1a11";
 const projectId = "3b968fb5-a00d-4b9d-8bd5-638598d9ef4d";
 const SECRET = "a-test-secret-that-is-longer-than-thirty-two-characters";
@@ -38,7 +45,7 @@ function fixture(options: { secret?: string | undefined; textProvider?: string; 
       from: (bucket: string) => ({
         download: async (path: string) => {
           const text = files.get(`${bucket}/${path}`);
-          return text === undefined ? { data: null, error: { message: "Object not found", statusCode: "404" } } : { data: { text: async () => text }, error: null };
+          return text === undefined ? { data: null, error: missingObjectError() } : { data: { text: async () => text }, error: null };
         },
         upload: async (path: string, body: string) => { files.set(`${bucket}/${path}`, body); return { data: {}, error: null }; },
       }),

@@ -7,6 +7,7 @@ import {
 import {
   VAULT_BUCKET,
   emptyVault,
+  isMissingStorageObject,
   openKey,
   parseVault,
   sealKey,
@@ -80,9 +81,8 @@ export function createKeyVault(db: AdminClient, config: Pick<AppConfig, "API_KEY
   async function read(userId: string): Promise<KeyVault> {
     const { data, error } = await db.storage.from(VAULT_BUCKET).download(vaultPath(userId));
     if (error) {
-      const status = String((error as { statusCode?: unknown; status?: unknown }).statusCode ?? (error as { status?: unknown }).status ?? "");
       // A missing file is an empty vault; any other failure must not look like one (a write would erase the other key).
-      if (status === "404" || /not found|does not exist/iu.test(error.message)) return emptyVault();
+      if (await isMissingStorageObject(error)) return emptyVault();
       throw error;
     }
     return parseVault(await data.text());

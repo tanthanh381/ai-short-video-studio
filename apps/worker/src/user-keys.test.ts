@@ -10,12 +10,19 @@ const SECRET = "a-test-secret-that-is-longer-than-thirty-two-characters";
 const OPENAI_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd";
 const CLAUDE_KEY = "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-wxyz";
 
+/** What the real Supabase client returns for a file that is not there: HTTP 400, message "{}", the 404 only in the body. */
+const missingObjectError = () => ({
+  name: "StorageUnknownError",
+  message: "{}",
+  originalError: new Response(JSON.stringify({ statusCode: "404", error: "not_found", message: "Object not found", code: "NoSuchKey" }), { status: 400 }),
+});
+
 /** A Supabase client whose storage holds the vault files given. */
 const storageWith = (files: Record<string, string>, failure?: { message: string; statusCode?: string }) =>
   ({ storage: { from: (bucket: string) => ({ download: async (path: string) => {
     if (failure) return { data: null, error: failure };
     const text = files[`${bucket}/${path}`];
-    return text === undefined ? { data: null, error: { message: "Object not found", statusCode: "404" } } : { data: { text: async () => text }, error: null };
+    return text === undefined ? { data: null, error: missingObjectError() } : { data: { text: async () => text }, error: null };
   } }) } }) as never;
 
 describe("opening the owner's own key for a job", () => {
