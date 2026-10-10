@@ -55,9 +55,29 @@ export const PAPER_STORYBOARD_STYLE =
   "one small chibi character on plain kraft paper with no scenery: no room, street, forest, sky or landscape. " +
   "Describe only the character's pose, facial expression, gesture and at most one simple prop or one small second figure, in under 20 words";
 
+/**
+ * How the paper-stage writer must describe each picture. The generic rules ("show the object, change the subject, add
+ * shot size and light") made a 4B model write "chibi rock", "bridge of mud layers" and "wide view of a growing wall":
+ * the image model then drew two children standing where the narration said stone, sand and river (measured on the
+ * "Nước chảy đá mòn" test video: 4 of 6 pictures). The reference shorts always show the same boy DOING something with
+ * one prop, so every prompt is that boy's action and an abstract idea becomes a symbol he handles.
+ */
+export const PAPER_PROMPT_RULES =
+  "Every imagePrompt is ENGLISH, 6-14 words and describes only THE BOY of this story. Work in two steps: the beat says what this narration " +
+  "means; the imagePrompt is what the boy does to SHOW that exact beat: a clear pose, a clear face and ONE simple everyday prop he holds or sits " +
+  "beside, written so the prop is plainly visible (\"holding a ...\", \"sitting beside a ...\"). Choose the prop that fits this narration from " +
+  "everyday objects such as cup, bowl, kettle, lantern, candle, book, scroll, basket, umbrella, broom, rope, fan, mirror, flower pot, small plant, " +
+  "bird, cat or big grey stone; if the narration names an object use that one, and for an abstract sentence pick the object a storyteller would use " +
+  "to show it. Never copy the wording of an earlier scene: every scene has its own pose and its own prop. The boy is in EVERY picture and is the " +
+  "only subject: never describe an object, animal, place or another person on its own, and never write the words chibi, kid, child, figure, " +
+  "character or boy (he is added automatically); at most one small second figure, and only when the narration is about another person. " +
+  "NEVER write a place, room, street, sky, weather, light, time of day, camera, shot size or background, and no text.";
+
 // Places, backdrops and camera words that turn the bare paper into a scene ("on dusty village road",
 // "against grey rain-swept street background", "low angle wide shot", "shallow depth of field").
-const SCENERY = /\b(?:road|street|alley|path|forest|woods|bamboo grove|village|town|city|market|room|indoors?|house|home|kitchen|temple|garden|park|field|mountains?|river|lake|sea|beach|sky|clouds?|rain\w*|snow\w*|mist\w*|fog\w*|sunset|sunrise|night|landscape|scenery|background|backdrop|wall|window|door|lighting|light|shadows?|depth of field|bokeh|shot|angle|close-?up|camera|lens|cinematic|textur\w*|paper|beige)\b/iu;
+// "paper" and bare "rain…" are not here: a paper lantern or a raindrop is a prop, while "on kraft paper" and "rain-swept street"
+// are caught by "kraft", "street" and the weather words below.
+const SCENERY = /\b(?:road|street|alley|path|forest|woods|bamboo grove|village|town|city|market|room|indoors?|house|home|kitchen|temple|garden|park|field|mountains?|river|lake|sea|beach|sky|clouds?|rain|rainy|raining|rain-swept|snow|snowy|snowing|mist|misty|fog|foggy|storm\w*|sunset|sunrise|night|landscape|scenery|background|backdrop|wall|window|door|lighting|light|daylight|sunlight|moonlight|shadows?|depth of field|bokeh|shot|angle|view|perspective|composition|foreground|eye level|morning|evening|afternoon|dusk|dawn|close-?up|camera|lens|cinematic|textur\w*|kraft|beige)\b/iu;
 
 /**
  * The scene prompt for a paper-stage picture: the mascot first (every scene, so the character stays the same), then
@@ -67,12 +87,20 @@ export function paperStagePrompt(prompt: string): string {
   const withoutMascot = prompt.replace(new RegExp(PAPER_MASCOT.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu"), "")
     .replace(/a little chibi boy with a topknot hair bun and a long olive headband ribbon, wearing an olive green ancient robe\.?/giu, "")
     .replace(/\b(another|a second|two|other) chibis?\b/giu, "$1 small child")
+    // The boy is put in front, so the writer's own subject ("Small chibi figure", "Tiny he") is dropped from the start of
+    // each clause and the action is what remains; a "chibi rock" that slips through is just a rock.
+    .replace(/(^|[,.;]\s*)(?:(?:a|an|the|tiny|small|little|cute|same|lone)\s+)*(?:(?:full[- ]body\s+)?chibi(?:\s+(?:figure|character|boy|girl|kid))?|figure|character|boy|kid|child|he)\b(?:\s+in (?:an? )?olive green robe)?[\s,]*/giu, "$1")
     .replace(/\b(?:full[- ]body )?(?:a |the |same )?chibi(?: (?:figure|character|boy|girl|kid))?(?: in (?:an? )?olive green robe)?\b/giu, "he");
   // Cut before places ("on dusty road") and before each action ("holding…", "carrying…"), so dropping a place
   // keeps the action that followed it in the same clause.
   const clauses = withoutMascot.split(/(?<=[,.;])\s+|\s+(?=(?:on|in|at|against|through|along|under|beside|near|inside|outside)\s)|\s+(?=\p{L}+ing\s)/iu)
     .map((clause) => clause.trim()).filter((clause) => clause && !SCENERY.test(clause));
-  const action = clauses.join(" ").replace(/\s+([,.;])/gu, "$1").replace(/^[,.;\s]+|[,;\s]+$/gu, "").replace(/^he\b\s*/iu, "");
+  let action = clauses.join(" ").replace(/\s+([,.;])/gu, "$1").replace(/^[,.;\s]+|[,;\s]+$/gu, "").replace(/^he\b\s*/iu, "");
+  // Dropping a place can leave the start of its phrase behind ("sitting beside a"): trim whatever dangles.
+  for (let before = ""; before !== action;) {
+    before = action;
+    action = action.replace(/[\s,;]+(?:a|an|the|beside|next to|with|and|while|of|on|in|at|to|by|near)\s*$/iu, "");
+  }
   return `${PAPER_MASCOT}, ${action || "standing calmly"}`;
 }
 

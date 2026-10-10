@@ -166,6 +166,24 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     expect(paperStagePrompt("Chibi figure sitting cross-legged holding open book while another chibi listens nearby")).toContain("while another small child listens");
   });
 
+  it("keeps the boy's own action and prop: no object as the subject, no leftovers of a dropped place", async () => {
+    const { paperStagePrompt, PAPER_MASCOT } = await import("./card-layout");
+    const action = (prompt: string) => paperStagePrompt(prompt).slice(PAPER_MASCOT.length + 2);
+    // the writer's own subject is dropped (the mascot is put in front), the action stays
+    expect(action("Small chibi figure sitting cross-legged holding an open book")).toBe("sitting cross-legged holding an open book");
+    expect(action("Tiny chibi character holding single water drop")).toBe("holding single water drop");
+    expect(action("Small chibi rock sitting alone")).toBe("rock sitting alone"); // never "he rock"
+    // props whose name contains a scenery word survive: a paper lantern is not "on paper", a raindrop is not "rain"
+    expect(action("sitting beside a glowing paper lantern while holding a cup of tea")).toBe("sitting beside a glowing paper lantern while holding a cup of tea");
+    expect(action("sitting beside a single raindrop glass")).toBe("sitting beside a single raindrop glass");
+    // while real places, weather and camera words still go
+    expect(action("standing on kraft paper background holding a fan, soft warm light, low angle view")).toBe("standing holding a fan");
+    expect(action("walking through rain-swept street holding an umbrella")).toBe("walking holding an umbrella");
+    // what a dropped place leaves behind is trimmed, and an empty answer falls back to a calm pose
+    expect(action("sitting beside a wall")).toBe("sitting");
+    expect(action("in a misty forest, wide shot")).toBe("standing calmly");
+  });
+
   it("puts the captions under the character, small and without a box", async () => {
     const { createAss } = await import("./render");
     const { PAPER } = await import("./card-layout");

@@ -681,6 +681,32 @@ describe("story-card prompt writer is told to vary composition and not re-descri
   });
 });
 
+describe("paper-stage prompt writer: the boy acts, he is never replaced by an object", () => {
+  const scenes = { ...input, lockedScenes: ["Tảng đá mòn dần.", "Giọt nước rơi."], sceneOffset: 0, totalScenes: 2 } as StoryboardInput;
+
+  it("uses its own short instruction instead of the generic picture rules", () => {
+    const paper = buildStoryboardInstruction({ ...scenes, paperStage: true });
+    expect(paper).toContain("scenes 1-2 of 2");
+    expect(paper).toContain("describes only THE BOY");
+    expect(paper).toContain("beat and imagePrompt");
+    expect(paper).toContain("holding a ...");
+    expect(paper).toContain("NEVER write a place");
+    // the generic rules asked for shot size, light and a different subject each scene: that made it write "chibi rock"
+    expect(paper).not.toContain("shot size, camera angle");
+    expect(paper).not.toContain("change the subject or the setting");
+    expect(paper).not.toContain("natural light");
+    // other layouts keep the generic instruction
+    expect(buildStoryboardInstruction(scenes)).toContain("camera angle");
+    expect(buildStoryboardInstruction(scenes)).not.toContain("THE BOY");
+  });
+
+  it("gives no scene-shaped example a small model could copy into every scene", () => {
+    const paper = buildStoryboardInstruction({ ...scenes, paperStage: true });
+    // measured on qwen3.5:4b: examples such as "a huge dark boulder on his back" came back in scenes about something else
+    expect(paper).not.toMatch(/boulder|candle he watches|pours? drop by drop|arms wide|chin on hand/iu);
+  });
+});
+
 describe("imageStyleFor", () => {
   it("gives every website visual preset its own image look", () => {
     expect(imageStyleFor("Ánh sáng tự nhiên, chiều sâu và màu sắc chân thực.", "cinematic-color")).toBe("photo");

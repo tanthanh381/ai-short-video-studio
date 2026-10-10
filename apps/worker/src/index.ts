@@ -365,6 +365,7 @@ async function storyboard(job: JobRow, project: Project) {
       ? PAPER_STORYBOARD_STYLE
       : `${project.settings.visualStyle}; ${visualPresetPrompt(project.settings.visualPreset)}`,
     model: project.settings.localModels.storyboard,
+    paperStage: usesPaperStage(project.settings),
   } as const;
   const cardMode = usesStoryCard(project.settings);
   // The banner/hook title and the post caption depend only on the script: draft them while the storyboard is written.
