@@ -99,10 +99,21 @@ main() {
   fi
 
   step models "5/7 Tải model từ Mac mini (khoảng $([ "$WITH_IMAGE" = "yes" ] && echo 7 || echo 0.5) GB qua mạng nội bộ)"
-  if [ "$DRY" = "1" ]; then
+  # A second run must not fetch 7 GB again: models are skipped when they are all there (the picture model by the size of its
+  # biggest file, which a download cut short would not reach) or when the last run marked them complete.
+  MODELS_DONE="$LOCAL_AI/models/.air-models-complete-$WITH_IMAGE"
+  UNET=$(ls "$LOCAL_AI"/models/image/hf-cache/hub/models--stabilityai--sdxl-turbo/snapshots/*/unet/diffusion_pytorch_model.safetensors 2>/dev/null | head -1 || true)
+  UNET_BYTES=0; [ -n "$UNET" ] && UNET_BYTES=$(stat -L -f %z "$UNET" 2>/dev/null || stat -L -c %s "$UNET" 2>/dev/null || echo 0)
+  SMALL_OK=0; [ -e "$LOCAL_AI/models/whisper/ggml-base.bin" ] && [ -d "$LOCAL_AI/models/piper" ] && [ -d "$LOCAL_AI/models/vieneu-v3-turbo" ] && SMALL_OK=1
+  IMAGE_OK=1; [ "$WITH_IMAGE" = "yes" ] && [ "$UNET_BYTES" -lt "${AIR_NODE_MIN_UNET_BYTES:-5000000000}" ] && IMAGE_OK=0
+  if [ -f "$MODELS_DONE" ] || { [ "$SMALL_OK" = "1" ] && [ "$IMAGE_OK" = "1" ]; }; then
+    echo "Model đã có đủ trên máy này, bỏ qua bước tải (muốn tải lại: xóa $LOCAL_AI/models)"
+    progress models done "Model đã có sẵn, không cần tải lại"
+  elif [ "$DRY" = "1" ]; then
     echo "[dry-run] curl $BUNDLE/models.tar?image=$WITH_IMAGE | tar -x -C $LOCAL_AI"
   else
     curl -fS "$BUNDLE/models.tar?image=$([ "$WITH_IMAGE" = "yes" ] && echo 1 || echo 0)" | tar -x -C "$LOCAL_AI"
+    : > "$MODELS_DONE"
   fi
 
   step token "6/7 Mã truy cập và model Ollama" "Lưu mã truy cập và kéo model $OLLAMA_MODEL"

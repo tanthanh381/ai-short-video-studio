@@ -263,6 +263,34 @@ class Installer(Fixture):
         self.assertEqual(status["failed"], "code")
         self.assertIn("dừng", next(step for step in status["steps"] if step["id"] == "code")["detail"])
 
+    def test_a_second_run_does_not_fetch_the_models_again_unless_the_picture_model_is_incomplete(self):
+        def prepare(unet_bytes):
+            home = Path(self.tmp.name) / f"home-unet-{unet_bytes}"
+            models = home / "Developer/local-ai/models"
+            (models / "whisper").mkdir(parents=True)
+            (models / "whisper/ggml-base.bin").write_bytes(b"w")
+            (models / "piper").mkdir()
+            (models / "vieneu-v3-turbo").mkdir()
+            unet = models / "image/hf-cache/hub/models--stabilityai--sdxl-turbo/snapshots/abc123/unet"
+            unet.mkdir(parents=True)
+            (unet / "diffusion_pytorch_model.safetensors").write_bytes(b"u" * unet_bytes)
+            return home
+
+        script = bundle_server.render_installer((REPO / "scripts/air-node/install-air-node.sh").read_text(), "http://mini:8899/secret", "node-token-123", "air")
+
+        def run(home):
+            env = {**os.environ, "AIR_NODE_HOME": str(home), "AIR_NODE_DRY_RUN": "1", "AIR_NODE_TOOLKIT": str(REPO / "local-tools/toolkit"),
+                   "NODE_IMAGE": "yes", "AIR_NODE_MIN_UNET_BYTES": "1000"}
+            return subprocess.run(["bash"], input=script, capture_output=True, text=True, env=env, timeout=60)
+
+        complete = run(prepare(2000))
+        self.assertEqual(complete.returncode, 0, complete.stdout + complete.stderr)
+        self.assertIn("Model đã có đủ trên máy này, bỏ qua bước tải", complete.stdout)
+        self.assertNotIn("models.tar", complete.stdout)
+        cut_short = run(prepare(500))  # a download that stopped half way leaves a smaller file: it is fetched again
+        self.assertNotIn("bỏ qua bước tải", cut_short.stdout)
+        self.assertIn("models.tar?image=yes", cut_short.stdout)
+
     def test_a_small_machine_gets_no_picture_model_and_the_main_machine_keeps_the_pictures(self):
         _, result = self.run_installer(NODE_IMAGE="no")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
