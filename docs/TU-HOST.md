@@ -199,6 +199,8 @@ Sau mỗi lần `git pull`, khởi động lại image server (cổng 5002) và 
 
 ## Dừng và cập nhật
 
+Cách nhanh nhất để cập nhật máy chính: nhấp đúp `scripts/Cap-Nhat-May-Chinh.command`. Tệp này hỏi lại xem có video nào đang tạo không, tải bản mới từ GitHub, dựng lại API và worker, khởi động lại máy vẽ ảnh và cầu nối media, rồi tự kiểm tra và báo kết quả. Phần dưới là các lệnh tương đương nếu muốn làm tay.
+
 ```bash
 docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml stop
 git pull
