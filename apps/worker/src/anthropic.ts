@@ -9,6 +9,7 @@ import {
   type StoryboardProvider,
   type StoryboardResult,
 } from "./providers";
+import { providerErrorMessage } from "./openai";
 
 export class AnthropicStoryboardAdapter implements StoryboardProvider {
   private readonly client: Anthropic;
@@ -16,8 +17,9 @@ export class AnthropicStoryboardAdapter implements StoryboardProvider {
   constructor(
     apiKey: string,
     private readonly model = "claude-haiku-4-5-20251001",
+    baseURL?: string,
   ) {
-    this.client = new Anthropic({ apiKey });
+    this.client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
   }
 
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {
@@ -56,9 +58,7 @@ export class AnthropicStoryboardAdapter implements StoryboardProvider {
         : parseStoryboard(text);
     } catch (error) {
       if (error instanceof Anthropic.APIError) {
-        throw new Error(
-          `Claude API trả lỗi ${error.status}${error.requestID ? ` (mã yêu cầu ${error.requestID})` : ""}`,
-        );
+        throw new Error(providerErrorMessage("Claude", "console.anthropic.com", error.status ?? 0, error.requestID));
       }
       throw error;
     }

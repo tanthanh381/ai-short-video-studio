@@ -12,5 +12,9 @@
   },
   "dependencies": {
     "zod": "4.1.13"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./secret-box": "./src/secret-box.ts"
   }
 }

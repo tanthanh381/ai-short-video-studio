@@ -25,6 +25,10 @@ services:
       LOCAL_MEDIA_FEATURES_ENABLED: ${LOCAL_MEDIA_FEATURES_ENABLED:-false}
       LOCAL_MEDIA_BASE_URL: ${LOCAL_MEDIA_BASE_URL:-http://host.docker.internal:8765}
       RENDER_WORKER_ENABLED: ${RENDER_WORKER_ENABLED:-true}
+      # Encrypts the owners' own OpenAI / Claude keys (Cài đặt → Dịch vụ trả phí); empty = keys cannot be saved
+      API_KEYS_SECRET: ${API_KEYS_SECRET:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
     ports:
       - "127.0.0.1:8787:8787"
     healthcheck:
@@ -55,6 +59,9 @@ services:
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      API_KEYS_SECRET: ${API_KEYS_SECRET:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
       OPENAI_TEXT_MODEL: ${OPENAI_TEXT_MODEL:-gpt-5-mini}
       OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-image-2.5-sunburst}
       OPENAI_TTS_MODEL: ${OPENAI_TTS_MODEL:-gpt-4o-mini-tts}

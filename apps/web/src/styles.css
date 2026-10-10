@@ -2562,3 +2562,21 @@ input[type="radio"] {
 .duration-note { font-size: 12px; color: var(--muted); }
 .panel-heading .duration-ok { font-weight: 600; color: #0c6d52; }
 .panel-heading .duration-off { font-weight: 600; color: #845000; }
+
+/* Settings: the owner's own OpenAI / Claude keys */
+.api-key-card { display: grid; gap: 10px; margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fbfcfd; }
+.api-key-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.api-key-head strong { display: block; font-size: 14px; }
+.api-key-head span { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
+.api-key-head b { flex: none; font-size: 12px; padding: 5px 8px; border-radius: 999px; background: #edf1f3; color: #526575; }
+.api-key-head b.configured { background: #dff6ed; color: #0c6d52; }
+.api-key-form { display: grid; gap: 6px; }
+.api-key-form label { font-size: 12px; font-weight: 700; color: var(--ink); }
+.api-key-form > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.api-key-form input { flex: 1 1 240px; min-width: 0; min-height: 40px; padding: 8px 12px; border: 1.5px solid var(--line); border-radius: 9px; font: inherit; font-size: 14px; background: white; }
+.api-key-form input:focus-visible { outline: 3px solid rgba(23, 107, 255, 0.35); outline-offset: 1px; border-color: var(--blue); }
+.api-key-form .button { min-height: 40px; }
+.api-key-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.api-key-actions .button { min-height: 36px; font-size: 13px; }
+.api-key-help { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.api-key-help a { color: var(--blue-dark); text-decoration: underline; }

@@ -12,13 +12,18 @@ import {
   type WordTimestamp,
 } from "./providers";
 
+/** Says what the provider's status means for the owner, in Vietnamese: a refused key and an empty balance are fixed in different places. */
+export function providerErrorMessage(name: string, consoleHost: string, status: number, requestId?: string | null): string {
+  const id = requestId ? ` (mã yêu cầu ${requestId})` : "";
+  if (status === 401) return `${name} từ chối khóa API của bạn (sai hoặc đã bị thu hồi). Hãy tạo khóa mới tại ${consoleHost} và dán lại ở Cài đặt.${id}`;
+  if (status === 403) return `Khóa API ${name} của bạn không có quyền dùng chức năng này (khóa bị giới hạn quyền hoặc tài khoản chưa được cấp). Kiểm tra tại ${consoleHost}.${id}`;
+  if (status === 402 || status === 429) return `${name} từ chối vì hết số dư hoặc vượt giới hạn tốc độ của tài khoản bạn. Kiểm tra gói và số dư tại ${consoleHost}, rồi thử lại sau.${id}`;
+  if (status >= 500) return `${name} đang gặp sự cố (lỗi ${status}). Hãy thử lại sau ít phút.${id}`;
+  return `${name} API trả lỗi ${status}${id}`;
+}
+
 async function checked(response: Response) {
-  if (!response.ok) {
-    const requestId = response.headers.get("x-request-id");
-    throw new Error(
-      `OpenAI API trả lỗi ${response.status}${requestId ? ` (mã yêu cầu ${requestId})` : ""}`,
-    );
-  }
+  if (!response.ok) throw new Error(providerErrorMessage("OpenAI", "platform.openai.com", response.status, response.headers.get("x-request-id")));
   return response;
 }
 
@@ -30,14 +35,18 @@ export class OpenAIAdapter implements AIProvider {
       image: "gpt-image-2.5-sunburst",
       tts: "gpt-4o-mini-tts",
     },
+    private readonly baseUrl = "https://api.openai.com/v1",
   ) {}
+  private url(path: string) {
+    return `${this.baseUrl.replace(/\/$/, "")}${path}`;
+  }
   private headers() {
     return { authorization: `Bearer ${this.apiKey}` };
   }
 
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {
     const response = await checked(
-      await fetch("https://api.openai.com/v1/responses", {
+      await fetch(this.url("/responses"), {
         method: "POST",
         signal: AbortSignal.timeout(300_000),
         headers: { ...this.headers(), "content-type": "application/json" },
@@ -89,7 +98,7 @@ export class OpenAIAdapter implements AIProvider {
           ? "1024x1024"
           : "1024x1536";
     const response = await checked(
-      await fetch("https://api.openai.com/v1/images/generations", {
+      await fetch(this.url("/images/generations"), {
         method: "POST",
         signal: AbortSignal.timeout(300_000),
         headers: { ...this.headers(), "content-type": "application/json" },
@@ -112,7 +121,7 @@ export class OpenAIAdapter implements AIProvider {
 
   async createSpeech(text: string, voice: string): Promise<Uint8Array> {
     const response = await checked(
-      await fetch("https://api.openai.com/v1/audio/speech", {
+      await fetch(this.url("/audio/speech"), {
         method: "POST",
         signal: AbortSignal.timeout(300_000),
         headers: { ...this.headers(), "content-type": "application/json" },
@@ -141,7 +150,7 @@ export class OpenAIAdapter implements AIProvider {
     form.append("response_format", "verbose_json");
     form.append("timestamp_granularities[]", "word");
     const response = await checked(
-      await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      await fetch(this.url("/audio/transcriptions"), {
         method: "POST",
         signal: AbortSignal.timeout(300_000),
         headers: this.headers(),

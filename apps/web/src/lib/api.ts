@@ -1,4 +1,4 @@
-import { DEFAULT_PROJECT_SETTINGS, type Estimate, type Job, type LocalModelCatalog, type Project, type RegenerationComponent } from "@studio/shared";
+import { DEFAULT_PROJECT_SETTINGS, type ApiKeySummary, type Estimate, type Job, type KeyProvider, type LocalModelCatalog, type Project, type RegenerationComponent } from "@studio/shared";
 import { appConfig } from "./config";
 import { demoApi } from "./demo";
 import { supabase } from "./supabase";
@@ -40,6 +40,8 @@ export type UsageStats = {
 export type AccountSettings = {
   dailyBudgetUsd: number;
   maxConcurrentJobs: number;
+  /** The owner's own OpenAI / Claude keys: only whether one is saved and its last four characters. */
+  apiKeys: ApiKeySummary;
   capabilities: {
     supabase: boolean;
     ai: boolean;
@@ -199,6 +201,14 @@ export const api = {
       : request<Job[]>(`/v1/projects/${id}/jobs`),
   getSettings: () => request<AccountSettings>("/v1/settings"),
   getLocalModels: () => request<LocalModelCatalog>("/v1/local-models"),
+  /** Checks the key with the provider, then saves it encrypted on the server. Resolves with the refreshed account view. */
+  saveApiKey: (provider: KeyProvider, key: string) =>
+    request<AccountSettings & { warning?: string }>(`/v1/api-keys/${provider}`, {
+      method: "PUT",
+      body: JSON.stringify({ key }),
+    }),
+  removeApiKey: (provider: KeyProvider) =>
+    request<AccountSettings>(`/v1/api-keys/${provider}`, { method: "DELETE" }),
   updateSettings: (
     input: Pick<AccountSettings, "dailyBudgetUsd" | "maxConcurrentJobs">,
   ) =>

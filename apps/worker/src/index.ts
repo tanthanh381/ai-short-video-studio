@@ -9,6 +9,7 @@ import pino from "pino";
 import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
 import { getConfig } from "./config";
 import { AnthropicStoryboardAdapter } from "./anthropic";
+import { loadUserKey } from "./user-keys";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { LocalMediaAdapter } from "./local-media";
 import { groupWords, OpenAIAdapter } from "./openai";
@@ -26,28 +27,33 @@ const log = pino({
   level: "info",
   redact: [
     "apiKey",
+    "*.apiKey",
+    "key",
+    "*.key",
     "SUPABASE_SECRET_KEY",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
+    "API_KEYS_SECRET",
   ],
 });
 const db = createClient(config.SUPABASE_URL, config.SUPABASE_SECRET_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
   global: { fetch: (input, init) => fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(30_000) }) },
 });
-const openai = config.OPENAI_API_KEY
-  ? new OpenAIAdapter(config.OPENAI_API_KEY, {
-      text: config.OPENAI_TEXT_MODEL,
-      image: config.OPENAI_IMAGE_MODEL,
-      tts: config.OPENAI_TTS_MODEL,
-    })
-  : null;
+const openaiModels = { text: config.OPENAI_TEXT_MODEL, image: config.OPENAI_IMAGE_MODEL, tts: config.OPENAI_TTS_MODEL };
+// The server's own keys (optional). An owner's own key, saved from the website, is used first for that owner's jobs.
+const openai = config.OPENAI_API_KEY ? new OpenAIAdapter(config.OPENAI_API_KEY, openaiModels, config.OPENAI_BASE_URL) : null;
 const anthropic = config.ANTHROPIC_API_KEY
-  ? new AnthropicStoryboardAdapter(
-      config.ANTHROPIC_API_KEY,
-      config.ANTHROPIC_TEXT_MODEL,
-    )
+  ? new AnthropicStoryboardAdapter(config.ANTHROPIC_API_KEY, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL)
   : null;
+async function openaiFor(userId: string): Promise<OpenAIAdapter | null> {
+  const key = await loadUserKey(db, config.API_KEYS_SECRET, userId, "openai");
+  return key ? new OpenAIAdapter(key, openaiModels, config.OPENAI_BASE_URL) : openai;
+}
+async function anthropicFor(userId: string): Promise<AnthropicStoryboardAdapter | null> {
+  const key = await loadUserKey(db, config.API_KEYS_SECRET, userId, "anthropic");
+  return key ? new AnthropicStoryboardAdapter(key, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL) : anthropic;
+}
 const ollama = new OllamaStoryboardAdapter(
   config.OLLAMA_BASE_URL,
   config.OLLAMA_MODEL,
@@ -328,17 +334,17 @@ async function storyboard(job: JobRow, project: Project) {
   const providerName = project.settings.textProvider;
   const provider: StoryboardProvider | null =
     providerName === "openai"
-      ? openai
+      ? await openaiFor(project.userId)
       : providerName === "ollama"
         ? ollama
-        : anthropic;
+        : await anthropicFor(project.userId);
   if (!provider) {
     throw new Error(
       providerName === "openai"
-        ? "Chưa cấu hình OpenAI cho phần kịch bản"
+        ? "Chưa có khóa API OpenAI. Hãy dán khóa của bạn ở Cài đặt (mục Dịch vụ trả phí), hoặc chọn Ollama trong Tùy chọn."
         : providerName === "ollama"
           ? "Chưa kết nối Ollama hoặc chưa cài model"
-          : "Chưa cấu hình Claude cho phần kịch bản",
+          : "Chưa có khóa API Claude. Hãy dán khóa của bạn ở Cài đặt (mục Dịch vụ trả phí), hoặc chọn Ollama trong Tùy chọn.",
     );
   }
   await setProgress(job.id, job.job_type === "create_video" ? 3 : 10, "Đang phân tích nội dung");
@@ -439,10 +445,10 @@ async function storyboard(job: JobRow, project: Project) {
 }
 
 async function generateMedia(job: JobRow, project: Project) {
-  const media: MediaProvider | null = project.settings.mediaProvider === "openai" ? openai : localMedia;
+  const media: MediaProvider | null = project.settings.mediaProvider === "openai" ? await openaiFor(project.userId) : localMedia;
   if (!media)
     throw new Error(
-      "Chưa cấu hình nhà cung cấp để tạo ảnh, giọng đọc và đồng bộ phụ đề",
+      "Chưa có khóa API OpenAI để tạo ảnh, giọng đọc và đồng bộ phụ đề. Hãy dán khóa của bạn ở Cài đặt (mục Dịch vụ trả phí), hoặc chọn media trên máy trong Tùy chọn.",
     );
   const targetId =
     job.job_type === "regenerate_scene"

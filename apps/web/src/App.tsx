@@ -40,6 +40,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  Link,
   Navigate,
   NavLink,
   Route,
@@ -51,6 +52,11 @@ import {
   cleanScriptForNarration,
   DEFAULT_PROJECT_SETTINGS,
   DURATION_OPTIONS,
+  KEY_PROVIDER_INFO,
+  keyFormatError,
+  lastFour,
+  type ApiKeySummary,
+  type KeyProvider,
   contentPlan,
   durationLabel,
   formatDuration,
@@ -2078,13 +2084,17 @@ function StudioPage() {
       type === "storyboard"
         ? storyboardEnabled
         : type === "generate_media"
-          ? Boolean(capabilities?.openai || capabilities?.localMedia)
+          ? Boolean(project?.settings.mediaProvider === "openai" ? capabilities?.openai : capabilities?.localMedia)
           : true;
     if (!requestedAiEnabled) {
       setError(
         type === "storyboard"
-          ? `Chưa cấu hình ${project?.settings.textProvider === "anthropic" ? "Claude" : project?.settings.textProvider === "ollama" ? "Ollama" : "OpenAI"} cho phần kịch bản.`
-          : "Chưa cấu hình OpenAI hoặc media local để tạo ảnh, giọng đọc và đồng bộ phụ đề. Anh vẫn có thể tải media của mình lên.",
+          ? project?.settings.textProvider === "ollama"
+            ? "Chưa kết nối Ollama cho phần kịch bản."
+            : `Chưa có khóa API ${project?.settings.textProvider === "anthropic" ? "Claude" : "OpenAI"}. Hãy dán khóa của bạn ở Cài đặt (mục Dịch vụ trả phí), hoặc chọn Ollama trong Tùy chọn.`
+          : project?.settings.mediaProvider === "openai"
+            ? "Chưa có khóa API OpenAI để tạo ảnh, giọng đọc và đồng bộ phụ đề. Hãy dán khóa của bạn ở Cài đặt (mục Dịch vụ trả phí), hoặc chọn media trên máy trong Tùy chọn."
+            : "Máy tạo ảnh và giọng đọc trên máy chưa được kết nối. Anh vẫn có thể tải media của mình lên.",
       );
       return;
     }
@@ -2724,6 +2734,11 @@ function StudioPage() {
               <p className="microcopy">
                 Chọn máy xử lý kịch bản. Tạo video tự động mặc định dùng máy đã kết nối.
               </p>
+              {capabilities && (project.settings.textProvider === "anthropic" || project.settings.textProvider === "openai") && !capabilities[project.settings.textProvider] && (
+                <Notice tone="info">
+                  Chưa có khóa API {KEY_PROVIDER_INFO[project.settings.textProvider].name}. <Link to="/settings">Dán khóa của bạn ở Cài đặt</Link> để dùng, hoặc chọn Ollama.
+                </Notice>
+              )}
             </div>
             <div className="setting-group">
               <h3><Sparkles /> Nét hình</h3>
@@ -2748,9 +2763,14 @@ function StudioPage() {
               <Field label="Cách tạo media">
                 <select value={project.settings.mediaProvider} onChange={(e) => change({ ...project, settings: { ...project.settings, mediaProvider: e.target.value as ProjectSettings["mediaProvider"] } })}>
                   <option value="local">Máy đã kết nối — không tốn phí API</option>
-                  <option value="openai">OpenAI — có phí API</option>
+                  <option value="openai">OpenAI — có phí API (khóa của bạn)</option>
                 </select>
               </Field>
+              {capabilities && project.settings.mediaProvider === "openai" && !capabilities.openai && (
+                <Notice tone="info">
+                  Chưa có khóa API OpenAI. <Link to="/settings">Dán khóa của bạn ở Cài đặt</Link> để tạo ảnh và giọng đọc bằng OpenAI, hoặc chọn media trên máy.
+                </Notice>
+              )}
             </div>
             <div className="setting-group">
               <h3><Image /> Khung video</h3>
@@ -3344,6 +3364,115 @@ function ExportsPage() {
   );
 }
 
+/** Claude first, as in the provider choices of the Studio. */
+const PAID_PROVIDERS: KeyProvider[] = ["anthropic", "openai"];
+
+/** One paid provider: paste the owner's own key, see only its last four characters afterwards, replace or remove it. */
+function ApiKeyCard({
+  provider,
+  status,
+  enabled,
+  demo,
+  onSave,
+  onRemove,
+}: {
+  provider: KeyProvider;
+  status: ApiKeySummary["keys"][KeyProvider];
+  enabled: boolean;
+  demo: boolean;
+  onSave(key: string): Promise<{ error?: string; note?: string }>;
+  onRemove(): Promise<{ error?: string }>;
+}) {
+  const info = KEY_PROVIDER_INFO[provider];
+  const [value, setValue] = useState("");
+  const [replacing, setReplacing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const inputId = `api-key-${provider}`;
+  const showForm = !status.saved || replacing;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setProblem(null);
+    setNote(null);
+    const result = await onSave(value);
+    setBusy(false);
+    if (result.error) {
+      setProblem(result.error);
+      return;
+    }
+    setValue(""); // the key is gone from the page the moment it is saved
+    setReplacing(false);
+    setNote(result.note ?? "Đã kiểm tra và lưu khóa. Bạn có thể chọn dịch vụ này trong Tùy chọn của Studio.");
+  }
+
+  async function remove() {
+    if (!window.confirm(`Xóa khóa ${info.name} đã lưu? Dự án đang chọn dịch vụ này sẽ cần khóa mới hoặc chuyển sang Ollama và media trên máy.`)) return;
+    setBusy(true);
+    setProblem(null);
+    setNote(null);
+    const result = await onRemove();
+    setBusy(false);
+    if (result.error) setProblem(result.error);
+    else setNote("Đã xóa khóa. Bạn nên thu hồi khóa này ở trang nhà cung cấp nếu không dùng nữa.");
+  }
+
+  return (
+    <section className="api-key-card" aria-label={`Khóa API ${info.name}`}>
+      <div className="api-key-head">
+        <div>
+          <strong>{info.name}</strong>
+          <span>Dùng để {info.unlocks}</span>
+        </div>
+        <b className={status.saved ? "configured" : "unknown"}>{status.saved ? `Đã lưu …${status.last4 ?? ""}` : "Chưa có khóa"}</b>
+      </div>
+      {!enabled && !demo && (
+        <Notice tone="warn">Máy chủ chưa bật lưu khóa API (thiếu API_KEYS_SECRET). Hãy báo người quản trị máy.</Notice>
+      )}
+      {showForm && enabled && (
+        <form className="api-key-form" onSubmit={submit}>
+          <label htmlFor={inputId}>{status.saved ? "Khóa mới thay cho khóa đã lưu" : "Khóa API của bạn"}</label>
+          <div>
+            <input
+              id={inputId}
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={`${info.prefix}…`}
+              value={value}
+              disabled={busy}
+              onChange={(event) => setValue(event.target.value)}
+            />
+            <button className="button button-secondary" type="submit" disabled={busy || !value.trim()}>
+              {busy ? "Đang kiểm tra…" : "Lưu và kiểm tra"}
+            </button>
+            {replacing && (
+              <button className="button button-ghost" type="button" disabled={busy} onClick={() => { setReplacing(false); setValue(""); setProblem(null); }}>
+                Hủy
+              </button>
+            )}
+          </div>
+        </form>
+      )}
+      {status.saved && !replacing && (
+        <div className="api-key-actions">
+          <button className="button button-ghost" type="button" disabled={busy || !enabled} onClick={() => { setReplacing(true); setNote(null); }}>Thay khóa</button>
+          <button className="button button-ghost" type="button" disabled={busy} onClick={() => void remove()}>Xóa khóa</button>
+        </div>
+      )}
+      {problem && <Notice tone="warn">{problem}</Notice>}
+      {note && !problem && <Notice tone="success">{note}</Notice>}
+      <small className="api-key-help">
+        Khóa được mã hóa trên máy chủ, chỉ dùng cho tài khoản của bạn và không bao giờ hiện lại. Lấy khóa tại{" "}
+        <a href={info.consoleUrl} target="_blank" rel="noopener noreferrer">{info.console}</a>.
+      </small>
+    </section>
+  );
+}
+
 function SettingsPage() {
   const { isDemo } = useAuth();
   const defaultServiceStatuses: Record<ServiceId, ServiceStatus> = {
@@ -3369,6 +3498,7 @@ function SettingsPage() {
   const [settings, setSettings] = useState({
     dailyBudgetUsd: 3,
     maxConcurrentJobs: 1,
+    apiKeys: { enabled: true, keys: { openai: { saved: false }, anthropic: { saved: false } } } as ApiKeySummary,
     capabilities: {
       supabase: !isDemo,
       ai: false,
@@ -3431,6 +3561,37 @@ function SettingsPage() {
       );
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Saves or removes the owner's own key; resolves with a message for the card, or null when all went well. */
+  async function saveKey(provider: KeyProvider, key: string): Promise<{ error?: string; note?: string }> {
+    const reason = keyFormatError(provider, key);
+    if (reason) return { error: reason };
+    if (isDemo) {
+      // The demo keeps nothing: only the last four characters are shown, for this page view, and the key is dropped at once.
+      setSettings((current) => ({ ...current, apiKeys: { ...current.apiKeys, keys: { ...current.apiKeys.keys, [provider]: { saved: true, last4: lastFour(key), savedAt: new Date().toISOString() } } } }));
+      return { note: "Chế độ mẫu chỉ minh họa: khóa không được gửi đi hay lưu ở đâu cả." };
+    }
+    try {
+      const next = await api.saveApiKey(provider, key);
+      setSettings((current) => ({ ...current, ...next, usageStats: next.usageStats ?? current.usageStats }));
+      return next.warning ? { note: next.warning } : {};
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Không lưu được khóa. Hãy thử lại." };
+    }
+  }
+  async function removeKey(provider: KeyProvider): Promise<{ error?: string }> {
+    if (isDemo) {
+      setSettings((current) => ({ ...current, apiKeys: { ...current.apiKeys, keys: { ...current.apiKeys.keys, [provider]: { saved: false } } } }));
+      return {};
+    }
+    try {
+      const next = await api.removeApiKey(provider);
+      setSettings((current) => ({ ...current, ...next, usageStats: next.usageStats ?? current.usageStats }));
+      return {};
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Không xóa được khóa. Hãy thử lại." };
     }
   }
 
@@ -3497,13 +3658,27 @@ function SettingsPage() {
           ] as const).map(([name, detail, state]) => (
             <ConnectionRow key={name} name={name} detail={detail} state={state} />
           ))}
-          <details className="settings-more">
+          <details className="settings-more" open={PAID_PROVIDERS.some((provider) => settings.apiKeys.keys[provider].saved) || undefined}>
             <summary>
               Dịch vụ trả phí (không bắt buộc)
-              <small>Chỉ dùng khi bạn chọn Claude hoặc OpenAI thay cho AI local</small>
+              <small>
+                {PAID_PROVIDERS.map((provider) => `${provider === "anthropic" ? "Claude" : "OpenAI"}: ${settings.apiKeys.keys[provider].saved ? "đã có khóa" : "chưa có khóa"}`).join(" · ")}
+              </small>
             </summary>
-            <ConnectionRow name="Claude" detail="Chia cảnh và biên tập kịch bản" state={anthropicState} />
-            <ConnectionRow name="ChatGPT / OpenAI" detail="Kịch bản, hình ảnh, giọng đọc và đồng bộ phụ đề" state={openaiState} />
+            <p className="microcopy">
+              Muốn viết kịch bản bằng Claude hoặc dùng OpenAI để tạo ảnh, giọng đọc? Dán khóa API của riêng bạn. Chi phí do nhà cung cấp tính thẳng vào tài khoản của bạn; không dùng khóa thì mọi thứ vẫn chạy bằng máy này, miễn phí.
+            </p>
+            {PAID_PROVIDERS.map((provider) => (
+              <ApiKeyCard
+                key={provider}
+                provider={provider}
+                status={settings.apiKeys.keys[provider]}
+                enabled={settings.apiKeys.enabled}
+                demo={isDemo}
+                onSave={(key) => saveKey(provider, key)}
+                onRemove={() => removeKey(provider)}
+              />
+            ))}
           </details>
         </section>
         <section>

@@ -31,6 +31,13 @@ const configSchema = z.object({
     .default("false")
     .transform((value) => value === "true"),
   LOCAL_MEDIA_BASE_URL: z.string().url().default("http://host.docker.internal:8765"),
+  // Encrypts the account owner's own OpenAI / Claude keys at rest. Empty means "not set": keys cannot be saved.
+  API_KEYS_SECRET: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().min(32, "API_KEYS_SECRET phải dài ít nhất 32 ký tự (dùng: openssl rand -base64 32)").optional(),
+  ),
+  OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+  ANTHROPIC_BASE_URL: z.string().url().default("https://api.anthropic.com"),
   RENDER_WORKER_ENABLED: z
     .enum(["true", "false"])
     .default("false")

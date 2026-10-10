@@ -20,6 +20,8 @@ const config: AppConfig = {
   LOCAL_MEDIA_FEATURES_ENABLED: false,
   LOCAL_MEDIA_BASE_URL: "http://localhost:8765",
   RENDER_WORKER_ENABLED: false,
+  OPENAI_BASE_URL: "https://api.openai.com/v1",
+  ANTHROPIC_BASE_URL: "https://api.anthropic.com",
   NODE_ENV: "test",
 };
 

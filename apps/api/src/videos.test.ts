@@ -14,6 +14,7 @@ const config: AppConfig = {
   OPENAI_FEATURES_ENABLED: true, ANTHROPIC_FEATURES_ENABLED: true,
   OLLAMA_FEATURES_ENABLED: true, LOCAL_MEDIA_FEATURES_ENABLED: true,
   LOCAL_MEDIA_BASE_URL: "http://media.test:8765", RENDER_WORKER_ENABLED: true, NODE_ENV: "test",
+  OPENAI_BASE_URL: "https://api.openai.com/v1", ANTHROPIC_BASE_URL: "https://api.anthropic.com",
 };
 
 function fixture(options: { allowed?: boolean; busy?: boolean; rpcError?: string; owner?: string } = {}) {

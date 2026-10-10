@@ -13,6 +13,13 @@ const schema = z.object({
       typeof value === "string" && value.trim() === "" ? undefined : value,
     z.string().min(10).optional(),
   ),
+  // Opens the owner's own keys saved from the website (the same secret the API encrypts them with).
+  API_KEYS_SECRET: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().min(32).optional(),
+  ),
+  OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+  ANTHROPIC_BASE_URL: z.string().url().default("https://api.anthropic.com"),
   ANTHROPIC_TEXT_MODEL: z.string().default("claude-haiku-4-5-20251001"),
   OLLAMA_BASE_URL: z.string().url().default("http://host.docker.internal:11434"),
   OLLAMA_MODEL: z.string().default("qwen3.5:4b"),

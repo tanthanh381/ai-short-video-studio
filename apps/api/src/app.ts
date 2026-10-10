@@ -10,7 +10,11 @@ import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { z, ZodError } from "zod";
 import {
+  KEY_PROVIDER_INFO,
+  cleanApiKey,
   cleanScriptForNarration,
+  isKeyProvider,
+  keyFormatError,
   regenerationRequestSchema,
   createProjectSchema,
   createVideoSchema,
@@ -22,6 +26,7 @@ import {
   type Project,
   voiceSample,
 } from "@studio/shared";
+import { checkKeyWithProvider, createKeyVault } from "./api-keys";
 import type { AppConfig } from "./config";
 import type { AdminClient } from "./db";
 import { mapJob, mapProject } from "./mappers";
@@ -131,6 +136,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     .map((x) => x.trim())
     .filter(Boolean);
   let serviceStatusCache: { expiresAt: number; value: Record<string, ServiceStatus> } | null = null;
+  const keyVault = createKeyVault(db, config);
 
   async function getUsageStats(userId: string, budgetUsd: number): Promise<UsageStats> {
     const now = new Date();
@@ -278,6 +284,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
         "req.headers.authorization",
         "req.body.password",
         "req.body.token",
+        "req.body.key", // an owner's own API key (PUT /v1/api-keys/:provider)
         "res.headers.set-cookie",
       ],
     }),
@@ -434,22 +441,83 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.json(projects);
   });
 
+  /**
+   * What the owner can use right now. OpenAI and Claude are available when the owner saved their own key, or when the
+   * server has a shared one (the worker reports it as configured); the server switch can still turn a provider off.
+   */
+  async function accountView(userId: string) {
+    const [apiKeys, statuses] = await Promise.all([keyVault.summary(userId), collectServiceStatuses()]);
+    const sharedKey = (id: "openai" | "anthropic") => statuses[id]?.state === "configured" || statuses[id]?.state === "healthy";
+    const checkedAt = new Date().toISOString();
+    const serviceStatuses: Record<string, ServiceStatus> = { ...statuses };
+    for (const id of ["openai", "anthropic"] as const) {
+      const saved = apiKeys.keys[id];
+      if (saved.saved)
+        serviceStatuses[id] = { state: "configured", detail: `Đang dùng khóa API của bạn (…${saved.last4 ?? ""})`, checkedAt };
+      else if (!sharedKey(id))
+        serviceStatuses[id] = { state: "disabled", detail: "Chưa có khóa API. Dán khóa của bạn ở Cài đặt để dùng.", checkedAt };
+    }
+    const flag = { openai: config.OPENAI_FEATURES_ENABLED, anthropic: config.ANTHROPIC_FEATURES_ENABLED };
+    return {
+      apiKeys,
+      capabilities: {
+        supabase: true,
+        ai: config.AI_FEATURES_ENABLED,
+        openai: flag.openai && (apiKeys.keys.openai.saved || sharedKey("openai")),
+        anthropic: flag.anthropic && (apiKeys.keys.anthropic.saved || sharedKey("anthropic")),
+        ollama: config.OLLAMA_FEATURES_ENABLED,
+        localMedia: config.LOCAL_MEDIA_FEATURES_ENABLED,
+        render: config.RENDER_WORKER_ENABLED,
+      },
+      serviceStatuses,
+    };
+  }
+
   app.get("/v1/settings", async (req, res) => {
     res.json({
       dailyBudgetUsd: req.dailyBudgetUsd,
       maxConcurrentJobs: req.maxConcurrentJobs,
       usageStats: await getUsageStats(req.userId!, req.dailyBudgetUsd!),
-      capabilities: {
-        supabase: true,
-        ai: config.AI_FEATURES_ENABLED,
-        openai: config.OPENAI_FEATURES_ENABLED,
-        anthropic: config.ANTHROPIC_FEATURES_ENABLED,
-        ollama: config.OLLAMA_FEATURES_ENABLED,
-        localMedia: config.LOCAL_MEDIA_FEATURES_ENABLED,
-        render: config.RENDER_WORKER_ENABLED,
-      },
-      serviceStatuses: await collectServiceStatuses(),
+      ...(await accountView(req.userId!)),
     });
+  });
+
+  // Attempts per owner, so this endpoint cannot be used to try many keys against a provider.
+  const keyAttempts = new Map<string, number[]>();
+  function tooManyKeyAttempts(userId: string) {
+    const now = Date.now();
+    const recent = (keyAttempts.get(userId) ?? []).filter((at) => now - at < 10 * 60_000);
+    if (recent.length >= 8) {
+      keyAttempts.set(userId, recent);
+      return true;
+    }
+    keyAttempts.set(userId, [...recent, now]);
+    return false;
+  }
+
+  app.put("/v1/api-keys/:provider", async (req, res) => {
+    const provider = req.params.provider ?? "";
+    if (!isKeyProvider(provider)) return res.status(404).json({ error: "Nhà cung cấp không được hỗ trợ" });
+    if (!keyVault.enabled)
+      return res.status(503).json({ error: "Máy chủ chưa bật lưu khóa API (thiếu API_KEYS_SECRET). Hãy báo người quản trị máy." });
+    const { key } = z.object({ key: z.string().max(500) }).parse(req.body);
+    const formatError = keyFormatError(provider, key);
+    if (formatError) return res.status(400).json({ error: formatError });
+    if (tooManyKeyAttempts(req.userId!))
+      return res.status(429).json({ error: "Bạn đã thử khóa quá nhiều lần. Hãy đợi vài phút rồi thử lại." });
+    const check = await checkKeyWithProvider(config, provider, key);
+    if (!check.ok) return res.status(check.reason === "invalid" ? 400 : 502).json({ error: check.message });
+    await keyVault.save(req.userId!, provider, cleanApiKey(key));
+    req.log.info({ provider }, "api_key_saved"); // the key itself is never logged
+    res.json({ ...(check.warning ? { warning: check.warning } : {}), ...(await accountView(req.userId!)) });
+  });
+
+  app.delete("/v1/api-keys/:provider", async (req, res) => {
+    const provider = req.params.provider ?? "";
+    if (!isKeyProvider(provider)) return res.status(404).json({ error: "Nhà cung cấp không được hỗ trợ" });
+    await keyVault.remove(req.userId!, provider);
+    req.log.info({ provider }, "api_key_removed");
+    res.json(await accountView(req.userId!));
   });
 
   app.get("/v1/local-models", async (_req, res) => {
@@ -535,16 +603,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.json({
       ...input,
       usageStats: await getUsageStats(req.userId!, input.dailyBudgetUsd),
-      capabilities: {
-        supabase: true,
-        ai: config.AI_FEATURES_ENABLED,
-        openai: config.OPENAI_FEATURES_ENABLED,
-        anthropic: config.ANTHROPIC_FEATURES_ENABLED,
-        ollama: config.OLLAMA_FEATURES_ENABLED,
-        localMedia: config.LOCAL_MEDIA_FEATURES_ENABLED,
-        render: config.RENDER_WORKER_ENABLED,
-      },
-      serviceStatuses: await collectServiceStatuses(),
+      ...(await accountView(req.userId!)),
     });
   });
 
@@ -788,6 +847,21 @@ export function createApp(config: AppConfig, db: AdminClient) {
         return res.status(409).json({
           error: `${noAudio.length} cảnh có ảnh nhưng chưa có giọng đọc (cảnh ${noAudio.map(s => s.order + 1).join(", ")}). Hãy tạo giọng đọc trước.`,
         });
+    }
+    {
+      // Say so now when the project uses a paid provider the owner has no key for, instead of queueing a job that fails.
+      const needs = input.type === "storyboard" && (project.settings.textProvider === "openai" || project.settings.textProvider === "anthropic")
+        ? project.settings.textProvider
+        : (input.type === "generate_media" || input.type === "regenerate_scene") && project.settings.mediaProvider === "openai"
+          ? "openai"
+          : null;
+      if (needs) {
+        const view = await accountView(req.userId!);
+        if (!view.capabilities[needs])
+          return res.status(409).json({
+            error: `Chưa có khóa API ${KEY_PROVIDER_INFO[needs].name}. Hãy dán khóa của bạn ở Cài đặt (mục Dịch vụ trả phí), hoặc chọn Ollama và media trên máy trong Tùy chọn.`,
+          });
+      }
     }
     if (input.type === "regenerate_scene") {
       input.payload = regenerationRequestSchema.parse(input.payload);

@@ -21,6 +21,20 @@ cp .env.selfhost.example .env.selfhost
 
 Đặt `ALLOWED_ORIGINS=https://tanthanh381.github.io`. Tailscale Funnel không cần token trong ứng dụng. Với frontend Pages, đặt `VITE_API_URL` trong biến Actions bằng hostname HTTPS public. Có thể để key AI trống khi dùng media local.
 
+### Khóa API riêng của từng người dùng (OpenAI, Claude)
+
+Mỗi người dùng có thể dán khóa OpenAI hoặc Claude của riêng mình ở **Cài đặt → Dịch vụ trả phí**; chi phí tính vào tài khoản của họ, không dùng khóa của máy chủ. Để bật tính năng này, đặt một chuỗi bí mật ngẫu nhiên trong `.env.selfhost`:
+
+```bash
+echo "API_KEYS_SECRET=$(openssl rand -base64 36 | tr -d '\n=+/' | cut -c1-48)" >> .env.selfhost
+```
+
+- Khóa được mã hóa AES-256-GCM (khóa mã hóa riêng cho từng người dùng, suy ra từ `API_KEYS_SECRET`) rồi lưu trong bucket Supabase **riêng tư** `app-secrets` (API tự tạo bucket ở lần lưu đầu tiên; chỉ service role đọc được). Trình duyệt chỉ nhận lại 4 ký tự cuối.
+- **Hãy sao lưu `API_KEYS_SECRET`.** Nếu mất hoặc đổi giá trị, các khóa đã lưu không giải mã được và mọi người phải dán lại khóa. Để trống thì tính năng này tắt (ô dán khóa báo "máy chủ chưa bật").
+- Khi lưu, máy chủ kiểm tra khóa bằng lệnh liệt kê model (miễn phí, không phát sinh chi phí). Khóa sai bị từ chối, khóa không kiểm tra được vì mạng thì không lưu.
+- Khóa của người dùng được ưu tiên hơn khóa chung trong `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` (nếu có). Chức năng "Tạo video tự động" bằng một cú nhấp luôn chỉ dùng Ollama và media trên máy.
+- `OPENAI_BASE_URL` và `ANTHROPIC_BASE_URL` (mặc định là địa chỉ chính thức) chỉ cần đổi khi dùng proxy hoặc khi kiểm thử.
+
 ## Cài media AI local trên macOS
 
 Máy kiểm thử đã cài Python 3.12, MLX Stable Diffusion với cache SDXL-Turbo và model Whisper trong các thư mục bị `.gitignore`. VieNeu/Piper cung cấp giọng tiếng Việt local. Image server bật anatomy guard + negative prompt để hạn chế mặt, tay và cơ thể biến dạng; dùng `IMAGE_CFG_WEIGHT=0` nếu ưu tiên tốc độ tối đa hơn chất lượng. Đây là phần mềm/model có thể dùng miễn phí; không phát sinh API charge, nhưng thời gian tạo ảnh phụ thuộc phần cứng.
@@ -84,7 +98,7 @@ docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml ps
 
 Kiểm tra API nội bộ tại `http://127.0.0.1:8787/health`. Sau đó đặt GitHub Actions variable `VITE_API_URL` bằng hostname HTTPS của Tailscale Funnel, hoặc `http://localhost:8787` nếu chạy local, rồi triển khai lại frontend.
 
-Trong **Cài đặt**, nút **Kiểm tra lại** gọi `GET /v1/settings` để kiểm tra Backend API, quyền Supabase, worker render, Ollama và media server. Worker cung cấp health endpoint nội bộ tại `http://worker:8790/health`; không cần publish cổng này ra Internet. OpenAI/Claude chỉ được kiểm tra sự tồn tại của API key, không gọi API provider để tránh phát sinh chi phí. Nếu vừa sửa `.env.selfhost`, hãy rebuild/restart compose trước khi kiểm tra lại.
+Trong **Cài đặt**, nút **Kiểm tra lại** gọi `GET /v1/settings` để kiểm tra Backend API, quyền Supabase, worker render, Ollama và media server. Worker cung cấp health endpoint nội bộ tại `http://worker:8790/health`; không cần publish cổng này ra Internet. OpenAI/Claude chỉ được kiểm tra sự tồn tại của API key (khóa chung của máy chủ hoặc khóa người dùng đã lưu), không gọi API provider để tránh phát sinh chi phí. Nếu vừa sửa `.env.selfhost`, hãy rebuild/restart compose trước khi kiểm tra lại.
 
 ## Kết nối public bằng Tailscale Funnel
 
