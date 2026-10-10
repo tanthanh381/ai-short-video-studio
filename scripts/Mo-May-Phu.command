@@ -17,8 +17,11 @@ esac
 
 mkdir -p tmp/local-services
 
-command -v tailscale >/dev/null 2>&1 || { print 'Máy này chưa cài Tailscale. Cài và đăng nhập cùng tài khoản với Mac mini, rồi chạy lại.'; exit 1; }
-tailscale_ip=$(tailscale ip -4 2>/dev/null | head -n1 || true)
+# Ứng dụng Tailscale cho Mac không đặt lệnh "tailscale" vào PATH; dùng bản đi kèm trong ứng dụng nếu cần.
+tailscale_cmd=$(command -v tailscale || true)
+[[ -n "$tailscale_cmd" ]] || { [[ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ]] && tailscale_cmd=/Applications/Tailscale.app/Contents/MacOS/Tailscale; }
+[[ -n "$tailscale_cmd" ]] || { print 'Máy này chưa cài Tailscale. Cài và đăng nhập cùng tài khoản với Mac mini, rồi chạy lại.'; exit 1; }
+tailscale_ip=$("$tailscale_cmd" ip -4 2>/dev/null | head -n1 || true)
 [[ -n "$tailscale_ip" ]] || { print 'Tailscale chưa đăng nhập hoặc chưa kết nối. Mở Tailscale, đăng nhập cùng tài khoản với Mac mini, rồi chạy lại.'; exit 1; }
 
 LOCAL_AI_ROOT=${LOCAL_AI_ROOT:-"$HOME/Developer/local-ai"}
