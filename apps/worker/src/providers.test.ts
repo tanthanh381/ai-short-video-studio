@@ -585,6 +585,19 @@ describe("idea mode becomes plain narration then faithful scenes", () => {
     expect(result.scenes.map((scene) => scene.narration).join("")).toBe(`${idea}\n${script}`);
   });
 
+  it("also edits a draft that would be accepted but is short of the asked length, and keeps it if the edit is no better", async () => {
+    // 75-90% of the words was accepted as it was, and a 45-second video came out 15% short.
+    const nearly = sentences(12); // 168 words: above the 167 floor, below the 199 asked
+    const edited = { writeScript: vi.fn(async (request: { draft?: string }) => (request.draft ? script : nearly)), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
+    const result = await createFaithfulStoryboard(edited, { ...ideaInput, sourceText: idea });
+    expect(edited.writeScript.mock.calls.filter((call) => (call[0] as { draft?: string }).draft)).toHaveLength(1); // one edit was enough
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(`${idea}\n${script}`);
+    // an edit that comes back shorter does not replace the draft that was already acceptable
+    const worse = { writeScript: vi.fn(async (request: { draft?: string }) => (request.draft ? sentences(10) : nearly)), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
+    const kept = await createFaithfulStoryboard(worse, { ...ideaInput, sourceText: idea });
+    expect(kept.scenes.map((scene) => scene.narration).join("")).toBe(`${idea}\n${nearly}`);
+  });
+
   it("expands again from the last, longer draft and still fails clearly when it never gets there", async () => {
     const lengths = [sentences(6), sentences(7), sentences(8)]; // 84, 98, 112 words: never 149
     const provider = {

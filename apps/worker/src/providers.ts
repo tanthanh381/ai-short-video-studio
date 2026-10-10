@@ -773,9 +773,10 @@ export async function writeIdeaScript(provider: StoryboardProvider, input: Story
       if (consider(await request(attempt))) break;
     } catch (error) { lastError = error; }
   }
-  // Still too short (a 4B model sometimes stops at 60%: 94 and 105 words for 167 asked, on real runs): editing its own draft
-  // into a longer one is an easier job for it than writing again, and it keeps the opening and the order.
-  for (let extra = 0; extra < EXPAND_ATTEMPTS && !accepted() && best.draft && best.words >= Math.round(target * 0.4); extra++) {
+  // Still below the length asked for (a 4B model sometimes stops at 60%: 94 and 105 words for 167 asked, on real runs, and the
+  // video failed; at 75-90% it was accepted and came out 15% short): editing its own draft into a longer one is an easier job
+  // for it than writing again, and it keeps the opening and the order. The accepted drafts keep the 75% floor if this fails.
+  for (let extra = 0; extra < EXPAND_ATTEMPTS && best.draft && best.words < min && best.words >= Math.round(target * 0.4); extra++) {
     try {
       consider(await request(LENGTH_ATTEMPTS + extra, { draft: best.draft }));
     } catch (error) { lastError = error; }
