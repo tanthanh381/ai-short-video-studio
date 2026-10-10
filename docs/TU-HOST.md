@@ -62,6 +62,17 @@ Trong màn hình tạo video, preset ảnh local có ba mức: **Fast** (2 bư�
 
 Cầu nối chỉ bind localhost; worker Docker truy cập qua `host.docker.internal`, không công khai endpoint media.
 
+### Giảm một nửa dung lượng model ảnh SDXL-Turbo
+
+Lần tạo ảnh đầu tiên tải SDXL-Turbo dạng fp32 (13,9 GB), nhưng image server luôn nạp nó dưới dạng fp16, nên một nửa dung lượng đó không bao giờ được dùng. Chạy một lần sau khi model đã tải xong (và gỡ model khỏi bộ nhớ trước: `curl -X POST localhost:5002/unload`):
+
+```bash
+"$LOCAL_AI_ROOT/wb-venv/bin/python" local-tools/slim_model_cache.py            # chuyển còn 6,9 GB
+"$LOCAL_AI_ROOT/wb-venv/bin/python" local-tools/slim_model_cache.py --dry-run  # chỉ báo sẽ tiết kiệm bao nhiêu
+```
+
+Script ghi từng tensor một (không tốn RAM), kiểm tra từng tensor giống hệt `astype(float16)` rồi mới thay file cũ; kiểm tra lỗi thì giữ nguyên bản gốc. Ảnh tạo ra giống hệt từng byte (đã thử cùng seed trước và sau). Chạy lại nhiều lần vẫn an toàn.
+
 ### Máy vẽ tay (phong cách "Vẽ tay bảng trắng")
 
 Video chọn phong cách **Vẽ tay bảng trắng** được worker gửi từng cảnh tới `local-tools/whiteboard_server.py` (cổng 8766) để bàn tay vẽ nét viền rồi tô màu. Máy này cần môi trường Python riêng và ffmpeg trong `PATH`:
