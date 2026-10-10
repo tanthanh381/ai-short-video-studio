@@ -153,6 +153,16 @@ Máy phụ bị loại khỏi một loại việc khi:
 
 Ollama (viết kịch bản, chia cảnh) chạy trọn một giai đoạn trên một máy: máy tốt nhất lúc đó, thường là máy chính. Nếu máy đó mất kết nối giữa chừng, giai đoạn được chạy lại trên máy kia. Dựng video bằng FFmpeg vẫn ở máy chính; riêng cảnh "Vẽ tay bảng trắng" được chia theo cảnh giữa các máy.
 
+### Cách nhanh, không cần SSH
+
+Máy Air chỉ cần có Tailscale (đăng nhập cùng tài khoản với Mac mini) và Homebrew.
+
+1. Trên Mac mini: `bash scripts/air-node/serve-bundle.sh` (tên máy Air trong Tailscale mặc định là `air`, hoặc truyền tên khác). Lệnh ghi `AI_NODES` và `AI_NODES_TOKEN` (mã tự sinh, không in ra) vào `.env.selfhost` rồi in đúng một dòng `curl … | bash`; máy chủ gói cài này chỉ nghe ở địa chỉ Tailscale, dùng đường dẫn bí mật và tự tắt sau 90 phút hoặc khi Air cài xong.
+2. Trên máy Air, mở Terminal và dán dòng đó. Script cài công cụ (Python 3.12, FFmpeg, Whisper, Ollama), tải mã nguồn đã commit, các model (khoảng 7 GB nếu máy có từ 16 GB RAM, còn lại khoảng 0,5 GB), dựng `venv` và `wb-venv`, kéo model Ollama, lưu mã truy cập vào `~/.studio-node-token` rồi chạy `scripts/Mo-May-Phu.command`. Máy dưới 16 GB RAM không tải model ảnh: ảnh vẫn do Mac mini vẽ.
+3. Trên Mac mini, khi hàng đợi trống, dựng lại worker để nó đọc `AI_NODES` (lệnh ở mục "Kết nối từ máy chính" bên dưới).
+
+Gỡ: `bash scripts/air-node/uninstall-air-node.sh` trên máy Air (`--purge` để xóa luôn model và mã nguồn). Các bước 1 – 5 dưới đây là cách làm tay tương đương.
+
 ### Chuẩn bị máy Air (một lần)
 
 1. Cài Tailscale, đăng nhập cùng tài khoản với Mac mini. Lấy địa chỉ bằng `tailscale ip -4` (dạng `100.x.y.z`). Dùng địa chỉ này, không dùng tên `.local`: container Docker trên máy chính không phân giải được tên mDNS.
