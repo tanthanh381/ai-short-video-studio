@@ -270,7 +270,12 @@ async function upload(path: string, data: Uint8Array, contentType: string) {
   const { error } = await db.storage
     .from("private-media")
     .upload(path, data, { contentType, upsert: true, cacheControl: "3600" });
-  if (error) throw error;
+  if (error) {
+    // The storage service answers in English; say what happened and what to do.
+    if (/exceeded the maximum allowed size/iu.test(error.message))
+      throw new Error(`Tệp ${Math.round(data.byteLength / 1_048_576)} MB vượt giới hạn lưu trữ 50 MB. Hãy dùng tệp nhỏ hơn hoặc chia video thành nhiều phần.`);
+    throw error;
+  }
 }
 async function download(path: string) {
   const { data, error } = await db.storage.from("private-media").download(path);

@@ -67,3 +67,31 @@ export function buildAmbientMusicArgs(outPath: string): string[] {
     + "aecho=0.8:0.55:700|1300:0.3|0.2,aformat=sample_fmts=fltp:channel_layouts=stereo[out]";
   return ["-y", ...inputs, "-filter_complex", filter, "-map", "[out]", "-t", "32", "-c:a", "pcm_s16le", outPath];
 }
+
+/** The private-media bucket refuses an object over this (its file_size_limit; the project's own 50 MiB cap). */
+export const EXPORT_LIMIT_BYTES = 52_428_800;
+
+export const EXPORT_AUDIO_BITS = 192_000;
+
+/**
+ * Video bitrate cap that keeps an export under the bucket's size limit. Constant-quality encoding (CRF 21) alone gave
+ * 1.5-4.2 Mbit/s: a 3-minute video came out near 65 MiB and failed at the upload ("The object exceeded the maximum
+ * allowed size") after 20 minutes of work, a 2-minute one at 47.8 MiB and a 90 s story at 45 MiB were a hair under.
+ * `scale` lowers the cap again when a first attempt still came out too large.
+ */
+export function exportRateCap(totalMs: number, scale = 1): { maxrate: number; bufsize: number } {
+  const seconds = Math.max(1, totalMs / 1000);
+  // 86% of the limit: container overhead, audio rounding and rate-control overshoot
+  const videoBits = Math.floor((EXPORT_LIMIT_BYTES * 0.86 * 8) / seconds - EXPORT_AUDIO_BITS);
+  const maxrate = Math.max(400_000, Math.floor(videoBits * scale));
+  return { maxrate, bufsize: maxrate * 2 };
+}
+
+export function exportRateArgs(totalMs: number, scale = 1): string[] {
+  const { maxrate, bufsize } = exportRateCap(totalMs, scale);
+  return ["-maxrate", String(maxrate), "-bufsize", String(bufsize)];
+}
+
+export function exportTooLargeMessage(totalMs: number): string {
+  return `Video dài ${Math.round(totalMs / 1000)} giây không nén vừa giới hạn tải lên 50 MB. Hãy chia thành nhiều phần ngắn hơn (dưới khoảng 4 phút).`;
+}

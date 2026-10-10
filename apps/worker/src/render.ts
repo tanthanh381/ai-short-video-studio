@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { drawsByHand, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
-import { buildAudioMixFilter, buildAmbientMusicArgs, validateCaptionTiming } from "./render-quality";
+import { EXPORT_LIMIT_BYTES, buildAudioMixFilter, buildAmbientMusicArgs, exportRateArgs, exportTooLargeMessage, validateCaptionTiming } from "./render-quality";
 import { CARD, PAPER, brandInitials, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperCanvasArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
 import { drawSceneByHand } from "./whiteboard";
 
@@ -471,13 +471,20 @@ export async function renderProject(
       "+faststart",
       "-t",
       (total / 1000).toFixed(3),
-      output,
     );
     await onProgress(78, "Đang ghép phụ đề và âm thanh");
-    await exec(config.FFMPEG_PATH, args, {
-      maxBuffer: 20_000_000,
-      timeout: config.RENDER_TIMEOUT_MS ?? 900_000,
-    });
+    // Constant quality, capped so the file fits the storage limit; a first attempt that still comes out too large is redone lower.
+    let rateScale = 1;
+    for (let attempt = 0; ; attempt++) {
+      await exec(config.FFMPEG_PATH, [...args, ...exportRateArgs(total, rateScale), output], {
+        maxBuffer: 20_000_000,
+        timeout: config.RENDER_TIMEOUT_MS ?? 900_000,
+      });
+      const size = (await stat(output)).size;
+      if (size <= EXPORT_LIMIT_BYTES * 0.97) break;
+      if (attempt >= 1) throw new Error(exportTooLargeMessage(total));
+      rateScale = Math.max(0.3, (EXPORT_LIMIT_BYTES * 0.8) / size * rateScale);
+    }
     const thumbnail = join(workdir, "thumbnail.jpg");
     // A hand-drawn video opens on blank paper: take the first scene once its drawing is finished.
     const firstSceneMs = timelineScenes[0]?.actualDurationMs ?? 0;
