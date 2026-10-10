@@ -147,13 +147,14 @@ export function paperStageFilter(index: number): string {
 }
 
 /**
- * Grain of the kraft sheet. The reference sheet (0594.mp4) is crumpled kraft: a grain of std 5.5 RGB levels (measured at
- * 720p, corner patches), where the old flat sheet with fine noise had 2.6. Noise at 108x192, enlarged and embossed, gives a soft
- * relief of that strength; `strength` scales it (0.2 gives 5.9 in the frame) and `neutral` is the level a gray still has
+ * Grain of the kraft sheet. The reference sheet (0594.mp4) is soft crumpled kraft with a std of 5.5 RGB levels (measured at
+ * 720p, corner patches; part of it is colour variation), where the first flat sheet with fine noise had 2.6. Noise at 108x192,
+ * enlarged and embossed, gives a luma-only relief. At strength 0.20 the frame measured 6.2 but looked like stucco next to the
+ * reference at the same size, so it is 0.13 (about 4): present and paper-like, not pebbled. `neutral` is the level a gray still has
  * after ffmpeg's range conversion, so the sheet's mean colour does not move. The seed is fixed: every scene must use the same
  * paper, a new pattern at each cut would show as a pop.
  */
-export const PAPER_GRAIN = { cells: "108x192", noise: 100, seed: 20261010, soften: 1.2, strength: 0.2, neutral: 126 } as const;
+export const PAPER_GRAIN = { cells: "108x192", noise: 100, seed: 20261010, soften: 1.2, strength: 0.13, neutral: 126 } as const;
 
 /** ffmpeg arguments that write the grain still (gray, centred on mid-gray). */
 export function paperGrainArgs(output: string): string[] {
