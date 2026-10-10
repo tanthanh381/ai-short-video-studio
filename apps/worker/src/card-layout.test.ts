@@ -1,3 +1,7 @@
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
 import { CARD, brandInitials, castForScript, cardFooterLines, cardTitleFontSize, fallbackCardTitle, splitCardTitle, usesStoryCard } from "./card-layout";
@@ -135,8 +139,8 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     expect(paperStageFilter(1)).not.toBe(paperStageFilter(0));
     expect(paperFeatherFilter()).toContain(`scale=${PAPER.stage}:${PAPER.stage}`);
     // the sheet is flat: a vignette (smaller angle = stronger) once darkened its corners by 11%
-    const { paperCanvasArgs, PAPER_HEX } = await import("./card-layout");
-    expect(paperCanvasArgs("/tmp/p.png").join(" ")).not.toMatch(/vignette/);
+    const { paperGrainArgs, PAPER_HEX } = await import("./card-layout");
+    expect(paperGrainArgs("/tmp/p.png").join(" ")).not.toMatch(/vignette/);
     expect(PAPER_HEX).toBe("d3bb87"); // RGB 211,187,135 measured from the reference short
     // every picture is shifted onto the same kraft: measured from its lightest corner (hair or a prop is darker)
     const { paperShift } = await import("./card-layout");
@@ -164,6 +168,53 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     expect(prompts[1]).toContain("eyes closed, quiet sad smile");
     expect(prompts[3]).toContain("holding out a small warm cup");
     expect(paperStagePrompt("Chibi figure sitting cross-legged holding open book while another chibi listens nearby")).toContain("while another small child listens");
+  });
+
+  it("grains the whole frame with one fixed paper, character included, without changing the sheet's colour", async () => {
+    const { paperGrainArgs, paperStageFilter, PAPER_GRAIN, PAPER_HEX } = await import("./card-layout");
+    // one seed: a new pattern at every scene cut would show as a pop
+    expect(paperGrainArgs("/tmp/g.png").join(" ")).toContain(`all_seed=${PAPER_GRAIN.seed}`);
+    expect(paperGrainArgs("/tmp/g.png").join(" ")).toContain("format=gray");
+    const filter = paperStageFilter(0);
+    expect(filter).toContain(`color=c=0x${PAPER_HEX}`); // the sheet itself is flat; the grain comes from input 2
+    expect(filter).toContain(`blend=c0_expr='A+(B-${PAPER_GRAIN.neutral})*${PAPER_GRAIN.strength}'`);
+    expect(filter).toContain("c1_mode=normal"); // luma only: the colour planes stay as they are
+    expect(filter.indexOf("overlay=")).toBeLessThan(filter.indexOf("blend=")); // grain over the character, not under it
+  });
+
+  const ffmpegAvailable = spawnSync("ffmpeg", ["-version"]).status === 0;
+  it.skipIf(!ffmpegAvailable)("renders a frame with the reference's grain (std 5.5), the same on paper and inside the picture", async () => {
+    const { paperGrainArgs, paperStageFilter, PAPER } = await import("./card-layout");
+    const dir = mkdtempSync(join(tmpdir(), "paper-grain-"));
+    try {
+      const run = (args: string[]) => execFileSync("ffmpeg", ["-nostdin", "-v", "error", ...args], { maxBuffer: 64 * 1024 * 1024 });
+      run(paperGrainArgs(join(dir, "grain.png")));
+      // a character picture whose own paper is flat kraft: the case that would show as a smooth patch
+      run(["-y", "-f", "lavfi", "-i", `color=c=0xD3BB87:s=${PAPER.stage}x${PAPER.stage}:d=1`, "-frames:v", "1", join(dir, "picture.png")]);
+      const raw = run(["-loop", "1", "-framerate", "30", "-i", join(dir, "picture.png"), "-i", join(dir, "grain.png"), "-t", "0.2",
+        "-filter_complex", paperStageFilter(0).replace("[2:v]", "[1:v]"), "-map", "[v]", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]);
+      expect(raw.length).toBe(PAPER.width * PAPER.height * 3);
+      const patch = (x0: number, y0: number, w: number, h: number) => {
+        const sums = [0, 0, 0], squares = [0, 0, 0];
+        for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) for (let c = 0; c < 3; c++) {
+          const v = raw[(y * PAPER.width + x) * 3 + c]!;
+          sums[c] += v; squares[c] += v * v;
+        }
+        const n = w * h;
+        return sums.map((sum, c) => ({ mean: sum / n, std: Math.sqrt(squares[c]! / n - (sum / n) ** 2) }));
+      };
+      const corner = patch(0, 0, 90, 150);
+      const inside = patch(PAPER.width / 2 - 150, PAPER.stageBottom - 450, 300, 300);
+      corner.forEach((channel, c) => {
+        expect(Math.abs(channel.mean - PAPER.paper[c]!)).toBeLessThan(8); // same kraft as the reference sheet
+        expect(channel.std).toBeGreaterThan(3); // a flat sheet had 2.6
+        expect(channel.std).toBeLessThan(9);
+        expect(Math.abs(channel.std - inside[c]!.std)).toBeLessThan(1.5); // no smooth patch where the picture is
+      });
+      expect(Math.abs(corner[0]!.std - corner[2]!.std)).toBeLessThan(0.5); // grey grain: no colour noise
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("keeps the boy's own action and prop: no object as the subject, no leftovers of a dropped place", async () => {

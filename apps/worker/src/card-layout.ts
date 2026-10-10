@@ -130,23 +130,37 @@ export function paperShift(corners: Array<[number, number, number]>): [number, n
 }
 
 /**
- * One scene: the paper (input 2) with the feathered character (input 0) breathing (1.2% scale, 3.4 s) and swaying
- * (0.4°, 4.6 s) from the feet, so it reads as alive without a video model. Phase differs per scene.
+ * One scene: the feathered character (input 0) breathing (1.2% scale, 3.4 s) and swaying (0.4°, 4.6 s) from the feet over the
+ * flat kraft sheet, so it reads as alive without a video model. Phase differs per scene. The paper's grain (input 2, see
+ * paperGrainArgs) is added to the finished frame, character included, so the square picture never shows as a smooth patch on
+ * grainy paper; only the luma plane changes, so the sheet keeps its colour exactly. It is the same still in every scene:
+ * the paper stays put while the character moves.
  */
 export function paperStageFilter(index: number): string {
   const phase = (index % 4) * 0.8;
   return `[0:v]format=rgba,scale=w='trunc(${PAPER.stage}*(1+0.012*sin(2*PI*(t+${phase})/3.4))/2)*2':h=-2:eval=frame,` +
     `rotate=a='0.007*sin(2*PI*(t+${phase})/4.6)':c=none:ow=iw:oh=ih[character];` +
-    `[2:v]format=yuv420p[paper];[paper][character]overlay=x='(W-w)/2':y='${PAPER.stageBottom}-h':eval=frame:format=auto,fps=30,format=yuv420p[v]`;
+    `color=c=0x${PAPER_HEX}:s=${PAPER.width}x${PAPER.height}:r=30,format=yuv444p[flat];[2:v]format=yuv444p[grain];` +
+    `[flat][character]overlay=x='(W-w)/2':y='${PAPER.stageBottom}-h':eval=frame:format=yuv444[comp];` +
+    `[comp][grain]blend=c0_expr='A+(B-${PAPER_GRAIN.neutral})*${PAPER_GRAIN.strength}':c1_mode=normal:c1_opacity=1:c2_mode=normal:c2_opacity=1,` +
+    `fps=30,format=yuv420p[v]`;
 }
 
 /**
- * The kraft sheet: one flat colour with fine grain. No vignette: ffmpeg's `vignette` takes a lens angle where a SMALLER
- * angle is stronger, and PI/14 darkened the corners by 11% (RGB 188,167,120 against the reference's 211,187,135, found
- * by the feature QA). The reference sheet is uniform to within 4 levels from corner to corner.
+ * Grain of the kraft sheet. The reference sheet (0594.mp4) is crumpled kraft: a grain of std 5.5 RGB levels (measured at
+ * 720p, corner patches), where the old flat sheet with fine noise had 2.6. Noise at 108x192, enlarged and embossed, gives a soft
+ * relief of that strength; `strength` scales it (0.2 gives 5.9 in the frame) and `neutral` is the level a gray still has
+ * after ffmpeg's range conversion, so the sheet's mean colour does not move. The seed is fixed: every scene must use the same
+ * paper, a new pattern at each cut would show as a pop.
  */
-export function paperCanvasArgs(output: string, color: string = PAPER_HEX): string[] {
-  return ["-y", "-f", "lavfi", "-i", `color=c=0x${color}:s=${PAPER.width}x${PAPER.height}:d=1,noise=alls=5:allf=u`,
+export const PAPER_GRAIN = { cells: "108x192", noise: 100, seed: 20261010, soften: 1.2, strength: 0.2, neutral: 126 } as const;
+
+/** ffmpeg arguments that write the grain still (gray, centred on mid-gray). */
+export function paperGrainArgs(output: string): string[] {
+  const g = PAPER_GRAIN;
+  return ["-y", "-f", "lavfi", "-i",
+    `color=c=0x808080:s=${g.cells}:d=1,format=gray,noise=alls=${g.noise}:allf=u:all_seed=${g.seed},` +
+    `scale=${PAPER.width}:${PAPER.height}:flags=bicubic,convolution='0m=-2 -1 0 -1 0 1 0 1 2:0rdiv=1:0bias=128',gblur=sigma=${g.soften},format=gray`,
     "-frames:v", "1", "-update", "1", output];
 }
 

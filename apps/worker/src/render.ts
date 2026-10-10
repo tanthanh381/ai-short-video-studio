@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { drawsByHand, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
 import { EXPORT_LIMIT_BYTES, buildAudioMixFilter, buildAmbientMusicArgs, exportRateArgs, exportTooLargeMessage, validateCaptionTiming } from "./render-quality";
-import { CARD, PAPER, brandInitials, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperCanvasArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
+import { CARD, PAPER, brandInitials, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
 import { drawSceneByHand } from "./whiteboard";
 
 const exec = promisify(execFile);
@@ -261,6 +261,8 @@ export async function renderProject(
     const encoderPreset = videoEncoderPreset(project.settings.generationPreset);
     const cardFrame = usesStoryCard(project.settings) ? await buildCardFrame(config, workdir, project) : null;
     const paperStage = usesPaperStage(project.settings);
+    // One grain still for the whole video, written by the first scene that needs it (the seed is fixed anyway).
+    let paperGrain: Promise<unknown> | null = null;
     let done = 0;
     const renderSegment = async (scene: Scene) => {
       if ((!scene.imagePath && !scene.videoPath) || !scene.audioPath)
@@ -300,8 +302,9 @@ export async function renderProject(
           if (stdout.length >= 3) corners.push([stdout[0]!, stdout[1]!, stdout[2]!]);
         }
         await exec(config.FFMPEG_PATH, ["-y", "-i", imagePath, "-vf", paperFeatherFilter(paperShift(corners)), "-frames:v", "1", feathered], { timeout: 60_000 });
-        paperCanvas = join(workdir, "paper.png");
-        await exec(config.FFMPEG_PATH, paperCanvasArgs(paperCanvas), { timeout: 60_000 });
+        paperCanvas = join(workdir, "paper-grain.png");
+        paperGrain ??= exec(config.FFMPEG_PATH, paperGrainArgs(paperCanvas), { timeout: 60_000 });
+        await paperGrain;
         await writeFile(imagePath, await readFile(feathered));
       }
       const clip = Boolean(scene.videoPath) || handDrawn;
