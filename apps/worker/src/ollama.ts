@@ -17,10 +17,12 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
     private readonly baseUrl: string,
     private readonly model = "qwen3.5:4b",
     private readonly tuning: { numCtx?: number; keepAlive?: string } = {},
+    /** How requests are sent; the load balancer passes one that gives up when the machine is declared down. */
+    private readonly send: typeof fetch = (input, init) => fetch(input, init),
   ) {}
 
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
+    const response = await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
       method: "POST",
       signal: AbortSignal.timeout(240_000),
       headers: { "content-type": "application/json" },
@@ -64,7 +66,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
   async describeCast(input: { title: string; sourceText: string; model?: string | null; cartoon?: boolean; people?: string }): Promise<string> {
     const people = input.people ?? "Vietnamese";
     try {
-      const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
+      const response = await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
         method: "POST",
         signal: AbortSignal.timeout(120_000),
         headers: { "content-type": "application/json" },
@@ -115,7 +117,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
     // Long sources (a whole story pasted as the idea) are cut to ~2,500 words so the prompt fits the context.
     const source = input.sourceText.split(/\s+/u).slice(0, 2500).join(" ");
     const sourceWords = source.split(/\s+/u).filter(Boolean).length;
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
+    const response = await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
       method: "POST",
       signal: AbortSignal.timeout(300_000),
       headers: { "content-type": "application/json" },
@@ -164,7 +166,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
   /** Free the model's RAM as soon as the text work is done; the image and voice models need it next. */
   async unload(model?: string | null): Promise<void> {
     try {
-      await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
+      await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
         method: "POST",
         signal: AbortSignal.timeout(10_000),
         headers: { "content-type": "application/json" },
@@ -179,7 +181,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
     const known = new Set(input.sourceText.normalize("NFC").toLocaleLowerCase("vi").match(/[\p{L}\p{N}]+/gu) ?? []);
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
+        const response = await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
           method: "POST",
           signal: AbortSignal.timeout(90_000),
           headers: { "content-type": "application/json" },
@@ -213,7 +215,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
   async writePostCaption(input: { sourceText: string; title: string; model?: string | null }): Promise<{ title: string; description: string; hashtags: string[] } | null> {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
+        const response = await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
           method: "POST",
           signal: AbortSignal.timeout(90_000),
           headers: { "content-type": "application/json" },
@@ -253,7 +255,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
     // Asked alone and with nothing else to do, the small model reliably answers in English.
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
+        const response = await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
           method: "POST",
           signal: AbortSignal.timeout(60_000),
           headers: { "content-type": "application/json" },

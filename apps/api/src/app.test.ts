@@ -81,5 +81,49 @@ describe("API", () => {
     expect(response.body.serviceStatuses.supabase.state).toBe("healthy");
     expect(response.body.serviceStatuses.ollama.state).toBe("disabled");
     expect(response.body.serviceStatuses.worker.state).toBe("disabled");
+    expect(response.body.balancer).toBeNull();
+  });
+
+  describe("cac may cung xu ly", () => {
+    const owner = {
+      auth: { getUser: vi.fn(async () => ({ data: { user: { id: "user-1", email: "owner@example.com" } }, error: null })) },
+      from: () => {
+        const query = {
+          select: () => query,
+          eq: () => query,
+          gte: () => query,
+          maybeSingle: async () => ({ data: { user_id: "user-1", is_active: true, daily_budget_usd: 3, max_concurrent_jobs: 1 }, error: null }),
+        };
+        return query;
+      },
+    };
+    const node = (id: string, role: "primary" | "secondary") => ({ id, role, state: "healthy", detail: "Sẵn sàng nhận việc", rttMs: null, resources: null, lanes: {} });
+    const workerSays = (balancer: unknown) => vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      services: { worker: { state: "healthy", detail: "Worker đang chạy" } },
+      balancer,
+    }))));
+
+    it("bao cac may va lan phan viec gan nhat khi co tu hai may", async () => {
+      workerSays({
+        mode: "auto",
+        nodes: [node("mini", "primary"), node("air", "secondary")],
+        decisions: [{ at: "2026-10-10T10:00:00.000Z", lane: "image", tasks: 12, nodes: ["mini", "air"], reason: "Chạy song song 2 máy" }],
+      });
+      const app = createApp({ ...config, RENDER_WORKER_ENABLED: true }, owner as never);
+      const response = await request(app).get("/v1/settings").set("Authorization", "Bearer test");
+      expect(response.status).toBe(200);
+      expect(response.body.balancer.nodes.map((item: { id: string }) => item.id)).toEqual(["mini", "air"]);
+      expect(response.body.balancer.decisions[0].reason).toBe("Chạy song song 2 máy");
+      vi.unstubAllGlobals();
+    });
+
+    it("khong hien gi khi worker chi co may chinh", async () => {
+      workerSays({ mode: "auto", nodes: [], decisions: [] });
+      const app = createApp({ ...config, RENDER_WORKER_ENABLED: true }, owner as never);
+      const response = await request(app).get("/v1/settings").set("Authorization", "Bearer test");
+      expect(response.body.balancer).toBeNull();
+      vi.unstubAllGlobals();
+    });
   });
 });

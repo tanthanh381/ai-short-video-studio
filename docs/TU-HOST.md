@@ -125,6 +125,78 @@ tailscale funnel status
 
 Lấy hostname HTTPS từ `tailscale funnel status`, kiểm tra `/health`, rồi đặt GitHub Actions variable `VITE_API_URL` bằng hostname đó (ví dụ `https://may-cua-ban.tailnet.ts.net`). Máy phải bật Tailscale, Docker API và worker khi sử dụng; nếu máy tắt hoặc Funnel dừng thì frontend vẫn mở được nhưng không tạo/render video.
 
+## Thêm máy phụ (MacBook Air) để chia tải
+
+Worker vẫn chạy một chỗ duy nhất, trên máy chính (Mac mini). MacBook Air chỉ chạy các dịch vụ AI (Ollama, vẽ ảnh, giọng đọc, Whisper, máy vẽ tay) và nhận việc từ máy chính qua Tailscale. Máy Air không cần Docker, không giữ khóa Supabase hay khóa API nào.
+
+### Hệ thống tự quyết định thế nào
+
+Trước mỗi đợt việc (tạo ảnh các cảnh, đọc các cảnh, vẽ tay), worker hỏi từng máy xem đang làm được gì và tốn bao lâu cho một việc, rồi tính xem cả đợt xong sớm nhất khi chạy một máy hay nhiều máy:
+
+- Máy phụ chỉ tham gia khi làm cả đợt nhanh hơn ít nhất 15% và tiết kiệm ít nhất 30 giây. Video 2 – 3 cảnh chạy trên máy chính; video 8 cảnh trở lên thường chạy song song. Không đánh thức một chiếc laptop, làm nó nóng và hao pin chỉ để tiết kiệm vài giây.
+- Mỗi máy nhận một việc một lúc, máy nào xong trước nhận việc tiếp, nên máy nhanh tự nhận nhiều hơn. Máy chậm không được giao cảnh cuối nếu máy nhanh xong cảnh đó sớm hơn.
+- Thời gian một việc được đo từ chính các lần chạy trước (trung bình có trọng số), lần đầu dùng số máy đó tự báo hoặc đoán chậm hơn máy chính một chút.
+- Việc đang chạy trên một máy mà máy đó mất kết nối (gập màn hình, ngủ, rớt mạng) tự được giao lại cho máy còn lại; máy lỗi được nghỉ một lúc rồi thử lại, lỗi liên tiếp thì nghỉ lâu hơn.
+
+Máy phụ bị loại khỏi một loại việc khi:
+
+| Tình trạng máy phụ | Cách xử lý |
+| --- | --- |
+| Tắt, ngủ, rớt Tailscale | Không giao việc; việc đang chạy chuyển sang máy khác |
+| Có tệp tạm dừng (`scripts/Mo-May-Phu.command pause`) | Không giao việc mới |
+| Chạy pin dưới `AI_NODE_MIN_BATTERY` (30%) | Không giao việc; trên mức đó vẫn nhận nhưng được tính chậm hơn |
+| RAM quá tải (memory pressure critical) | Không giao vẽ ảnh, Ollama, vẽ tay (vẫn nhận giọng đọc); RAM căng thì tính chậm hơn |
+| Máy đang nóng, hệ điều hành giảm xung | Tính chậm hơn |
+| Đang bận việc khác (tải CPU trên 1,25 lần số nhân) | Tính chậm hơn, tối đa 2,5 lần |
+| Cấu hình ảnh/giọng hoặc mã khác máy chính | Không giao vẽ ảnh và giọng đọc, để ảnh và giọng cả video đồng nhất |
+| Thiếu model ảnh, giọng hoặc model Ollama giống máy chính | Không giao loại việc đó |
+
+Ollama (viết kịch bản, chia cảnh) chạy trọn một giai đoạn trên một máy: máy tốt nhất lúc đó, thường là máy chính. Nếu máy đó mất kết nối giữa chừng, giai đoạn được chạy lại trên máy kia. Dựng video bằng FFmpeg vẫn ở máy chính; riêng cảnh "Vẽ tay bảng trắng" được chia theo cảnh giữa các máy.
+
+### Chuẩn bị máy Air (một lần)
+
+1. Cài Tailscale, đăng nhập cùng tài khoản với Mac mini. Lấy địa chỉ bằng `tailscale ip -4` (dạng `100.x.y.z`). Dùng địa chỉ này, không dùng tên `.local`: container Docker trên máy chính không phân giải được tên mDNS.
+2. Cài Homebrew, `python@3.12`, `ffmpeg`, `ollama`; clone repository này; chạy `ollama pull qwen3.5:4b`.
+3. Đưa thư mục `local-ai` sang máy Air, cùng đường dẫn (`~/Developer/local-ai`): model SDXL-Turbo, Whisper, VieNeu, Piper, các script `bin/start-*.sh` và các môi trường Python `venv`, `wb-venv`. Cách chắc nhất khi hai máy cùng tên người dùng macOS là sao chép nguyên thư mục từ máy mini, ví dụ `rsync -a mini:Developer/local-ai/ ~/Developer/local-ai/`; môi trường Python gắn với đường dẫn nên khác tên người dùng thì phải dựng lại từng môi trường. Các thư mục này không nằm trong repository.
+4. Máy Air cần đủ RAM cho SDXL-Turbo (model fp16 chiếm khoảng 7 GB); máy 8 GB sẽ bị hệ thống báo RAM căng và chậm, nên nên để máy chính làm phần việc đó.
+5. Chạy `scripts/Mo-May-Phu.command`. Script lấy địa chỉ Tailscale, sinh token một lần và lưu ở `~/.studio-node-token`, rồi mở các cổng 8765 (media), 8766 (máy vẽ tay) và 11434 (Ollama) chỉ trên địa chỉ Tailscale, không mở `0.0.0.0`. Media bridge và máy vẽ tay từ chối khởi động nếu bị mở ra mạng mà không có `NODE_TOKEN`. Ollama không có cơ chế token, nên chỉ cho phép máy mini truy cập cổng 11434 của máy Air bằng ACL của Tailscale nếu tailnet có nhiều thiết bị.
+
+### Kết nối từ máy chính
+
+Trong `.env.selfhost` trên máy mini:
+
+```dotenv
+AI_NODES=air=100.101.102.103
+AI_NODES_TOKEN=<nội dung ~/.studio-node-token trên máy Air>
+```
+
+Rồi dựng lại worker và kiểm tra:
+
+```bash
+docker-compose --env-file .env.selfhost -f docker-compose.selfhost.yml up -d --build worker
+scripts/kiem-tra-may.sh
+```
+
+Script cho biết từng máy đang sẵn sàng, hạn chế (vì sao) hay mất kết nối, thời gian trung bình mỗi việc và quyết định phân việc gần nhất. Trang **Cài đặt** của website có mục "Máy cùng xử lý video" với cùng thông tin. Khi tạo video, dòng trạng thái ghi máy đang vẽ từng cảnh.
+
+### Giữ hai máy đồng bộ
+
+Sau mỗi lần `git pull`, khởi động lại image server (cổng 5002) và media bridge (cổng 8765) ở cả hai máy, vì hai tiến trình này đang chạy mã cũ cho tới khi được khởi động lại. Media bridge tính một dấu vân tay từ các thông số ảnh/giọng (`IMAGE_STEPS`, `VIENEU_STEPS`, `TTS_BREAK_WORDS`, voice, negative prompt...) và từ mã `media_server.py`, `image_server.py`. Hai máy khác dấu vân tay thì máy phụ không nhận vẽ ảnh và giọng đọc, và Cài đặt ghi rõ lý do. Chỉ đặt `AI_NODES_STRICT=false` khi chấp nhận ảnh hai máy có thể khác nhau.
+
+### Điều khiển
+
+- Tạm dừng khi cần dùng máy Air: `scripts/Mo-May-Phu.command pause`; nhận việc lại: `scripts/Mo-May-Phu.command resume`.
+- `AI_BALANCE_MODE=auto` (mặc định) để hệ thống tự quyết định; `single` chỉ dùng máy chính và giữ máy phụ làm dự phòng; `parallel` luôn dùng mọi máy khả dụng.
+- Máy Air nên cắm sạc, không gập màn hình khi đang phục vụ. Script dùng `caffeinate` để máy không ngủ, nhưng không ngăn được việc gập màn hình khi không có màn hình ngoài.
+- Bỏ dòng `AI_NODES` rồi dựng lại worker để quay về một máy: worker khi đó không thăm dò và không gọi máy nào ngoài máy chính.
+
+### Giới hạn hiện tại
+
+- Chưa dựng FFmpeg trên máy phụ: bước ghép MP4 vẫn chạy ở máy chính.
+- Mỗi máy làm một việc ảnh và một việc giọng cùng lúc, như trước đây trên máy mini.
+- Cùng seed nhưng khác đời chip Apple Silicon có thể cho ảnh khác nhau ở chi tiết nhỏ.
+- Các quy tắc đọc tình trạng máy (pin, nhiệt, RAM) dựa trên `pmset` và `sysctl` của macOS và đã được kiểm thử bằng mẫu đầu ra; chưa chạy thử trên phần cứng MacBook Air thật.
+
 ## Dừng và cập nhật
 
 ```bash

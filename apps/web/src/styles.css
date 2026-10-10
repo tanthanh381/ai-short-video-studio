@@ -1652,6 +1652,21 @@ a:focus-visible {
   background: #edf1f3;
   color: #526575;
 }
+.balancer-panel {
+  margin-top: 14px;
+  border-top: 1px solid #e3e9ed;
+  padding-top: 12px;
+}
+.balancer-panel h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.balancer-panel .connection-row:first-of-type {
+  border-top: 1px solid #e3e9ed;
+}
+.balancer-last {
+  margin-top: 8px;
+}
 .spin {
   animation: spin 0.9s linear infinite;
 }

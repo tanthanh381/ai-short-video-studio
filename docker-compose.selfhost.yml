@@ -74,6 +74,13 @@ services:
       WORKER_HEALTH_PORT: 8790
       LOCAL_MEDIA_BASE_URL: ${LOCAL_MEDIA_BASE_URL:-http://host.docker.internal:8765}
       WHITEBOARD_SERVER_URL: ${WHITEBOARD_SERVER_URL:-http://host.docker.internal:8766}
+      # Other Macs that share the AI work (see docs/TU-HOST.md, "Thêm máy phụ"); empty = this machine only.
+      AI_NODES: ${AI_NODES:-}
+      AI_NODES_TOKEN: ${AI_NODES_TOKEN:-}
+      AI_PRIMARY_NODE: ${AI_PRIMARY_NODE:-mini}
+      AI_BALANCE_MODE: ${AI_BALANCE_MODE:-auto}
+      AI_NODES_STRICT: ${AI_NODES_STRICT:-true}
+      AI_NODE_MIN_BATTERY: ${AI_NODE_MIN_BATTERY:-30}
       WORKER_POLL_MS: ${WORKER_POLL_MS:-750}
       RENDER_TIMEOUT_MS: ${RENDER_TIMEOUT_MS:-900000}
       TEMP_RETENTION_HOURS: ${TEMP_RETENTION_HOURS:-24}

@@ -1,28 +1,46 @@
 import { z } from "zod";
 import { subtitleCueSchema } from "@studio/shared";
+import { NodeHttpError } from "./node-errors";
 import type { MediaModelOptions, MediaProvider, WordTimestamp } from "./providers";
 
 async function checked(response: Response) {
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`Media local trả lỗi ${response.status}${body ? `: ${body.slice(0, 200)}` : ""}`);
+    throw new NodeHttpError(`Media local trả lỗi ${response.status}${body ? `: ${body.slice(0, 200)}` : ""}`, response.status);
   }
   return response;
 }
 
+export type LocalMediaOptions = {
+  /** Sent as `Authorization: Bearer` to a machine that demands NODE_TOKEN. */
+  token?: string;
+  /** Aborts the request when the load balancer declares this machine down. */
+  downSignal?: () => AbortSignal | undefined;
+};
+
 export class LocalMediaAdapter implements MediaProvider {
-  constructor(private readonly baseUrl: string) {}
+  constructor(private readonly baseUrl: string, private readonly options: LocalMediaOptions = {}) {}
 
   private url(path: string) {
     return `${this.baseUrl.replace(/\/$/, "")}${path}`;
+  }
+
+  /** The request's own time limit, plus the machine-went-away signal when there is one. */
+  private signal(timeoutMs: number): AbortSignal {
+    const down = this.options.downSignal?.();
+    return down ? AbortSignal.any([AbortSignal.timeout(timeoutMs), down]) : AbortSignal.timeout(timeoutMs);
+  }
+
+  private headers(contentType: string): Record<string, string> {
+    return { "content-type": contentType, ...(this.options.token ? { authorization: `Bearer ${this.options.token}` } : {}) };
   }
 
   async createImage(prompt: string, aspectRatio: string, models: MediaModelOptions = {}): Promise<Uint8Array> {
     const response = await checked(
       await fetch(this.url("/image"), {
         method: "POST",
-        signal: AbortSignal.timeout(900_000),
-        headers: { "content-type": "application/json" },
+        signal: this.signal(900_000),
+        headers: this.headers("application/json"),
         body: JSON.stringify({
           prompt,
           aspectRatio,
@@ -42,8 +60,8 @@ export class LocalMediaAdapter implements MediaProvider {
     const response = await checked(
       await fetch(this.url("/video"), {
         method: "POST",
-        signal: AbortSignal.timeout(1_800_000),
-        headers: { "content-type": "application/json" },
+        signal: this.signal(1_800_000),
+        headers: this.headers("application/json"),
         body: JSON.stringify({
           model: models.video,
           prompt: input.prompt,
@@ -61,8 +79,8 @@ export class LocalMediaAdapter implements MediaProvider {
     const response = await checked(
       await fetch(this.url("/tts"), {
         method: "POST",
-        signal: AbortSignal.timeout(120_000),
-        headers: { "content-type": "application/json" },
+        signal: this.signal(120_000),
+        headers: this.headers("application/json"),
         body: JSON.stringify({ text, voice, engine: models.tts ?? undefined, speed: models.speed ?? undefined }),
       }),
     );
@@ -72,8 +90,8 @@ export class LocalMediaAdapter implements MediaProvider {
   async createSpeechAligned(text: string, voice: string, models: MediaModelOptions = {}) {
     const response = await checked(await fetch(this.url("/tts-aligned"), {
       method: "POST",
-      signal: AbortSignal.timeout(240_000),
-      headers: { "content-type": "application/json" },
+      signal: this.signal(240_000),
+      headers: this.headers("application/json"),
       body: JSON.stringify({ text, voice, engine: models.tts ?? undefined, speed: models.speed ?? undefined }),
     }));
     const parsed = z.object({
@@ -94,8 +112,8 @@ export class LocalMediaAdapter implements MediaProvider {
     const response = await checked(
       await fetch(this.url(`/transcribe${models.transcribe ? `?model=${encodeURIComponent(models.transcribe)}` : ""}`), {
         method: "POST",
-        signal: AbortSignal.timeout(900_000),
-        headers: { "content-type": "audio/mpeg" },
+        signal: this.signal(900_000),
+        headers: this.headers("audio/mpeg"),
         body: Buffer.from(audio),
       }),
     );

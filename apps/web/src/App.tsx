@@ -66,9 +66,12 @@ import {
   voiceHint,
   DEFAULT_VOICE_PRESET,
   VOICE_PRESETS,
+  type BalancerSummary,
   type Job,
   type LocalModelCatalog,
   type LocalModels,
+  type NodeResourceSummary,
+  type NodeSummary,
   type Project,
   type ProjectSettings,
   type Scene,
@@ -3509,6 +3512,7 @@ function SettingsPage() {
       render: false,
     },
     serviceStatuses: defaultServiceStatuses,
+    balancer: null as BalancerSummary | null,
     usageStats: defaultUsageStats as UsageStats,
   });
   const [busy, setBusy] = useState(false);
@@ -3658,6 +3662,7 @@ function SettingsPage() {
           ] as const).map(([name, detail, state]) => (
             <ConnectionRow key={name} name={name} detail={detail} state={state} />
           ))}
+          {settings.balancer ? <BalancerPanel balancer={settings.balancer} /> : null}
           <details className="settings-more" open={PAID_PROVIDERS.some((provider) => settings.apiKeys.keys[provider].saved) || undefined}>
             <summary>
               Dịch vụ trả phí (không bắt buộc)
@@ -3756,6 +3761,60 @@ function ConnectionRow({ name, detail, state }: { name: string; detail: string; 
         <span>{detail}</span>
       </div>
       <b className={state.className} title={state.detail}>{state.label}</b>
+    </div>
+  );
+}
+
+const BALANCE_MODE_LABEL: Record<BalancerSummary["mode"], string> = {
+  auto: "Tự động: hệ thống đánh giá từng đợt rồi chọn chạy một máy hay song song",
+  single: "Một máy: chỉ dùng máy chính, các máy khác chờ dự phòng",
+  parallel: "Luôn song song: dùng mọi máy đang khả dụng",
+};
+const NODE_STATE_META: Record<NodeSummary["state"], { className: string; label: string }> = {
+  healthy: { className: "on", label: "Sẵn sàng" },
+  degraded: { className: "off", label: "Hạn chế" },
+  paused: { className: "unknown", label: "Tạm dừng" },
+  offline: { className: "off", label: "Mất kết nối" },
+};
+
+function nodeFacts(node: NodeSummary): string {
+  const resources: NodeResourceSummary | null = node.resources;
+  const facts: string[] = [];
+  if (resources?.memTotalGb) facts.push(`RAM ${resources.memTotalGb} GB`);
+  if (resources?.power === "battery") facts.push(`pin ${resources.batteryPercent ?? "?"}%`);
+  else if (resources?.power === "ac" && resources.batteryPercent !== null) facts.push(`cắm điện ${resources.batteryPercent}%`);
+  if (resources?.thermal === "throttled") facts.push("đang nóng");
+  if (resources?.loadAvg1 != null && resources.cpuCores) facts.push(`tải ${Math.round((resources.loadAvg1 / resources.cpuCores) * 100)}%`);
+  const image = node.lanes.image?.avgMs;
+  if (image) facts.push(`ảnh ~${Math.round(image / 1000)} giây`);
+  if (node.rttMs !== null && node.role === "secondary") facts.push(`${node.rttMs} ms`);
+  return facts.join(" · ");
+}
+
+/** The machines that share the work, what each can take right now, and what the balancer last decided. */
+function BalancerPanel({ balancer }: { balancer: BalancerSummary }) {
+  const last = balancer.decisions[0];
+  return (
+    <div className="balancer-panel">
+      <h3>Máy cùng xử lý video</h3>
+      <p className="microcopy">{BALANCE_MODE_LABEL[balancer.mode]}.</p>
+      {balancer.nodes.map((node) => {
+        const meta = NODE_STATE_META[node.state];
+        const facts = nodeFacts(node);
+        return (
+          <ConnectionRow
+            key={node.id}
+            name={`${node.id}${node.role === "primary" ? " (máy chính)" : ""}`}
+            detail={[node.detail, facts].filter(Boolean).join(" · ")}
+            state={{ ...meta, detail: node.detail }}
+          />
+        );
+      })}
+      {last ? (
+        <p className="microcopy balancer-last">
+          Lần phân việc gần nhất ({new Date(last.at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}, {last.tasks} việc): {last.reason}.
+        </p>
+      ) : null}
     </div>
   );
 }

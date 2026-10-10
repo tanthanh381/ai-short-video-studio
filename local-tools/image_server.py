@@ -191,8 +191,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             # Unloaded on purpose still counts as ready: the next request reloads the model.
             ready = STATE["sd"] is not None or STATE["unloaded"]
+            # `config` lets the media bridge compare this machine with another one: pictures only match when these do.
             self._send(200 if ready else 503, "application/json",
-                       json.dumps({"ok": ready, "error": STATE["error"]}).encode())
+                       json.dumps({"ok": ready, "error": STATE["error"],
+                                   "config": {"preset": PRESET, "steps": STEPS, "cfgWeight": CFG_WEIGHT,
+                                              "negativePrompt": NEGATIVE_PROMPT}}).encode())
         else:
             self._send(404, "application/json", b"{}")
 

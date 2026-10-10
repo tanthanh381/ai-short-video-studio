@@ -1,4 +1,4 @@
-import { DEFAULT_PROJECT_SETTINGS, type ApiKeySummary, type Estimate, type Job, type KeyProvider, type LocalModelCatalog, type Project, type RegenerationComponent } from "@studio/shared";
+import { DEFAULT_PROJECT_SETTINGS, type ApiKeySummary, type BalancerSummary, type Estimate, type Job, type KeyProvider, type LocalModelCatalog, type Project, type RegenerationComponent } from "@studio/shared";
 import { appConfig } from "./config";
 import { demoApi } from "./demo";
 import { supabase } from "./supabase";
@@ -52,6 +52,8 @@ export type AccountSettings = {
     render: boolean;
   };
   serviceStatuses: Record<ServiceId, ServiceStatus>;
+  /** Other Macs sharing the AI work and the balancer's latest decisions; null while only the main machine is used. */
+  balancer: BalancerSummary | null;
   usageStats: UsageStats;
 };
 
