@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
 import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
 import { getConfig } from "./config";
+import { fetchAirSetup } from "./air-setup";
 import { AnthropicStoryboardAdapter } from "./anthropic";
 import { loadUserKey } from "./user-keys";
 import { OllamaStoryboardAdapter } from "./ollama";
@@ -125,11 +126,12 @@ async function probeRender(): Promise<boolean> {
 }
 
 async function workerHealth() {
-  const [ollamaReady, mediaReady, renderReady, whiteboardUp] = await Promise.all([
+  const [ollamaReady, mediaReady, renderReady, whiteboardUp, airSetup] = await Promise.all([
     probeJson(`${config.OLLAMA_BASE_URL.replace(/\/$/, "")}/api/tags`),
     probeJson(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/models`),
     probeRender(),
     whiteboardReady(config),
+    fetchAirSetup(config.AIR_SETUP_URL, config.AI_NODES_TOKEN),
   ]);
   const configured = (available: boolean, ready: boolean, name: string): HealthItem => ({
     state: available ? (ready ? "healthy" : "offline") : "offline",
@@ -156,6 +158,8 @@ async function workerHealth() {
       whiteboard: configured(true, whiteboardUp, "Máy vẽ tay"),
     } satisfies Record<string, HealthItem>,
     balancer: pool.summary(),
+    // The installation of the second machine while it is going on (null otherwise).
+    airSetup,
   };
 }
 

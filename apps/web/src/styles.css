@@ -2595,3 +2595,38 @@ input[type="radio"] {
 .api-key-actions .button { min-height: 36px; font-size: 13px; }
 .api-key-help { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .api-key-help a { color: var(--blue-dark); text-decoration: underline; }
+
+.air-setup-steps {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.air-step {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 13px;
+  color: #5b6b76;
+}
+.air-step small {
+  display: block;
+  color: #66767f;
+}
+.air-step-running {
+  color: #17212b;
+}
+.air-step-running > span {
+  color: var(--blue);
+}
+.air-step-done > span {
+  color: #2c7a4b;
+}
+.air-step-failed {
+  color: #985348;
+}
+.air-step-failed > span {
+  color: #b04a3d;
+}

@@ -23,6 +23,7 @@ import {
   projectSchema,
   projectSettingsSchema,
   subtitleStyleSchema,
+  type AirSetupSummary,
   type BalancerSummary,
   type Project,
   voiceSample,
@@ -70,6 +71,8 @@ type ServiceStatus = { state: ServiceState; detail: string; checkedAt: string };
 type WorkerHealthPayload = {
   /** The machines sharing the AI work (empty when the worker only has its own). */
   balancer?: BalancerSummary;
+  /** The installation of the second machine while it goes on (worker/src/air-setup.ts). */
+  airSetup?: AirSetupSummary | null;
   services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia" | "whiteboard", { state: ServiceState; detail: string }>>;
 };
 type LocalMediaHealthPayload = { video?: boolean; videoState?: string; videoDetail?: string; faceDetail?: boolean; faceDetailDetail?: string };
@@ -140,6 +143,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     .filter(Boolean);
   let serviceStatusCache: { expiresAt: number; value: Record<string, ServiceStatus> } | null = null;
   let balancerSnapshot: BalancerSummary | null = null;
+  let airSetupSnapshot: AirSetupSummary | null = null;
   const keyVault = createKeyVault(db, config);
 
   async function getUsageStats(userId: string, budgetUsd: number): Promise<UsageStats> {
@@ -267,6 +271,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       anthropic: fromWorker("anthropic", status(config.ANTHROPIC_FEATURES_ENABLED ? "unknown" : "disabled", config.ANTHROPIC_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng Claude đang tắt")),
     };
     balancerSnapshot = workerResponse?.balancer && workerResponse.balancer.nodes.length > 1 ? workerResponse.balancer : null;
+    airSetupSnapshot = workerResponse?.airSetup ?? null;
     serviceStatusCache = { expiresAt: Date.now() + 5_000, value };
     return value;
   }
@@ -477,6 +482,8 @@ export function createApp(config: AppConfig, db: AdminClient) {
       serviceStatuses,
       // Other Macs that share the work and what the balancer last decided; null while only this machine is used.
       balancer: balancerSnapshot,
+      // How far installing the second machine has got (null when no installation is going on).
+      airSetup: airSetupSnapshot,
     };
   }
 

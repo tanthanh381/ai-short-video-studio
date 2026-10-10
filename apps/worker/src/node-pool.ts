@@ -189,7 +189,7 @@ export type DistributeOptions<T> = {
   nodeWaitMs?: number;
 };
 
-type NodeEntry = { spec: NodeSpec; snapshot: NodeSnapshot; failures: number; strikes: number; down: AbortController };
+type NodeEntry = { spec: NodeSpec; snapshot: NodeSnapshot; failures: number; strikes: number; done: Partial<Record<Lane, number>>; down: AbortController };
 
 const NO_NODE = "Không có máy xử lý nào khả dụng";
 /** A second machine joins a batch only when it makes it at least 15% and 30 seconds faster: a laptop is not woken up, heated and drained for less. */
@@ -211,6 +211,7 @@ export class NodePool {
         spec,
         failures: 0,
         strikes: 0,
+        done: {},
         down: new AbortController(),
         snapshot: {
           id: spec.id, local: spec.local,
@@ -396,7 +397,9 @@ export class NodePool {
     const sample = Math.min(ms, cap);
     snapshot.ewma[lane] = previous === undefined ? sample : previous + 0.4 * (sample - previous);
     snapshot.lastSampleAt[lane] = this.now();
-    this.entries.get(id)!.strikes = 0; // it answered: forget the earlier failures
+    const entry = this.entries.get(id)!;
+    entry.strikes = 0; // it answered: forget the earlier failures
+    entry.done[lane] = (entry.done[lane] ?? 0) + 1;
   }
 
   /**
@@ -609,7 +612,13 @@ export class NodePool {
       const lanes: Record<string, NodeLaneSummary> = {};
       for (const lane of LANES) {
         const assessment = assessNode(snapshot, lane, ctx);
-        lanes[lane] = { eligible: assessment.eligible, reasons: assessment.reasons, avgMs: snapshot.ewma[lane] !== undefined ? Math.round(snapshot.ewma[lane]!) : null };
+        lanes[lane] = {
+          eligible: assessment.eligible,
+          reasons: assessment.reasons,
+          avgMs: snapshot.ewma[lane] !== undefined ? Math.round(snapshot.ewma[lane]!) : null,
+          running: snapshot.inflight[lane]?.length ?? 0,
+          done: entry.done[lane] ?? 0,
+        };
       }
       const status = snapshot.status;
       const paused = Boolean(status && !status.accepting);

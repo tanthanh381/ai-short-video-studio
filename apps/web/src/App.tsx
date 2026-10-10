@@ -66,6 +66,7 @@ import {
   voiceHint,
   DEFAULT_VOICE_PRESET,
   VOICE_PRESETS,
+  type AirSetupSummary,
   type BalancerSummary,
   type Job,
   type LocalModelCatalog,
@@ -81,6 +82,8 @@ import {
   visualPresetPrompt,
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
+import { AirSetupPanel } from "./AirSetupPanel";
+import { nodeActivity } from "./lib/air-setup";
 import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
 import { resetPasswordView } from "./lib/auth";
@@ -3513,23 +3516,27 @@ function SettingsPage() {
     },
     serviceStatuses: defaultServiceStatuses,
     balancer: null as BalancerSummary | null,
+    airSetup: null as AirSetupSummary | null,
     usageStats: defaultUsageStats as UsageStats,
   });
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function refreshSettings() {
+  /** `quiet`: the refresh that follows an installation or a running video, without the spinner or an error message. */
+  async function refreshSettings(quiet = false) {
     if (isDemo) return;
-    setRefreshing(true);
-    setMessage(null);
+    if (!quiet) {
+      setRefreshing(true);
+      setMessage(null);
+    }
     try {
       const next = await api.getSettings();
       setSettings({ ...next, usageStats: next.usageStats ?? defaultUsageStats });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Không thể kiểm tra trạng thái dịch vụ");
+      if (!quiet) setMessage(error instanceof Error ? error.message : "Không thể kiểm tra trạng thái dịch vụ");
     } finally {
-      setRefreshing(false);
+      if (!quiet) setRefreshing(false);
     }
   }
 
@@ -3537,6 +3544,15 @@ function SettingsPage() {
     if (isDemo) return;
     void refreshSettings();
   }, [isDemo]);
+
+  // While the Air is being installed, or a machine is making pictures or voices, the page follows it without a click.
+  const watching = Boolean(settings.airSetup?.active)
+    || Boolean(settings.balancer?.nodes.some((node) => Object.values(node.lanes).some((lane) => lane.running > 0)));
+  useEffect(() => {
+    if (isDemo || !watching) return;
+    const timer = window.setInterval(() => void refreshSettings(true), 4000);
+    return () => window.clearInterval(timer);
+  }, [isDemo, watching]);
 
   async function saveSettings() {
     if (isDemo) {
@@ -3662,6 +3678,7 @@ function SettingsPage() {
           ] as const).map(([name, detail, state]) => (
             <ConnectionRow key={name} name={name} detail={detail} state={state} />
           ))}
+          {settings.airSetup ? <AirSetupPanel setup={settings.airSetup} /> : null}
           {settings.balancer ? <BalancerPanel balancer={settings.balancer} /> : null}
           <details className="settings-more" open={PAID_PROVIDERS.some((provider) => settings.apiKeys.keys[provider].saved) || undefined}>
             <summary>
@@ -3787,6 +3804,8 @@ function nodeFacts(node: NodeSummary): string {
   if (resources?.loadAvg1 != null && resources.cpuCores) facts.push(`tải ${Math.round((resources.loadAvg1 / resources.cpuCores) * 100)}%`);
   const image = node.lanes.image?.avgMs;
   if (image) facts.push(`ảnh ~${Math.round(image / 1000)} giây`);
+  const activity = nodeActivity(node);
+  if (activity) facts.push(activity);
   if (node.rttMs !== null && node.role === "secondary") facts.push(`${node.rttMs} ms`);
   return facts.join(" · ");
 }

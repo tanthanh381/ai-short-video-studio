@@ -77,6 +77,8 @@ services:
       # Other Macs that share the AI work (see docs/TU-HOST.md, "Thêm máy phụ"); empty = this machine only.
       AI_NODES: ${AI_NODES:-}
       AI_NODES_TOKEN: ${AI_NODES_TOKEN:-}
+      # While the second machine is being installed (scripts/air-node/serve-bundle.sh): where its progress can be read for Settings
+      AIR_SETUP_URL: ${AIR_SETUP_URL:-}
       AI_PRIMARY_NODE: ${AI_PRIMARY_NODE:-mini}
       AI_BALANCE_MODE: ${AI_BALANCE_MODE:-auto}
       AI_NODES_STRICT: ${AI_NODES_STRICT:-true}

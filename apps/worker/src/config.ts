@@ -34,6 +34,8 @@ const schema = z.object({
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().min(8).optional(),
   ),
+  // The one-time bundle server that installs the second machine (scripts/air-node/serve-bundle.sh): its progress shows in Settings.
+  AIR_SETUP_URL: z.preprocess((value) => (typeof value === "string" && value.trim() === "" ? undefined : value), z.string().url().optional()),
   AI_PRIMARY_NODE: z.string().regex(/^[a-z0-9][a-z0-9-]{0,23}$/u, "chữ thường, số và dấu gạch ngang").default("mini"),
   // auto: the worker decides per batch whether a second machine pays off; single: only the main machine (others stand by); parallel: always all.
   AI_BALANCE_MODE: z.enum(["auto", "single", "parallel"]).default("auto"),

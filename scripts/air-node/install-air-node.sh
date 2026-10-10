@@ -25,11 +25,26 @@ LOCAL_AI="$HOME_DIR/Developer/local-ai"
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3.5:4b}"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
-fail() { printf '\n\033[31mLỗi: %s\033[0m\n' "$*" >&2; exit 1; }
 run() { if [ "$DRY" = "1" ]; then echo "[dry-run] $*"; else "$@"; fi; }
+LAST_ERROR=""
+CURRENT=""
+fail() { LAST_ERROR="$*"; printf '\n\033[31mLỗi: %s\033[0m\n' "$*" >&2; exit 1; }
+
+# The website's Settings page shows these steps while the Air installs. Reporting is best effort and never stops the install.
+REPORT="${AIR_NODE_REPORT:-$([ "$DRY" = "1" ] && echo 0 || echo 1)}"
+progress() { # step state detail
+  [ "$REPORT" = "1" ] || return 0
+  curl -fsS -m 4 -G -X POST "$BUNDLE/progress" --data-urlencode "step=$1" --data-urlencode "state=$2" --data-urlencode "detail=${3:-}" >/dev/null 2>&1 || true
+}
+step() { CURRENT="$1"; progress "$1" running "${3:-}"; say "$2"; } # id, title, detail
+on_exit() {
+  local code=$?
+  if [ "$code" -ne 0 ] && [ -n "$CURRENT" ]; then progress "$CURRENT" failed "${LAST_ERROR:-Script dừng với mã $code ở bước này}"; fi
+}
+trap on_exit EXIT
 
 main() {
-  say "1/7 Kiểm tra máy"
+  step check "1/7 Kiểm tra máy"
   if [ "$DRY" != "1" ]; then
     [ "$(uname -s)" = "Darwin" ] || fail "Chỉ chạy trên macOS"
     [ "$(uname -m)" = "arm64" ] || fail "Cần máy Mac chip Apple (arm64)"
@@ -51,7 +66,7 @@ main() {
     echo "RAM ${RAM_GB} GB không đủ để vẽ ảnh (SDXL-Turbo cần khoảng 7 GB riêng): không tải model ảnh, máy chính vẫn tự làm phần ảnh. Đặt NODE_IMAGE=yes để ép cài."
   fi
 
-  say "2/7 Công cụ hệ thống"
+  step tools "2/7 Công cụ hệ thống" "Cài Python, FFmpeg, Whisper, Ollama nếu còn thiếu"
   [ -z "${AIR_NODE_TEST_READ_STDIN:-}" ] || cat >/dev/null  # test only: what brew did to the first run
   if [ "$DRY" != "1" ]; then
     export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -63,7 +78,7 @@ main() {
     [ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ] || command -v tailscale >/dev/null 2>&1 || fail "Chưa cài Tailscale. Cài và đăng nhập cùng tài khoản với Mac mini rồi chạy lại lệnh này"
   fi
 
-  say "3/7 Tải mã nguồn và công cụ từ Mac mini"
+  step code "3/7 Tải mã nguồn và công cụ từ Mac mini"
   mkdir -p "$REPO" "$LOCAL_AI/bin" "$LOCAL_AI/output" "$REPO/tmp/local-services"
   if [ "$DRY" = "1" ]; then echo "[dry-run] curl $BUNDLE/repo.tar.gz | tar -xz -C $REPO"; else curl -fsS "$BUNDLE/repo.tar.gz" | tar -xz -C "$REPO"; fi
   TOOLKIT="$REPO/local-tools/toolkit"
@@ -72,24 +87,25 @@ main() {
   cp "$TOOLKIT"/vieneu_api.py "$TOOLKIT"/vieneu_tts.py "$TOOLKIT"/tts_api.py "$LOCAL_AI/"
   chmod +x "$LOCAL_AI"/bin/*.sh
 
-  say "4/7 Môi trường Python (vài phút)"
+  step python "4/7 Môi trường Python (vài phút)" "Dựng môi trường Python cho giọng đọc và vẽ ảnh"
   if [ ! -x "$LOCAL_AI/venv/bin/python" ]; then run /opt/homebrew/bin/python3.12 -m venv "$LOCAL_AI/venv"; fi
   if [ ! -x "$LOCAL_AI/wb-venv/bin/python" ]; then run /opt/homebrew/bin/python3.12 -m venv "$LOCAL_AI/wb-venv"; fi
   run "$LOCAL_AI/venv/bin/pip" install --quiet --disable-pip-version-check -r "$TOOLKIT/requirements-venv.txt"
+  progress python running "Cài thư viện cho sửa khuôn mặt và máy vẽ tay"
   run "$LOCAL_AI/wb-venv/bin/pip" install --quiet --disable-pip-version-check -r "$TOOLKIT/requirements-wb.txt"
   if [ "$WITH_IMAGE" = "yes" ] && [ ! -d "$LOCAL_AI/mlx-examples/.git" ]; then
     run git clone --quiet https://github.com/ml-explore/mlx-examples.git "$LOCAL_AI/mlx-examples"
     run git -C "$LOCAL_AI/mlx-examples" checkout --quiet "$(cat "$TOOLKIT/MLX_EXAMPLES_COMMIT")"
   fi
 
-  say "5/7 Tải model từ Mac mini (khoảng $([ "$WITH_IMAGE" = "yes" ] && echo 7 || echo 0.5) GB qua mạng nội bộ)"
+  step models "5/7 Tải model từ Mac mini (khoảng $([ "$WITH_IMAGE" = "yes" ] && echo 7 || echo 0.5) GB qua mạng nội bộ)"
   if [ "$DRY" = "1" ]; then
     echo "[dry-run] curl $BUNDLE/models.tar?image=$WITH_IMAGE | tar -x -C $LOCAL_AI"
   else
     curl -fS "$BUNDLE/models.tar?image=$([ "$WITH_IMAGE" = "yes" ] && echo 1 || echo 0)" | tar -x -C "$LOCAL_AI"
   fi
 
-  say "6/7 Mã truy cập và model Ollama"
+  step token "6/7 Mã truy cập và model Ollama" "Lưu mã truy cập và kéo model $OLLAMA_MODEL"
   TOKEN_FILE="$HOME_DIR/.studio-node-token"
   ( umask 077; printf '%s' "$TOKEN" > "$TOKEN_FILE" )
   echo "Đã lưu mã truy cập vào ~/.studio-node-token (chỉ bạn đọc được); Mac mini đã có cùng mã."
@@ -107,7 +123,7 @@ main() {
     sleep 2
   fi
 
-  say "7/7 Bật máy phụ"
+  step start "7/7 Bật máy phụ" "Bật Ollama, Whisper, giọng đọc, vẽ ảnh, máy vẽ tay"
   if [ "$DRY" = "1" ]; then
     echo "[dry-run] zsh $REPO/scripts/Mo-May-Phu.command"
   else

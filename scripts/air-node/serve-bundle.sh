@@ -22,9 +22,9 @@ for peer in (json.load(sys.stdin).get('Peer') or {}).values():
         print(peer['TailscaleIPs'][0]); break
 " "$NAME")"
 [ -n "$AIR_IP" ] || { echo "Tailscale không thấy máy tên '$NAME'. Kiểm tra tên máy trong 'tailscale status'."; exit 1; }
-python3 - "$ENV_FILE" "$NAME" "$AIR_IP" <<'PY'
+python3 - "$ENV_FILE" "$NAME" "$AIR_IP" "$MY_IP" "${BUNDLE_PORT:-8899}" <<'PY'
 import os, secrets, sys
-path, name, ip = sys.argv[1:4]
+path, name, ip, my_ip, port = sys.argv[1:6]
 sys.path.insert(0, "local-tools")
 import air_bundle_server as bundle
 text = open(path).read() if os.path.exists(path) else ""
@@ -43,6 +43,8 @@ nodes = bundle.env_value(text, "AI_NODES")
 entries = [entry for entry in nodes.split(",") if entry and not entry.startswith(f"{name}=")]
 text = put(text, "AI_NODES", ",".join(entries + [f"{name}={ip}"]))
 text = put(text, "AI_NODES_TOKEN", token)
+# the worker reads the installation's progress from here, with the same token, so Settings can show it
+text = put(text, "AIR_SETUP_URL", f"http://{my_ip}:{port}")
 with open(path, "w") as handle:
     handle.write(text)
 os.chmod(path, 0o600)

@@ -384,6 +384,29 @@ describe("runOne", () => {
   });
 });
 
+describe("what each machine is doing, for the Settings page", () => {
+  it("counts the tasks finished and running per kind of work on each machine", async () => {
+    const { pool } = makePool();
+    const lane = (id: string, kind: string) => pool.summary().nodes.find((node) => node.id === id)!.lanes[kind]!;
+    expect([lane("air", "image").done, lane("air", "image").running]).toEqual([0, 0]);
+    pool.recordSample("air", "image", 9_000);
+    pool.recordSample("air", "image", 9_000);
+    pool.recordSample("air", "tts", 5_000);
+    expect(lane("air", "image").done).toBe(2);
+    expect(lane("air", "tts").done).toBe(1);
+    expect(lane("mini", "image").done).toBe(0); // counted per machine
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const running = pool.runOne("image", async () => { await held; return "ok"; });
+    await vi.advanceTimersByTimeAsync(5);
+    const busy = pool.summary().nodes.map((node) => node.lanes.image!.running).reduce((a, b) => a + b, 0);
+    expect(busy).toBe(1); // one picture is being made on one of the machines right now
+    release();
+    await settle(running);
+    expect(pool.summary().nodes.map((node) => node.lanes.image!.running).reduce((a, b) => a + b, 0)).toBe(0);
+  });
+});
+
 describe("watching the machines", () => {
   it("counts a machine as down only after repeated misses, and up again at the first answer", () => {
     const { pool, results } = makePool();

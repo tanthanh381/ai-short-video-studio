@@ -118,6 +118,20 @@ describe("API", () => {
       vi.unstubAllGlobals();
     });
 
+    it("bao tien trinh cai may Air khi worker doc duoc, va khong bao gi khi khong co", async () => {
+      const setup = { active: true, finished: false, failed: null, node: "air", startedAt: "2026-10-10T16:00:00.000Z", expiresAt: "2026-10-10T17:30:00.000Z", lastSeenAt: null,
+        steps: [{ id: "check", name: "Kiểm tra máy", state: "running", detail: "" }], models: { sentBytes: 0, totalBytes: 0 } };
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: true, services: { worker: { state: "healthy", detail: "Worker đang chạy" } }, balancer: { mode: "auto", nodes: [], decisions: [] }, airSetup: setup }))));
+      const app = createApp({ ...config, RENDER_WORKER_ENABLED: true }, owner as never);
+      const response = await request(app).get("/v1/settings").set("Authorization", "Bearer test");
+      expect(response.body.airSetup).toEqual(setup);
+      vi.unstubAllGlobals();
+      workerSays({ mode: "auto", nodes: [], decisions: [] });
+      const quiet = createApp({ ...config, RENDER_WORKER_ENABLED: true }, owner as never);
+      expect((await request(quiet).get("/v1/settings").set("Authorization", "Bearer test")).body.airSetup).toBeNull();
+      vi.unstubAllGlobals();
+    });
+
     it("khong hien gi khi worker chi co may chinh", async () => {
       workerSays({ mode: "auto", nodes: [], decisions: [] });
       const app = createApp({ ...config, RENDER_WORKER_ENABLED: true }, owner as never);

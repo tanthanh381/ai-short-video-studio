@@ -5,6 +5,7 @@ Run with: python3 -m unittest discover -s local-tools -p 'test_*.py'
 
 import importlib.util
 import io
+import json
 import os
 import subprocess
 import tarfile
@@ -120,6 +121,80 @@ class BundleServer(Fixture):
         self.assertEqual(bundle_server.env_value("", "AI_NODES"), "")
 
 
+class Progress(Fixture):
+    """What the website shows while the Air installs: steps, model bytes, and whether it is still going."""
+
+    def status(self, base, token="node-token-123"):
+        request = urllib.request.Request(f"{base}/status", headers={"Authorization": f"Bearer {token}"} if token else {})
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as error:
+            return error.code, json.load(error)
+
+    def states(self, body):
+        return {step["id"]: step["state"] for step in body["steps"]}
+
+    def test_the_status_needs_the_node_access_code_and_not_the_secret_path(self):
+        _, base = self.start()
+        self.assertEqual(self.status(base, token=None)[0], 401)
+        self.assertEqual(self.status(base, token="wrong")[0], 401)
+        code, body = self.status(base)
+        self.assertEqual(code, 200)
+        self.assertTrue(body["active"])
+        self.assertFalse(body["finished"])
+        self.assertEqual([step["id"] for step in body["steps"]], ["check", "tools", "code", "python", "models", "token", "start"])
+        self.assertTrue(all(state == "pending" for state in self.states(body).values()))
+        self.assertNotIn("s3cr3tpath", json.dumps(body))  # the secret path is not handed out by the status
+
+    def test_what_the_server_can_see_is_shown_even_for_an_installer_that_reports_nothing(self):
+        _, base = self.start()
+        self.fetch(f"{base}/s3cr3tpath/install.sh")
+        self.assertEqual(self.states(self.status(base)[1])["check"], "running")
+        self.fetch(f"{base}/s3cr3tpath/repo.tar.gz")
+        states = self.states(self.status(base)[1])
+        self.assertEqual((states["check"], states["tools"], states["code"]), ("done", "done", "done"))  # earlier steps are over
+        self.assertEqual(states["python"], "pending")
+        self.fetch(f"{base}/s3cr3tpath/models.tar?image=1")
+        body = self.status(base)[1]
+        self.assertEqual(self.states(body)["python"], "done")
+        self.assertEqual(self.states(body)["models"], "done")
+        self.assertGreater(body["models"]["totalBytes"], 6000)  # the stand-in models: 2 KiB + 4 KiB, plus tar headers
+        self.assertLess(abs(body["models"]["sentBytes"] - body["models"]["totalBytes"]), 12288)  # the estimate is what tar really sends (it pads to 10 KiB records)
+        self.assertIsNotNone(body["lastSeenAt"])
+
+    def test_the_installer_reports_each_step_and_a_failure_is_shown(self):
+        _, base = self.start()
+        self.assertEqual(self.fetch(f"{base}/s3cr3tpath/progress?step=python&state=running&detail=pip", "POST")[0], 200)
+        body = self.status(base)[1]
+        self.assertEqual(self.states(body)["python"], "running")
+        self.assertEqual(self.states(body)["tools"], "done")
+        self.assertEqual(next(step for step in body["steps"] if step["id"] == "python")["detail"], "pip")
+        self.assertEqual(self.fetch(f"{base}/s3cr3tpath/progress?step=nope&state=running", "POST")[0], 400)
+        self.assertEqual(self.fetch(f"{base}/s3cr3tpath/progress?step=python&state=sideways", "POST")[0], 400)
+        self.fetch(f"{base}/s3cr3tpath/progress?step=python&state=failed&detail=pip%20loi", "POST")
+        failed = self.status(base)[1]
+        self.assertEqual(failed["failed"], "python")
+        self.assertEqual(self.fetch(f"{base}/s3cr3tpath/progress?step=python&state=running", "POST")[0], 200)  # a retry may start again
+        # a finished step is not taken back by a late report
+        self.fetch(f"{base}/s3cr3tpath/progress?step=tools&state=running", "POST")
+        self.assertEqual(self.states(self.status(base)[1])["tools"], "done")
+
+    def test_when_the_air_reports_done_everything_is_done_and_the_server_stays_up_a_while_for_the_website(self):
+        bundle = bundle_server.Bundle(self.repo, self.local_ai, "s3cr3tpath", "node-token-123", "air", "http://127.0.0.1:0/s3cr3tpath", 60, linger_s=0.3)
+        server = bundle_server.serve(bundle, "127.0.0.1", 0)
+        self.addCleanup(server.server_close)
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        self.fetch(f"{base}/s3cr3tpath/done?name=air&host=100.117.49.124", "POST")
+        body = self.status(base)[1]
+        self.assertTrue(body["finished"])
+        self.assertFalse(body["active"])
+        self.assertTrue(all(state == "done" for state in self.states(body).values()))
+        self.assertEqual(body["report"], {"name": "air", "host": "100.117.49.124"})
+        server.serve_thread.join(5)
+        self.assertFalse(server.serve_thread.is_alive())  # and it stops by itself after the linger
+
+
 class Installer(Fixture):
     def run_installer(self, **extra_env):
         home = Path(self.tmp.name) / "air-home"
@@ -160,6 +235,33 @@ class Installer(Fixture):
         self.assertIn("7/7 Bật máy phụ", result.stdout)
         self.assertIn("Xong. Máy 'air'", result.stdout)
         self.assertTrue((home / ".studio-node-token").exists())
+
+    def test_the_installer_reports_its_steps_to_the_bundle_server_and_a_stop_shows_as_failed_at_its_step(self):
+        bundle = bundle_server.Bundle(self.repo, self.local_ai, "s3cr3tpath", "node-token-123", "air", "http://127.0.0.1:0/s3cr3tpath", 60, linger_s=0.3)
+        server = bundle_server.serve(bundle, "127.0.0.1", 0)
+        self.addCleanup(server.server_close)
+        bundle.bundle_url = f"http://127.0.0.1:{server.server_address[1]}/s3cr3tpath"
+        script = bundle.installer()
+
+        def run_with(toolkit):
+            home = Path(self.tmp.name) / f"home-{toolkit.name}"
+            home.mkdir()
+            env = {**os.environ, "AIR_NODE_HOME": str(home), "AIR_NODE_DRY_RUN": "1", "AIR_NODE_REPORT": "1", "AIR_NODE_TOOLKIT": str(toolkit), "NODE_IMAGE": "yes"}
+            return subprocess.run(["bash"], input=script, capture_output=True, text=True, env=env, timeout=60)
+
+        ok = run_with(REPO / "local-tools/toolkit")
+        self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
+        steps = {step["id"]: step for step in bundle.status()["steps"]}
+        self.assertEqual(steps["tools"]["detail"], "Cài Python, FFmpeg, Whisper, Ollama nếu còn thiếu")
+        self.assertEqual(steps["python"]["detail"], "Cài thư viện cho sửa khuôn mặt và máy vẽ tay")  # the last detail of that step
+        self.assertEqual(steps["start"]["state"], "running")  # the installer reports a step when it starts it; "done" comes with /done
+        self.assertIsNone(bundle.status()["failed"])
+        # a stop in step 3 (the toolkit folder is missing): the website sees which step failed and why
+        broken = run_with(Path(self.tmp.name) / "no-such-toolkit")
+        self.assertNotEqual(broken.returncode, 0)
+        status = bundle.status()
+        self.assertEqual(status["failed"], "code")
+        self.assertIn("dừng", next(step for step in status["steps"] if step["id"] == "code")["detail"])
 
     def test_a_small_machine_gets_no_picture_model_and_the_main_machine_keeps_the_pictures(self):
         _, result = self.run_installer(NODE_IMAGE="no")
@@ -219,6 +321,7 @@ if [ "$1" = "status" ]; then echo '{"Peer":{"a":{"HostName":"air","TailscaleIPs"
         self.assertEqual(bundle_server.env_value(text, "AI_NODES"), "studio=100.9.9.9,air=100.117.49.124")
         self.assertEqual(len(token), 48)
         self.assertIn("A=1", text)
+        self.assertEqual(bundle_server.env_value(text, "AIR_SETUP_URL"), "http://127.0.0.1:0")  # where the worker reads the progress from
         self.assertEqual(oct(self.env_file.stat().st_mode & 0o777), "0o600")
         self.assertNotIn(token, output)  # the code goes to the Air inside the installer, never to the terminal
         self.assertIn("curl -fsSL http://127.0.0.1:", output)
