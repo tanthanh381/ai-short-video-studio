@@ -25,11 +25,14 @@ fail() { printf '\n\033[31mLỗi: %s\033[0m\n' "$*" >&2; exit 1; }
 run() { if [ "$DRY" = "1" ]; then echo "[dry-run] $*"; else "$@"; fi; }
 
 say "1/7 Kiểm tra máy"
-[ "$(uname -s)" = "Darwin" ] || fail "Chỉ chạy trên macOS"
-[ "$(uname -m)" = "arm64" ] || fail "Cần máy Mac chip Apple (arm64)"
-RAM_GB=$(( $(sysctl -n hw.memsize) / 1073741824 ))
-FREE_GB=$(df -g "$HOME_DIR" | awk 'NR==2 {print $4}')
-MODEL_NAME=$(system_profiler SPHardwareDataType 2>/dev/null | awk -F': ' '/Model Name/ {print $2}')
+if [ "$DRY" != "1" ]; then
+  [ "$(uname -s)" = "Darwin" ] || fail "Chỉ chạy trên macOS"
+  [ "$(uname -m)" = "arm64" ] || fail "Cần máy Mac chip Apple (arm64)"
+fi
+RAM_BYTES=$(sysctl -n hw.memsize 2>/dev/null || echo 17179869184)
+RAM_GB=$(( RAM_BYTES / 1073741824 ))
+FREE_GB=$(df -k "$HOME_DIR" | awk 'NR==2 {print int($4 / 1048576)}')
+MODEL_NAME=$(system_profiler SPHardwareDataType 2>/dev/null | awk -F': ' '/Model Name/ {print $2}' || true)
 echo "Máy: ${MODEL_NAME:-Mac}, RAM ${RAM_GB} GB, trống ${FREE_GB} GB"
 WITH_IMAGE="${NODE_IMAGE:-}"
 if [ -z "$WITH_IMAGE" ]; then
