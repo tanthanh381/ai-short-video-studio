@@ -570,6 +570,41 @@ describe("idea mode becomes plain narration then faithful scenes", () => {
     expect(result.scenes.map((scene) => scene.narration).join("")).toBe(`${idea}\n${script}`);
   });
 
+  it("edits a draft that stays too short into the right length instead of failing the video", async () => {
+    // On the real model, 94 and 105 words came back for 167 asked, after all four length attempts: the job failed.
+    const tooShort = sentences(7); // 98 words, below the 75% that is accepted (149 of 199)
+    const provider = {
+      writeScript: vi.fn(async (request: { draft?: string }) => (request.draft ? script : tooShort)),
+      createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)),
+    };
+    const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: idea });
+    const calls = provider.writeScript.mock.calls.map((call) => call[0]);
+    expect(calls.filter((call) => !call.draft)).toHaveLength(4); // the length attempts come first
+    const expansion = calls.find((call) => call.draft)!;
+    expect(expansion).toMatchObject({ draft: expect.stringContaining("Câu số 1"), previousWords: 98 }); // it is given the draft and its length
+    expect(result.scenes.map((scene) => scene.narration).join("")).toBe(`${idea}\n${script}`);
+  });
+
+  it("expands again from the last, longer draft and still fails clearly when it never gets there", async () => {
+    const lengths = [sentences(6), sentences(7), sentences(8)]; // 84, 98, 112 words: never 149
+    const provider = {
+      writeScript: vi.fn(async (request: { draft?: string }) => (request.draft ? lengths.shift() ?? sentences(8) : sentences(6))),
+      createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)),
+    };
+    await expect(createFaithfulStoryboard(provider, { ...ideaInput, sourceText: idea })).rejects.toThrow(/AI chỉ viết được \d+ từ cho video/u);
+    const expansions = provider.writeScript.mock.calls.map((call) => call[0] as { draft?: string; previousWords?: number }).filter((call) => call.draft);
+    expect(expansions).toHaveLength(3);
+    expect(expansions[1]!.previousWords).toBe(84); // told the length of the answer before it
+    expect(expansions[2]!.previousWords).toBe(98);
+    expect(expansions[2]!.draft!.length).toBeGreaterThan(expansions[0]!.draft!.length); // and handed the best draft so far, not the first
+  });
+
+  it("does not try to edit a draft that is far too short to be worth it", async () => {
+    const provider = { writeScript: vi.fn(async (_request: unknown) => sentences(2)), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
+    await expect(createFaithfulStoryboard(provider, { ...ideaInput, sourceText: idea })).rejects.toThrow(/AI chỉ viết được/u);
+    expect(provider.writeScript.mock.calls.some((call) => (call[0] as { draft?: string }).draft)).toBe(false);
+  });
+
   it("cuts a long draft from the body and keeps the opening and the ending", async () => {
     const long = `Mở đầu bằng một câu hỏi?\n${sentences(20)}\nCâu kết đọng lại trong lòng người xem.`;
     const provider = { writeScript: vi.fn(async () => long), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };

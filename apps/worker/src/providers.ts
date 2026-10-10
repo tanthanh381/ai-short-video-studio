@@ -68,6 +68,8 @@ export interface StoryboardProvider {
       title: string; sourceText: string; duration: number; audience: string; style: string; model?: string | null; attempt?: number;
       /** Word budget and outline for the chosen length; `previousWords` tells a retry how long the last draft was. */
       plan?: ContentPlan; previousWords?: number;
+      /** A draft that came out too short: the writer expands it (keeps its opening and order) instead of starting over. */
+      draft?: string;
     }): Promise<string>;
   /** Title, caption and hashtags to post the finished video with. */
   writePostCaption?(input: { sourceText: string; title: string; model?: string | null }): Promise<{ title: string; description: string; hashtags: string[] } | null>;
@@ -717,6 +719,8 @@ function promptFlaws(prompts: string[]): number {
 
 /** Drafts asked for before settling on the closest one: length misses are retried with the previous word count. */
 const LENGTH_ATTEMPTS = 4;
+/** Expansions of a draft that stayed too short after every length attempt. */
+const EXPAND_ATTEMPTS = 3;
 
 /** The plan for an idea's narration at the project's duration, voice and style. */
 export function ideaPlan(input: StoryboardInput): ContentPlan {
@@ -734,36 +738,49 @@ export function withoutBeatLabels(script: string): string {
  * Narration for an idea, sized to the chosen duration (±10%). The model writes to an outline with words per part;
  * a short draft is asked again with its length, a long one loses body sentences (never the opening or the ending).
  */
-async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardInput): Promise<string> {
+export async function writeIdeaScript(provider: StoryboardProvider, input: StoryboardInput): Promise<string> {
   const plan = ideaPlan(input);
   const { target, min, max } = plan.words;
   const terms = importantTerms(input.sourceText);
   let best = { draft: "", score: -Infinity, overlap: 0, words: 0 };
   let previousWords: number | undefined;
   let lastError: unknown = new Error("AI chưa viết được lời đọc từ ý tưởng; hãy thử lại");
+  /** Scores one answer of the writer against the plan; keeps it if it is the best so far. Returns whether it is good as it is. */
+  const consider = (answer: string): boolean => {
+    const raw = withoutBeatLabels(cleanScriptForNarration(answer));
+    previousWords = contentWords(raw).length;
+    // Another writing system counts against the draft below and is never read out, even if this draft is kept.
+    const otherScript = foreignWords(raw).length - foreignWords(withoutForeignScript(raw)).length;
+    const draft = fitToWords(withQuestionHook(withoutForeignScript(raw), input.sourceText), max);
+    const words = contentWords(draft).length;
+    const overlap = terms.length >= 2 ? overlapRatio(terms, new Set(contentWords(draft))) : 1;
+    // An English word in Vietnamese narration ("sau khi hydrate") is read out oddly: prefer a clean draft.
+    const english = foreignWords(draft).length + otherScript;
+    // Being long enough weighs most: a 60-second video must not come out at 40 seconds.
+    const length = words >= min ? 1 : words / min;
+    const score = overlap - 0.3 * english + 2 * length;
+    if (score > best.score) best = { draft, score, overlap, words };
+    return words >= min && (overlap >= 0.25 || terms.length < 2) && english === 0; // right length, on topic, all Vietnamese
+  };
+  const request = (attempt: number, extra: { draft?: string } = {}) => provider.writeScript!({
+    title: input.title, sourceText: input.sourceText, duration: input.duration,
+    audience: input.audience, style: input.style, model: input.model ?? null, attempt, plan,
+    ...(previousWords !== undefined ? { previousWords } : {}), ...extra,
+  });
+  const accepted = () => best.draft && (best.overlap >= 0.1 || terms.length < 2) && best.words >= Math.round(target * 0.75);
   for (let attempt = 0; attempt < LENGTH_ATTEMPTS; attempt++) {
     try {
-      const raw = withoutBeatLabels(cleanScriptForNarration(await provider.writeScript!({
-        title: input.title, sourceText: input.sourceText, duration: input.duration,
-        audience: input.audience, style: input.style, model: input.model ?? null, attempt, plan,
-        ...(previousWords !== undefined ? { previousWords } : {}),
-      })));
-      previousWords = contentWords(raw).length;
-      // Another writing system counts against the draft below and is never read out, even if this draft is kept.
-      const otherScript = foreignWords(raw).length - foreignWords(withoutForeignScript(raw)).length;
-      const draft = fitToWords(withQuestionHook(withoutForeignScript(raw), input.sourceText), max);
-      const words = contentWords(draft).length;
-      const overlap = terms.length >= 2 ? overlapRatio(terms, new Set(contentWords(draft))) : 1;
-      // An English word in Vietnamese narration ("sau khi hydrate") is read out oddly: prefer a clean draft.
-      const english = foreignWords(draft).length + otherScript;
-      // Being long enough weighs most: a 60-second video must not come out at 40 seconds.
-      const length = words >= min ? 1 : words / min;
-      const score = overlap - 0.3 * english + 2 * length;
-      if (score > best.score) best = { draft, score, overlap, words };
-      if (words >= min && (overlap >= 0.25 || terms.length < 2) && english === 0) break; // right length, on topic, all Vietnamese
+      if (consider(await request(attempt))) break;
     } catch (error) { lastError = error; }
   }
-  if (best.draft && (best.overlap >= 0.1 || terms.length < 2) && best.words >= Math.round(target * 0.75)) return best.draft;
+  // Still too short (a 4B model sometimes stops at 60%: 94 and 105 words for 167 asked, on real runs): editing its own draft
+  // into a longer one is an easier job for it than writing again, and it keeps the opening and the order.
+  for (let extra = 0; extra < EXPAND_ATTEMPTS && !accepted() && best.draft && best.words >= Math.round(target * 0.4); extra++) {
+    try {
+      consider(await request(LENGTH_ATTEMPTS + extra, { draft: best.draft }));
+    } catch (error) { lastError = error; }
+  }
+  if (accepted()) return best.draft;
   if (best.draft)
     throw new Error(`AI chỉ viết được ${best.words} từ cho video ${durationLabel(input.duration)} (cần khoảng ${target} từ). ` +
       "Hãy thử lại, thêm vài ý vào ý tưởng hoặc chọn thời lượng ngắn hơn.");
