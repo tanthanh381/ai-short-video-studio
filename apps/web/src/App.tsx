@@ -62,6 +62,8 @@ import {
   durationLabel,
   formatDuration,
   looksLikeSubtitles,
+  looksLikeFinishedScript,
+  splitScript,
   humanStatus,
   isVoicePreset,
   voiceHint,
@@ -1232,6 +1234,10 @@ function NewProjectPage() {
   const [error, setError] = useState<string | null>(null);
   const [sourceText, setSourceText] = useState("");
   const [inputMode, setInputMode] = useState<Project["inputMode"]>("idea");
+  // A finished script pasted into "Một ý tưởng" is switched to "Kịch bản có sẵn" (so it is read as written, not rewritten);
+  // once the person has picked a mode themselves, that choice is never overridden.
+  const [modeChosen, setModeChosen] = useState(false);
+  const [autoScript, setAutoScript] = useState(false);
   const [settings, setSettings] = useState<ProjectSettings>(
     // 1.0x is already the short-form pace: the voice bridge brings every voice to about 3.7 words per second.
     { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, captionHighlight: true, hookTitle: true },
@@ -1247,6 +1253,11 @@ function NewProjectPage() {
   // A script is read as written, so its length is known now; an idea is written to the chosen duration.
   const readsAsWritten = inputMode === "full-script";
   const narrationSeconds = estimatedNarrationSeconds(wordCount, settings.voice, settings.voiceSpeed);
+  /** How many scenes a script read as written will be cut into: the same cuts the studio makes. */
+  const sceneCount = useMemo(() => {
+    if (!readsAsWritten || !spokenText.trim()) return null;
+    try { return splitScript(spokenText).length; } catch { return null; }
+  }, [readsAsWritten, spokenText]);
   const plan = contentPlan(settings.targetDurationSec, settings.style, settings.voice, settings.voiceSpeed);
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -1310,6 +1321,8 @@ function NewProjectPage() {
                 event.preventDefault();
                 const next = inputMode === "idea" ? "full-script" : "idea";
                 setInputMode(next);
+                setModeChosen(true);
+                setAutoScript(false);
                 event.currentTarget.querySelector<HTMLButtonElement>(`[data-mode="${next}"]`)?.focus();
               }}
             >
@@ -1326,7 +1339,7 @@ function NewProjectPage() {
                   data-mode={mode}
                   className={inputMode === mode ? "active" : ""}
                   disabled={busy}
-                  onClick={() => setInputMode(mode)}
+                  onClick={() => { setInputMode(mode); setModeChosen(true); setAutoScript(false); }}
                 >
                   <strong>{title}</strong>
                   <small>{detail}</small>
@@ -1348,6 +1361,13 @@ function NewProjectPage() {
                   setSourceText(e.target.value);
                   // Subtitles are someone's finished lines: read them as written, never rewrite them as an idea.
                   if (looksLikeSubtitles(e.target.value)) setInputMode("full-script");
+                  else if (!modeChosen && inputMode === "idea" && looksLikeFinishedScript(e.target.value)) {
+                    setInputMode("full-script");
+                    setAutoScript(true);
+                  } else if (autoScript && !looksLikeFinishedScript(e.target.value)) {
+                    setInputMode("idea"); // the text changed into something that is no longer a finished script
+                    setAutoScript(false);
+                  }
                 }}
                 required
                 minLength={10}
@@ -1360,7 +1380,16 @@ function NewProjectPage() {
                 <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>
                 <span>{wordCount.toLocaleString("vi-VN")} từ</span>
                 {readsAsWritten && wordCount > 0 && <span>≈ {formatDuration(narrationSeconds * 1000)} lời đọc</span>}
+                {sceneCount !== null && <span>≈ {sceneCount} cảnh</span>}
               </div>
+              {autoScript && inputMode === "full-script" && !pastedSubtitles && (
+                <Notice tone="info">
+                  <span>
+                    Đây là kịch bản hoàn chỉnh nên Studio giữ nguyên từng câu bạn viết và chia cảnh theo các dòng của bạn{sceneCount ? ` (khoảng ${sceneCount} cảnh)` : ""}, thay vì để AI viết lại.
+                  </span>
+                  <Button variant="ghost" type="button" onClick={() => { setInputMode("idea"); setModeChosen(true); setAutoScript(false); }}>Để AI viết lại theo thời lượng</Button>
+                </Notice>
+              )}
               {pastedSubtitles && <Notice tone="info">Đã nhận nội dung phụ đề: bỏ số thứ tự và mốc thời gian, nối các dòng thành câu và đọc nguyên văn.</Notice>}
               {readsAsWritten && narrationSeconds > 90 && (
                 <Notice tone="warn">Video sẽ dài khoảng {formatDuration(narrationSeconds * 1000)}. Shorts, Reels và TikTok giữ chân tốt nhất dưới 60–90 giây: nên chia thành nhiều phần (Phần 1, Phần 2…).</Notice>

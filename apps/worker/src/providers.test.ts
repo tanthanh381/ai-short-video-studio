@@ -1007,10 +1007,11 @@ describe("every image prompt stays about its own narration", () => {
     "Bữa ăn của họ nhiều cá, rau và đậu, rất ít đồ chiên và đồ ngọt.",
     "Bí mật thứ hai là vận động nhẹ mỗi ngày: đi bộ, làm vườn, đạp xe đi chợ.",
     "Thứ ba, người già ở Nhật không nghỉ hưu hẳn, họ luôn có một lý do để thức dậy mỗi sáng.",
-    "Và cuối cùng, họ giữ những người bạn thân suốt cả cuộc đời.",
-    "Bạn muốn bắt đầu từ bí mật nào trước?",
+    "Và cuối cùng, họ giữ những người bạn thân suốt cả cuộc đời, kể cả khi đã già yếu.",
+    "Bạn muốn bắt đầu từ bí mật nào trước, bữa ăn nhẹ hay những buổi đi bộ mỗi sáng?",
   ];
-  const sourceText = script.map((line) => `${line}\n`).join("");
+  // one paragraph each: a paragraph break is where the author wants a new scene
+  const sourceText = script.map((line) => `${line}\n\n`).join("");
   const picture = (narration: string) =>
     narration.includes("ăn no tám phần") ? "Close-up of hands lowering chopsticks beside a small bowl of rice, soft daylight"
     : narration.includes("cá, rau và đậu") ? "A plate of grilled fish, green vegetables and beans with almost no fried food, side view"
@@ -1067,7 +1068,7 @@ describe("every image prompt stays about its own narration", () => {
     expect(result.scenes.map((scene) => scene.imagePrompt)).not.toContain(walking);
     const alone = provider.createStoryboard.mock.calls.map(([value]) => value).filter((value) => value.lockedScenes?.length === 1 && value.sceneOffset === 2);
     expect(alone).toHaveLength(1);
-    expect(alone[0]).toMatchObject({ lockedScenes: [`${script[2]}\n`], totalScenes: 7, attempt: 0 });
+    expect(alone[0]).toMatchObject({ lockedScenes: [`${script[2]}\n\n`], totalScenes: 7, attempt: 0 });
     expect(provider.createStoryboard).toHaveBeenCalledTimes(3); // two batches (6 + 1 scenes) and one repair
   });
 

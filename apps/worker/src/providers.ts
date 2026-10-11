@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { cleanScriptForNarration, contentPlan, durationLabel, type ContentPlan } from "@studio/shared";
+import { cleanScriptForNarration, contentPlan, durationLabel, splitScript, type ContentPlan } from "@studio/shared";
+
+export { splitScript };
 import type { Scene } from "@studio/shared";
 import type { generationPresetSchema } from "@studio/shared";
 import { isOldTimeStory, PAPER_PROMPT_RULES, storyNationality, VIETNAMESE, withNationality, type Nationality } from "./card-layout";
@@ -391,40 +393,6 @@ export function buildStoryboardInstruction(input: StoryboardInput) {
       ? "Giữ nguyên nội dung và câu chữ của kịch bản, chỉ chia cảnh."
       : "Có thể biên tập câu chữ để tăng nhịp kể.";
   return `Bạn là biên tập viên trưởng cho kênh video ngắn Việt Nam có yêu cầu giữ chân cao. Tạo storyboard ${input.duration} giây cho đối tượng: ${input.audience}. Phong cách: ${input.style}. ${editingRule} Trước khi viết, xác định chủ đề trung tâm, các ý bắt buộc và thông điệp cuối; không bỏ sót ý chính người dùng đã cung cấp. Dựng mạch rõ: hook → bối cảnh → phát triển/xung đột → insight/payoff → kết thúc đáng nhớ. Hook dài 7-16 từ, phải tạo tò mò và là câu mở đầu nguyên văn của narration cảnh 1, không chỉ nằm ở trường hook. Tổng narration phải chính là toàn bộ lời đọc được phân bổ trong các scene; không để nội dung chỉ nằm ở trường narration mà không xuất hiện trong scene. Mỗi cảnh 4-9 giây, chỉ có một beat mới, không lặp ý hoặc cảnh minh họa chung chung. Cảnh cuối phải khép lại câu chuyện hoặc trả lời lời hứa của hook. Prompt ảnh (imagePrompt) viết bằng TIẾNG ANH, 28-48 từ, thể hiện đúng beat cụ thể của narration bằng chủ thể, hành động, đồ vật và bối cảnh; có shot size/góc máy, chiều sâu tiền cảnh-hậu cảnh và ánh sáng tự nhiên; giữ nhất quán nhân vật, trang phục và đạo cụ; không chứa chữ, logo hay thương hiệu; phong cách hình: ${input.visualStyle}. Trả về đúng JSON schema, không giải thích thêm.`;
-}
-
-/** Contiguous slices, not an LLM rewrite: joining them restores the input exactly. */
-export function splitScript(sourceText: string): string[] {
-  if (!sourceText.trim()) throw new Error("Vui lòng nhập kịch bản");
-  const chunks: string[] = [];
-  let chunk = "";
-  let words = 0;
-  for (const token of sourceText.match(/\S+\s*|\s+/gu) ?? []) {
-    if (chunk && chunk.length + token.length > 1900) {
-      chunks.push(chunk);
-      chunk = "";
-      words = 0;
-    }
-    chunk += token;
-    if (token.trim()) words++;
-    // Cut at a sentence end, else at a clause mark once the scene is long, and only mid-clause as a last resort:
-    // a cut in the middle of "từ khi | cha mẹ mất sớm" changes the picture halfway through a thought.
-    const sentenceEnd = /[.!?…。！？]["'”’)]?\s*$/u.test(token);
-    const clauseEnd = /[,;:]["'”’)]?\s*$/u.test(token);
-    if ((words >= 8 && sentenceEnd) || (words >= 18 && clauseEnd) || words >= 32) {
-      chunks.push(chunk);
-      chunk = "";
-      words = 0;
-    }
-  }
-  if (chunk) {
-    if (!chunk.trim() && chunks.length) chunks[chunks.length - 1] += chunk;
-    else chunks.push(chunk);
-  }
-  if (chunks.some((part) => part.length > 2000))
-    throw new Error("Kịch bản có một từ quá dài; vui lòng kiểm tra nội dung đã dán");
-  if (chunks.length > 250) throw new Error("Kịch bản quá dài cho video ngắn");
-  return chunks;
 }
 
 /** Only accept measured ASR word timestamps when the words match the known script. */
