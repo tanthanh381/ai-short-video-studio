@@ -1461,6 +1461,34 @@ function NewProjectPage() {
           </button>
         </section>
         <section hidden={!advanced}>
+          <div className="form-grid advanced-panel">
+            <Field label="AI viết kịch bản">
+              <select
+                value={settings.textProvider}
+                onChange={(event) => setSettings((current) => ({ ...current, textProvider: event.target.value as ProjectSettings["textProvider"] }))}
+              >
+                <option value="ollama">Ollama local — không tốn phí API</option>
+                <option value="anthropic">Claude — dùng API trả phí</option>
+                <option value="openai">OpenAI — dùng API trả phí</option>
+              </select>
+            </Field>
+            <Field label="Tạo ảnh và giọng đọc">
+              <select
+                value={settings.mediaProvider}
+                onChange={(event) => setSettings((current) => ({ ...current, mediaProvider: event.target.value as ProjectSettings["mediaProvider"] }))}
+              >
+                <option value="local">Self-host local — không tốn phí API</option>
+                <option value="openai">OpenAI — dùng API trả phí</option>
+              </select>
+            </Field>
+            {(settings.textProvider !== "ollama" || settings.mediaProvider === "openai") && (
+              <Notice tone="info">
+                Cần lưu khóa API tương ứng tại <Link to="/settings">Cài đặt → Dịch vụ trả phí</Link> trước khi bắt đầu. Chi phí do tài khoản nhà cung cấp của bạn chi trả.
+              </Notice>
+            )}
+          </div>
+        </section>
+        <section hidden={!advanced}>
             <label className="check">
               <input
                 type="checkbox"
@@ -1668,7 +1696,11 @@ function NewProjectPage() {
             <Clapperboard size={18} /> Tạo video
           </Button>
         </div>
-        <p className="creation-footnote">Xử lý trên máy đã kết nối, không gọi API trả phí. Máy cần bật trong lúc tạo video.</p>
+        <p className="creation-footnote">
+          {settings.textProvider === "ollama" && settings.mediaProvider === "local"
+            ? "Xử lý trên máy đã kết nối, không gọi API trả phí. Máy cần bật trong lúc tạo video."
+            : "Video sẽ sử dụng API trả phí đã chọn; hãy bảo đảm khóa API và hạn mức tài khoản đã sẵn sàng."}
+        </p>
       </form>
     </div>
   );

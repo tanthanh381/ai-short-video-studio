@@ -9,7 +9,7 @@ Phương án này giữ frontend trên GitHub Pages và chạy API/FFmpeg trên 
 3. Chạy migration trong thư mục `supabase/migrations` theo đúng thứ tự.
 4. Tạo tài khoản đăng nhập trong Supabase Authentication và thêm `user_id` đó vào bảng `allowed_users`.
 5. Chọn Tailscale Funnel (không cần domain riêng), hoặc chạy frontend trên chính máy backend với `VITE_API_URL=http://localhost:8787`.
-6. API key OpenAI và Anthropic là tùy chọn. Có thể để trống cả hai và chạy chế độ local-first bằng Ollama, image server SDXL-Turbo/MLX, VieNeu/Piper hoặc TTS Linh của macOS và whisper.cpp.
+6. API key OpenAI và Anthropic là tùy chọn. Docker Compose bật sẵn hai provider trả phí; bạn có thể dùng khóa chung cho worker hoặc cho từng tài khoản tự lưu khóa ở **Cài đặt → Dịch vụ trả phí**. Có thể để trống cả hai và chạy chế độ local-first bằng Ollama, image server SDXL-Turbo/MLX, VieNeu/Piper hoặc TTS Linh của macOS và whisper.cpp.
 
 ## Cấu hình bí mật
 
@@ -32,7 +32,7 @@ echo "API_KEYS_SECRET=$(openssl rand -base64 36 | tr -d '\n=+/' | cut -c1-48)" >
 - Khóa được mã hóa AES-256-GCM (khóa mã hóa riêng cho từng người dùng, suy ra từ `API_KEYS_SECRET`) rồi lưu trong bucket Supabase **riêng tư** `app-secrets` (API tự tạo bucket ở lần lưu đầu tiên; chỉ service role đọc được). Trình duyệt chỉ nhận lại 4 ký tự cuối.
 - **Hãy sao lưu `API_KEYS_SECRET`.** Nếu mất hoặc đổi giá trị, các khóa đã lưu không giải mã được và mọi người phải dán lại khóa. Để trống thì tính năng này tắt (ô dán khóa báo "máy chủ chưa bật").
 - Khi lưu, máy chủ kiểm tra khóa bằng lệnh liệt kê model (miễn phí, không phát sinh chi phí). Khóa sai bị từ chối, khóa không kiểm tra được vì mạng thì không lưu.
-- Khóa của người dùng được ưu tiên hơn khóa chung trong `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` (nếu có). Chức năng "Tạo video tự động" bằng một cú nhấp luôn chỉ dùng Ollama và media trên máy.
+- Khóa của người dùng được ưu tiên hơn khóa chung trong `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` (nếu có). Luồng **Tạo video** nay có thể chọn Claude/OpenAI cho kịch bản và OpenAI cho ảnh/giọng đọc; local vẫn là mặc định để tránh phát sinh phí ngoài ý muốn.
 - `OPENAI_BASE_URL` và `ANTHROPIC_BASE_URL` (mặc định là địa chỉ chính thức) chỉ cần đổi khi dùng proxy hoặc khi kiểm thử.
 
 ## Cài media AI local trên macOS

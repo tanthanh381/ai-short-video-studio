@@ -377,14 +377,34 @@ export function createApp(config: AppConfig, db: AdminClient) {
   }
 
   function oneClickUnavailable(settings: Project["settings"]) {
-    if (settings.textProvider !== "ollama" || settings.mediaProvider !== "local")
-      return "Chế độ Tạo video tự động chỉ dùng Ollama và media trên máy, không gọi dịch vụ trả phí.";
-    if (!config.OLLAMA_FEATURES_ENABLED)
+    if (settings.textProvider === "ollama" && !config.OLLAMA_FEATURES_ENABLED)
       return "Chưa kết nối Ollama. Hãy bật Ollama trên máy tạo video.";
-    if (!config.LOCAL_MEDIA_FEATURES_ENABLED)
+    if (settings.mediaProvider === "local" && !config.LOCAL_MEDIA_FEATURES_ENABLED)
       return "Chưa kết nối dịch vụ tạo ảnh và giọng đọc trên máy.";
     if (!config.RENDER_WORKER_ENABLED)
       return "Chưa kết nối máy xử lý video. Hãy bật worker trên máy.";
+    return null;
+  }
+
+  async function paidProviderUnavailable(settings: Project["settings"], userId: string) {
+    const baseError = oneClickUnavailable(settings);
+    if (baseError) return baseError;
+
+    const needsPaidProvider =
+      settings.textProvider === "openai" ||
+      settings.textProvider === "anthropic" ||
+      settings.mediaProvider === "openai";
+    if (!needsPaidProvider) return null;
+
+    const view = await accountView(userId);
+    const providers = new Set<"openai" | "anthropic">();
+    if (settings.textProvider === "openai" || settings.textProvider === "anthropic") providers.add(settings.textProvider);
+    if (settings.mediaProvider === "openai") providers.add("openai");
+    for (const provider of providers) {
+      if (!view.capabilities[provider]) {
+        return `Chưa có khóa API ${KEY_PROVIDER_INFO[provider].name}. Hãy dán khóa ở Cài đặt → Dịch vụ trả phí rồi thử lại.`;
+      }
+    }
     return null;
   }
 
@@ -747,7 +767,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       voice: DEFAULT_PROJECT_SETTINGS.voice,
       ...input.settings,
     });
-    const unavailable = oneClickUnavailable(settings);
+    const unavailable = await paidProviderUnavailable(settings, req.userId!);
     if (unavailable) return res.status(503).json({ error: unavailable });
     if (settings.backgroundMusicPath)
       return res.status(400).json({ error: "Hãy tải nhạc riêng trong Studio sau khi dự án được tạo." });
@@ -776,7 +796,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
   app.post("/v1/projects/:id/continue", async (req, res) => {
     const project = await loadProject(req.params.id, req.userId!);
     if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
-    const unavailable = oneClickUnavailable(project.settings);
+    const unavailable = await paidProviderUnavailable(project.settings, req.userId!);
     if (unavailable) return res.status(503).json({ error: unavailable });
     const { data, error } = await db.rpc("continue_video", {
       p_user_id: req.userId,
@@ -1074,7 +1094,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (previous.job_type === "create_video") {
       const project = await loadProject(previous.project_id, req.userId!);
       if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
-      const unavailable = oneClickUnavailable(project.settings);
+      const unavailable = await paidProviderUnavailable(project.settings, req.userId!);
       if (unavailable) return res.status(503).json({ error: unavailable });
       const { data: resumed, error: resumeError } = await db.rpc("continue_video", {
         p_user_id: req.userId, p_project_id: project.id, p_max_concurrent: req.maxConcurrentJobs,
