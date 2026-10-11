@@ -30,6 +30,9 @@ export type NodeResourceSummary = {
   memUsedGb?: number | null;
   swapUsedGb?: number | null;
   swapTotalGb?: number | null;
+  /** MB/s swapped in / out over the last minute: only pages going OUT mean the machine is short of memory now (a full swap alone does not). */
+  swapInMBps?: number | null;
+  swapOutMBps?: number | null;
   diskFreeGb?: number | null;
   diskTotalGb?: number | null;
   processes?: NodeProcessSummary[];

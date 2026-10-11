@@ -17,7 +17,7 @@ export function demoSystem(now = Date.now()): SystemSummary {
     id: "mini", role: "primary", state: "degraded", detail: "RAM đang căng", rttMs: 8,
     resources: {
       memTotalGb: 16, memPressure: "warn", power: "ac", batteryPercent: null, thermal: "nominal", loadAvg1: 5.1, cpuCores: 10,
-      memUsedGb: 14.2, swapUsedGb: 8, swapTotalGb: 9, diskFreeGb: 44, diskTotalGb: 228,
+      memUsedGb: 14.2, swapUsedGb: 8, swapTotalGb: 9, swapInMBps: 9.5, swapOutMBps: 12, diskFreeGb: 44, diskTotalGb: 228,
       processes: [
         { id: "image", label: "Vẽ ảnh SDXL-Turbo", memGb: 3.96, count: 1 },
         { id: "docker", label: "Máy ảo (Docker, Claude Code)", memGb: 3.14, count: 4 },
@@ -46,7 +46,7 @@ export function demoSystem(now = Date.now()): SystemSummary {
     id: "air", role: "secondary", state: "healthy", detail: "Sẵn sàng nhận việc", rttMs: 74,
     resources: {
       memTotalGb: 24, memPressure: "normal", power: "ac", batteryPercent: 100, thermal: "nominal", loadAvg1: 2.4, cpuCores: 10,
-      memUsedGb: 11.8, swapUsedGb: 0.3, swapTotalGb: 2, diskFreeGb: 242, diskTotalGb: 494,
+      memUsedGb: 11.8, swapUsedGb: 0.3, swapTotalGb: 2, swapInMBps: 0, swapOutMBps: 0, diskFreeGb: 242, diskTotalGb: 494,
       processes: [
         { id: "image", label: "Vẽ ảnh SDXL-Turbo", memGb: 4.1, count: 1 },
         { id: "vieneu", label: "Giọng VieNeu", memGb: 1.3, count: 1 },

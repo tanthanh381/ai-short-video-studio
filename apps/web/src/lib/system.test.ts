@@ -60,12 +60,27 @@ describe("machineGauges", () => {
     expect(gauges.thermal).toMatchObject({ value: "Bình thường", tone: "ok" });
   });
 
-  it("turns red for a machine that has run out of memory and is writing to disk", () => {
-    const squeezed = node("mini", { resources: { ...node("mini").resources!, memUsedGb: 15.2, memPressure: "warn", swapUsedGb: 8, swapTotalGb: 9 } });
+  it("turns red for a machine that has run out of memory and is writing to disk right now", () => {
+    const squeezed = node("mini", { resources: { ...node("mini").resources!, memUsedGb: 15.2, memPressure: "warn", swapUsedGb: 8, swapTotalGb: 9, swapOutMBps: 12 } });
     const gauges = byId(squeezed);
-    expect(gauges.swap).toMatchObject({ percent: 89, tone: "bad" });
-    expect(gauges.swap!.detail).toMatch(/ảnh và giọng chậm/);
+    expect(gauges.swap).toMatchObject({ percent: 89, tone: "bad", value: "8 GB / 9 GB · ghi 12 MB/s" });
+    expect(gauges.swap!.detail).toMatch(/ảnh và giọng đang chậm lại/);
     expect(gauges.ram!.tone).toBe("warn");
+  });
+
+  it("does not raise the alarm for a swap that is merely full: macOS leaves old pages there after the pressure is gone", () => {
+    const idle = node("mini", { resources: { ...node("mini").resources!, swapUsedGb: 8.4, swapTotalGb: 9, swapOutMBps: 0, swapInMBps: 0.7 } });
+    expect(byId(idle).swap).toMatchObject({ percent: 93, tone: "ok" });
+    expect(byId(idle).swap!.detail).toMatch(/không ghi thêm ra đĩa trong phút qua/);
+    expect(systemAlerts(system([idle, node("air")]))).toEqual([]);
+  });
+
+  it("falls back to the memory pressure when a bridge does not report swap activity", () => {
+    const full = { ...node("air").resources!, swapUsedGb: 6.8, swapTotalGb: 8 };
+    expect(byId(node("air", { resources: { ...full, memPressure: "normal" } })).swap).toMatchObject({ tone: "ok" });
+    expect(byId(node("air", { resources: { ...full, memPressure: "normal" } })).swap!.detail).toMatch(/chưa biết máy có đang ghi/);
+    expect(byId(node("air", { resources: { ...full, memPressure: "warn" } })).swap!.tone).toBe("warn");
+    expect(byId(node("air", { resources: { ...full, memPressure: "critical" } })).swap!.tone).toBe("bad");
   });
 
   it("flags a laptop on low battery, a hot machine and a nearly full disk", () => {
@@ -180,7 +195,7 @@ describe("systemAlerts and summaryTiles", () => {
   });
 
   it("puts a machine that dropped out and a squeezed Mac first, then the rest", () => {
-    const squeezed = node("mini", { resources: { ...node("mini").resources!, memUsedGb: 12, memPressure: "warn", swapUsedGb: 8, swapTotalGb: 9 } });
+    const squeezed = node("mini", { resources: { ...node("mini").resources!, memUsedGb: 12, memPressure: "warn", swapUsedGb: 8, swapTotalGb: 9, swapOutMBps: 12 } });
     const off = node("air", { state: "offline", detail: "cầu nối media không kết nối được", matchesPrimary: null });
     const alerts = systemAlerts(system([squeezed, off], { jobs: { running: 0, queued: 0, completed24h: 2, failed24h: 1, avgVideoSeconds24h: 300, recent: [] }, services: { ollama: { state: "offline", detail: "Không kết nối được Ollama", checkedAt: "x" }, supabase: { state: "healthy", detail: "ok", checkedAt: "x" } } }));
     expect(alerts.map((alert) => alert.id)).toEqual(["mini-swap", "air-offline", "service-ollama", "jobs-failed"]); // red ones first, in the order found
@@ -193,6 +208,17 @@ describe("systemAlerts and summaryTiles", () => {
     const alerts = systemAlerts(system([node("mini"), air]));
     expect(alerts.find((alert) => alert.id === "air-parity")).toMatchObject({ tone: "warn", detail: "cấu hình khác máy chính ở IMAGE_STEPS" });
     expect(summaryTiles(system([node("mini"), air])).find((tile) => tile.id === "machines")).toMatchObject({ value: "2/2 hoạt động", tone: "warn" });
+  });
+
+  it("turns the several complaints about a second machine that has not been updated into one", () => {
+    const old = node("air", { state: "degraded", detail: "máy này đang chạy bản cũ", sync: null, matchesPrimary: false, lanes: { image: lane({ eligible: false, reasons: ["máy này đang chạy bản cũ"] }) } });
+    const alerts = systemAlerts(system([node("mini"), old]));
+    expect(alerts.map((alert) => alert.id)).toEqual(["air-outdated"]);
+    expect(alerts[0]!.detail).toMatch(/dán dòng lệnh cài/);
+    expect(alerts[0]!.detail).toMatch(/chưa được giao việc vẽ ảnh và đọc giọng/);
+    // once it runs the new agent but is still different, the specific complaint comes back
+    const withAgent = node("air", { state: "degraded", matchesPrimary: false, lanes: { image: lane({ eligible: false, reasons: ["cấu hình khác máy chính ở số bước vẽ ảnh"] }) } });
+    expect(systemAlerts(system([node("mini"), withAgent])).map((alert) => alert.id)).toEqual(["air-degraded", "air-parity"]);
   });
 
   it("counts the work and the videos in the tiles", () => {

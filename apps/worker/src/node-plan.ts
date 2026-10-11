@@ -40,6 +40,8 @@ export type NodeResources = {
   memUsedGb?: number | null;
   swapUsedGb?: number | null;
   swapTotalGb?: number | null;
+  swapInMBps?: number | null;
+  swapOutMBps?: number | null;
   diskFreeGb?: number | null;
   diskTotalGb?: number | null;
   processes?: Array<{ id: string; label: string; memGb: number; count: number }>;
@@ -67,13 +69,27 @@ export type NodeStatus = {
   } | null;
 };
 
-/** Why two machines' fingerprints differ: the settings that are not equal, or (when all settings match) the code. */
+/** What the settings behind the fingerprint are called when the owner reads about them. */
+const SETTING_LABELS: Record<string, string> = {
+  IMAGE_PRESET: "mức chất lượng ảnh", IMAGE_STEPS: "số bước vẽ ảnh", IMAGE_PERSON_STEPS: "số bước vẽ người", VIENEU_STEPS: "số bước giọng VieNeu",
+  TTS_BREAK_WORDS: "độ dài đoạn đọc", TTS_ENGINES: "các giọng đọc", PACE_TARGET_WPS: "tốc độ đọc", VIENEU_VOICE: "giọng mặc định",
+  FACE_DETAIL: "sửa khuôn mặt", FACE_DETAIL_READY: "mô hình sửa khuôn mặt", IMAGE_ANATOMY_GUARD: "chống méo người", IMAGE_NEGATIVE_PROMPT: "lời cấm khi vẽ",
+  MODELS_DIGEST: "tệp model",
+};
+const settingLabel = (key: string) => SETTING_LABELS[key] ?? (key.startsWith("image_server.") ? `máy vẽ ảnh (${key.slice("image_server.".length)})` : key);
+
+/**
+ * Why two machines' fingerprints differ, in words: a machine that runs an older media bridge does not report some settings at all
+ * (it needs updating, nothing to be tuned), otherwise the settings that are not equal, or (when all settings match) the code.
+ */
 export function describeMismatch(node: NodeStatus, primary: NodeStatus): string {
   if (!node.settings || !primary.settings) return "cấu hình hoặc mã khác máy chính";
+  const missing = Object.keys(primary.settings).filter((key) => !(key in (node.settings ?? {})));
+  if (missing.length) return `máy này đang chạy bản cũ của chương trình media (chưa báo: ${missing.map(settingLabel).join(", ")}); cần cập nhật`;
   const keys = [...new Set([...Object.keys(node.settings), ...Object.keys(primary.settings)])].sort();
   const different = keys.filter((key) => node.settings?.[key] !== primary.settings?.[key]);
   if (!different.length) return "mã media_server.py hoặc image_server.py khác phiên bản máy chính (cập nhật mã và khởi động lại ở cả hai máy)";
-  return `cấu hình khác máy chính ở ${different.join(", ")}`;
+  return `cấu hình khác máy chính ở ${different.map(settingLabel).join(", ")}`;
 }
 
 export type InflightTask = { startedAt: number; expectedMs: number };

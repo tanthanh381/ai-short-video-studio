@@ -74,6 +74,9 @@ export type Gauge = {
   tone: Tone;
 };
 
+/** Swapping out faster than this (MB/s, averaged over a minute) means the machine is short of memory right now. */
+const SWAP_WRITING_MBPS = 5;
+
 const PRESSURE_TEXT = { normal: "áp lực bộ nhớ bình thường", warn: "hệ điều hành báo bộ nhớ đang căng", critical: "bộ nhớ ở mức nghiêm trọng", unknown: "chưa rõ áp lực bộ nhớ" } as const;
 
 export function machineGauges(node: NodeSummary): Gauge[] {
@@ -93,13 +96,28 @@ export function machineGauges(node: NodeSummary): Gauge[] {
 
   if (resources.swapUsedGb != null && resources.swapTotalGb != null) {
     const swapPercent = resources.swapTotalGb > 0 ? percentOf(resources.swapUsedGb, resources.swapTotalGb) : 0;
+    const full = (swapPercent ?? 0) >= 50;
+    const writing = resources.swapOutMBps ?? null; // MB/s going out to disk over the last minute; null from a bridge that does not measure it
+    const active = writing !== null && writing >= SWAP_WRITING_MBPS;
+    // A full swap alone proves nothing: macOS leaves old pages there long after the pressure is gone. Only pages going out now do.
+    let tone: Tone = "ok";
+    let detail = "bình thường";
+    if (active) {
+      tone = full ? "bad" : "warn";
+      detail = `đang ghi ${decimal(writing!)} MB/s ra ổ đĩa vì thiếu RAM: ảnh và giọng đang chậm lại`;
+    } else if (writing === null) {
+      tone = resources.memPressure === "critical" ? "bad" : resources.memPressure === "warn" && (swapPercent ?? 0) >= 80 ? "warn" : "ok";
+      if (full) detail = "chưa biết máy có đang ghi ra swap không (máy này chưa báo hoạt động swap)";
+    } else if (full) {
+      detail = "Swap còn đầy nhưng máy không ghi thêm ra đĩa trong phút qua: đó là phần cũ còn nằm lại, không làm chậm việc đang chạy";
+    }
     gauges.push({
       id: "swap",
       label: "Swap (RAM ảo)",
       percent: swapPercent,
-      value: resources.swapTotalGb > 0 ? `${formatGb(resources.swapUsedGb)} / ${formatGb(resources.swapTotalGb)}` : "chưa dùng",
-      detail: (swapPercent ?? 0) >= 50 ? "RAM không đủ, máy đang ghi tạm ra ổ đĩa nên ảnh và giọng chậm lại" : "bình thường",
-      tone: (swapPercent ?? 0) >= 80 ? "bad" : (swapPercent ?? 0) >= 50 ? "warn" : "ok",
+      value: resources.swapTotalGb > 0 ? `${formatGb(resources.swapUsedGb)} / ${formatGb(resources.swapTotalGb)}${active ? ` · ghi ${decimal(writing!)} MB/s` : ""}` : "chưa dùng",
+      detail,
+      tone,
     });
   }
 
@@ -350,6 +368,9 @@ const SERVICE_NAMES: Record<string, string> = {
 export function systemAlerts(system: SystemSummary): SystemAlert[] {
   const alerts: SystemAlert[] = [];
   for (const node of system.balancer?.nodes ?? []) {
+    // A second machine that has not been updated yet runs the old media bridge and has no sync agent: it differs from the main one in
+    // everything at once. That is one thing to do (update it once), not three alarms.
+    const outdated = node.role !== "primary" && node.state !== "offline" && node.state !== "disabled" && !node.sync && node.matchesPrimary === false;
     if (node.state === "disabled") {
       // switched off by the owner: nothing to fix, and its readings are not a problem either
       alerts.push({ id: `${node.id}-disabled`, tone: "info", title: `Máy ${node.id} đang tắt`, detail: "Đã tắt trong Cài đặt: máy này không nhận việc mới. Bật lại ở Cài đặt → Máy xử lý video." });
@@ -357,19 +378,24 @@ export function systemAlerts(system: SystemSummary): SystemAlert[] {
     }
     if (node.state === "offline") alerts.push({ id: `${node.id}-offline`, tone: "bad", title: `Máy ${node.id} mất kết nối`, detail: node.detail });
     else if (node.state === "paused") alerts.push({ id: `${node.id}-paused`, tone: "info", title: `Máy ${node.id} đang tạm dừng`, detail: "Chủ máy đã tạm dừng: máy chính không giao việc mới cho máy này (bật lại bằng Mo-May-Phu.command resume)." });
-    else if (node.state === "degraded") alerts.push({ id: `${node.id}-degraded`, tone: "warn", title: `Máy ${node.id} bị hạn chế`, detail: node.detail });
+    else if (outdated) {
+      alerts.push({
+        id: `${node.id}-outdated`, tone: "warn", title: `Máy ${node.id} đang chạy bản cũ`,
+        detail: `Cập nhật một lần: mở Terminal trên máy ${node.id} và dán dòng lệnh cài (Cài đặt → Máy xử lý video, hoặc docs/TU-HOST.md). Từ lần sau máy tự đồng bộ với Mac mini. Trong lúc này ${node.id} chưa được giao việc vẽ ảnh và đọc giọng vì hai máy làm ra kết quả khác nhau.`,
+      });
+    } else if (node.state === "degraded") alerts.push({ id: `${node.id}-degraded`, tone: "warn", title: `Máy ${node.id} bị hạn chế`, detail: node.detail });
     for (const gauge of machineGauges(node)) {
       if (gauge.tone === "ok" || gauge.tone === "idle") continue;
       if (gauge.id === "ram" && node.resources?.memPressure === "warn" && (gauge.percent ?? 0) < 92) continue; // a warning from the system alone: the swap gauge says whether it matters
       alerts.push({ id: `${node.id}-${gauge.id}`, tone: gauge.tone === "bad" ? "bad" : "warn", title: `Máy ${node.id}: ${gauge.label} ${gauge.value}`, detail: gauge.detail });
     }
-    const sync = node.role === "primary" || node.state === "offline" ? null : syncView(node);
+    const sync = node.role === "primary" || node.state === "offline" || outdated ? null : syncView(node);
     if (sync && node.role !== "primary" && node.state !== "offline") {
       if (!node.sync) alerts.push({ id: `${node.id}-sync-off`, tone: "info", title: `Máy ${node.id} chưa bật tự động đồng bộ`, detail: sync.detail });
       else if (node.sync.state === "error") alerts.push({ id: `${node.id}-sync-error`, tone: "warn", title: `Đồng bộ máy ${node.id} đang lỗi`, detail: sync.detail });
       else if (node.sync.state === "behind") alerts.push({ id: `${node.id}-sync-behind`, tone: "info", title: `Máy ${node.id} chưa giống Mac mini (${sync.label.toLowerCase()})`, detail: sync.differences.slice(0, 3).join("; ") || sync.detail });
     }
-    if (node.matchesPrimary === false) {
+    if (node.matchesPrimary === false && !outdated) {
       alerts.push({ id: `${node.id}-parity`, tone: "warn", title: `Máy ${node.id} làm ảnh và giọng khác máy chính`, detail: node.lanes.image?.reasons[0] ?? "Cấu hình hoặc mã khác máy chính nên máy này không được chia việc ảnh và giọng." });
     }
   }

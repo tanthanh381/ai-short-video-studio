@@ -85,12 +85,12 @@ export function parseNodeSpecs(config: NodeConfig): NodeSpec[] {
 
 /** The readings the dashboard shows; fields an older media bridge does not report are left out rather than set to null. */
 function summarizeResources(resources: NonNullable<NodeStatus["resources"]>): NonNullable<NodeSummary["resources"]> {
-  const optional = <K extends "memUsedGb" | "swapUsedGb" | "swapTotalGb" | "diskFreeGb" | "diskTotalGb" | "processes">(key: K) =>
+  const optional = <K extends "memUsedGb" | "swapUsedGb" | "swapTotalGb" | "swapInMBps" | "swapOutMBps" | "diskFreeGb" | "diskTotalGb" | "processes">(key: K) =>
     resources[key] === undefined ? {} : { [key]: resources[key] };
   return {
     memTotalGb: resources.memTotalGb, memPressure: resources.memPressure, power: resources.power, batteryPercent: resources.batteryPercent,
     thermal: resources.thermal, loadAvg1: resources.loadAvg1, cpuCores: resources.cpuCores,
-    ...optional("memUsedGb"), ...optional("swapUsedGb"), ...optional("swapTotalGb"), ...optional("diskFreeGb"), ...optional("diskTotalGb"), ...optional("processes"),
+    ...optional("memUsedGb"), ...optional("swapUsedGb"), ...optional("swapTotalGb"), ...optional("swapInMBps"), ...optional("swapOutMBps"), ...optional("diskFreeGb"), ...optional("diskTotalGb"), ...optional("processes"),
   };
 }
 

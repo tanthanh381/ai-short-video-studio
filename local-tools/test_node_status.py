@@ -106,6 +106,27 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(node_status.parse_swap("total = 2.00G  used = 512.00M  free = 1.50G"), (0.5, 2.0))
         self.assertEqual(node_status.parse_swap(None), (None, None))
 
+    def test_swap_counters_come_from_vm_stat(self):
+        text = VM_STAT + "Swapins:                                    78996118.\nSwapouts:                                   95763096.\n"
+        self.assertEqual(node_status.parse_swap_counters(text), (16384, 78996118, 95763096))
+        self.assertIsNone(node_status.parse_swap_counters(VM_STAT))
+        self.assertIsNone(node_status.parse_swap_counters(""))
+
+    def test_a_full_swap_is_not_a_machine_that_is_swapping(self):
+        mib = 2**20 // 16384  # pages in a MiB
+        # a Mac whose swap is full but which wrote nothing to it for a minute: only reads of old pages
+        idle = [(0.0, 16384, 1000, 5000), (30.0, 16384, 1000 + 30 * mib, 5000), (60.0, 16384, 1000 + 60 * mib, 5000)]
+        self.assertEqual(node_status.swap_activity(idle, 60.0), (1.0, 0.0))
+        # a Mac pushing 8 MiB/s out to disk
+        busy = [(0.0, 16384, 0, 0), (10.0, 16384, 0, 80 * mib)]
+        self.assertEqual(node_status.swap_activity(busy, 10.0), (0.0, 8.0))
+        # one reading, or two readings a moment apart, say nothing yet
+        self.assertEqual(node_status.swap_activity([(0.0, 16384, 0, 0)], 0.0), (None, None))
+        self.assertEqual(node_status.swap_activity([(0.0, 16384, 0, 0), (1.0, 16384, 0, 99999)], 1.0), (None, None))
+        # readings older than a minute no longer count
+        old = [(0.0, 16384, 0, 0), (5.0, 16384, 0, 50 * mib), (200.0, 16384, 0, 50 * mib), (210.0, 16384, 0, 50 * mib)]
+        self.assertEqual(node_status.swap_activity(old, 210.0), (0.0, 0.0))
+
     def test_footprint_from_top_in_gigabytes(self):
         sizes = node_status.parse_top_memory(TOP_MEMORY)
         self.assertAlmostEqual(sizes[101], 3.96, places=2)

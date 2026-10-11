@@ -139,6 +139,50 @@ def parse_vm_stat(text, total_gb):
     return round(max(0.0, total_gb - available_gb), 1)
 
 
+def parse_swap_counters(text):
+    """`vm_stat` -> (page size, pages swapped in so far, pages swapped out so far); None where the output has no such lines."""
+    if not text:
+        return None
+    page = re.search(r"page size of (\d+) bytes", text)
+    ins = re.search(r"^Swapins:\s+(\d+)", text, re.MULTILINE)
+    outs = re.search(r"^Swapouts:\s+(\d+)", text, re.MULTILINE)
+    if not ins or not outs:
+        return None
+    return (int(page.group(1)) if page else 4096), int(ins.group(1)), int(outs.group(1))
+
+
+SWAP_WINDOW_S = 60.0
+
+
+def swap_activity(samples, now, window_s=SWAP_WINDOW_S):
+    """(MB/s swapped in, MB/s swapped out) over the last minute, from [(time, page size, ins, outs)] readings; None until two readings are
+    at least a few seconds apart. Swap that is merely FULL says nothing: macOS leaves old pages there long after the pressure is gone.
+    Only pages going out now mean the machine is short of memory now."""
+    recent = [item for item in samples if now - item[0] <= window_s]
+    if len(recent) < 2:
+        return None, None
+    first, last = recent[0], recent[-1]
+    seconds = last[0] - first[0]
+    if seconds < 3:
+        return None, None
+    megabytes = lambda pages: pages * last[1] / 2**20
+    return round(megabytes(max(0, last[2] - first[2])) / seconds, 2), round(megabytes(max(0, last[3] - first[3])) / seconds, 2)
+
+
+_SWAP_SAMPLES = []
+_SWAP_LOCK = threading.Lock()
+
+
+def _swap_rates(vm_stat_text, now):
+    counters = parse_swap_counters(vm_stat_text)
+    if counters is None:
+        return None, None
+    with _SWAP_LOCK:
+        _SWAP_SAMPLES.append((now, *counters))
+        del _SWAP_SAMPLES[:-30]
+        return swap_activity(list(_SWAP_SAMPLES), now)
+
+
 def parse_swap(text):
     """`sysctl -n vm.swapusage` -> (used GB, total GB): "total = 9216.00M  used = 8195.62M  free = 1020.38M"."""
     if not text:
@@ -259,10 +303,14 @@ def read_resources(max_age_s=4.0):
             disk_free, disk_total = round(disk.free / 2**30), round(disk.total / 2**30)
         except OSError:
             disk_free = disk_total = None
+        vm_stat_text = _run(["vm_stat"]) if mac else None
+        swap_in, swap_out = _swap_rates(vm_stat_text, now) if mac else (None, None)
         value = {
             "cpuCores": os.cpu_count(),
             "memTotalGb": total_gb,
-            "memUsedGb": parse_vm_stat(_run(["vm_stat"]), total_gb) if mac else None,
+            "memUsedGb": parse_vm_stat(vm_stat_text, total_gb) if mac else None,
+            "swapInMBps": swap_in,
+            "swapOutMBps": swap_out,
             "swapUsedGb": swap_used,
             "swapTotalGb": swap_total,
             "diskFreeGb": disk_free,

@@ -39,7 +39,7 @@ export function machineFacts(node: NodeSummary): string {
   const facts: string[] = [];
   if (resources?.memUsedGb != null && resources.memTotalGb) facts.push(`RAM ${formatGb(resources.memUsedGb)}/${formatGb(resources.memTotalGb)}`);
   else if (resources?.memTotalGb) facts.push(`RAM ${formatGb(resources.memTotalGb)}`);
-  if (resources?.swapUsedGb != null && resources.swapTotalGb && resources.swapUsedGb / resources.swapTotalGb >= 0.5) facts.push(`swap ${formatGb(resources.swapUsedGb)}/${formatGb(resources.swapTotalGb)}`);
+  if ((resources?.swapOutMBps ?? 0) >= 5) facts.push(`đang ghi swap ${resources!.swapOutMBps} MB/s`); // only swapping that is going on now is worth a glance
   if (resources?.power === "battery") facts.push(`pin ${resources.batteryPercent ?? "?"}%`);
   if (resources?.thermal === "throttled") facts.push("đang nóng");
   const activity = nodeActivity(node);

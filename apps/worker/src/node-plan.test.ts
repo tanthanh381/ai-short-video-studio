@@ -52,10 +52,22 @@ describe("assessNode", () => {
     const primary = node("mini", { local: true, status: status({ settings: base }) });
     const air = node("air", { status: status({ fingerprint: "other", settings: { ...base, IMAGE_STEPS: "4", VIENEU_STEPS: 24 } }) });
     const reason = assessNode(air, "image", context([primary, air])).reasons[0];
-    expect(reason).toMatch(/cấu hình khác máy chính ở IMAGE_STEPS, VIENEU_STEPS/);
-    expect(reason).not.toMatch(/FACE_DETAIL/);
+    expect(reason).toMatch(/cấu hình khác máy chính ở số bước vẽ ảnh, số bước giọng VieNeu/);
+    expect(reason).not.toMatch(/IMAGE_STEPS|khuôn mặt/);
     const sameSettings = node("air", { status: status({ fingerprint: "other", settings: base }) });
     expect(assessNode(sameSettings, "image", context([primary, sameSettings])).reasons[0]).toMatch(/mã media_server\.py hoặc image_server\.py khác/);
+  });
+
+  it("says an older bridge needs updating instead of naming a setting the owner has never heard of", () => {
+    const base = { IMAGE_STEPS: "", MODELS_DIGEST: "abc", "image_server.steps": 4 };
+    const primary = node("mini", { local: true, status: status({ settings: base }) });
+    const { MODELS_DIGEST: _missing, ...old } = base;
+    const air = node("air", { status: status({ fingerprint: "other", settings: old }) });
+    const reason = assessNode(air, "image", context([primary, air])).reasons[0]!;
+    expect(reason).toMatch(/đang chạy bản cũ của chương trình media \(chưa báo: tệp model\); cần cập nhật/);
+    expect(reason).not.toMatch(/MODELS_DIGEST/);
+    const tuned = node("air", { status: status({ fingerprint: "other", settings: { ...base, "image_server.steps": 6 } }) });
+    expect(assessNode(tuned, "image", context([primary, tuned])).reasons[0]).toMatch(/máy vẽ ảnh \(steps\)/);
   });
 
   it("cannot vouch for a machine whose bridge does not report a fingerprint", () => {

@@ -15,7 +15,7 @@ describe("machineChoices", () => {
   it("shows each machine with its state and a glance at how it is doing", () => {
     const [mini, air] = machineChoices(balancer([node("mini"), node("air", { state: "degraded" })]));
     expect(mini).toMatchObject({ id: "mini", primary: true, enabled: true, state: { label: "Sẵn sàng", tone: "ok" }, canSwitchOff: true });
-    expect(mini!.facts).toBe("RAM 12,9 GB/16 GB · swap 6,6 GB/8 GB · đang vẽ 1 ảnh · đã xong 4 ảnh, 9 giọng");
+    expect(mini!.facts).toBe("RAM 12,9 GB/16 GB · đang vẽ 1 ảnh · đã xong 4 ảnh, 9 giọng"); // a full swap alone is not worth a mention
     expect(air).toMatchObject({ id: "air", primary: false, state: { label: "Hạn chế", tone: "warn" } });
   });
 
@@ -60,8 +60,10 @@ describe("machineWarning", () => {
 });
 
 describe("machineFacts and serviceSummary", () => {
-  it("mentions swap only when it is getting full, and battery only when on battery", () => {
+  it("mentions swap only while the machine is writing to it, and battery only when on battery", () => {
     expect(machineFacts(node("air", { resources: { ...node("air").resources!, swapUsedGb: 0.3, swapTotalGb: 2, power: "battery", batteryPercent: 40 }, lanes: {} }))).toBe("RAM 12,9 GB/16 GB · pin 40%");
+    expect(machineFacts(node("air", { resources: { ...node("air").resources!, swapOutMBps: 14 }, lanes: {} }))).toBe("RAM 12,9 GB/16 GB · đang ghi swap 14 MB/s");
+    expect(machineFacts(node("air", { resources: { ...node("air").resources!, swapOutMBps: 0.2 }, lanes: {} }))).toBe("RAM 12,9 GB/16 GB");
   });
 
   it("counts the services that are running and names the ones that are not", () => {
