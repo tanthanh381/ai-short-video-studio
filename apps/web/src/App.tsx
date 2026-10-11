@@ -1244,7 +1244,17 @@ function NewProjectPage() {
   );
   const [channelPreset, setChannelPreset] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);
-  const localModels = useLocalModels(isDemo || !advanced);
+  // Read the real local catalog even before Advanced is opened so a ready LTX node can
+  // be selected automatically for new projects. When LTX is offline, the catalog's
+  // video default stays null and the existing still-image fallback remains unchanged.
+  const localModels = useLocalModels(isDemo);
+  useEffect(() => {
+    const defaultVideo = localModels?.video.default;
+    if (!defaultVideo) return;
+    setSettings((current) => current.localModels.video
+      ? current
+      : { ...current, localModels: { ...current.localModels, video: defaultVideo } });
+  }, [localModels]);
   const submitting = useRef(false);
   // Pasted subtitles are read without their cue numbers and timings, so count only what will be spoken.
   const pastedSubtitles = looksLikeSubtitles(sourceText);

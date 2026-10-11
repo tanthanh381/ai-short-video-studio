@@ -981,6 +981,13 @@ const PRESET_IMAGE_STYLE: Record<string, ImageStyle> = {
   "paper-cut": "paper-cut",
   whiteboard: "whiteboard",
   "chibi-co-phong": "chibi",
+  "chibi-tien-hiep": "chibi",
+  "chibi-dan-gian-viet": "chibi",
+  "chibi-co-trang-hai": "chibi",
+  "thuy-mac-co-phong": "ink",
+  "paper-storybook": "paper-cut",
+  "chibi-huyen-bi": "chibi",
+  "chibi-dong-vat-co-phong": "chibi",
 };
 
 export function imageStyleFor(visualStyle: string, visualPreset?: string): ImageStyle {

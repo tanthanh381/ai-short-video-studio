@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
 import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
+import { sceneMotionPrompt } from "./motion-prompts";
 import { getConfig } from "./config";
 import { fetchAirSetup } from "./air-setup";
 import { AnthropicStoryboardAdapter } from "./anthropic";
@@ -730,7 +731,7 @@ async function generateMedia(job: JobRow, project: Project) {
         const motion = await media.createVideo(
           {
             image: await download(imagePath),
-            prompt: `${scene.imagePrompt}. Natural subtle motion, stable face and identity, physically correct hands, consistent clothing, no flicker, no morphing, no extra limbs.`,
+            prompt: `${scene.imagePrompt}. ${sceneMotionPrompt(project.settings.visualPreset, scene.order)}`,
             aspectRatio: project.settings.aspectRatio,
           },
           {

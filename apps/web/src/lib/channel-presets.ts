@@ -22,6 +22,30 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1 }),
   },
   {
+    id: "tien-hiep-chibi",
+    label: "Chibi tiên hiệp",
+    hint: "Tu tiên, linh thú, mây núi và pháp bảo chuyển động nhẹ",
+    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "chibi-tien-hiep"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true }),
+  },
+  {
+    id: "dan-gian-viet-chibi",
+    label: "Chibi dân gian Việt",
+    hint: "Cổ tích, ca dao, làng quê Việt và nhân vật chibi thân thiện",
+    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "chibi-dan-gian-viet"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true }),
+  },
+  {
+    id: "co-trang-hai-chibi",
+    label: "Chibi cổ trang hài",
+    hint: "Biểu cảm lớn, tình huống cung đình và cú twist cuối cảnh",
+    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "chibi-co-trang-hai"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
+  },
+  {
+    id: "huyen-bi-co-phong",
+    label: "Chibi huyền bí cổ phong",
+    hint: "Hồ ly, miếu cổ, đèn lồng, khói và cú twist huyền bí",
+    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "chibi-huyen-bi"), style: "ke-chuyen", voice: "co-trang", voiceSpeed: 1, autoMusic: true }),
+  },
+  {
     id: "chua-lanh",
     label: "Triết lý · chữa lành",
     hint: "Tranh màu nước, giọng trầm, nhịp vừa, nhạc nền",

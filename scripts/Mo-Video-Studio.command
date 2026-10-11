@@ -30,6 +30,10 @@ if ! curl -fsS http://127.0.0.1:8765/health >/dev/null 2>&1; then
   nohup /opt/homebrew/bin/python3.12 local-tools/media_server.py >tmp/local-services/media.log 2>&1 &
 fi
 start_if_down http://127.0.0.1:8766/health whiteboard "$LOCAL_AI_ROOT/wb-venv/bin/python" local-tools/whiteboard_server.py
+# LTX là tùy chọn: chỉ tự bật khi đã cài đủ venv/model bằng scripts/Cai-LTX-Video.command.
+if [[ -x "$LOCAL_AI_ROOT/ltx-venv/bin/python" && -f "$LOCAL_AI_ROOT/models/ltx-video/ltxv-2b-0.9.8-distilled.safetensors" ]]; then
+  start_if_down http://127.0.0.1:8770/health ltx env LTX_VIDEO_ROOT="$LOCAL_AI_ROOT/LTX-Video" LTX_VIDEO_CHECKPOINT="$LOCAL_AI_ROOT/models/ltx-video/ltxv-2b-0.9.8-distilled.safetensors" LTX_VIDEO_TEXT_ENCODER="${LTX_VIDEO_TEXT_ENCODER:-$HOME/.cache/huggingface/hub/models--PixArt-alpha--PixArt-XL-2-1024-MS/snapshots/current}" "$LOCAL_AI_ROOT/ltx-venv/bin/python" local-tools/ltx_server.py
+fi
 docker-compose --env-file .env.selfhost -f docker-compose.selfhost.yml up -d api worker
 tailscale funnel --bg --https=443 http://127.0.0.1:8787
 print 'Máy tạo video đã được khởi động. Giữ máy bật, không ngủ khi xử lý.'
