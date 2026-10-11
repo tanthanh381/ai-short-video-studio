@@ -27,7 +27,7 @@ if [[ ! -d "$LTX_ROOT/.git" ]]; then
   git clone https://github.com/Lightricks/LTX-Video.git "$LTX_ROOT"
 fi
 git -C "$LTX_ROOT" pull --ff-only
-"$LTX_ENV/bin/pip" install -e "$LTX_ROOT[inference]"
+"$LTX_ENV/bin/pip" install -e "${LTX_ROOT}[inference]"
 
 if ! command -v hf >/dev/null; then
   "$LTX_ENV/bin/pip" install huggingface_hub
