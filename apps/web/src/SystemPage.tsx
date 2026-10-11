@@ -322,7 +322,8 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
   );
 }
 
-const NODE_COLORS = ["#176bff", "#ff6b55", "#22b78d", "#8b5cf6"];
+// Keep the coral lane dark enough for the white percentage label to meet WCAG AA.
+const NODE_COLORS = ["#176bff", "#b64030", "#087a5b", "#6d3fc2"];
 
 function WorkShare({ system, now }: { system: SystemSummary; now: number }) {
   const balancer = system.balancer!;

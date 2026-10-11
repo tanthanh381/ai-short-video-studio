@@ -4,6 +4,7 @@ import {
   createVideoSchema,
   projectSettingsSchema,
   subtitleCueSchema,
+  whiteboardAnnotationSchema,
 } from "./schemas";
 import { DEFAULT_PROJECT_SETTINGS } from "./index";
 
@@ -61,5 +62,27 @@ describe("schema du an", () => {
     const parsed = projectSettingsSchema.parse({});
     expect(parsed.localModels).toEqual({ storyboard: null, image: null, video: null, tts: null, transcribe: null });
     expect(projectSettingsSchema.safeParse({ localModels: { image: "a b" } }).success).toBe(false);
+  });
+
+  it("giới hạn annotation whiteboard và từ chối payload không hợp lệ", () => {
+    const annotation = whiteboardAnnotationSchema.parse({
+      sceneId: "scene-1",
+      canvas: { width: 1080, height: 1920 },
+      sceneDurationMs: 4_000,
+      elements: [{
+        id: "title",
+        label: "Tiêu đề",
+        sequence: 0,
+        narrativeRole: "title",
+        type: "text",
+        subtitle: "",
+        region: { x: 20, y: 30, width: 500, height: 100 },
+        reveal: { direction: "left_to_right", startMs: 0, durationMs: 500, maskPaddingPx: 8 },
+        handPath: null,
+      }],
+    });
+    expect(annotation.elements[0]?.reveal.protectedRegions).toEqual([]);
+    expect(() => whiteboardAnnotationSchema.parse({ ...annotation, canvas: { width: 100_001, height: 1920 } })).toThrow();
+    expect(() => whiteboardAnnotationSchema.parse({ ...annotation, elements: [{ ...annotation.elements[0], extra: true }] })).toThrow();
   });
 });

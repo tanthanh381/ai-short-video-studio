@@ -1,0 +1,9 @@
+{
+  "name": "AI Short Video Studio",
+  "short_name": "AI Studio",
+  "start_url": "/ai-short-video-studio/",
+  "display": "standalone",
+  "background_color": "#071A2B",
+  "theme_color": "#071A2B",
+  "icons": [{ "src": "/ai-short-video-studio/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

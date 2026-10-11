@@ -65,6 +65,46 @@ export const subtitleCueSchema = z
     message: "Thoi diem ket thuc phai sau thoi diem bat dau",
   });
 
+const annotationCoordinateSchema = z.number().finite().min(-100_000).max(100_000);
+const annotationRegionSchema = z.object({
+  x: annotationCoordinateSchema,
+  y: annotationCoordinateSchema,
+  width: z.number().finite().min(1).max(10_000),
+  height: z.number().finite().min(1).max(10_000),
+});
+const annotationPointSchema = z.tuple([annotationCoordinateSchema, annotationCoordinateSchema]);
+
+/** Bounded whiteboard metadata accepted from the editor and persisted with a scene. */
+export const whiteboardAnnotationSchema = z.object({
+  sceneId: z.string().min(1).max(200),
+  canvas: z.object({
+    width: z.number().int().min(1).max(10_000),
+    height: z.number().int().min(1).max(10_000),
+  }),
+  sceneDurationMs: z.number().int().min(1).max(180_000),
+  elements: z.array(z.object({
+    id: z.string().min(1).max(200),
+    label: z.string().max(500).default(""),
+    sequence: z.number().int().min(0).max(10_000),
+    narrativeRole: z.string().max(100).default(""),
+    type: z.string().max(100).default(""),
+    subtitle: z.string().max(2_000).default(""),
+    region: annotationRegionSchema,
+    reveal: z.object({
+      direction: z.enum(["left_to_right", "right_to_left", "top_to_bottom", "bottom_to_top", "fade", "none"]),
+      startMs: z.number().int().min(0).max(180_000),
+      durationMs: z.number().int().min(0).max(180_000),
+      maskPaddingPx: z.number().finite().min(0).max(1_000),
+      protectedRegions: z.array(annotationRegionSchema).max(100).default([]),
+    }),
+    handPath: z.object({
+      start: annotationPointSchema,
+      end: annotationPointSchema,
+      easing: z.string().max(100).default("linear"),
+    }).partial().nullable().default(null),
+  }).strict()).max(100),
+}).strict();
+
 export const sceneSchema = z.object({
   id: z.string().uuid(),
   order: z.number().int().min(0),

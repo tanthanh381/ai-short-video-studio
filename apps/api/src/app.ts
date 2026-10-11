@@ -23,6 +23,7 @@ import {
   projectSchema,
   projectSettingsSchema,
   subtitleStyleSchema,
+  whiteboardAnnotationSchema,
   type AirSetupSummary,
   type BalancerSummary,
   type Project,
@@ -1279,7 +1280,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       return res.status(400).json({ error: "Dữ liệu annotation không hợp lệ — cần có trường elements" });
     const { error } = await db
       .from("scenes")
-      .update({ annotation_json: req.body })
+      .update({ annotation_json: whiteboardAnnotationSchema.parse(req.body) })
       .eq("id", req.params.sceneId)
       .eq("project_id", req.params.id);
     if (error) throw error;

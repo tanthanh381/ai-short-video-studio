@@ -11,6 +11,7 @@
   --blue-dark: #0951c7;
   --coral: #ff6b55;
   --mint: #22b78d;
+  --mint-strong: #087a5b;
   --line: #d7e0e6;
   /* 5.1:1 on the paper background (AA); the old #66798b was 4.3:1 */
   --muted: #5a6d7f;
@@ -2017,6 +2018,9 @@ a:focus-visible {
 .login-brand {
   padding-left: 0;
 }
+.login-brand span {
+  color: #597285;
+}
 .login-box h1 {
   font-size: 30px;
   letter-spacing: -0.04em;
@@ -2583,7 +2587,7 @@ input[type="radio"] {
 
 /* ---- Hệ thống: bảng giám sát các máy ---------------------------------------------------------------------------------- */
 .system-page {
-  --tone-ok: #12805f;
+  --tone-ok: #0e6b50;
   --tone-warn: #a64b00;
   --tone-bad: #c0281d;
   --tone-idle: #5a6d7f;
@@ -2745,7 +2749,7 @@ input[type="radio"] {
   color: var(--tone-idle);
   white-space: nowrap;
 }
-.sys-badge.tone-ok { background: #e3f6ee; color: var(--tone-ok); }
+.sys-badge.tone-ok { background: #e3f6ee; color: #0e6b50; }
 .sys-badge.tone-warn { background: #fff0dc; color: var(--tone-warn); }
 .sys-badge.tone-bad { background: #fde8e6; color: var(--tone-bad); }
 .sys-chips {
@@ -2762,7 +2766,7 @@ input[type="radio"] {
   background: #eef2f5;
   color: var(--tone-idle);
 }
-.sys-chips span.tone-ok { background: #e3f6ee; color: var(--tone-ok); }
+.sys-chips span.tone-ok { background: #e3f6ee; color: #0e6b50; }
 .sys-chips span.tone-warn { background: #fff0dc; color: var(--tone-warn); }
 .sys-meters {
   display: grid;
@@ -3043,7 +3047,7 @@ input[type="radio"] {
   color: #5a6d7f;
   white-space: nowrap;
 }
-.machine-state.tone-ok { background: #e3f6ee; color: #12805f; }
+.machine-state.tone-ok { background: #e3f6ee; color: #0e6b50; }
 .machine-state.tone-warn { background: #fff0dc; color: #a64b00; }
 .machine-state.tone-bad { background: #fde8e6; color: #c0281d; }
 .switch {
@@ -3069,8 +3073,8 @@ input[type="radio"] {
   transition: transform 0.15s;
 }
 .switch[aria-checked="true"] {
-  background: var(--mint);
-  border-color: var(--mint);
+  background: var(--mint-strong);
+  border-color: var(--mint-strong);
   color: white;
   padding: 3px 3px 3px 10px;
   flex-direction: row-reverse;
@@ -3112,7 +3116,7 @@ input[type="radio"] {
 .mode-choice small { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .machine-notice { margin: 10px 0 0; }
 .machine-notice.tone-warn { color: #a64b00; }
-.machine-notice.tone-ok { color: #12805f; }
+.machine-notice.tone-ok { color: #0e6b50; }
 .machine-links { margin: 14px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 .machine-problems {
   margin: 8px 0 0;

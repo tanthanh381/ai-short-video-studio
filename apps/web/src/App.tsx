@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type ReactNode } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -83,9 +83,9 @@ import {
   visualPresetPrompt,
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
-import { AirSetupPanel } from "./AirSetupPanel";
-import { MachinesPanel } from "./MachinesPanel";
-import { SystemPage } from "./SystemPage";
+const AirSetupPanel = lazy(() => import("./AirSetupPanel").then((module) => ({ default: module.AirSetupPanel })));
+const MachinesPanel = lazy(() => import("./MachinesPanel").then((module) => ({ default: module.MachinesPanel })));
+const SystemPage = lazy(() => import("./SystemPage").then((module) => ({ default: module.SystemPage })));
 import { demoBalancerAfter, demoSystem } from "./lib/demo-system";
 import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
@@ -185,6 +185,10 @@ function Button({
 function AppShell({ children }: { children: React.ReactNode }) {
   const { isDemo, signOut, user } = useAuth();
   const [mobileNav, setMobileNav] = useState(false);
+  const [isMobileLayout, setIsMobileLayout] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const mobileCloseRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuRef = useRef<HTMLButtonElement>(null);
   const displayName =
     (typeof user?.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()) ||
     user?.email?.split("@")[0] ||
@@ -195,9 +199,40 @@ function AppShell({ children }: { children: React.ReactNode }) {
     .slice(-2)
     .map((part) => part[0]?.toUpperCase())
     .join("") || "SV";
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 760px)");
+    const sync = () => setIsMobileLayout(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  useEffect(() => {
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+    if (isMobileLayout && !mobileNav) sidebar.setAttribute("inert", "");
+    else sidebar.removeAttribute("inert");
+    if (isMobileLayout && mobileNav) mobileCloseRef.current?.focus();
+  }, [isMobileLayout, mobileNav]);
+  useEffect(() => {
+    if (!mobileNav) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMobileNav();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileNav]);
+  function closeMobileNav() {
+    setMobileNav(false);
+    if (isMobileLayout) window.setTimeout(() => mobileMenuRef.current?.focus(), 0);
+  }
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${mobileNav ? "is-open" : ""}`}>
+      <aside
+        ref={sidebarRef}
+        id="app-navigation"
+        className={`sidebar ${mobileNav ? "is-open" : ""}`}
+        aria-hidden={isMobileLayout && !mobileNav ? true : undefined}
+      >
         <div className="brand">
           <div className="brand-mark">
             <Clapperboard size={24} />
@@ -208,9 +243,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <button
+          ref={mobileCloseRef}
           className="mobile-close"
           aria-label="Đóng menu"
-          onClick={() => setMobileNav(false)}
+          onClick={closeMobileNav}
         >
           <X />
         </button>
@@ -220,7 +256,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
               key={to}
               to={to}
               end={to === "/"}
-              onClick={() => setMobileNav(false)}
+              onClick={closeMobileNav}
             >
               <Icon size={19} />
               <span>{label}</span>
@@ -245,12 +281,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <button
           className="scrim"
           aria-label="Đóng menu"
-          onClick={() => setMobileNav(false)}
+          onClick={closeMobileNav}
         />
       )}
       <main className="main">
         <header className="mobile-header">
-          <button onClick={() => setMobileNav(true)} aria-label="Mở menu">
+          <button
+            ref={mobileMenuRef}
+            aria-expanded={mobileNav}
+            aria-controls="app-navigation"
+            onClick={() => setMobileNav(true)}
+            aria-label="Mở menu"
+          >
             <Menu />
           </button>
           <span>Short Video Studio</span>
@@ -342,7 +384,7 @@ function LoginPage() {
     }
   }
   return (
-    <div className="login-page">
+    <main className="login-page">
       <div className="login-art">
         <div className="vertical-frame">
           <div className="frame-sun" />
@@ -478,7 +520,7 @@ function LoginPage() {
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -691,7 +733,8 @@ function DashboardPage() {
                   navigate(`/studio/${project.id}`);
                 }
               }}
-              role="link"
+              role="button"
+              aria-label={`Mở dự án ${project.title}`}
               tabIndex={0}
             >
               <div className={`project-thumb thumb-${index % 3}`}>
@@ -3870,7 +3913,8 @@ class AppErrorBoundary extends Component<
 export function App() {
   return (
     <AppErrorBoundary>
-      <Routes>
+      <Suspense fallback={<div className="center-page">Đang tải giao diện…</div>}>
+        <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
@@ -3893,7 +3937,8 @@ export function App() {
           </Protected>
         }
       />
-      </Routes>
+        </Routes>
+      </Suspense>
     </AppErrorBoundary>
   );
 }
