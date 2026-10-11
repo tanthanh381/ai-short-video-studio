@@ -310,6 +310,8 @@ export function busyRemainingMs(node: NodeSnapshot, lane: Lane, now: number): nu
 export type PlanNode = {
   id: string;
   local: boolean;
+  /** Parallel slots available for this lane on the node. */
+  capacity?: number;
   /** When this node can start its next task, from now (running work and warm-up). */
   availableAtMs: number;
   durationMs: number;
@@ -320,23 +322,25 @@ export type PlanNode = {
  * only gets work when that really finishes sooner, which is what keeps a laptop from becoming the straggler.
  */
 export function simulate(nodes: PlanNode[], tasks: number): { makespanMs: number; assigned: Record<string, number> } {
-  const free = new Map(nodes.map((node) => [node.id, node.availableAtMs]));
+  const free = new Map(nodes.map((node) => [node.id, Array.from({ length: Math.max(1, Math.floor(node.capacity ?? 1)) }, () => node.availableAtMs)]));
   const assigned: Record<string, number> = Object.fromEntries(nodes.map((node) => [node.id, 0]));
   for (let task = 0; task < tasks; task += 1) {
-    let best: PlanNode | null = null;
+    let best: { node: PlanNode; slot: number } | null = null;
     let bestFinish = Infinity;
     for (const node of nodes) {
-      const finish = free.get(node.id)! + node.durationMs;
-      if (finish < bestFinish - 1e-6 || (Math.abs(finish - bestFinish) <= 1e-6 && node.local && !best?.local)) {
-        best = node;
+      const slots = free.get(node.id)!;
+      const slot = slots.reduce((bestIndex, value, index) => value < slots[bestIndex]! ? index : bestIndex, 0);
+      const finish = slots[slot]! + node.durationMs;
+      if (finish < bestFinish - 1e-6 || (Math.abs(finish - bestFinish) <= 1e-6 && node.local && !best?.node.local)) {
+        best = { node, slot };
         bestFinish = finish;
       }
     }
     if (!best) break;
-    free.set(best.id, bestFinish);
-    assigned[best.id]! += 1;
+    free.get(best.node.id)![best.slot] = bestFinish;
+    assigned[best.node.id]! += 1;
   }
-  const makespanMs = Math.max(0, ...nodes.filter((node) => assigned[node.id]! > 0).map((node) => free.get(node.id)!));
+  const makespanMs = Math.max(0, ...nodes.filter((node) => assigned[node.id]! > 0).flatMap((node) => free.get(node.id)!));
   return { makespanMs, assigned };
 }
 

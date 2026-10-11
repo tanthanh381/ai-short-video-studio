@@ -164,7 +164,7 @@ describe("estimates", () => {
   });
 });
 
-const plan = (id: string, durationMs: number, availableAtMs = 0): PlanNode => ({ id, local: id === "mini", availableAtMs, durationMs });
+const plan = (id: string, durationMs: number, availableAtMs = 0, capacity = 1): PlanNode => ({ id, local: id === "mini", availableAtMs, durationMs, capacity });
 const auto = { mode: "auto" as const, minGain: 0.15, minSavingsMs: 30_000 };
 
 describe("simulate (earliest finish time)", () => {
@@ -186,6 +186,12 @@ describe("simulate (earliest finish time)", () => {
   it("prefers the main machine on a tie and handles an empty batch", () => {
     expect(simulate([plan("air", 10_000), plan("mini", 10_000)], 1).assigned).toEqual({ air: 0, mini: 1 });
     expect(simulate([plan("mini", 10_000)], 0)).toEqual({ makespanMs: 0, assigned: { mini: 0 } });
+  });
+
+  it("models multiple execution slots on a node", () => {
+    const result = simulate([plan("mini", 10_000, 0, 2)], 4);
+    expect(result.assigned).toEqual({ mini: 4 });
+    expect(result.makespanMs).toBe(20_000);
   });
 });
 

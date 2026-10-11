@@ -11,7 +11,7 @@ import {
 } from "@studio/shared";
 import { classifyError, NodeDownError } from "./node-errors";
 import {
-  assessNode, busyRemainingMs, estimateMs, LANES, planLane, simulate,
+  assessNode, busyRemainingMs, estimateMs, LANE_CAPACITY, LANES, planLane, simulate,
   type Assessment, type AssessContext, type BalanceMode, type Lane, type LaneRequest, type NodeSnapshot, type NodeStatus, type Plan, type PlanNode,
 } from "./node-plan";
 
@@ -583,10 +583,11 @@ export class NodePool {
     const ctx = this.context(request);
     let nodes: PlanNode[] = this.candidates(lane, request).map((item) => ({
       id: item.id, local: item.local, availableAtMs: item.availableAt, durationMs: item.estimate,
+      capacity: LANE_CAPACITY[lane],
     }));
     if (!this.distributed || !nodes.length) {
       const main = this.entries.get(this.primary.id)!.snapshot;
-      nodes = [{ id: main.id, local: true, availableAtMs: 0, durationMs: estimateMs(main, lane, { eligible: true, reasons: [], speed: 1, warmupMs: 0 }, ctx) }];
+      nodes = [{ id: main.id, local: true, availableAtMs: 0, durationMs: estimateMs(main, lane, { eligible: true, reasons: [], speed: 1, warmupMs: 0 }, ctx), capacity: LANE_CAPACITY[lane] }];
     }
     return planLane(nodes, tasks, { mode: this.mode, minGain: this.options.minGain ?? DEFAULT_MIN_GAIN, minSavingsMs: this.options.minSavingsMs ?? DEFAULT_MIN_SAVINGS_MS });
   }
@@ -604,6 +605,7 @@ export class NodePool {
         id: otherId, local: snapshot.local,
         availableAtMs: (otherId === id ? 0 : busyRemainingMs(snapshot, lane, ctx.now)) + assessment.warmupMs,
         durationMs: estimateMs(snapshot, lane, assessment.eligible ? assessment : { ...assessment, speed: 1 }, ctx),
+        capacity: LANE_CAPACITY[lane],
       });
     }
     if (!nodes.some((node) => node.id === id)) return false;
@@ -699,17 +701,22 @@ export class NodePool {
 
     const spawn = () => {
       for (const id of selected) {
-        if (running.has(id) || stop) continue;
-        if (!queue.some((job) => !job.avoid.has(id)) || !this.usable(id, lane, request)) continue;
-        running.add(id);
-        runners.push(
-          runner(id)
-            .catch((error: unknown) => this.options.log?.warn({ node: id, err: error instanceof Error ? error.message : String(error) }, "distribute_runner_failed"))
-            .finally(() => {
-              running.delete(id);
-              this.changed.notify();
-            }),
-        );
+        if (stop || !queue.some((job) => !job.avoid.has(id)) || !this.usable(id, lane, request)) continue;
+        const capacity = LANE_CAPACITY[lane];
+        const runningOnNode = [...running].filter((key) => key.startsWith(`${id}:`)).length;
+        for (let slot = runningOnNode; slot < capacity; slot += 1) {
+          if (!queue.some((job) => !job.avoid.has(id)) || stop) break;
+          const key = `${id}:${slot}`;
+          running.add(key);
+          runners.push(
+            runner(id)
+              .catch((error: unknown) => this.options.log?.warn({ node: id, err: error instanceof Error ? error.message : String(error) }, "distribute_runner_failed"))
+              .finally(() => {
+                running.delete(key);
+                this.changed.notify();
+              }),
+          );
+        }
       }
     };
 

@@ -163,6 +163,19 @@ describe("distribute over two machines", () => {
     expect(worst).toBe(1);
   });
 
+  it("uses the two configured whiteboard slots without exceeding them", async () => {
+    const { pool } = makePool();
+    const active: Record<string, number> = { mini: 0, air: 0 };
+    let peak = 0;
+    await settle(pool.distribute("whiteboard", Array.from({ length: 6 }, (_, i) => i), async (_item, node) => {
+      active[node.id] = (active[node.id] ?? 0) + 1;
+      peak = Math.max(peak, ...Object.values(active));
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      active[node.id] = (active[node.id] ?? 1) - 1;
+    }));
+    expect(peak).toBe(2);
+  });
+
   it("keeps to one machine for a couple of scenes: the laptop is not worth waking up", async () => {
     const { pool } = makePool();
     const log: Run[] = [];
