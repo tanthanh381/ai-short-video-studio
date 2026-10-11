@@ -70,7 +70,7 @@ start_if_down http://127.0.0.1:8080/ whisper zsh "$LOCAL_AI_ROOT/bin/start-whisp
 start_if_down http://127.0.0.1:5000/health piper zsh "$LOCAL_AI_ROOT/bin/start-tts.sh"
 start_if_down http://127.0.0.1:5001/health vieneu zsh "$LOCAL_AI_ROOT/bin/start-vieneu.sh"
 start_if_down http://127.0.0.1:5002/health image "$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
-start_if_down "http://$tailscale_ip:8765/health" media /opt/homebrew/bin/python3.12 local-tools/media_server.py
+start_if_down "http://$tailscale_ip:8765/health" media env NODE_START_SCRIPT="$studio_root/scripts/Mo-May-Phu.command" /opt/homebrew/bin/python3.12 local-tools/media_server.py
 start_if_down "http://$tailscale_ip:8766/health" whiteboard "$LOCAL_AI_ROOT/wb-venv/bin/python" local-tools/whiteboard_server.py
 if [[ -x "$LOCAL_AI_ROOT/ltx-venv/bin/python" && -f "$LOCAL_AI_ROOT/models/ltx-video/ltxv-2b-0.9.8-distilled.safetensors" ]]; then
   start_if_down http://127.0.0.1:8770/health ltx env LTX_VIDEO_HOST=127.0.0.1 LTX_VIDEO_ROOT="$LOCAL_AI_ROOT/LTX-Video" LTX_VIDEO_CHECKPOINT="$LOCAL_AI_ROOT/models/ltx-video/ltxv-2b-0.9.8-distilled.safetensors" LTX_VIDEO_TEXT_ENCODER="${LTX_VIDEO_TEXT_ENCODER:-$HOME/.cache/huggingface/hub/models--PixArt-alpha--PixArt-XL-2-1024-MS/snapshots/current}" "$LOCAL_AI_ROOT/ltx-venv/bin/python" "$studio_root/local-tools/ltx_server.py"

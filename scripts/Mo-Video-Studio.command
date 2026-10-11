@@ -27,7 +27,7 @@ start_if_down http://127.0.0.1:5000/health piper zsh "$LOCAL_AI_ROOT/bin/start-t
 start_if_down http://127.0.0.1:5001/health vieneu zsh "$LOCAL_AI_ROOT/bin/start-vieneu.sh"
 start_if_down http://127.0.0.1:5002/health image "$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
 if ! curl -fsS http://127.0.0.1:8765/health >/dev/null 2>&1; then
-  nohup /opt/homebrew/bin/python3.12 local-tools/media_server.py >tmp/local-services/media.log 2>&1 &
+  NODE_START_SCRIPT="$studio_root/scripts/Mo-Video-Studio.command" nohup /opt/homebrew/bin/python3.12 local-tools/media_server.py >tmp/local-services/media.log 2>&1 &
 fi
 start_if_down http://127.0.0.1:8766/health whiteboard "$LOCAL_AI_ROOT/wb-venv/bin/python" local-tools/whiteboard_server.py
 # LTX là tùy chọn: chỉ tự bật khi đã cài đủ venv/model bằng scripts/Cai-LTX-Video.command.

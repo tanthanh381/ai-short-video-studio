@@ -331,6 +331,18 @@ def paused(path=None):
     return Path(path or PAUSE_FILE).exists()
 
 
+def set_paused(value, path=None):
+    """Persist the node's accepting switch without touching its installed models."""
+    target = Path(path or PAUSE_FILE)
+    if value:
+        target.touch()
+    else:
+        try:
+            target.unlink()
+        except FileNotFoundError:
+            pass
+
+
 # --- what this node has done lately ----------------------------------------------------------------------------------
 
 

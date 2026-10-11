@@ -28,7 +28,7 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
             <li key={choice.id} className={choice.enabled ? "" : "is-off"}>
               <div className="machine-text">
                 <strong>{choice.id}{choice.primary ? " (máy chính)" : ""}</strong>
-                <span>{choice.facts || "Chưa có số liệu"}</span>
+                  <span>{choice.facts || (choice.enabled ? "Chưa có số liệu" : "Đã dừng model AI local và các server Python; vẫn giữ API/worker để bật lại")}</span>
                 {choice.sync ? (
                   <span className={`machine-sync tone-${choice.sync.tone}`}>
                     Đồng bộ với Mac mini: <b>{choice.sync.label}</b>{choice.sync.detail ? ` · ${choice.sync.detail}` : ""}
