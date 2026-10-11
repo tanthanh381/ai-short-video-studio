@@ -18,6 +18,13 @@ export const visualPresetSchema = z.enum([
   "paper-cut",
   "whiteboard",
   "chibi-co-phong",
+  "chibi-tien-hiep",
+  "chibi-dan-gian-viet",
+  "chibi-co-trang-hai",
+  "thuy-mac-co-phong",
+  "paper-storybook",
+  "chibi-huyen-bi",
+  "chibi-dong-vat-co-phong",
 ]);
 export type VisualPreset = z.infer<typeof visualPresetSchema>;
 export const projectStatusSchema = z.enum([

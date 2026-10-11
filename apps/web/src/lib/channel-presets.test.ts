@@ -35,7 +35,12 @@ describe("channel presets", () => {
     const { readFileSync } = await import("node:fs");
     const bridge = readFileSync(new URL("../../../../local-tools/media_server.py", import.meta.url), "utf8");
     // preset id -> bridge style, as in apps/worker/src/providers.ts PRESET_IMAGE_STYLE (cinematic-color falls back to photo)
-    const bridgeStyle: Record<string, string> = { "cinematic-color": "photo", "ink-monochrome": "ink", cartoon: "flat", historical: "historical", watercolor: "watercolor", "paper-cut": "paper-cut", "chibi-co-phong": "chibi", whiteboard: "whiteboard" };
+    const bridgeStyle: Record<string, string> = {
+      "cinematic-color": "photo", "ink-monochrome": "ink", cartoon: "flat", historical: "historical", watercolor: "watercolor",
+      "paper-cut": "paper-cut", "chibi-co-phong": "chibi", "chibi-tien-hiep": "chibi", "chibi-dan-gian-viet": "chibi",
+      "chibi-co-trang-hai": "chibi", "thuy-mac-co-phong": "ink", "paper-storybook": "paper-cut", "chibi-huyen-bi": "chibi",
+      "chibi-dong-vat-co-phong": "chibi", whiteboard: "whiteboard",
+    };
     for (const option of VISUAL_PRESET_OPTIONS) {
       expect(bridgeStyle[option.id], `${option.id} has no bridge style`).toBeDefined();
       expect(bridge, `${option.id} -> ${bridgeStyle[option.id]}`).toMatch(new RegExp(`"${bridgeStyle[option.id]}": "`));
