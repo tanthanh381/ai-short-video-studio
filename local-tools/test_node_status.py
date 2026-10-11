@@ -46,6 +46,32 @@ CPU_Speed_Limit 	= 72
 """
 
 
+VM_STAT = """Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     6404.
+Pages active:                                 214944.
+Pages inactive:                               212986.
+Pages speculative:                               857.
+Pages throttled:                                   0.
+Pages wired down:                             197653.
+"""
+SWAPUSAGE = "total = 9216.00M  used = 8195.62M  free = 1020.38M  (encrypted)"
+PS_LISTING = """  101 13136 /Users/x/Developer/local-ai/venv/bin/python local-tools/image_server.py
+  102 195664 /opt/homebrew/Cellar/ollama/0.35.1_1/libexec/lib/ollama/llama-server --model /Users/x/.ollama/models/blobs/sha256-a9d0
+  103 566832 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com
+  104 4096 /opt/homebrew/bin/ffmpeg -i in.mp4 out.mp4
+  105 2048 /Applications/Claude.app/Contents/MacOS/Claude
+  106 1024 /opt/homebrew/bin/python3.12 local-tools/media_server.py
+  not a process line
+"""
+TOP_MEMORY = """Processes: 400 total, 3 running
+PID    MEM
+101    4054M
+102    3.2G
+103    3087M
+104    980K
+"""
+
+
 class ParserTests(unittest.TestCase):
     def test_memory_pressure_levels(self):
         self.assertEqual(node_status.parse_pressure_level("1\n"), "normal")
@@ -53,6 +79,40 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(node_status.parse_pressure_level("4"), "critical")
         self.assertEqual(node_status.parse_pressure_level("garbage"), "unknown")
         self.assertEqual(node_status.parse_pressure_level(None), "unknown")
+
+    def test_memory_in_use_counts_what_is_not_free_or_reclaimable(self):
+        # 16 GB, of which (6404 + 212986 + 857) pages of 16 KiB are free or cache: about 3.4 GB
+        self.assertEqual(node_status.parse_vm_stat(VM_STAT, 16.0), 12.6)
+        self.assertIsNone(node_status.parse_vm_stat("", 16.0))
+        self.assertIsNone(node_status.parse_vm_stat("nothing useful", 16.0))
+        self.assertIsNone(node_status.parse_vm_stat(VM_STAT, None))
+
+    def test_swap_in_gigabytes(self):
+        self.assertEqual(node_status.parse_swap(SWAPUSAGE), (8.0, 9.0))
+        self.assertEqual(node_status.parse_swap("total = 2.00G  used = 512.00M  free = 1.50G"), (0.5, 2.0))
+        self.assertEqual(node_status.parse_swap(None), (None, None))
+
+    def test_footprint_from_top_in_gigabytes(self):
+        sizes = node_status.parse_top_memory(TOP_MEMORY)
+        self.assertAlmostEqual(sizes[101], 3.96, places=2)
+        self.assertAlmostEqual(sizes[102], 3.2, places=2)
+        self.assertLess(sizes[104], 0.001)
+        self.assertNotIn("Processes:", sizes)
+
+    def test_services_are_named_and_use_the_footprint_not_the_tiny_resident_size(self):
+        rows = {row["id"]: row for row in node_status.parse_processes(PS_LISTING, node_status.parse_top_memory(TOP_MEMORY))}
+        self.assertEqual(rows["image"]["memGb"], 3.96)  # 13 MB resident, 4 GB of model in GPU memory
+        self.assertEqual(rows["ollama"]["memGb"], 3.2)
+        self.assertEqual(rows["docker"]["label"], "Docker (API + worker)")
+        self.assertEqual(rows["ffmpeg"]["count"], 1)
+        self.assertIn("media", rows)
+        self.assertNotIn("Claude", " ".join(row["label"] for row in rows.values()))  # unrelated apps stay out
+        ordered = [row["memGb"] for row in node_status.parse_processes(PS_LISTING, node_status.parse_top_memory(TOP_MEMORY))]
+        self.assertEqual(ordered, sorted(ordered, reverse=True))
+
+    def test_without_top_the_resident_size_is_used(self):
+        rows = {row["id"]: row for row in node_status.parse_processes(PS_LISTING)}
+        self.assertAlmostEqual(rows["ollama"]["memGb"], 0.19, places=2)
 
     def test_power_on_a_laptop_and_on_a_mini(self):
         self.assertEqual(node_status.parse_power(BATTERY_AC), ("ac", 87))

@@ -1,5 +1,6 @@
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type ReactNode } from "react";
 import {
+  Activity,
   ArrowLeft,
   BookOpenText,
   Check,
@@ -83,6 +84,7 @@ import {
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
 import { AirSetupPanel } from "./AirSetupPanel";
+import { SystemPage } from "./SystemPage";
 import { nodeActivity } from "./lib/air-setup";
 import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
@@ -99,6 +101,7 @@ const navItems = [
   { to: "/tts", label: "Đọc văn bản (TTS)", icon: Mic2 },
   { to: "/media", label: "Thư viện media", icon: Library },
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
+  { to: "/system", label: "Hệ thống", icon: Activity },
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
 
@@ -3949,6 +3952,7 @@ export function App() {
               <Route path="media" element={<MediaPage />} />
               <Route path="exports" element={<ExportsPage />} />
               <Route path="whiteboard" element={<WhiteboardPage />} />
+              <Route path="system" element={<SystemPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

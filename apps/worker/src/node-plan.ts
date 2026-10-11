@@ -36,6 +36,13 @@ export type NodeResources = {
   power: "ac" | "battery" | "unknown";
   batteryPercent: number | null;
   thermal: "nominal" | "throttled" | "unknown";
+  /** Reported by newer media bridges only (they feed the dashboard, not the balancing). */
+  memUsedGb?: number | null;
+  swapUsedGb?: number | null;
+  swapTotalGb?: number | null;
+  diskFreeGb?: number | null;
+  diskTotalGb?: number | null;
+  processes?: Array<{ id: string; label: string; memGb: number; count: number }>;
 };
 
 /** Body of `GET /node-status` on the media bridge (local-tools/media_server.py). */
@@ -75,6 +82,8 @@ export type NodeSnapshot = {
   llmUp: boolean;
   llmInstalled: string[];
   llmLoaded: string[];
+  /** What `/api/ps` says about each loaded model (memory it holds, when Ollama will unload it). */
+  llmLoadedInfo?: Array<{ name: string; sizeBytes: number | null; expiresAt: string | null }>;
   whiteboardUp: boolean;
   cooldownUntil: number;
   rttMs: number | null;

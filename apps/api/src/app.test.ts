@@ -132,6 +132,59 @@ describe("API", () => {
       vi.unstubAllGlobals();
     });
 
+    describe("bang dieu khien he thong", () => {
+      const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3600_000).toISOString();
+      const jobsTable = (rowsFor: (columns: string) => unknown[]) => ({
+        auth: owner.auth,
+        from: (table: string) => {
+          const query: Record<string, unknown> = {
+            select: (columns: string) => { query.columns = columns; return query; },
+            eq: () => query, in: () => query, gte: () => query, order: () => query, limit: () => query,
+            maybeSingle: async () => ({ data: { user_id: "user-1", is_active: true, daily_budget_usd: 3, max_concurrent_jobs: 1 }, error: null }),
+            then: (resolve: (value: unknown) => void) => resolve({ data: table === "jobs" ? rowsFor(String(query.columns)) : [], error: null }),
+          };
+          return query;
+        },
+      });
+
+      it("gom may, dich vu va viec cua chu tai khoan trong mot lan goi", async () => {
+        workerSays({ mode: "auto", nodes: [node("mini", "primary"), node("air", "secondary")], decisions: [] });
+        const db = jobsTable((columns) => {
+          if (columns === "status") return [{ status: "running" }, { status: "queued" }, { status: "queued" }];
+          if (columns.startsWith("job_type, status")) return [
+            { job_type: "create_video", status: "completed", started_at: hoursAgo(2), finished_at: new Date(Date.parse(hoursAgo(2)) + 300_000).toISOString() },
+            { job_type: "create_video", status: "completed", started_at: hoursAgo(1), finished_at: new Date(Date.parse(hoursAgo(1)) + 500_000).toISOString() },
+            { job_type: "render_video", status: "completed", started_at: hoursAgo(1), finished_at: hoursAgo(0.9) }, // not a whole video: no effect on the average
+            { job_type: "create_video", status: "failed", started_at: hoursAgo(3), finished_at: hoursAgo(3) },
+          ];
+          return [
+            { id: "j2", job_type: "create_video", status: "running", stage: "Đang tạo ảnh cảnh 3 · máy air", progress: 30, started_at: hoursAgo(0.05), finished_at: null, projects: { title: "Ăn khế trả vàng" } },
+            { id: "j1", job_type: "create_video", status: "completed", stage: "Hoàn thành", progress: 100, started_at: hoursAgo(2), finished_at: hoursAgo(1.9), projects: [{ title: "Sơn Tinh" }] },
+          ];
+        });
+        const app = createApp({ ...config, RENDER_WORKER_ENABLED: true }, db as never);
+        const response = await request(app).get("/v1/system").set("Authorization", "Bearer test");
+        expect(response.status).toBe(200);
+        expect(response.body.balancer.nodes.map((item: { id: string }) => item.id)).toEqual(["mini", "air"]);
+        expect(response.body.services.worker.state).toBe("healthy");
+        expect(response.body.jobs).toMatchObject({ running: 1, queued: 2, completed24h: 3, failed24h: 1, avgVideoSeconds24h: 400 });
+        expect(response.body.jobs.recent[0]).toMatchObject({ id: "j2", title: "Ăn khế trả vàng", status: "running", stage: "Đang tạo ảnh cảnh 3 · máy air", progress: 30 });
+        expect(response.body.jobs.recent[0].durationSeconds).toBeGreaterThanOrEqual(179); // still running: counts up to now
+        expect(response.body.jobs.recent[1]).toMatchObject({ title: "Sơn Tinh", durationSeconds: 360 });
+        vi.unstubAllGlobals();
+      });
+
+      it("khong tinh trung binh khi chua co video nao xong, va can dang nhap", async () => {
+        workerSays({ mode: "auto", nodes: [], decisions: [] });
+        const app = createApp({ ...config, RENDER_WORKER_ENABLED: true }, jobsTable(() => []) as never);
+        const response = await request(app).get("/v1/system").set("Authorization", "Bearer test");
+        expect(response.body.jobs).toEqual({ running: 0, queued: 0, completed24h: 0, failed24h: 0, avgVideoSeconds24h: null, recent: [] });
+        expect(response.body.balancer).toBeNull();
+        expect((await request(app).get("/v1/system")).status).toBe(401);
+        vi.unstubAllGlobals();
+      });
+    });
+
     it("khong hien gi khi worker chi co may chinh", async () => {
       workerSays({ mode: "auto", nodes: [], decisions: [] });
       const app = createApp({ ...config, RENDER_WORKER_ENABLED: true }, owner as never);

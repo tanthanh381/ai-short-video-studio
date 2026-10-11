@@ -27,6 +27,9 @@ import {
   type BalancerSummary,
   type Project,
   voiceSample,
+  type SystemJob,
+  type SystemJobsSummary,
+  type SystemSummary,
 } from "@studio/shared";
 import { checkKeyWithProvider, createKeyVault } from "./api-keys";
 import type { AppConfig } from "./config";
@@ -141,7 +144,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
   const allowedOrigins = config.ALLOWED_ORIGINS.split(",")
     .map((x) => x.trim())
     .filter(Boolean);
-  let serviceStatusCache: { expiresAt: number; value: Record<string, ServiceStatus> } | null = null;
+  let serviceStatusCache: { at: number; value: Record<string, ServiceStatus> } | null = null;
   let balancerSnapshot: BalancerSummary | null = null;
   let airSetupSnapshot: AirSetupSummary | null = null;
   const keyVault = createKeyVault(db, config);
@@ -209,8 +212,8 @@ export function createApp(config: AppConfig, db: AdminClient) {
     }
   }
 
-  async function collectServiceStatuses() {
-    if (serviceStatusCache && serviceStatusCache.expiresAt > Date.now()) return serviceStatusCache.value;
+  async function collectServiceStatuses(maxAgeMs = 5_000) {
+    if (serviceStatusCache && Date.now() - serviceStatusCache.at < maxAgeMs) return serviceStatusCache.value;
     const checkedAt = new Date().toISOString();
     const shouldCheckWorker = config.RENDER_WORKER_ENABLED || config.OPENAI_FEATURES_ENABLED || config.ANTHROPIC_FEATURES_ENABLED || config.OLLAMA_FEATURES_ENABLED || config.LOCAL_MEDIA_FEATURES_ENABLED;
     const [workerResponse, ollamaReady, mediaReady, mediaHealth] = await Promise.all([
@@ -272,7 +275,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     };
     balancerSnapshot = workerResponse?.balancer && workerResponse.balancer.nodes.length > 1 ? workerResponse.balancer : null;
     airSetupSnapshot = workerResponse?.airSetup ?? null;
-    serviceStatusCache = { expiresAt: Date.now() + 5_000, value };
+    serviceStatusCache = { at: Date.now(), value };
     return value;
   }
   app.disable("x-powered-by");
@@ -486,6 +489,46 @@ export function createApp(config: AppConfig, db: AdminClient) {
       airSetup: airSetupSnapshot,
     };
   }
+
+  /** What the dashboard says about the owner's jobs: how many are going, how the last day went, the latest few. */
+  async function getJobsSummary(userId: string): Promise<SystemJobsSummary> {
+    const since = new Date(Date.now() - 24 * 3600_000).toISOString();
+    const [active, finished, recent] = await Promise.all([
+      db.from("jobs").select("status").eq("user_id", userId).in("status", ["queued", "running"]),
+      db.from("jobs").select("job_type, status, started_at, finished_at").eq("user_id", userId).in("status", ["completed", "failed"]).gte("finished_at", since),
+      db.from("jobs").select("id, job_type, status, stage, progress, started_at, finished_at, projects(title)").eq("user_id", userId).order("created_at", { ascending: false }).limit(8),
+    ]);
+    for (const result of [active, finished, recent]) if (result.error) throw result.error;
+    const seconds = (from: unknown, to: unknown) =>
+      typeof from === "string" && typeof to === "string" ? Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000)) : null;
+    const done = finished.data ?? [];
+    const videos = done.filter((row) => row.job_type === "create_video" && row.status === "completed")
+      .map((row) => seconds(row.started_at, row.finished_at)).filter((value): value is number => value !== null);
+    return {
+      running: (active.data ?? []).filter((row) => row.status === "running").length,
+      queued: (active.data ?? []).filter((row) => row.status === "queued").length,
+      completed24h: done.filter((row) => row.status === "completed").length,
+      failed24h: done.filter((row) => row.status === "failed").length,
+      avgVideoSeconds24h: videos.length ? Math.round(videos.reduce((sum, value) => sum + value, 0) / videos.length) : null,
+      recent: (recent.data ?? []).map((row): SystemJob => {
+        const project = Array.isArray(row.projects) ? row.projects[0] : row.projects;
+        const running = row.status === "running";
+        return {
+          id: String(row.id), type: String(row.job_type), title: typeof project?.title === "string" ? project.title : "",
+          status: row.status as SystemJob["status"], stage: String(row.stage ?? ""), progress: Number(row.progress ?? 0),
+          startedAt: row.started_at ?? null, finishedAt: row.finished_at ?? null,
+          durationSeconds: seconds(row.started_at, running ? new Date().toISOString() : row.finished_at),
+        };
+      }),
+    };
+  }
+
+  // The "Hệ thống" dashboard: the machines, the models they hold, the services and the jobs, refreshed every few seconds.
+  app.get("/v1/system", async (req, res) => {
+    const services = await collectServiceStatuses(1_500);
+    const body: SystemSummary = { checkedAt: new Date().toISOString(), balancer: balancerSnapshot, services, jobs: await getJobsSummary(req.userId!) };
+    res.json(body);
+  });
 
   app.get("/v1/settings", async (req, res) => {
     res.json({

@@ -1,6 +1,7 @@
-import { DEFAULT_PROJECT_SETTINGS, type AirSetupSummary, type ApiKeySummary, type BalancerSummary, type Estimate, type Job, type KeyProvider, type LocalModelCatalog, type Project, type RegenerationComponent } from "@studio/shared";
+import { DEFAULT_PROJECT_SETTINGS, type AirSetupSummary, type ApiKeySummary, type BalancerSummary, type Estimate, type Job, type KeyProvider, type LocalModelCatalog, type Project, type RegenerationComponent, type SystemSummary } from "@studio/shared";
 import { appConfig } from "./config";
 import { demoApi } from "./demo";
+import { demoSystem } from "./demo-system";
 import { supabase } from "./supabase";
 import { completeVideoSubmission, videoSubmission, type VideoInput } from "./video-submission";
 
@@ -204,6 +205,8 @@ export const api = {
       ? demoApi.getJobs(id)
       : request<Job[]>(`/v1/projects/${id}/jobs`),
   getSettings: () => request<AccountSettings>("/v1/settings"),
+  /** The "Hệ thống" dashboard: machines, models, services and jobs. */
+  getSystem: () => (appConfig.demoMode ? Promise.resolve(demoSystem()) : request<SystemSummary>("/v1/system")),
   getLocalModels: () => request<LocalModelCatalog>("/v1/local-models"),
   /** Checks the key with the provider, then saves it encrypted on the server. Resolves with the refreshed account view. */
   saveApiKey: (provider: KeyProvider, key: string) =>

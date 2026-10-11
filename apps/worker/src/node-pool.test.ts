@@ -407,6 +407,83 @@ describe("what each machine is doing, for the Settings page", () => {
   });
 });
 
+describe("what the dashboard shows", () => {
+  const rich = (over: Partial<NodeStatus> = {}) => up({
+    resources: {
+      cpuCores: 10, memTotalGb: 16, memPressure: "warn", loadAvg1: 5, power: "ac", batteryPercent: null, thermal: "nominal",
+      memUsedGb: 12, swapUsedGb: 8, swapTotalGb: 9, diskFreeGb: 44, diskTotalGb: 228,
+      processes: [{ id: "image", label: "Vẽ ảnh SDXL-Turbo", memGb: 3.96, count: 1 }],
+    },
+    settings: { FACE_DETAIL_READY: true },
+    ...over,
+  }, { llm: {
+    ok: true, installed: ["qwen3.5:4b", "llama3:8b"], loaded: ["qwen3.5:4b"],
+    loadedInfo: [{ name: "qwen3.5:4b", sizeBytes: 3_400_000_000, expiresAt: "2026-10-10T10:05:00Z" }],
+  } });
+  const air = (pool: NodePool) => pool.summary().nodes.find((node) => node.id === "air")!;
+
+  it("lists the models and engines each machine has ready, with the memory Ollama holds", () => {
+    const { pool } = makePool();
+    pool.applyProbe("air", rich());
+    expect(air(pool).models).toEqual({
+      llm: { up: true, installed: ["qwen3.5:4b", "llama3:8b"], loaded: [{ name: "qwen3.5:4b", sizeGb: 3.4, expiresAt: "2026-10-10T10:05:00Z" }] },
+      image: { state: "ready", models: ["sdxl-turbo"], defaultModel: "sdxl-turbo" },
+      tts: { engines: ["vieneu", "piper"], defaultEngine: "vieneu" },
+      transcribe: true, whiteboard: true, faceDetail: true,
+    });
+  });
+
+  it("passes on memory, swap, disk and the programs' memory, and leaves them out for an older bridge", () => {
+    const { pool } = makePool();
+    expect(air(pool).resources).not.toHaveProperty("memUsedGb"); // makePool's bridge reports the basics only
+    pool.applyProbe("air", rich());
+    expect(air(pool).resources).toMatchObject({ memUsedGb: 12, swapUsedGb: 8, diskFreeGb: 44, processes: [{ id: "image", memGb: 3.96 }] });
+  });
+
+  it("knows whether a machine makes the same pictures and voices as the main one", () => {
+    const { pool } = makePool();
+    const nodes = () => Object.fromEntries(pool.summary().nodes.map((node) => [node.id, node.matchesPrimary]));
+    expect(nodes()).toEqual({ mini: true, air: true });
+    pool.applyProbe("air", up({ fingerprint: "other" }));
+    expect(nodes().air).toBe(false);
+    pool.applyProbe("air", up({ fingerprint: undefined as unknown as string }));
+    expect(nodes().air).toBeNull(); // an old bridge cannot vouch for itself
+  });
+
+  it("keeps a chart point at most every ten seconds, for the last half hour, oldest first", () => {
+    const { pool } = makePool();
+    const before = air(pool).history!.length;
+    pool.applyProbe("air", rich());
+    expect(air(pool).history!.length).toBe(before); // probes come every 5 s; a point per 10 s is enough
+    vi.setSystemTime(Date.now() + 11_000);
+    pool.applyProbe("air", rich());
+    const points = air(pool).history!;
+    expect(points.length).toBe(before + 1);
+    expect(points[points.length - 1]).toMatchObject({ load: 50, mem: 75, swapGb: 8, running: 0, rttMs: 20 });
+    for (let i = 0; i < 250; i += 1) {
+      vi.setSystemTime(Date.now() + 11_000);
+      pool.applyProbe("air", rich());
+    }
+    const capped = air(pool).history!;
+    expect(capped).toHaveLength(180);
+    expect(capped[0]!.at).toBeLessThan(capped[capped.length - 1]!.at);
+  });
+
+  it("logs finished and failed tasks, newest first, and says since when the counters count", async () => {
+    const { pool } = makePool();
+    pool.recordSample("air", "image", 9_000);
+    pool.recordSample("mini", "tts", 2_000);
+    const failing = pool.runOne("image", async () => { throw new Error("Giọng đọc local không bảo toàn kịch bản"); }).catch(() => undefined);
+    await settle(failing);
+    const summary = pool.summary();
+    expect(summary.since).toBe("2026-10-10T10:00:00.000Z");
+    expect(summary.recent!.slice(0, 3).map((event) => [event.node, event.lane, event.ok])).toEqual([["mini", "image", false], ["mini", "tts", true], ["air", "image", true]]);
+    expect(summary.recent![2]).toMatchObject({ ms: 9_000 });
+    for (let i = 0; i < 60; i += 1) pool.recordSample("air", "image", 1_000);
+    expect(pool.summary().recent).toHaveLength(40);
+  });
+});
+
 describe("watching the machines", () => {
   it("counts a machine as down only after repeated misses, and up again at the first answer", () => {
     const { pool, results } = makePool();
@@ -467,11 +544,12 @@ describe("createProbe", () => {
       calls.push([target, (init?.headers as Record<string, string> | undefined)?.authorization]);
       if (target.endsWith("/node-status")) return reply(200, status());
       if (target.endsWith("/api/tags")) return reply(200, { models: [{ name: "qwen3.5:4b" }, { name: "llama3:8b" }] });
-      if (target.endsWith("/api/ps")) return reply(200, { models: [{ name: "qwen3.5:4b" }] });
+      if (target.endsWith("/api/ps")) return reply(200, { models: [{ name: "qwen3.5:4b", size: 3_400_000_000, expires_at: "2026-10-10T10:05:00Z" }] });
       return reply(200, { ok: true });
     }) as unknown as typeof fetch;
     const result = await createProbe(fetchFn)(TWO[1]!);
     expect(result).toMatchObject({ mediaOk: true, whiteboardOk: true, llm: { ok: true, installed: ["qwen3.5:4b", "llama3:8b"], loaded: ["qwen3.5:4b"] } });
+    expect(result.llm.loadedInfo).toEqual([{ name: "qwen3.5:4b", sizeBytes: 3_400_000_000, expiresAt: "2026-10-10T10:05:00Z" }]);
     expect(result.status?.fingerprint).toBe("same");
     expect(calls.find(([url]) => url.endsWith("/node-status"))![1]).toBe("Bearer tok");
   });

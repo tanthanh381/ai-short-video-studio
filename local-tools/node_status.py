@@ -11,6 +11,7 @@ import ipaddress
 import os
 import platform
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -94,6 +95,92 @@ def parse_thermal(text):
     return "nominal"
 
 
+def parse_vm_stat(text, total_gb):
+    """`vm_stat` -> GB of memory in use: everything that is not free, inactive (reclaimable cache) or speculative."""
+    if not text or not total_gb:
+        return None
+    page = re.search(r"page size of (\d+) bytes", text)
+    size = int(page.group(1)) if page else 4096
+
+    def pages(name):
+        match = re.search(rf"^{name}:\s+(\d+)", text, re.MULTILINE)
+        return int(match.group(1)) if match else None
+
+    free, inactive, speculative = pages("Pages free"), pages("Pages inactive"), pages("Pages speculative")
+    if free is None or inactive is None:
+        return None
+    available_gb = (free + inactive + (speculative or 0)) * size / 2**30
+    return round(max(0.0, total_gb - available_gb), 1)
+
+
+def parse_swap(text):
+    """`sysctl -n vm.swapusage` -> (used GB, total GB): "total = 9216.00M  used = 8195.62M  free = 1020.38M"."""
+    if not text:
+        return None, None
+
+    def megabytes(name):
+        match = re.search(rf"{name}\s*=\s*([\d.]+)([MGK])", text)
+        if not match:
+            return None
+        return float(match.group(1)) * {"K": 1 / 1024, "M": 1, "G": 1024}[match.group(2)] / 1024
+
+    used, total = megabytes("used"), megabytes("total")
+    return (round(used, 1) if used is not None else None), (round(total, 1) if total is not None else None)
+
+
+# What the studio runs on a machine, as the dashboard names it: (id, label, pattern in the command line).
+SERVICE_PATTERNS = [
+    ("ollama", "Ollama (viết kịch bản)", re.compile(r"llama-server|ollama (runner|serve)")),
+    ("image", "Vẽ ảnh SDXL-Turbo", re.compile(r"image_server\.py")),
+    ("comfy", "ComfyUI (SDXL Base)", re.compile(r"[Cc]omfy[Uu][Ii]")),
+    ("whisper", "Whisper (nhận dạng giọng)", re.compile(r"whisper-(server|cli)")),
+    ("vieneu", "Giọng VieNeu", re.compile(r"vieneu_(api|tts)")),
+    ("piper", "Giọng Piper", re.compile(r"tts_api|piper")),
+    ("media", "Cầu nối media", re.compile(r"media_server\.py")),
+    ("whiteboard", "Máy vẽ tay", re.compile(r"whiteboard_server\.py")),
+    ("ffmpeg", "FFmpeg (ghép video)", re.compile(r"(^|/)ffmpeg( |$)")),
+    ("docker", "Docker (API + worker)", re.compile(r"Virtualization\.VirtualMachine|colima|limactl|qemu-system")),
+]
+
+
+def parse_top_memory(text):
+    """`top -l 1 -stats pid,mem` -> {pid: GB of physical footprint}.
+
+    Footprint, not resident size: a model held in GPU memory (MLX, Metal) shows as a few MB of RSS but as gigabytes here.
+    """
+    sizes = {}
+    for line in (text or "").splitlines():
+        match = re.match(r"^\s*(\d+)\s+(\d+(?:\.\d+)?)([KMG])[+-]?\s*$", line)
+        if match:
+            sizes[int(match.group(1))] = float(match.group(2)) * {"K": 1 / 1024 / 1024, "M": 1 / 1024, "G": 1}[match.group(3)]
+    return sizes
+
+
+def parse_processes(text, footprints=None):
+    """`ps -axo pid=,rss=,command=` -> the studio's services and the memory each uses (GB), biggest first."""
+    footprints = footprints or {}
+    totals = {}
+    for line in (text or "").splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) != 3 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        pid, rss_kb, command = int(parts[0]), int(parts[1]), parts[2]
+        for service_id, label, pattern in SERVICE_PATTERNS:
+            if pattern.search(command):
+                entry = totals.setdefault(service_id, {"id": service_id, "label": label, "rssGb": 0.0, "count": 0})
+                entry["rssGb"] += footprints.get(pid, rss_kb / 1024 / 1024)
+                entry["count"] += 1
+                break
+    rows = [{"id": e["id"], "label": e["label"], "memGb": round(e["rssGb"], 2), "count": e["count"]} for e in totals.values()]
+    return sorted(rows, key=lambda row: row["memGb"], reverse=True)
+
+
+def read_processes():
+    listing = _run(["ps", "-axo", "pid=,rss=,command="], timeout=3.0)
+    top = _run(["top", "-l", "1", "-o", "mem", "-n", "300", "-stats", "pid,mem"], timeout=5.0) if platform.system() == "Darwin" else None
+    return parse_processes(listing, parse_top_memory(top))
+
+
 def _run(command, timeout=2.0):
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
@@ -114,6 +201,14 @@ def _memory_total_gb():
 
 
 _RESOURCES = {"at": 0.0, "value": None}
+_PROCESSES = {"at": -1e9, "value": []}
+
+
+def _processes_cached(now, max_age_s=10.0):
+    """Listing the processes costs about half a second (`top`), so it is refreshed less often than the other readings."""
+    if now - _PROCESSES["at"] >= max_age_s:
+        _PROCESSES.update(at=now, value=read_processes())
+    return _PROCESSES["value"]
 _RESOURCES_LOCK = threading.Lock()
 
 
@@ -131,9 +226,22 @@ def read_resources(max_age_s=4.0):
             load = round(os.getloadavg()[0], 2)
         except (OSError, AttributeError):
             load = None
+        total_gb = _memory_total_gb()
+        swap_used, swap_total = parse_swap(_run(["sysctl", "-n", "vm.swapusage"])) if mac else (None, None)
+        try:
+            disk = shutil.disk_usage("/")
+            disk_free, disk_total = round(disk.free / 2**30), round(disk.total / 2**30)
+        except OSError:
+            disk_free = disk_total = None
         value = {
             "cpuCores": os.cpu_count(),
-            "memTotalGb": _memory_total_gb(),
+            "memTotalGb": total_gb,
+            "memUsedGb": parse_vm_stat(_run(["vm_stat"]), total_gb) if mac else None,
+            "swapUsedGb": swap_used,
+            "swapTotalGb": swap_total,
+            "diskFreeGb": disk_free,
+            "diskTotalGb": disk_total,
+            "processes": _processes_cached(now),
             "memPressure": pressure,
             "loadAvg1": load,
             "power": power,

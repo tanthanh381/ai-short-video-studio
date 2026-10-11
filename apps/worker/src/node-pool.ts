@@ -5,7 +5,7 @@
  * With only the main machine configured it is a thin pass-through: no probing, no scheduling, the same calls in the
  * same order as before the pool existed.
  */
-import type { BalanceDecision, BalancerSummary, NodeLaneSummary, NodeSummary } from "@studio/shared";
+import type { BalanceDecision, BalancerSummary, NodeActivityEvent, NodeHistoryPoint, NodeLaneSummary, NodeModelsSummary, NodeSummary } from "@studio/shared";
 import { classifyError, NodeDownError } from "./node-errors";
 import {
   assessNode, busyRemainingMs, estimateMs, LANES, planLane, simulate,
@@ -29,7 +29,7 @@ export type ProbeResult = {
   /** The media bridge's /node-status (or, from an older bridge, what /health says). Null when it does not answer. */
   status: NodeStatus | null;
   mediaOk: boolean;
-  llm: { ok: boolean; installed: string[]; loaded: string[] };
+  llm: { ok: boolean; installed: string[]; loaded: string[]; loadedInfo?: Array<{ name: string; sizeBytes: number | null; expiresAt: string | null }> };
   whiteboardOk: boolean;
   error?: string;
 };
@@ -80,6 +80,38 @@ export function parseNodeSpecs(config: NodeConfig): NodeSpec[] {
   return specs;
 }
 
+/** The readings the dashboard shows; fields an older media bridge does not report are left out rather than set to null. */
+function summarizeResources(resources: NonNullable<NodeStatus["resources"]>): NonNullable<NodeSummary["resources"]> {
+  const optional = <K extends "memUsedGb" | "swapUsedGb" | "swapTotalGb" | "diskFreeGb" | "diskTotalGb" | "processes">(key: K) =>
+    resources[key] === undefined ? {} : { [key]: resources[key] };
+  return {
+    memTotalGb: resources.memTotalGb, memPressure: resources.memPressure, power: resources.power, batteryPercent: resources.batteryPercent,
+    thermal: resources.thermal, loadAvg1: resources.loadAvg1, cpuCores: resources.cpuCores,
+    ...optional("memUsedGb"), ...optional("swapUsedGb"), ...optional("swapTotalGb"), ...optional("diskFreeGb"), ...optional("diskTotalGb"), ...optional("processes"),
+  };
+}
+
+/** Which models and engines the machine has ready: Ollama's, the picture model, the voices, Whisper, the hand-drawing server. */
+function summarizeModels(snapshot: NodeSnapshot): NodeModelsSummary {
+  const status = snapshot.status;
+  const faceDetail = status?.settings?.FACE_DETAIL_READY;
+  return {
+    llm: {
+      up: snapshot.llmUp,
+      installed: snapshot.llmInstalled,
+      loaded: (snapshot.llmLoadedInfo ?? snapshot.llmLoaded.map((name) => ({ name, sizeBytes: null, expiresAt: null })))
+        .map((model) => ({ name: model.name, sizeGb: model.sizeBytes === null ? null : Math.round(model.sizeBytes / 1e8) / 10, expiresAt: model.expiresAt })),
+    },
+    image: status?.image
+      ? { state: status.image.state, models: status.image.models, defaultModel: status.image.defaultModel }
+      : { state: "unknown", models: [], defaultModel: null },
+    tts: status?.tts ? { engines: status.tts.engines, defaultEngine: status.tts.defaultEngine } : { engines: [], defaultEngine: null },
+    transcribe: status ? status.capabilities.transcribe : null,
+    whiteboard: snapshot.whiteboardUp,
+    faceDetail: typeof faceDetail === "boolean" ? faceDetail : null,
+  };
+}
+
 const describeFailure = (error: unknown) =>
   error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError") ? "không phản hồi" : "không kết nối được";
 
@@ -120,10 +152,13 @@ export function createProbe(fetchFn: typeof fetch = fetch, timeoutMs = 2_500): (
     const llm = (async () => {
       const [tags, loaded] = await Promise.all([
         json<{ models?: Array<{ name?: string }> }>(`${spec.ollamaUrl}/api/tags`),
-        json<{ models?: Array<{ name?: string }> }>(`${spec.ollamaUrl}/api/ps`),
+        json<{ models?: Array<{ name?: string; size?: number; expires_at?: string }> }>(`${spec.ollamaUrl}/api/ps`),
       ]);
-      const names = (body: typeof tags) => (body?.models ?? []).map((model) => model.name).filter((name): name is string => Boolean(name));
-      return { ok: tags !== null, installed: names(tags), loaded: names(loaded) };
+      const names = (body: { models?: Array<{ name?: string }> } | null) => (body?.models ?? []).map((model) => model.name).filter((name): name is string => Boolean(name));
+      const loadedInfo = (loaded?.models ?? []).flatMap((model) => model.name
+        ? [{ name: model.name, sizeBytes: typeof model.size === "number" ? model.size : null, expiresAt: typeof model.expires_at === "string" ? model.expires_at : null }]
+        : []);
+      return { ok: tags !== null, installed: names(tags), loaded: names(loaded), loadedInfo };
     })();
     const whiteboard = (async () => {
       try {
@@ -189,7 +224,12 @@ export type DistributeOptions<T> = {
   nodeWaitMs?: number;
 };
 
-type NodeEntry = { spec: NodeSpec; snapshot: NodeSnapshot; failures: number; strikes: number; done: Partial<Record<Lane, number>>; down: AbortController };
+type NodeEntry = { spec: NodeSpec; snapshot: NodeSnapshot; failures: number; strikes: number; done: Partial<Record<Lane, number>>; down: AbortController; history: NodeHistoryPoint[] };
+
+/** One chart point every 10 seconds, kept for 30 minutes. */
+const HISTORY_EVERY_MS = 10_000;
+const HISTORY_POINTS = 180;
+const RECENT_EVENTS = 40;
 
 const NO_NODE = "Không có máy xử lý nào khả dụng";
 /** A second machine joins a batch only when it makes it at least 15% and 30 seconds faster: a laptop is not woken up, heated and drained for less. */
@@ -200,18 +240,22 @@ export class NodePool {
   private readonly entries = new Map<string, NodeEntry>();
   private readonly changed = new Signal();
   private readonly decisions: BalanceDecision[] = [];
+  private readonly events: NodeActivityEvent[] = [];
+  private readonly startedAt: number;
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly now: () => number;
 
   constructor(specs: NodeSpec[], private readonly options: PoolOptions) {
     if (!specs.some((spec) => spec.local)) throw new Error("NodePool cần một máy chính");
     this.now = options.now ?? Date.now;
+    this.startedAt = this.now();
     for (const spec of specs) {
       this.entries.set(spec.id, {
         spec,
         failures: 0,
         strikes: 0,
         done: {},
+        history: [],
         down: new AbortController(),
         snapshot: {
           id: spec.id, local: spec.local,
@@ -293,6 +337,7 @@ export class NodePool {
     snapshot.llmUp = result.llm.ok;
     snapshot.llmInstalled = result.llm.installed;
     snapshot.llmLoaded = result.llm.loaded;
+    snapshot.llmLoadedInfo = result.llm.loadedInfo ?? result.llm.loaded.map((name) => ({ name, sizeBytes: null, expiresAt: null }));
     snapshot.whiteboardUp = result.whiteboardOk;
     snapshot.rttMs = result.rttMs;
     if (result.mediaOk && reachable) delete snapshot.error;
@@ -305,7 +350,32 @@ export class NodePool {
     } else if (!wasUp && snapshot.up) {
       this.options.log?.info({ node: id, rttMs: result.rttMs }, "node_up");
     }
+    this.remember(entry);
     this.changed.notify();
+  }
+
+  /** Adds a chart point for the machine (at most one every few seconds, so the 5-second probes do not crowd it). */
+  private remember(entry: NodeEntry) {
+    const at = this.now();
+    const last = entry.history[entry.history.length - 1];
+    if (last && at - last.at < HISTORY_EVERY_MS) return;
+    const resources = entry.snapshot.status?.resources;
+    const percent = (value: number | null | undefined, total: number | null | undefined) =>
+      value != null && total ? Math.round((value / total) * 100) : null;
+    entry.history.push({
+      at,
+      load: percent(resources?.loadAvg1, resources?.cpuCores),
+      mem: percent(resources?.memUsedGb, resources?.memTotalGb),
+      swapGb: resources?.swapUsedGb ?? null,
+      running: Object.values(entry.snapshot.inflight).reduce((sum, tasks) => sum + (tasks?.length ?? 0), 0),
+      rttMs: entry.snapshot.rttMs,
+    });
+    if (entry.history.length > HISTORY_POINTS) entry.history.shift();
+  }
+
+  private logEvent(node: string, lane: Lane, ms: number, ok: boolean) {
+    this.events.push({ at: new Date(this.now()).toISOString(), node, lane, ms: Math.round(ms), ok });
+    if (this.events.length > RECENT_EVENTS) this.events.shift();
   }
 
   /** Aborts when the machine is declared down; adapters combine it with their own timeouts. */
@@ -400,6 +470,7 @@ export class NodePool {
     const entry = this.entries.get(id)!;
     entry.strikes = 0; // it answered: forget the earlier failures
     entry.done[lane] = (entry.done[lane] ?? 0) + 1;
+    this.logEvent(id, lane, ms, true);
   }
 
   /**
@@ -433,6 +504,7 @@ export class NodePool {
         return value;
       } catch (error) {
         lastError = error;
+        this.logEvent(node.id, lane, this.now() - started, false);
         const kind = classifyError(error);
         if (kind === "unreachable") this.markSuspect(node.id, error);
         tried.add(node.id);
@@ -541,6 +613,7 @@ export class NodePool {
           outcomes[job.index] = { ok: true, value, nodeId: id };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
+          this.logEvent(id, lane, this.now() - started, false);
           const kind = classifyError(error);
           job.attempts += 1;
           job.avoid.add(id);
@@ -629,18 +702,30 @@ export class NodePool {
         : paused ? "paused"
         : core.some((lane) => !lane.eligible) || coreReasons.length ? "degraded" : "healthy";
       const reasons = !snapshot.up || paused ? [...new Set(Object.values(lanes).flatMap((lane) => lane.reasons))] : coreReasons;
+      const primaryFingerprint = this.primaryStatus()?.fingerprint;
       return {
         id: snapshot.id,
         role: snapshot.local ? "primary" : "secondary",
         state,
         detail: reasons.length ? reasons.slice(0, 3).join("; ") : "Sẵn sàng nhận việc",
         rttMs: snapshot.rttMs,
-        resources: status?.resources
-          ? { memTotalGb: status.resources.memTotalGb, memPressure: status.resources.memPressure, power: status.resources.power, batteryPercent: status.resources.batteryPercent, thermal: status.resources.thermal, loadAvg1: status.resources.loadAvg1, cpuCores: status.resources.cpuCores }
-          : null,
+        resources: status?.resources ? summarizeResources(status.resources) : null,
         lanes,
+        models: summarizeModels(snapshot),
+        history: [...entry.history],
+        matchesPrimary: snapshot.local ? true : status?.fingerprint && primaryFingerprint ? status.fingerprint === primaryFingerprint : null,
       };
     });
-    return { mode: this.options.mode, nodes, decisions: [...this.decisions].reverse() };
+    return {
+      mode: this.options.mode,
+      nodes,
+      decisions: [...this.decisions].reverse(),
+      since: new Date(this.startedAt).toISOString(),
+      recent: [...this.events].reverse(),
+    };
+  }
+
+  private primaryStatus(): NodeStatus | null {
+    return [...this.entries.values()].find((entry) => entry.spec.local)?.snapshot.status ?? null;
   }
 }
