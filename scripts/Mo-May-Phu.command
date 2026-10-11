@@ -50,10 +50,19 @@ start_if_down() { # url name command...
   curl -fsS "$url" >/dev/null 2>&1 || nohup "$@" >"tmp/local-services/$name.log" 2>&1 &
 }
 
-if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && ! curl -fsS "http://$tailscale_ip:11434/api/tags" >/dev/null 2>&1; then
-  print 'Ollama đang chạy nhưng chỉ nghe trên chính máy này (thường là ứng dụng Ollama trên thanh menu).'
-  print 'Hãy thoát ứng dụng Ollama rồi chạy lại script này để mở Ollama cho máy chính.'
-  exit 1
+# Một Ollama chỉ nghe trên chính máy này (ứng dụng trên thanh menu, hoặc bản tạm của bộ cài chưa kịp tắt) chiếm cổng 11434 và
+# máy chính không gọi tới được. Máy này đã được dành làm máy phụ, nên tắt nó đi rồi mở lại Ollama trên địa chỉ Tailscale.
+ollama_up() { curl -fsS -m 2 "$1/api/tags" >/dev/null 2>&1; }
+if ollama_up http://127.0.0.1:11434 && ! ollama_up "http://$tailscale_ip:11434"; then
+  print 'Ollama đang chỉ nghe trên chính máy này; tắt nó để mở lại cho máy chính...'
+  osascript -e 'tell application "Ollama" to quit' >/dev/null 2>&1 || true
+  pkill -TERM -f 'ollama serve' 2>/dev/null || true
+  for _ in {1..10}; do ollama_up http://127.0.0.1:11434 || break; sleep 1; done
+  if ollama_up http://127.0.0.1:11434; then pkill -KILL -f 'ollama serve' 2>/dev/null || true; sleep 2; fi
+  if ollama_up http://127.0.0.1:11434; then
+    print 'Không tắt được Ollama đang chạy. Thoát ứng dụng Ollama trên thanh menu rồi chạy lại script này.'
+    exit 1
+  fi
 fi
 start_if_down "http://$tailscale_ip:11434/api/tags" ollama ollama serve
 

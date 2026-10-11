@@ -130,8 +130,10 @@ main() {
     fi
     ollama pull "$OLLAMA_MODEL"
     # Mo-May-Phu.command starts its own Ollama on the Tailscale address, so the temporary one must be gone.
-    [ -n "${OLLAMA_PID:-}" ] && kill "$OLLAMA_PID" 2>/dev/null || true
-    sleep 2
+    if [ -n "${OLLAMA_PID:-}" ]; then
+      kill "$OLLAMA_PID" 2>/dev/null || true
+      for _ in $(seq 1 15); do curl -fsS -m 1 http://127.0.0.1:11434/api/tags >/dev/null 2>&1 || break; sleep 1; done
+    fi
   fi
 
   step start "7/7 Bật máy phụ" "Bật Ollama, Whisper, giọng đọc, vẽ ảnh, máy vẽ tay"

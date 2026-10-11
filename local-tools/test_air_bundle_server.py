@@ -7,7 +7,11 @@ import importlib.util
 import io
 import json
 import os
+import shutil
+import socket
 import subprocess
+import sys
+import time
 import tarfile
 import tempfile
 import unittest
@@ -364,6 +368,46 @@ if [ "$1" = "status" ]; then echo '{"Peer":{"a":{"HostName":"air","TailscaleIPs"
         output = self.run_script("nobody")
         self.assertIn("Tailscale không thấy máy tên 'nobody'", output)
         self.assertFalse(self.env_file.exists())
+
+
+@unittest.skipUnless(shutil.which("zsh"), "Mo-May-Phu.command is a zsh script")
+class LoopbackOllama(unittest.TestCase):
+    """An Ollama that only listens on this machine (the menu-bar app) used to stop the Air from becoming a node: it must be stopped for it."""
+
+    def test_the_block_that_frees_the_port_stops_a_loopback_only_server(self):
+        script = (REPO / "scripts/Mo-May-Phu.command").read_text()
+        block = script[script.index("# Một Ollama chỉ nghe"):script.index('start_if_down "http://$tailscale_ip:11434')]
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        # a stand-in server on a free port, found by a marker in its command line instead of the real "ollama serve"
+        block = block.replace("11434", str(port)).replace("ollama serve", "stand-in-ollama-serve").replace('application "Ollama"', 'application "NoSuchApp"')
+        serve = ("import http.server,sys\n"
+                 "class H(http.server.BaseHTTPRequestHandler):\n"
+                 "    def do_GET(self):\n"
+                 "        self.send_response(200); self.send_header('Content-Length', '2'); self.end_headers(); self.wfile.write(b'{}')\n"
+                 "http.server.HTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()")
+        fake = subprocess.Popen([sys.executable, "-c", serve, str(port), "stand-in-ollama-serve"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=tempfile.gettempdir())
+        try:
+            for _ in range(50):
+                with socket.socket() as probe:
+                    if probe.connect_ex(("127.0.0.1", port)) == 0:
+                        break
+                time.sleep(0.1)
+            else:
+                self.fail("the stand-in server did not start")
+            self.assertEqual(urllib.request.urlopen(f"http://127.0.0.1:{port}/api/tags", timeout=3).status, 200)
+            # the address the main machine uses is unreachable here (nothing listens on 127.0.0.2:port)
+            result = subprocess.run(["zsh", "-c", f"tailscale_ip=127.0.0.2\n{block}\nprint passed"], capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("passed", result.stdout)
+            fake.wait(timeout=5)
+            self.assertIsNotNone(fake.returncode, "the loopback-only server should have been stopped")
+        finally:
+            if fake.poll() is None:
+                fake.kill()
+                fake.wait()
 
 
 if __name__ == "__main__":

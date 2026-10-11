@@ -3,7 +3,7 @@
 #   bash scripts/air-node/serve-bundle.sh [name]      (name defaults to "air": the Tailscale machine name of the Air)
 # 1. makes sure .env.selfhost has AI_NODES (the Air's Tailscale address) and AI_NODES_TOKEN (generated here, never printed, and sent
 #    to the Air by the installer, so nothing has to be copied by hand);
-# 2. serves the installer, the committed code and the models to the Air only, over Tailscale, for 90 minutes or until the Air reports in.
+# 2. serves the installer, the committed code and the models to the Air only, over Tailscale, for 4 hours (BUNDLE_TTL_MIN) or until the Air reports in.
 # Then the worker needs a restart to read the new list (check the job queue first).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -60,5 +60,5 @@ PY
 [ -n "$TOKEN" ] || { echo "Không đọc được AI_NODES_TOKEN trong $ENV_FILE"; exit 1; }
 SECRET="$(openssl rand -hex 12)"
 echo
-echo "Trên máy $NAME, mở Terminal và dán đúng một dòng (hết hạn sau 90 phút hoặc khi cài xong):"
-exec python3 local-tools/air_bundle_server.py --repo "$PWD" --local-ai "$LOCAL_AI" --host "$MY_IP" --secret "$SECRET" --token "$TOKEN" --name "$NAME" --port "${BUNDLE_PORT:-8899}"
+echo "Trên máy $NAME, mở Terminal và dán đúng một dòng (hết hạn sau ${BUNDLE_TTL_MIN:-240} phút hoặc khi cài xong):"
+exec python3 local-tools/air_bundle_server.py --repo "$PWD" --local-ai "$LOCAL_AI" --host "$MY_IP" --secret "$SECRET" --token "$TOKEN" --name "$NAME" --port "${BUNDLE_PORT:-8899}" --ttl "$(( ${BUNDLE_TTL_MIN:-240} * 60 ))"
