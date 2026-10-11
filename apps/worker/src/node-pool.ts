@@ -237,6 +237,8 @@ export type PoolOptions = {
   minSavingsMs?: number;
   now?: () => number;
   log?: Logger;
+  /** Powers down model runtimes when the owner switches a node off in Settings. */
+  controlPower?: (spec: NodeSpec, enabled: boolean) => Promise<void>;
 };
 
 export type Outcome<R> = { ok: true; value: R; nodeId: string } | { ok: false; error: Error; nodeId?: string };
@@ -272,6 +274,7 @@ export class NodePool {
   private modeOverride: BalanceMode | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly now: () => number;
+  private readonly powerCommands = new Map<string, boolean>();
 
   constructor(specs: NodeSpec[], private readonly options: PoolOptions) {
     if (!specs.some((spec) => spec.local)) throw new Error("NodePool cần một máy chính");
@@ -336,6 +339,26 @@ export class NodePool {
       this.options.log?.info({ mode: this.mode, disabled: [...off] }, "balancer_settings_changed");
       this.changed.notify();
     }
+  }
+
+  /** Applies the same switch to the actual local media bridge, not only to scheduling. */
+  async applyPowerSettings(settings: BalancerSettings): Promise<void> {
+    if (!this.options.controlPower) return;
+    const off = new Set(effectiveDisabled([...this.entries.keys()], settings.disabled));
+    const changes = [...this.entries.values()].flatMap((entry) => {
+      const enabled = !off.has(entry.spec.id);
+      const previous = this.powerCommands.get(entry.spec.id);
+      this.powerCommands.set(entry.spec.id, enabled);
+      return previous === undefined ? (enabled ? [] : [{ entry, enabled }]) : previous === enabled ? [] : [{ entry, enabled }];
+    });
+    await Promise.all(changes.map(async ({ entry, enabled }) => {
+      try {
+        await this.options.controlPower!(entry.spec, enabled);
+        this.options.log?.info({ node: entry.spec.id, enabled }, "node_power_changed");
+      } catch (error) {
+        this.options.log?.warn({ node: entry.spec.id, enabled, err: error instanceof Error ? error.message : String(error) }, "node_power_change_failed");
+      }
+    }));
   }
 
   /** Starts watching the machines; resolves once the first look at all of them is done (never rejects). */

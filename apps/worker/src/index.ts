@@ -68,11 +68,22 @@ const pool = new NodePool(parseNodeSpecs(config), {
   minBatteryPercent: config.AI_NODE_MIN_BATTERY,
   probe: createProbe(),
   log,
+  controlPower: async (spec, enabled) => {
+    const response = await fetch(`${spec.mediaUrl}/node-control`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(spec.token ? { authorization: `Bearer ${spec.token}` } : {}) },
+      body: JSON.stringify({ enabled }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) throw new Error(`node-control HTTP ${response.status}`);
+  },
 });
 /** Follows the owner's choices from Cài đặt (machines switched off, how work is split); a hiccup keeps the last choices. */
 async function followBalancerSettings() {
   try {
-    pool.applySettings(await readBalancerSettings(db));
+    const settings = await readBalancerSettings(db);
+    pool.applySettings(settings);
+    await pool.applyPowerSettings(settings);
   } catch (error) {
     log.warn({ err: error instanceof Error ? error.message : String(error) }, "balancer_settings_unreadable");
   }

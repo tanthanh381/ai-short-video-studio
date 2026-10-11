@@ -12,6 +12,7 @@ import math
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -71,6 +72,7 @@ VIENEU_URL = os.getenv("VIENEU_URL", "http://127.0.0.1:5001")
 PIPER_URL = os.getenv("PIPER_URL", "http://127.0.0.1:5000")
 VIENEU_VOICE = os.getenv("VIENEU_VOICE", "Đức Trí")
 LTX_VIDEO_URL = os.getenv("LTX_VIDEO_URL", "http://127.0.0.1:8770")
+NODE_START_SCRIPT = os.getenv("NODE_START_SCRIPT", "")
 COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
 COMFYUI_CHECKPOINT = os.getenv("COMFYUI_CHECKPOINT", "sd_xl_base_1.0_0.9vae.safetensors")
 COMFYUI_MODEL_DIR = Path(os.getenv(
@@ -623,6 +625,58 @@ def listener_pid(port):
         return None
 
 
+POWER_PORTS = (11434, 8080, 5000, 5001, 5002, 8766, 8770, 8188)
+
+
+def stop_local_ai_services():
+    """Stop model servers and their Python runtimes, but keep this bridge alive for a later resume.
+
+    The bridge is deliberately not killed: the website needs a small control endpoint to turn the node on again.
+    Docker/Colima is also left alone because on the primary Mac it hosts the API and worker themselves.
+    """
+    stopped = []
+    for port in POWER_PORTS:
+        pid = listener_pid(port)
+        if not pid or pid == os.getpid():
+            continue
+        try:
+            os.kill(pid, signal.SIGTERM)
+            stopped.append({"port": port, "pid": pid})
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            raise RuntimeError(f"Không có quyền dừng dịch vụ ở cổng {port}")
+    deadline = time.time() + 8
+    while time.time() < deadline and any(listener_pid(item["port"]) for item in stopped):
+        time.sleep(0.25)
+    for item in stopped:
+        pid = listener_pid(item["port"])
+        if pid and pid != os.getpid():
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    return stopped
+
+
+def start_local_ai_services():
+    """Ask the same launcher used at boot to restore the model servers."""
+    if not NODE_START_SCRIPT:
+        raise RuntimeError("Thiếu NODE_START_SCRIPT để bật lại các dịch vụ AI local")
+    script = Path(NODE_START_SCRIPT)
+    if not script.is_file():
+        raise RuntimeError(f"Không tìm thấy script bật máy: {script}")
+    repo = script.parent.parent
+    log_path = SERVICE_LOG_DIR / "node-control.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = log_path.open("ab")
+    try:
+        subprocess.Popen(["/bin/zsh", str(script)], cwd=str(repo), stdin=subprocess.DEVNULL,
+                         stdout=handle, stderr=subprocess.STDOUT, start_new_session=True)
+    finally:
+        handle.close()
+
+
 def recycle_if_bloated(name, base_url, wait_s=240):
     """Restart a launchd-supervised model server whose footprint passed its limit. True if it was restarted."""
     label, port, _, limit_mb = SUPERVISED[name]
@@ -1155,6 +1209,25 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if not self._authorised():
+            return
+        if self.path == "/node-control":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = json.loads(self.rfile.read(length) or b"{}")
+                enabled = body.get("enabled")
+                if not isinstance(enabled, bool):
+                    raise ValueError("enabled phải là boolean")
+                if enabled:
+                    node_status.set_paused(False)
+                    start_local_ai_services()
+                    json_response(self, 202, {"ok": True, "enabled": True, "detail": "Đang bật lại các dịch vụ AI local"})
+                else:
+                    node_status.set_paused(True)
+                    stopped = stop_local_ai_services()
+                    json_response(self, 200, {"ok": True, "enabled": False, "stopped": stopped,
+                                              "detail": "Đã dừng model AI và server Python; giữ media bridge để bật lại từ website"})
+            except Exception as error:
+                json_response(self, 500, {"error": str(error)})
             return
         if self.path == "/sync-now":
             node_status.request_sync()
