@@ -19,6 +19,7 @@ export const NODE_STATE_LABEL: Record<NodeSummary["state"], { label: string; ton
   degraded: { label: "Hạn chế", tone: "warn" },
   paused: { label: "Tạm dừng", tone: "idle" },
   offline: { label: "Mất kết nối", tone: "bad" },
+  disabled: { label: "Đã tắt", tone: "idle" },
 };
 
 const decimal = (value: number, digits = 1) => value.toFixed(digits).replace(".", ",").replace(/,0$/u, "");
@@ -314,6 +315,11 @@ const SERVICE_NAMES: Record<string, string> = {
 export function systemAlerts(system: SystemSummary): SystemAlert[] {
   const alerts: SystemAlert[] = [];
   for (const node of system.balancer?.nodes ?? []) {
+    if (node.state === "disabled") {
+      // switched off by the owner: nothing to fix, and its readings are not a problem either
+      alerts.push({ id: `${node.id}-disabled`, tone: "info", title: `Máy ${node.id} đang tắt`, detail: "Đã tắt trong Cài đặt: máy này không nhận việc mới. Bật lại ở Cài đặt → Máy xử lý video." });
+      continue;
+    }
     if (node.state === "offline") alerts.push({ id: `${node.id}-offline`, tone: "bad", title: `Máy ${node.id} mất kết nối`, detail: node.detail });
     else if (node.state === "paused") alerts.push({ id: `${node.id}-paused`, tone: "info", title: `Máy ${node.id} đang tạm dừng`, detail: "Chủ máy đã tạm dừng: máy chính không giao việc mới cho máy này (bật lại bằng Mo-May-Phu.command resume)." });
     else if (node.state === "degraded") alerts.push({ id: `${node.id}-degraded`, tone: "warn", title: `Máy ${node.id} bị hạn chế`, detail: node.detail });
@@ -337,7 +343,9 @@ export function systemAlerts(system: SystemSummary): SystemAlert[] {
 export type SummaryTile = { id: string; label: string; value: string; detail: string; tone: Tone };
 
 export function summaryTiles(system: SystemSummary): SummaryTile[] {
-  const nodes = system.balancer?.nodes ?? [];
+  const all = system.balancer?.nodes ?? [];
+  const nodes = all.filter((node) => node.state !== "disabled");
+  const switchedOff = all.length - nodes.length;
   const ready = nodes.filter((node) => node.state === "healthy").length;
   const usable = nodes.filter((node) => node.state === "healthy" || node.state === "degraded").length;
   const share = system.balancer ? workShare(system.balancer.nodes).find((row) => row.lane === "image") : undefined;
@@ -347,7 +355,9 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
     {
       id: "machines", label: "Máy xử lý",
       value: nodes.length ? `${usable}/${nodes.length} hoạt động` : "1 máy",
-      detail: nodes.length ? `${ready} sẵn sàng hoàn toàn${nodes.length > ready ? `, ${nodes.length - ready} hạn chế` : ""}` : "Chưa thêm máy phụ: mọi việc chạy trên máy chính",
+      detail: nodes.length
+        ? `${ready} sẵn sàng hoàn toàn${nodes.length > ready ? `, ${nodes.length - ready} hạn chế` : ""}${switchedOff ? ` · ${switchedOff} máy đã tắt` : ""}`
+        : "Chưa thêm máy phụ: mọi việc chạy trên máy chính",
       tone: nodes.length === 0 ? "idle" : usable === nodes.length ? (ready === nodes.length ? "ok" : "warn") : "bad",
     },
     {

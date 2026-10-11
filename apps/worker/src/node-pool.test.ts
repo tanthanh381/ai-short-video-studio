@@ -484,6 +484,81 @@ describe("what the dashboard shows", () => {
   });
 });
 
+describe("machines the owner switches off in Cài đặt", () => {
+  const node = (pool: NodePool, id: string) => pool.summary().nodes.find((item) => item.id === id)!;
+
+  it("keeps a switched-off machine out of all work, but still shows it", async () => {
+    const { pool } = makePool();
+    pool.applySettings({ mode: null, disabled: ["air"] });
+    expect(node(pool, "air")).toMatchObject({ state: "disabled", enabled: false, detail: expect.stringMatching(/Đã tắt trong Cài đặt/) });
+    expect(node(pool, "air").lanes.image).toMatchObject({ eligible: false, reasons: ["đã tắt trong Cài đặt"] });
+    expect(node(pool, "air").resources).not.toBeNull(); // still watched
+    expect(node(pool, "mini")).toMatchObject({ state: "healthy", enabled: true });
+    const used: string[] = [];
+    for (let i = 0; i < 4; i += 1) await settle(pool.runOne("image", async (nodeRef) => { used.push(nodeRef.id); return i; }));
+    expect(used).toEqual(["mini", "mini", "mini", "mini"]);
+    const log: Run[] = [];
+    await settle(pool.distribute("image", [1, 2, 3, 4, 5, 6], job({ mini: 1_000, air: 1_000 }, log), { request: {} }));
+    expect(new Set(log.map((run) => run.node))).toEqual(new Set(["mini"]));
+  });
+
+  it("can switch the main machine off: the other one takes everything, and the main one is never used as a fallback", async () => {
+    const { pool, results } = makePool();
+    pool.applySettings({ mode: null, disabled: ["mini"] });
+    expect(node(pool, "mini")).toMatchObject({ state: "disabled", enabled: false });
+    const used: string[] = [];
+    await settle(pool.runOne("tts", async (nodeRef) => { used.push(nodeRef.id); return 1; }));
+    expect(used).toEqual(["air"]);
+    // with the Air gone there is nobody: the work must fail rather than quietly run on the machine that was switched off
+    pool.applyProbe("air", offline);
+    pool.applyProbe("air", offline);
+    await expect(settle(pool.runOne("tts", async () => 1))).rejects.toThrow(/Không có máy xử lý nào khả dụng/);
+    pool.applyProbe("air", results.air!);
+    await expect(settle(pool.runOne("tts", async () => 1))).resolves.toBe(1);
+  });
+
+  it("ignores a request to switch every machine off, and unknown machines", () => {
+    const { pool } = makePool();
+    pool.applySettings({ mode: null, disabled: ["mini", "air"] });
+    expect(pool.summary().nodes.map((item) => item.state)).not.toContain("disabled");
+    pool.applySettings({ mode: null, disabled: ["ghost"] });
+    expect(pool.summary().nodes.every((item) => item.enabled)).toBe(true);
+  });
+
+  it("switches back on, and a machine that is working finishes what it started", async () => {
+    const { pool } = makePool();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const running = pool.runOne("image", async () => { await held; return "done"; });
+    await vi.advanceTimersByTimeAsync(5);
+    const busyNode = pool.summary().nodes.find((item) => item.lanes.image!.running > 0)!;
+    pool.applySettings({ mode: null, disabled: [busyNode.id] });
+    release();
+    await expect(settle(running)).resolves.toBe("done");
+    pool.applySettings({ mode: null, disabled: [] });
+    expect(node(pool, busyNode.id).state).toBe("healthy");
+  });
+
+  it("lets the owner choose how work is split, falling back to the environment's mode when nothing is chosen", () => {
+    const { pool } = makePool();
+    expect(pool.summary().mode).toBe("auto");
+    pool.applySettings({ mode: "parallel", disabled: [] });
+    expect(pool.summary().mode).toBe("parallel");
+    expect(pool.mode).toBe("parallel");
+    pool.applySettings({ mode: null, disabled: [] });
+    expect(pool.summary().mode).toBe("auto");
+  });
+
+  it("logs a change once, not on every look at the settings", () => {
+    const messages: string[] = [];
+    const { pool } = makePool({ log: { info: (_fields, message) => messages.push(message), warn: () => undefined } });
+    pool.applySettings({ mode: null, disabled: ["air"] });
+    pool.applySettings({ mode: null, disabled: ["air"] });
+    pool.applySettings({ mode: null, disabled: [] });
+    expect(messages.filter((message) => message === "balancer_settings_changed")).toHaveLength(2);
+  });
+});
+
 describe("watching the machines", () => {
   it("counts a machine as down only after repeated misses, and up again at the first answer", () => {
     const { pool, results } = makePool();

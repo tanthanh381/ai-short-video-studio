@@ -232,3 +232,20 @@ describe("processLabel", () => {
     expect(processLabel({ id: "image", label: "Vẽ ảnh SDXL-Turbo" })).toBe("Vẽ ảnh SDXL-Turbo");
   });
 });
+
+describe("machines switched off in Cài đặt", () => {
+  const off = node("air", { state: "disabled", enabled: false, detail: "Đã tắt trong Cài đặt: không nhận việc mới", matchesPrimary: true });
+
+  it("is not an alarm: one quiet note, and no complaints about its memory or connection", () => {
+    const squeezed = { ...off, resources: { ...off.resources!, memUsedGb: 23.5, memPressure: "critical" as const, swapUsedGb: 7, swapTotalGb: 7 } };
+    const alerts = systemAlerts(system([node("mini"), squeezed]));
+    expect(alerts.map((alert) => [alert.id, alert.tone])).toEqual([["air-disabled", "info"]]);
+    expect(alerts[0]!.detail).toMatch(/Cài đặt → Máy xử lý video/);
+  });
+
+  it("counts only the machines that are on, and says how many are off", () => {
+    const tile = summaryTiles(system([node("mini"), off])).find((item) => item.id === "machines")!;
+    expect(tile).toMatchObject({ value: "1/1 hoạt động", tone: "ok" });
+    expect(tile.detail).toBe("1 sẵn sàng hoàn toàn · 1 máy đã tắt");
+  });
+});

@@ -5,7 +5,10 @@
  * With only the main machine configured it is a thin pass-through: no probing, no scheduling, the same calls in the
  * same order as before the pool existed.
  */
-import type { BalanceDecision, BalancerSummary, NodeActivityEvent, NodeHistoryPoint, NodeLaneSummary, NodeModelsSummary, NodeSummary } from "@studio/shared";
+import {
+  effectiveDisabled,
+  type BalancerSettings, type BalanceDecision, type BalancerSummary, type NodeActivityEvent, type NodeHistoryPoint, type NodeLaneSummary, type NodeModelsSummary, type NodeSummary,
+} from "@studio/shared";
 import { classifyError, NodeDownError } from "./node-errors";
 import {
   assessNode, busyRemainingMs, estimateMs, LANES, planLane, simulate,
@@ -242,6 +245,7 @@ export class NodePool {
   private readonly decisions: BalanceDecision[] = [];
   private readonly events: NodeActivityEvent[] = [];
   private readonly startedAt: number;
+  private modeOverride: BalanceMode | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly now: () => number;
 
@@ -289,7 +293,25 @@ export class NodePool {
   }
 
   get mode(): BalanceMode {
-    return this.options.mode;
+    return this.modeOverride ?? this.options.mode;
+  }
+
+  /**
+   * The owner's choices from Cài đặt: how to split the work, and which machines are switched off. A switched-off machine
+   * is still watched (the dashboard keeps showing it) but takes no new work; one that is already working finishes it.
+   * Switching off every machine is ignored: something has to do the work.
+   */
+  applySettings(settings: BalancerSettings) {
+    const ids = [...this.entries.keys()];
+    const off = new Set(effectiveDisabled(ids, settings.disabled));
+    const before = `${this.mode}|${ids.filter((id) => this.entries.get(id)!.snapshot.disabled).join(",")}`;
+    this.modeOverride = settings.mode;
+    for (const [id, entry] of this.entries) entry.snapshot.disabled = off.has(id);
+    const after = `${this.mode}|${[...off].join(",")}`;
+    if (after !== before) {
+      this.options.log?.info({ mode: this.mode, disabled: [...off] }, "balancer_settings_changed");
+      this.changed.notify();
+    }
   }
 
   /** Starts watching the machines; resolves once the first look at all of them is done (never rejects). */
@@ -430,14 +452,15 @@ export class NodePool {
     if (!this.distributed) return this.primary;
     const found = this.candidates(lane, request, tried).sort((a, b) => a.availableAt + a.estimate - (b.availableAt + b.estimate) || Number(b.local) - Number(a.local));
     const best = found[0];
-    if (!best) return tried.size === 0 ? this.primary : null; // nothing certain: try the main machine like before
+    // nothing certain: try the main machine like before (unless the owner switched it off)
+    if (!best) return tried.size === 0 && !this.entries.get(this.primary.id)!.snapshot.disabled ? this.primary : null;
     let chosen = best;
     const main = found.find((item) => item.local);
-    if (main && !best.local && this.options.mode !== "parallel") {
+    if (main && !best.local && this.mode !== "parallel") {
       const mainFinish = main.availableAt + main.estimate;
       const bestFinish = best.availableAt + best.estimate;
       const worthIt = mainFinish - bestFinish >= (this.options.minSavingsMs ?? DEFAULT_MIN_SAVINGS_MS) && bestFinish <= mainFinish * (1 - (this.options.minGain ?? DEFAULT_MIN_GAIN));
-      if (!worthIt || this.options.mode === "single") chosen = main;
+      if (!worthIt || this.mode === "single") chosen = main;
     }
     return { id: chosen.id, spec: this.entries.get(chosen.id)!.spec };
   }
@@ -525,7 +548,7 @@ export class NodePool {
       const main = this.entries.get(this.primary.id)!.snapshot;
       nodes = [{ id: main.id, local: true, availableAtMs: 0, durationMs: estimateMs(main, lane, { eligible: true, reasons: [], speed: 1, warmupMs: 0 }, ctx) }];
     }
-    return planLane(nodes, tasks, { mode: this.options.mode, minGain: this.options.minGain ?? DEFAULT_MIN_GAIN, minSavingsMs: this.options.minSavingsMs ?? DEFAULT_MIN_SAVINGS_MS });
+    return planLane(nodes, tasks, { mode: this.mode, minGain: this.options.minGain ?? DEFAULT_MIN_GAIN, minSavingsMs: this.options.minSavingsMs ?? DEFAULT_MIN_SAVINGS_MS });
   }
 
   /** Would this idle machine be given the next task by an earliest-finish schedule of what is still queued? */
@@ -678,7 +701,7 @@ export class NodePool {
 
   summary(): BalancerSummary {
     // One machine is not probed, so there is nothing true to say about it here; the worker's own health covers it.
-    if (!this.distributed) return { mode: this.options.mode, nodes: [], decisions: [] };
+    if (!this.distributed) return { mode: this.mode, nodes: [], decisions: [] };
     const ctx = this.context();
     const nodes: NodeSummary[] = [...this.entries.values()].map((entry) => {
       const snapshot = entry.snapshot;
@@ -698,7 +721,7 @@ export class NodePool {
       // Pictures and voices are what the machine is for; a missing LTX or hand-drawing server is normal on a second Mac.
       const core = (["image", "tts"] as const).map((lane) => lanes[lane]!);
       const coreReasons = [...new Set(core.flatMap((lane) => lane.reasons))];
-      const state: NodeSummary["state"] = !snapshot.up ? "offline"
+      const state: NodeSummary["state"] = snapshot.disabled ? "disabled" : !snapshot.up ? "offline"
         : paused ? "paused"
         : core.some((lane) => !lane.eligible) || coreReasons.length ? "degraded" : "healthy";
       const reasons = !snapshot.up || paused ? [...new Set(Object.values(lanes).flatMap((lane) => lane.reasons))] : coreReasons;
@@ -707,7 +730,8 @@ export class NodePool {
         id: snapshot.id,
         role: snapshot.local ? "primary" : "secondary",
         state,
-        detail: reasons.length ? reasons.slice(0, 3).join("; ") : "Sẵn sàng nhận việc",
+        detail: snapshot.disabled ? "Đã tắt trong Cài đặt: không nhận việc mới" : reasons.length ? reasons.slice(0, 3).join("; ") : "Sẵn sàng nhận việc",
+        enabled: !snapshot.disabled,
         rttMs: snapshot.rttMs,
         resources: status?.resources ? summarizeResources(status.resources) : null,
         lanes,
@@ -717,7 +741,7 @@ export class NodePool {
       };
     });
     return {
-      mode: this.options.mode,
+      mode: this.mode,
       nodes,
       decisions: [...this.decisions].reverse(),
       since: new Date(this.startedAt).toISOString(),

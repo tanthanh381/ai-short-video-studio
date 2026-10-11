@@ -84,8 +84,9 @@ import {
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
 import { AirSetupPanel } from "./AirSetupPanel";
+import { MachinesPanel } from "./MachinesPanel";
 import { SystemPage } from "./SystemPage";
-import { nodeActivity } from "./lib/air-setup";
+import { demoBalancerAfter, demoSystem } from "./lib/demo-system";
 import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
 import { resetPasswordView } from "./lib/auth";
@@ -3518,28 +3519,48 @@ function SettingsPage() {
       render: false,
     },
     serviceStatuses: defaultServiceStatuses,
-    balancer: null as BalancerSummary | null,
+    balancer: (isDemo ? demoSystem().balancer : null) as BalancerSummary | null,
     airSetup: null as AirSetupSummary | null,
     usageStats: defaultUsageStats as UsageStats,
   });
   const [busy, setBusy] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [machineBusy, setMachineBusy] = useState(false);
+  const [machineNotice, setMachineNotice] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
 
-  /** `quiet`: the refresh that follows an installation or a running video, without the spinner or an error message. */
-  async function refreshSettings(quiet = false) {
+  /** Reads the account's settings again; the page follows an installation or a running video without a click. */
+  async function refreshSettings() {
     if (isDemo) return;
-    if (!quiet) {
-      setRefreshing(true);
-      setMessage(null);
-    }
     try {
       const next = await api.getSettings();
       setSettings({ ...next, usageStats: next.usageStats ?? defaultUsageStats });
     } catch (error) {
-      if (!quiet) setMessage(error instanceof Error ? error.message : "Không thể kiểm tra trạng thái dịch vụ");
+      setMessage(error instanceof Error ? error.message : "Không thể đọc cài đặt từ máy chủ");
+    }
+  }
+
+  /** Switches a machine off or on, or changes how work is split; the server saves it and the worker follows at once. */
+  async function changeMachines(input: { mode?: BalancerSummary["mode"]; disabled?: string[] }) {
+    const current = settings.balancer;
+    if (!current) return;
+    setMachineBusy(true);
+    setMachineNotice(null);
+    try {
+      if (isDemo) {
+        setSettings((value) => ({ ...value, balancer: demoBalancerAfter(current, input) }));
+        setMachineNotice({ tone: "ok", text: "Chế độ mẫu chỉ minh họa: không đổi máy thật." });
+        return;
+      }
+      const result = await api.setBalancer(input);
+      setSettings((value) => ({ ...value, balancer: result.balancer ?? value.balancer }));
+      setMachineNotice(result.applied
+        ? { tone: "ok", text: "Đã lưu. Áp dụng cho các việc mới ngay bây giờ; việc đang chạy vẫn xong như cũ." }
+        : { tone: "warn", text: "Đã lưu nhưng worker chưa phản hồi ngay; nó sẽ áp dụng trong vài giây." });
+      if (!result.applied) window.setTimeout(() => void refreshSettings(), 4000);
+    } catch (error) {
+      setMachineNotice({ tone: "warn", text: error instanceof Error ? error.message : "Không lưu được lựa chọn máy" });
     } finally {
-      if (!quiet) setRefreshing(false);
+      setMachineBusy(false);
     }
   }
 
@@ -3553,7 +3574,7 @@ function SettingsPage() {
     || Boolean(settings.balancer?.nodes.some((node) => Object.values(node.lanes).some((lane) => lane.running > 0)));
   useEffect(() => {
     if (isDemo || !watching) return;
-    const timer = window.setInterval(() => void refreshSettings(true), 4000);
+    const timer = window.setInterval(() => void refreshSettings(), 4000);
     return () => window.clearInterval(timer);
   }, [isDemo, watching]);
 
@@ -3618,71 +3639,34 @@ function SettingsPage() {
     }
   }
 
-  const serviceState = (id: ServiceId, fallbackEnabled: boolean) => {
-    // Older API deployments may not return the live status map yet. Keep the
-    // settings screen usable while the user upgrades the backend.
-    const status = settings.serviceStatuses?.[id];
-    const meta = {
-      healthy: { className: "on", label: "Hoạt động" },
-      configured: { className: "configured", label: "Đã cấu hình" },
-      offline: { className: "off", label: "Mất kết nối" },
-      disabled: { className: "off", label: "Đang tắt" },
-      unknown: { className: "unknown", label: fallbackEnabled ? "Chưa kiểm tra" : "Chưa cấu hình" },
-    }[status?.state ?? (fallbackEnabled ? "unknown" : "disabled")];
-    return { ...meta, detail: status?.detail ?? "Chưa có dữ liệu kiểm tra" };
-  };
-  // Worker and FFmpeg are one machine to the user: show the worse of the two.
-  const worseState = (a: ReturnType<typeof serviceState>, b: ReturnType<typeof serviceState>) => {
-    const rank = { off: 0, unknown: 1, configured: 2, on: 3 } as Record<string, number>;
-    const worse = (rank[a.className] ?? 1) <= (rank[b.className] ?? 1) ? a : b;
-    return { ...worse, detail: a.detail === b.detail ? a.detail : `${a.detail} · ${b.detail}` };
-  };
-  const apiState = serviceState("api", true);
-  const supabaseState = serviceState("supabase", settings.capabilities.supabase);
-  const openaiState = serviceState("openai", settings.capabilities.openai);
-  const anthropicState = serviceState("anthropic", settings.capabilities.anthropic);
-  const ollamaState = serviceState("ollama", settings.capabilities.ollama);
-  const localMediaState = serviceState("localMedia", settings.capabilities.localMedia);
-  const faceDetailState = serviceState("faceDetail", settings.capabilities.localMedia);
-  const whiteboardState = serviceState("whiteboard", settings.capabilities.render);
-  const workerState = serviceState("worker", settings.capabilities.render);
-  const renderState = serviceState("render", settings.capabilities.render);
   return (
     <SimplePage
       title="Cài đặt"
-      subtitle="Tình trạng máy AI, hàng đợi video và dịch vụ trả phí tùy chọn."
+      subtitle="Chọn máy nào làm video và cách chia việc, dịch vụ trả phí tùy chọn, hàng đợi và ngân sách. Hiệu năng và tình trạng máy xem ở trang Hệ thống."
     >
       <div className="settings-page-grid">
         <section>
           <div className="section-heading-row">
             <div>
-              <h2>Máy AI của bạn</h2>
-              <p>Video được tạo hoàn toàn trên máy này. Trạng thái kiểm tra từ backend và worker.</p>
+              <h2>Máy xử lý video</h2>
+              <p>Tắt một máy để nó không nhận việc mới; việc đang chạy vẫn xong. Luôn cần giữ ít nhất một máy bật.</p>
             </div>
-            <button
-              className="button button-ghost"
-              type="button"
-              onClick={() => void refreshSettings()}
-              disabled={isDemo || refreshing}
-              aria-busy={refreshing}
-            >
-              <RefreshCw size={14} className={refreshing ? "spin" : undefined} />
-              {refreshing ? "Đang kiểm tra" : "Kiểm tra lại"}
-            </button>
           </div>
-          {([
-            ["Backend API", "Máy chủ đang phục vụ website", apiState],
-            ["Supabase", "Đăng nhập, dữ liệu và media", supabaseState],
-            ["Ollama", "Viết và chia cảnh kịch bản, không gửi nội dung ra ngoài", ollamaState],
-            ["Media local", "Vẽ ảnh SDXL, giọng VieNeu/Piper và Whisper trên máy này", localMediaState],
-            ["Sửa khuôn mặt", "Tự tìm và vẽ lại khuôn mặt trong ảnh có người", faceDetailState],
-            ["Worker dựng video", "Nhận việc từ hàng đợi, ghép và xuất MP4 bằng FFmpeg", worseState(workerState, renderState)],
-            ["Máy vẽ tay", "Vẽ từng nét cho phong cách Vẽ tay bảng trắng", whiteboardState],
-          ] as const).map(([name, detail, state]) => (
-            <ConnectionRow key={name} name={name} detail={detail} state={state} />
-          ))}
+          {settings.balancer && settings.balancer.nodes.length ? (
+            <MachinesPanel
+              balancer={settings.balancer}
+              busy={machineBusy}
+              notice={machineNotice}
+              services={settings.serviceStatuses}
+              onChange={(input) => void changeMachines(input)}
+            />
+          ) : (
+            <p className="microcopy">
+              Hiện chỉ có máy chính nên chưa có gì để bật hoặc tắt. Thêm máy phụ (ví dụ MacBook Air) theo hướng dẫn "Thêm máy phụ" trong <code>docs/TU-HOST.md</code>;
+              tình trạng các dịch vụ xem ở <Link to="/system">Hệ thống</Link>.
+            </p>
+          )}
           {settings.airSetup ? <AirSetupPanel setup={settings.airSetup} /> : null}
-          {settings.balancer ? <BalancerPanel balancer={settings.balancer} /> : null}
           <details className="settings-more" open={PAID_PROVIDERS.some((provider) => settings.apiKeys.keys[provider].saved) || undefined}>
             <summary>
               Dịch vụ trả phí (không bắt buộc)
@@ -3770,74 +3754,6 @@ function SettingsPage() {
         </section>
       </div>
     </SimplePage>
-  );
-}
-
-function ConnectionRow({ name, detail, state }: { name: string; detail: string; state: { className: string; label: string; detail: string } }) {
-  return (
-    <div className="connection-row">
-      <div>
-        <strong>{name}</strong>
-        <span>{detail}</span>
-      </div>
-      <b className={state.className} title={state.detail}>{state.label}</b>
-    </div>
-  );
-}
-
-const BALANCE_MODE_LABEL: Record<BalancerSummary["mode"], string> = {
-  auto: "Tự động: hệ thống đánh giá từng đợt rồi chọn chạy một máy hay song song",
-  single: "Một máy: chỉ dùng máy chính, các máy khác chờ dự phòng",
-  parallel: "Luôn song song: dùng mọi máy đang khả dụng",
-};
-const NODE_STATE_META: Record<NodeSummary["state"], { className: string; label: string }> = {
-  healthy: { className: "on", label: "Sẵn sàng" },
-  degraded: { className: "off", label: "Hạn chế" },
-  paused: { className: "unknown", label: "Tạm dừng" },
-  offline: { className: "off", label: "Mất kết nối" },
-};
-
-function nodeFacts(node: NodeSummary): string {
-  const resources: NodeResourceSummary | null = node.resources;
-  const facts: string[] = [];
-  if (resources?.memTotalGb) facts.push(`RAM ${resources.memTotalGb} GB`);
-  if (resources?.power === "battery") facts.push(`pin ${resources.batteryPercent ?? "?"}%`);
-  else if (resources?.power === "ac" && resources.batteryPercent !== null) facts.push(`cắm điện ${resources.batteryPercent}%`);
-  if (resources?.thermal === "throttled") facts.push("đang nóng");
-  if (resources?.loadAvg1 != null && resources.cpuCores) facts.push(`tải ${Math.round((resources.loadAvg1 / resources.cpuCores) * 100)}%`);
-  const image = node.lanes.image?.avgMs;
-  if (image) facts.push(`ảnh ~${Math.round(image / 1000)} giây`);
-  const activity = nodeActivity(node);
-  if (activity) facts.push(activity);
-  if (node.rttMs !== null && node.role === "secondary") facts.push(`${node.rttMs} ms`);
-  return facts.join(" · ");
-}
-
-/** The machines that share the work, what each can take right now, and what the balancer last decided. */
-function BalancerPanel({ balancer }: { balancer: BalancerSummary }) {
-  const last = balancer.decisions[0];
-  return (
-    <div className="balancer-panel">
-      <h3>Máy cùng xử lý video</h3>
-      <p className="microcopy">{BALANCE_MODE_LABEL[balancer.mode]}.</p>
-      {balancer.nodes.map((node) => {
-        const meta = NODE_STATE_META[node.state];
-        const facts = nodeFacts(node);
-        return (
-          <ConnectionRow
-            key={node.id}
-            name={`${node.id}${node.role === "primary" ? " (máy chính)" : ""}`}
-            detail={[node.detail, facts].filter(Boolean).join(" · ")}
-            state={{ ...meta, detail: node.detail }}
-          />
-        );
-      })}
-      {last ? (
-        <p className="microcopy balancer-last">
-          Lần phân việc gần nhất ({new Date(last.at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}, {last.tasks} việc): {last.reason}.
-        </p>
-      ) : null}
-    </div>
   );
 }
 

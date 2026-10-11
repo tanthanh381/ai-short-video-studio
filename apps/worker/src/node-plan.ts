@@ -77,6 +77,8 @@ export type NodeSnapshot = {
   local: boolean;
   /** Reachable at all (debounced over several probes). */
   up: boolean;
+  /** Switched off by the owner in Cài đặt: still watched, but it takes no new work. */
+  disabled?: boolean;
   error?: string;
   mediaUp: boolean;
   llmUp: boolean;
@@ -123,6 +125,10 @@ export function assessNode(node: NodeSnapshot, lane: Lane, ctx: AssessContext): 
   const primary = ctx.nodes.find((other) => other.local);
   const request = ctx.request ?? {};
 
+  if (node.disabled) {
+    reasons.push("đã tắt trong Cài đặt");
+    return out(false);
+  }
   if (!node.up) {
     reasons.push(node.error ?? "mất kết nối");
     return out(false);

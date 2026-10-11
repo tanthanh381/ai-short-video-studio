@@ -28,9 +28,13 @@ import {
   type Project,
   voiceSample,
   type SystemJob,
+  balancerModeSchema,
+  nodeIdSchema,
+  type BalancerSettings,
   type SystemJobsSummary,
   type SystemSummary,
 } from "@studio/shared";
+import { readBalancerSettings, writeBalancerSettings } from "@studio/shared/balancer-store";
 import { checkKeyWithProvider, createKeyVault } from "./api-keys";
 import type { AppConfig } from "./config";
 import type { AdminClient } from "./db";
@@ -528,6 +532,40 @@ export function createApp(config: AppConfig, db: AdminClient) {
     const services = await collectServiceStatuses(1_500);
     const body: SystemSummary = { checkedAt: new Date().toISOString(), balancer: balancerSnapshot, services, jobs: await getJobsSummary(req.userId!) };
     res.json(body);
+  });
+
+  // Cài đặt → "Máy xử lý video": switch a machine off or on, choose how work is split. Saved in the private bucket; the worker
+  // follows it (and is told right away so the page can show the result at once).
+  const balancerChoice = z.object({ mode: balancerModeSchema.nullable().optional(), disabled: z.array(nodeIdSchema).max(16).optional() });
+  app.put("/v1/balancer", async (req, res) => {
+    const input = balancerChoice.parse(req.body);
+    await collectServiceStatuses(1_500);
+    const known = balancerSnapshot?.nodes.map((node) => node.id) ?? [];
+    if (!known.length) return res.status(409).json({ error: "Chưa có máy phụ nào để bật hoặc tắt. Thêm máy phụ trước (xem hướng dẫn trong docs/TU-HOST.md)." });
+    const unknown = (input.disabled ?? []).filter((id) => !known.includes(id));
+    if (unknown.length) return res.status(400).json({ error: `Không có máy tên ${unknown.join(", ")}` });
+    if (input.disabled && input.disabled.length >= known.length) return res.status(400).json({ error: "Cần giữ ít nhất một máy đang bật để làm video." });
+    const saved = await readBalancerSettings(db);
+    const next: BalancerSettings = {
+      mode: input.mode === undefined ? saved.mode : input.mode,
+      disabled: [...new Set(input.disabled ?? saved.disabled)],
+    };
+    await writeBalancerSettings(db, next);
+    req.log.info({ mode: next.mode, disabled: next.disabled }, "balancer_settings_saved");
+    // best effort: the worker also re-reads the file every ten seconds
+    let applied = false;
+    try {
+      const reply = await fetch(`${config.WORKER_HEALTH_URL.replace(/\/$/, "")}/balancer/reload`, { method: "POST", signal: AbortSignal.timeout(2_500) });
+      if (reply.ok) {
+        const body = (await reply.json()) as { balancer?: BalancerSummary };
+        if (body.balancer && body.balancer.nodes.length > 1) balancerSnapshot = body.balancer;
+        serviceStatusCache = null;
+        applied = true;
+      }
+    } catch {
+      applied = false;
+    }
+    res.json({ settings: next, applied, balancer: balancerSnapshot });
   });
 
   app.get("/v1/settings", async (req, res) => {

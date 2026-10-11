@@ -205,6 +205,9 @@ export const api = {
       ? demoApi.getJobs(id)
       : request<Job[]>(`/v1/projects/${id}/jobs`),
   getSettings: () => request<AccountSettings>("/v1/settings"),
+  /** Cài đặt → Máy xử lý video: switch machines off or on and choose how work is split. `applied`: the worker already follows it. */
+  setBalancer: (input: { mode?: BalancerSummary["mode"] | null; disabled?: string[] }) =>
+    request<{ settings: { mode: BalancerSummary["mode"] | null; disabled: string[] }; applied: boolean; balancer: BalancerSummary | null }>("/v1/balancer", { method: "PUT", body: JSON.stringify(input) }),
   /** The "Hệ thống" dashboard: machines, models, services and jobs. */
   getSystem: () => (appConfig.demoMode ? Promise.resolve(demoSystem()) : request<SystemSummary>("/v1/system")),
   getLocalModels: () => request<LocalModelCatalog>("/v1/local-models"),

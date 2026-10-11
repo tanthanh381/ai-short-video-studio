@@ -132,6 +132,83 @@ describe("API", () => {
       vi.unstubAllGlobals();
     });
 
+    describe("bat tat may", () => {
+      const missing = { name: "StorageUnknownError", message: "{}", originalError: new Response(JSON.stringify({ statusCode: "404", code: "NoSuchKey" }), { status: 400 }) };
+      function dbWithSettings(initial?: string) {
+        const store = { content: initial ?? null as string | null, uploads: [] as string[] };
+        const db = {
+          auth: owner.auth,
+          from: owner.from,
+          storage: {
+            getBucket: async () => ({ data: { id: "app-secrets" } }),
+            createBucket: async () => ({ error: null }),
+            from: () => ({
+              download: async () => store.content === null ? { data: null, error: missing } : { data: { text: async () => store.content as string }, error: null },
+              upload: async (_path: string, body: string) => { store.uploads.push(body); store.content = body; return { error: null }; },
+            }),
+          },
+        };
+        return { db, store };
+      }
+      const workerWith = (nodes: unknown[], reloadReply?: unknown) => vi.stubGlobal("fetch", vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).endsWith("/balancer/reload")) {
+          expect(init?.method).toBe("POST");
+          return reloadReply === undefined ? new Response("{}", { status: 503 }) : new Response(JSON.stringify(reloadReply));
+        }
+        return new Response(JSON.stringify({ ok: true, services: { worker: { state: "healthy", detail: "Worker đang chạy" } }, balancer: { mode: "auto", nodes, decisions: [] } }));
+      }));
+      const both = [node("mini", "primary"), node("air", "secondary")];
+
+      it("luu viec tat may Air, bao worker doc lai ngay va tra ve trang thai moi", async () => {
+        const after = [node("mini", "primary"), { ...node("air", "secondary"), state: "disabled", enabled: false }];
+        workerWith(both, { ok: true, balancer: { mode: "auto", nodes: after, decisions: [] } });
+        const { db, store } = dbWithSettings();
+        const app = createApp({ ...config, RENDER_WORKER_ENABLED: true }, db as never);
+        const response = await request(app).put("/v1/balancer").set("Authorization", "Bearer test").send({ disabled: ["air"] });
+        expect(response.status).toBe(200);
+        expect(JSON.parse(store.uploads[0]!)).toEqual({ mode: null, disabled: ["air"] });
+        expect(response.body).toMatchObject({ applied: true, settings: { mode: null, disabled: ["air"] } });
+        expect(response.body.balancer.nodes[1]).toMatchObject({ id: "air", state: "disabled", enabled: false });
+        vi.unstubAllGlobals();
+      });
+
+      it("giu nguyen phan con lai khi chi doi cach chia viec, va noi that vong khi worker khong tra loi", async () => {
+        workerWith(both);
+        const { db, store } = dbWithSettings(JSON.stringify({ mode: null, disabled: ["air"] }));
+        const app = createApp({ ...config, RENDER_WORKER_ENABLED: true }, db as never);
+        const response = await request(app).put("/v1/balancer").set("Authorization", "Bearer test").send({ mode: "parallel" });
+        expect(response.status).toBe(200);
+        expect(JSON.parse(store.uploads[0]!)).toEqual({ mode: "parallel", disabled: ["air"] }); // the machine stays off
+        expect(response.body.applied).toBe(false); // saved; the worker picks it up within ten seconds
+        vi.unstubAllGlobals();
+      });
+
+      it("khong cho tat het cac may, khong nhan may la, va noi ro khi chua co may phu", async () => {
+        workerWith(both);
+        const { db, store } = dbWithSettings();
+        const app = createApp({ ...config, RENDER_WORKER_ENABLED: true }, db as never);
+        const put = (body: unknown) => request(app).put("/v1/balancer").set("Authorization", "Bearer test").send(body as object);
+        const all = await put({ disabled: ["mini", "air"] });
+        expect(all.status).toBe(400);
+        expect(all.body.error).toMatch(/ít nhất một máy/);
+        const ghost = await put({ disabled: ["ghost"] });
+        expect(ghost.status).toBe(400);
+        expect(ghost.body.error).toMatch(/ghost/);
+        expect((await put({ mode: "turbo" })).status).toBe(400);
+        expect(store.uploads).toEqual([]); // nothing was saved by any of those
+        vi.unstubAllGlobals();
+        workerWith([]);
+        const alone = await request(createApp({ ...config, RENDER_WORKER_ENABLED: true }, dbWithSettings().db as never)).put("/v1/balancer").set("Authorization", "Bearer test").send({ disabled: ["air"] });
+        expect(alone.status).toBe(409);
+        vi.unstubAllGlobals();
+      });
+
+      it("can dang nhap", async () => {
+        const { db } = dbWithSettings();
+        expect((await request(createApp(config, db as never)).put("/v1/balancer").send({ disabled: [] })).status).toBe(401);
+      });
+    });
+
     describe("bang dieu khien he thong", () => {
       const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3600_000).toISOString();
       const jobsTable = (rowsFor: (columns: string) => unknown[]) => ({

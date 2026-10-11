@@ -1,4 +1,4 @@
-import type { NodeHistoryPoint, NodeSummary, SystemSummary } from "@studio/shared";
+import type { BalancerSummary, NodeHistoryPoint, NodeSummary, SystemSummary } from "@studio/shared";
 
 /** Sample numbers for the "Hệ thống" page in the demo build (no worker to ask): two Macs, one of them short of memory. */
 
@@ -101,5 +101,17 @@ export function demoSystem(now = Date.now()): SystemSummary {
         { id: "j1", type: "create_video", title: "Đạo lý cổ phong", status: "completed", stage: "Hoàn thành", progress: 100, startedAt: iso(-7_200_000), finishedAt: iso(-6_870_000), durationSeconds: 330 },
       ],
     },
+  };
+}
+
+/** What the demo page shows after a switch is flipped (the real one asks the server, which saves it and tells the worker). */
+export function demoBalancerAfter(balancer: BalancerSummary, input: { mode?: BalancerSummary["mode"] | null; disabled?: string[] }): BalancerSummary {
+  const off = new Set(input.disabled ?? balancer.nodes.filter((node) => node.enabled === false).map((node) => node.id));
+  return {
+    ...balancer,
+    mode: input.mode ?? balancer.mode,
+    nodes: balancer.nodes.map((node) => off.has(node.id)
+      ? { ...node, enabled: false, state: "disabled", detail: "Đã tắt trong Cài đặt: không nhận việc mới" }
+      : { ...node, enabled: true, state: node.state === "disabled" ? "healthy" : node.state, detail: node.state === "disabled" ? "Sẵn sàng nhận việc" : node.detail }),
   };
 }

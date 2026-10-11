@@ -6,6 +6,7 @@ export * from "./srt";
 export * from "./duration";
 export * from "./api-keys";
 export * from "./nodes";
+export * from "./node-settings";
 
 import type { VisualPreset } from "./schemas";
 

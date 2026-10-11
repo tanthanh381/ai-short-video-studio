@@ -1,6 +1,7 @@
 /** Shapes the worker reports about its machines (worker /health → API /v1/settings → Settings page). */
 
-export type NodeHealthState = "healthy" | "degraded" | "offline" | "paused";
+/** `disabled`: switched off by the owner in Cài đặt (still watched, takes no new work). */
+export type NodeHealthState = "healthy" | "degraded" | "offline" | "paused" | "disabled";
 
 export type NodeLaneSummary = {
   eligible: boolean;
@@ -72,6 +73,8 @@ export type NodeSummary = {
   rttMs: number | null;
   resources: NodeResourceSummary | null;
   lanes: Record<string, NodeLaneSummary>;
+  /** False when the owner switched the machine off in Cài đặt. */
+  enabled?: boolean;
   models?: NodeModelsSummary;
   /** Oldest first, one point every few seconds for the last half hour. */
   history?: NodeHistoryPoint[];

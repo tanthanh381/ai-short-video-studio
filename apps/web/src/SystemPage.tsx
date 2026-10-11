@@ -85,7 +85,7 @@ export function SystemPage() {
       <div className="page-heading">
         <div>
           <h1>Hệ thống</h1>
-          <p>Hiệu năng từng máy, mô hình AI đang chạy và việc đang làm. Số liệu tự cập nhật mỗi {REFRESH_MS / 1000} giây khi bạn mở trang này.</p>
+          <p>Hiệu năng từng máy, mô hình AI đang chạy và việc đang làm; chỉ để theo dõi, tự cập nhật mỗi {REFRESH_MS / 1000} giây khi bạn mở trang này. Muốn bật hoặc tắt một máy, đổi cách chia việc: vào <Link to="/settings">Cài đặt</Link>.</p>
         </div>
         <div className="sys-live" role="status" aria-live="polite">
           <span className={`sys-dot tone-${live.tone}`} aria-hidden="true" />
@@ -129,7 +129,7 @@ export function SystemPage() {
           </div>
           <p className="microcopy sys-foot">
             Số đếm việc tính từ lúc worker khởi động{system.balancer?.since ? ` (${new Date(system.balancer.since).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })})` : ""}.
-            Chế độ chia việc, khóa API và dịch vụ trả phí nằm ở <Link to="/settings">Cài đặt</Link>.
+            Bật hoặc tắt máy, cách chia việc, khóa API và dịch vụ trả phí nằm ở <Link to="/settings">Cài đặt</Link>.
           </p>
         </>
       )}
@@ -218,7 +218,7 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
   const biggest = Math.max(0.01, ...processes.map((process) => process.memGb));
   const Icon = node.role === "primary" ? Server : Laptop;
   return (
-    <article className="sys-card sys-machine" aria-label={`Máy ${node.id}`}>
+    <article className={`sys-card sys-machine${node.state === "disabled" ? " is-off" : ""}`} aria-label={`Máy ${node.id}`}>
       <header>
         <Icon size={22} aria-hidden="true" />
         <div>
@@ -227,6 +227,7 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
         </div>
         <span className={`sys-badge tone-${state.tone}`}>{state.label}</span>
       </header>
+      {node.state === "disabled" ? <p className="sys-off-note">Máy này đang tắt nên không nhận việc mới, nhưng vẫn được theo dõi. <Link to="/settings">Bật lại ở Cài đặt</Link>.</p> : null}
       <div className="sys-chips">
         {node.rttMs !== null && node.role === "secondary" ? <span>độ trễ mạng {node.rttMs} ms</span> : null}
         {node.role === "secondary" && node.matchesPrimary === true ? <span className="tone-ok">cấu hình giống máy chính</span> : null}

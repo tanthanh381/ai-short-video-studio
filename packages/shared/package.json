@@ -15,6 +15,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./secret-box": "./src/secret-box.ts"
+    "./secret-box": "./src/secret-box.ts",
+    "./balancer-store": "./src/balancer-store.ts"
   }
 }

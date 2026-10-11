@@ -10,6 +10,7 @@ import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, typ
 import { getConfig } from "./config";
 import { fetchAirSetup } from "./air-setup";
 import { AnthropicStoryboardAdapter } from "./anthropic";
+import { readBalancerSettings } from "@studio/shared/balancer-store";
 import { loadUserKey } from "./user-keys";
 import { OllamaStoryboardAdapter } from "./ollama";
 import { markFatal } from "./node-errors";
@@ -67,6 +68,14 @@ const pool = new NodePool(parseNodeSpecs(config), {
   probe: createProbe(),
   log,
 });
+/** Follows the owner's choices from Cài đặt (machines switched off, how work is split); a hiccup keeps the last choices. */
+async function followBalancerSettings() {
+  try {
+    pool.applySettings(await readBalancerSettings(db));
+  } catch (error) {
+    log.warn({ err: error instanceof Error ? error.message : String(error) }, "balancer_settings_unreadable");
+  }
+}
 const ollamaAdapters = new Map<string, OllamaStoryboardAdapter>();
 /** The Ollama adapter of one machine; its requests give up when the machine is declared down. */
 function ollamaOn(id: string): OllamaStoryboardAdapter {
@@ -164,6 +173,13 @@ async function workerHealth() {
 }
 
 const healthServer = createServer(async (request, response) => {
+  // The API asks for this right after the owner saves a choice in Cài đặt, instead of waiting for the next look.
+  if (request.method === "POST" && request.url === "/balancer/reload") {
+    await followBalancerSettings();
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ok: true, balancer: pool.summary() }));
+    return;
+  }
   if (request.url !== "/health") {
     response.writeHead(404, { "content-type": "application/json" });
     response.end(JSON.stringify({ error: "Not found" }));
@@ -1046,16 +1062,21 @@ async function poll() {
 }
 
 let stopping = false;
+const settingsWatch = setInterval(() => void followBalancerSettings(), 10_000);
+settingsWatch.unref();
 process.on("SIGTERM", () => {
   stopping = true;
+  clearInterval(settingsWatch);
   pool.stop();
   healthServer.close();
 });
 process.on("SIGINT", () => {
   stopping = true;
+  clearInterval(settingsWatch);
   pool.stop();
   healthServer.close();
 });
+await followBalancerSettings(); // machines the owner switched off must not get the first job either
 await pool.start(); // the first look at every machine, so the log and the first job already know who is available
 log.info(
   {
