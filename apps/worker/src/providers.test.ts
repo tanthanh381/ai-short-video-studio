@@ -538,7 +538,7 @@ describe("idea mode becomes plain narration then faithful scenes", () => {
   it("sizes the budget to the voice: a calmer voice gets fewer words for the same minute", async () => {
     const provider = { writeScript: vi.fn(async (_request: unknown) => script), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
     await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: idea, voice: "triet-ly" });
-    expect(provider.writeScript.mock.calls[0]![0]).toMatchObject({ plan: { words: { target: 204 } } });
+    expect(provider.writeScript.mock.calls[0]![0]).toMatchObject({ plan: { words: { target: 186 } } }); // 3.1 words a second for the reflective voice
   });
 
   it("keeps text that already reads at the chosen length word for word", async () => {

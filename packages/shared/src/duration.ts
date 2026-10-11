@@ -7,29 +7,52 @@ export const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120, 180] as const;
 export type DurationSec = (typeof DURATION_OPTIONS)[number];
 
 /**
- * Spoken words per second of a finished video. The voice bridge stretches every voice to PACE_WPS × mood × reading
- * speed (local-tools/media_server.py, PACE_TARGET_WPS and VOICE_PRESETS); measured 3.77-3.79 w/s for a 1.02 voice.
+ * Spoken words per second of a finished video, worked out like the voice bridge does it (local-tools/media_server.py: PACE_TARGET_WPS,
+ * PACE_VIDEO_FACTOR, PACE_TEMPO_RANGE, VOICE_PRESETS; a test keeps the two in step). A voice is brought to PACE_WPS × mood words a
+ * second of finished video, but only within TEMPO_RANGE of its own pace: a stronger time stretch is audible, so a naturally slow
+ * voice (Đức Trí, 2.9 words a second) reads at about 3 rather than being forced to 3.7.
  */
 export const PACE_WPS = 3.7;
+/** Share of a finished narration that is speech; the rest is the pauses between phrases. */
+export const SPEECH_SHARE = 0.84;
+export const TEMPO_RANGE = { min: 0.85, max: 1.18 } as const;
 
 /** Mood of each voice, as in media_server.py VOICE_PRESETS (a test keeps the two in sync). */
 export const VOICE_MOOD: Record<string, number> = {
-  "doc-truyen": 1.0,
-  "co-trang": 0.93,
-  "co-trang-nu": 0.95,
-  "triet-ly": 0.92,
-  "tam-su": 0.95,
+  "doc-truyen": 0.8,
+  "co-trang": 0.8,
+  "co-trang-nu": 0.86,
+  "triet-ly": 0.84,
+  "tam-su": 0.78,
   "tin-tuc": 1.05,
   "tin-tuc-nu": 1.05,
   "thuyet-minh": 1.02,
   "nang-dong": 1.05,
 };
 
+/** Words a second each voice speaks on its own, without pauses or any stretch (media_server.py VOICE_PRESETS, third value). */
+export const VOICE_NATIVE_WPS: Record<string, number> = {
+  "doc-truyen": 2.87,
+  "co-trang": 2.89,
+  "co-trang-nu": 3.58,
+  "triet-ly": 3.69,
+  "tam-su": 2.78,
+  "tin-tuc": 3.34,
+  "tin-tuc-nu": 4.16,
+  "thuyet-minh": 4.1,
+  "nang-dong": 4.3,
+};
+
 /** How far a script may miss its word budget before it is rewritten or trimmed (±10% ≈ ±6 s on a minute). */
 export const LENGTH_TOLERANCE = 0.1;
 
 export function spokenWordsPerSecond(voice: string, voiceSpeed = 1): number {
-  return PACE_WPS * (VOICE_MOOD[voice] ?? 1) * Math.min(2, Math.max(0.5, voiceSpeed || 1));
+  const speed = Math.min(2, Math.max(0.5, voiceSpeed || 1));
+  const mood = VOICE_MOOD[voice] ?? 1;
+  const native = VOICE_NATIVE_WPS[voice];
+  if (!native) return PACE_WPS * mood * speed; // a voice that was never measured
+  const tempo = Math.min(TEMPO_RANGE.max, Math.max(TEMPO_RANGE.min, (PACE_WPS * mood) / SPEECH_SHARE / native));
+  return native * tempo * speed * SPEECH_SHARE;
 }
 
 export function narrationSeconds(words: number, voice: string, voiceSpeed = 1): number {

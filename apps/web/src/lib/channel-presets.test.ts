@@ -67,8 +67,8 @@ describe("channel presets", () => {
   });
 
   it("estimates narration length from words, the voice's pace and reading speed", () => {
-    expect(estimatedNarrationSeconds(309, "doc-truyen", 1)).toBe(84); // "Ăn khế trả vàng" at the normalised pace
-    expect(estimatedNarrationSeconds(309, "doc-truyen", 1.2)).toBe(70);
-    expect(estimatedNarrationSeconds(309, "triet-ly", 1)).toBe(91); // a calmer voice takes longer
+    expect(estimatedNarrationSeconds(309, "doc-truyen", 1)).toBe(109); // "Ăn khế trả vàng": a slow storyteller reads about 2.85 words a second, pauses included
+    expect(estimatedNarrationSeconds(309, "doc-truyen", 1.2)).toBe(91);
+    expect(estimatedNarrationSeconds(309, "triet-ly", 1)).toBe(99);
   });
 });

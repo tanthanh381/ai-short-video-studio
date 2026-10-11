@@ -1,16 +1,16 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DURATION_OPTIONS, VOICE_MOOD, contentPlan, durationLabel, narrationSeconds, paceCorrection, wordBudget } from "./duration";
+import { DURATION_OPTIONS, SPEECH_SHARE, TEMPO_RANGE, VOICE_MOOD, VOICE_NATIVE_WPS, contentPlan, durationLabel, narrationSeconds, paceCorrection, spokenWordsPerSecond, wordBudget } from "./duration";
 import { VOICE_PRESETS } from "./voices";
 import { projectSettingsSchema } from "./schemas";
 
 describe("video length from an idea", () => {
-  it("budgets words for the voice's real pace (3.7 w/s × mood × speed), within ±10%", () => {
+  it("budgets words for the voice's real pace (its own pace stretched towards 3.7 w/s × mood, × speed), within ±10%", () => {
     expect(wordBudget(60, "thuyet-minh")).toEqual({ target: 226, min: 203, max: 249 });
     // A calmer voice reads fewer words in the same minute; a faster reading speed more.
     expect(wordBudget(60, "triet-ly").target).toBeLessThan(wordBudget(60, "nang-dong").target);
-    expect(wordBudget(30, "doc-truyen", 1.2).target).toBe(133);
+    expect(wordBudget(30, "doc-truyen", 1.2).target).toBe(102); // 2.85 w/s × 1.2
     for (const seconds of DURATION_OPTIONS) {
       const { target } = wordBudget(seconds, "tam-su");
       expect(Math.abs(narrationSeconds(target, "tam-su") - seconds)).toBeLessThan(0.5);
@@ -56,14 +56,37 @@ describe("video length from an idea", () => {
     expect(DURATION_OPTIONS.map(durationLabel)).toEqual(["15 giây", "30 giây", "45 giây", "1 phút", "1 phút 30 giây", "2 phút", "3 phút"]);
   });
 
-  it("knows the mood of every voice, the same as the voice bridge uses", () => {
+  it("knows the mood, the own pace and the pacing rules of every voice, the same as the voice bridge uses", () => {
     expect(Object.keys(VOICE_MOOD).sort()).toEqual(VOICE_PRESETS.map((preset) => preset.id).sort());
+    expect(Object.keys(VOICE_NATIVE_WPS).sort()).toEqual(Object.keys(VOICE_MOOD).sort());
     const bridge = readFileSync(join(__dirname, "../../../local-tools/media_server.py"), "utf8");
     for (const [voice, mood] of Object.entries(VOICE_MOOD)) {
-      const match = bridge.match(new RegExp(`"${voice}": \\("[^"]+", ([\\d.]+), [\\d.]+\\)`));
+      const match = bridge.match(new RegExp(`"${voice}": \\("[^"]+", ([\\d.]+), ([\\d.]+)\\)`));
       expect(match, voice).not.toBeNull();
       expect(Number(match![1]), voice).toBe(mood);
+      expect(Number(match![2]), voice).toBe(VOICE_NATIVE_WPS[voice]);
     }
     expect(bridge).toMatch(/PACE_TARGET_WPS = float\(os\.getenv\("PACE_TARGET_WPS", "3\.7"\)\)/);
+    expect(bridge).toContain(`PACE_VIDEO_FACTOR = ${SPEECH_SHARE}\n`);
+    expect(bridge).toContain(`PACE_TEMPO_RANGE = (${TEMPO_RANGE.min}, ${TEMPO_RANGE.max})`);
+  });
+
+  it("gives the same words a second as the bridge's pace_tempo (numbers taken from it)", () => {
+    // python3: native * pace_tempo(voice, "vieneu") * PACE_VIDEO_FACTOR for each preset
+    const fromBridge = { "doc-truyen": 2.845, "co-trang": 2.865, "co-trang-nu": 3.182, "triet-ly": 3.108, "tam-su": 2.756, "tin-tuc": 3.311, "tin-tuc-nu": 3.885, "thuyet-minh": 3.774, "nang-dong": 3.885 };
+    for (const [voice, expected] of Object.entries(fromBridge)) expect(spokenWordsPerSecond(voice), voice).toBeCloseTo(expected, 2);
+  });
+
+  it("never asks a voice for more than the stretch it can take, and still honours the video's own reading speed", () => {
+    for (const voice of Object.keys(VOICE_MOOD)) {
+      const tempo = spokenWordsPerSecond(voice) / SPEECH_SHARE / VOICE_NATIVE_WPS[voice]!;
+      expect(tempo, voice).toBeGreaterThanOrEqual(TEMPO_RANGE.min - 1e-9);
+      expect(tempo, voice).toBeLessThanOrEqual(TEMPO_RANGE.max + 1e-9);
+    }
+    expect(spokenWordsPerSecond("doc-truyen", 1.2) / spokenWordsPerSecond("doc-truyen", 1)).toBeCloseTo(1.2);
+    expect(spokenWordsPerSecond("giong-la")).toBeCloseTo(3.7); // a voice that was never measured keeps the plain target
+    // a slow storytelling voice is not forced up to the short-form pace: a minute holds about 170 words, not 222
+    expect(wordBudget(60, "doc-truyen").target).toBeLessThan(180);
+    expect(wordBudget(60, "tin-tuc-nu").target).toBeGreaterThan(220);
   });
 });

@@ -142,9 +142,12 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual("".join(cue["text"] for cue in cues), script)
         self.assertEqual(spoken_text("".join(cue["text"] for cue in cues)), script)
         elapsed_samples = 0
-        for cue, (phrase, samples) in zip(cues, processes.synthesized):
+        for index, (cue, (phrase, samples)) in enumerate(zip(cues, processes.synthesized)):
+            last = index == len(cues) - 1
+            # a pause follows every phrase (the fake audio has no silence of its own): between sentences and, shorter, at the end
+            pause = int(self.media.pause_seconds(cue["text"], "Linh") * (self.media.SCENE_END_PAUSE if last else 1.0) * processes.rate)
             self.assertEqual(cue["startMs"], round(elapsed_samples * 1000 / processes.rate))
-            elapsed_samples += samples
+            elapsed_samples += samples + pause
             self.assertEqual(cue["endMs"], round(elapsed_samples * 1000 / processes.rate))
             self.assertGreater(cue["endMs"], cue["startMs"])
         self.assertEqual(result["durationMs"], round(elapsed_samples * 1000 / processes.rate))
@@ -153,9 +156,10 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             self.assertEqual(audio.getframerate(), processes.rate)
             self.assertEqual(audio.getnchannels(), 1)
             self.assertEqual(audio.getsampwidth(), 2)
-        # Unequal audio durations prove that the cues do not use text length.
-        self.assertEqual(cues[0]["endMs"] - cues[0]["startMs"], 500)
-        self.assertEqual(cues[1]["endMs"] - cues[1]["startMs"], 1500)
+        # Unequal audio durations prove that the cues do not use text length (the speech is 0.5 s and 1.5 s; the rest is pause).
+        pauses = [int(self.media.pause_seconds(cue["text"], "Linh") * processes.rate) for cue in cues]
+        self.assertEqual(cues[0]["endMs"] - cues[0]["startMs"], round((11025 + pauses[0]) * 1000 / processes.rate))
+        self.assertEqual(cues[1]["endMs"] - cues[1]["startMs"], round((33075 + pauses[1]) * 1000 / processes.rate))
 
     def test_empty_pcm_from_a_successful_process_is_rejected(self):
         processes = FakeSpeechProcesses([0])
@@ -185,9 +189,11 @@ class LocalSpeechCaptionTests(unittest.TestCase):
              patch.object(self.media, "_http_wav", side_effect=fake_http), \
              patch.object(self.media.subprocess, "run", side_effect=fake_run):
             result = self.media.tts_aligned("Trăng treo đầu núi.", "co-trang")
-        self.assertEqual(sent[0][1]["voice"], "Hải Đăng")
+        self.assertEqual(sent[0][1]["voice"], "Thiền Tâm Đức")
         self.assertAlmostEqual(sent[0][1]["speed"], self.media.pace_tempo("co-trang", "vieneu"))
-        self.assertEqual(result["durationMs"], 500)
+        # half a second of speech, then the pause a narration ends with (a sentence pause of this voice, a little shorter at the end)
+        ending = self.media.pause_seconds("Trăng treo đầu núi.", "co-trang") * self.media.SCENE_END_PAUSE
+        self.assertEqual(result["durationMs"], round((11025 + int(ending * 22050)) * 1000 / 22050))
 
     def test_vieneu_receives_sentence_emotion_but_subtitle_keeps_original_text(self):
         sent = []
@@ -213,7 +219,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             result = self.media.tts_aligned(script, "tam-su")
         self.assertIn("[thở dài]", sent[0][1]["input"])
         self.assertEqual("".join(cue["text"] for cue in result["cues"]), script)
-        self.assertLess(sent[0][1]["speed"], 0.92)
+        self.assertAlmostEqual(sent[0][1]["speed"], self.media.pace_tempo("tam-su", "vieneu", 1.0, 0.94))  # the sigh is read a little slower
 
     def test_every_vieneu_preset_uses_a_supported_voice_name(self):
         supported = {
@@ -528,15 +534,124 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             self.media.synth_phrase("Xin chào.", workdir, 0, "doc-truyen", "vieneu", 1.3)
         self.assertTrue(any(f.startswith("atempo=1.3") or f.startswith("atempo=1.2") or f.startswith("atempo=1.4") for f in filters), filters)
 
-    def test_every_voice_reaches_the_short_form_pace_at_normal_speed(self):
+    # --- natural delivery: pauses, lead-ins, levels, cues ---------------------------------------------------------------
+
+    @staticmethod
+    def tone(ms, amplitude=8000, rate=22050):
+        import array as arr
+        return arr.array("h", (amplitude if (i // 40) % 2 else -amplitude for i in range(int(rate * ms / 1000)))).tobytes()
+
+    @staticmethod
+    def silence(ms, rate=22050):
+        return b"\x00\x00" * int(rate * ms / 1000)
+
+    def test_the_pause_after_a_phrase_follows_its_punctuation_and_the_voice(self):
+        pause, kind = self.media.pause_seconds, self.media.pause_kind
+        self.assertEqual([kind(text) for text in ["Xong.", "Thật sao?", "Đợi đã…", "Một là,", "Ý này:", "đi qua rừng", "Hết.\n\n", "Nói rằng \"đi đi.\""]],
+                         ["sentence", "sentence", "ellipsis", "minor", "minor", "split", "para", "sentence"])
+        self.assertAlmostEqual(pause("Xong.", "thuyet-minh"), 0.50)  # what VieNeu's own join puts between sentences
+        self.assertAlmostEqual(pause("Xong.\n\n", "thuyet-minh"), 0.70)  # a paragraph
+        self.assertAlmostEqual(pause("Một là,", "thuyet-minh"), 0.30)
+        self.assertGreater(pause("Đợi đã…", "thuyet-minh"), pause("Xong.", "thuyet-minh"))
+        self.assertAlmostEqual(pause("Xong.\n", "thuyet-minh"), 0.60)  # a line the author ended on purpose is held a little
+        self.assertGreater(pause("Xong.", "tam-su"), pause("Xong.", "thuyet-minh"))  # reflective voices linger
+        self.assertLess(pause("Xong.", "nang-dong"), pause("Xong.", "thuyet-minh"))  # an ad does not
+        self.assertLessEqual(pause("Xong.\n\n", "co-trang"), self.media.PAUSE_MAX_S)
+
+    def test_silence_is_added_only_where_the_gap_falls_short(self):
+        rate = 22050
+        speech = self.tone(400) + self.silence(60)  # the phrase already ends with 60 ms of quiet
+        padded = self.media.with_pause(speech, 0.5, next_lead_frames=int(0.1 * rate), rate=rate)
+        self.assertAlmostEqual(self.media.edge_silence_frames(padded, rate)[1] / rate, 0.4, delta=0.02)  # 0.5 s wanted - 0.1 s next lead
+        already = self.tone(400) + self.silence(600)
+        self.assertEqual(self.media.with_pause(already, 0.5, 0, rate), already)  # enough of its own: untouched
+        abrupt = self.tone(300)  # stops at full level: faded out before the silence so it does not click
+        padded = self.media.with_pause(abrupt, 0.4, 0, rate)
+        import array as arr
+        samples = arr.array("h"); samples.frombytes(padded)
+        self.assertLess(abs(samples[len(abrupt) // 2 - 1]), 1500)
+        self.assertGreaterEqual(len(padded) // 2 - len(abrupt) // 2, int(0.39 * rate))
+
+    def test_edges_and_levels_are_measured_on_the_real_samples(self):
+        rate = 22050
+        clip = self.silence(120) + self.tone(500) + self.silence(80)
+        lead, tail = self.media.edge_silence_frames(clip, rate)
+        self.assertAlmostEqual(lead / rate, 0.12, delta=0.015)
+        self.assertAlmostEqual(tail / rate, 0.08, delta=0.015)
+        self.assertEqual(self.media.edge_silence_frames(self.silence(100), rate), (int(0.1 * rate), 0))  # nothing but silence
+        quiet, normal, loud = self.tone(500, 2500), self.tone(500, 8000), self.tone(500, 8000)
+        loud = self.media.apply_gain_db(loud, 6)
+        clips = [quiet, normal, self.tone(500, 8200), loud]
+        before = [self.media.speech_level_db(pcm, rate) for pcm in clips]
+        after = [self.media.speech_level_db(pcm, rate) for pcm in self.media.level_phrases(clips, rate)]
+        self.assertGreater(max(before) - min(before), 15)  # it really was uneven
+        # the outliers move towards the typical level by the allowed range, no further; the ones in line are left alone
+        self.assertAlmostEqual(after[0] - before[0], self.media.LEVEL_RANGE_DB, delta=0.3)
+        self.assertAlmostEqual(after[3] - before[3], -self.media.LEVEL_RANGE_DB, delta=0.3)
+        self.assertAlmostEqual(after[1], before[1], delta=0.05)
+        self.assertAlmostEqual(after[2], before[2], delta=0.05)
+        original = before
+        self.assertEqual(self.media.level_phrases([normal, quiet], rate), [normal, quiet])  # too few phrases to know what is typical
+
+    def test_a_short_lead_in_is_read_together_with_the_sentence_it_leads(self):
+        phrases = self.media.split_speech_phrases("Cuối cùng… Cuộc đời khôn ngoan không cần ồn ào.\nNên nhớ:\nĐừng vội kể hết tương lai khi đôi tay chưa làm đủ.\nHọ dùng kết quả.")
+        self.assertEqual(len(phrases), 3, phrases)
+        self.assertTrue(phrases[0].startswith("Cuối cùng… Cuộc đời"))
+        self.assertTrue(phrases[1].startswith("Nên nhớ:\nĐừng vội"))
+        self.assertEqual(phrases[2], "Họ dùng kết quả.")  # a short sentence of its own stays alone
+        self.assertEqual("".join(phrases), "Cuối cùng… Cuộc đời khôn ngoan không cần ồn ào.\nNên nhớ:\nĐừng vội kể hết tương lai khi đôi tay chưa làm đủ.\nHọ dùng kết quả.")
+
+    def test_a_theme_word_does_not_turn_every_line_into_a_sigh(self):
+        for line in ["Có những người chọn cách rất khác: im lặng.", "Im lặng không phải yếu thế.", "Bạn đang tích lũy trong im lặng…", "Hãy nhớ điều này thật kỹ.",
+                     "Đừng vội dùng miệng để kể hết tương lai.", "Mỗi người một hoàn cảnh, hay là không."]:
+            for voice in ("tam-su", "triet-ly", "co-trang", "doc-truyen"):
+                self.assertIsNone(self.media.emotion_profile(line, voice), (voice, line))
+        # two different feelings' words in one sentence do earn the cue; one word alone does not
+        self.assertEqual(self.media.emotion_profile("Hôm nay tôi thấy buồn và cô đơn.", "tam-su")["tag"], "[thở dài]")
+        self.assertIsNone(self.media.emotion_profile("Hôm nay tôi thấy buồn.", "tam-su"))
+        self.assertEqual(self.media.emotion_profile("Cảnh báo: điều này rất quan trọng.", "tin-tuc")["tag"], "[hắng giọng]")
+        self.assertIsNone(self.media.emotion_profile("Hôm nay tôi thấy buồn và cô đơn. [cười]", "tam-su"))  # a cue typed by the author is left alone
+
+    def test_a_narration_gets_at_most_one_cue_sound(self):
+        sent = []
+
+        def fake_http(url, payload):
+            sent.append(payload["input"])
+            return b"RIFF-fake-network-audio"
+
+        def fake_run(command, **kwargs):
+            command = [str(item) for item in command]
+            with wave.open(command[-1], "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(22050)
+                audio.writeframes(b"\x80\x01" * 11025)
+            return subprocess.CompletedProcess(command, 0)
+
+        script = "Hôm nay tôi thấy buồn và cô đơn. Tôi mệt, tôi đau, tôi muốn khóc. Ngày mai sẽ tốt hơn."
+        with patch.object(self.media, "TTS_ENGINES", ["vieneu"]), patch.object(self.media, "service_up", return_value=True), \
+             patch.object(self.media, "_http_wav", side_effect=fake_http), patch.object(self.media.subprocess, "run", side_effect=fake_run):
+            self.media.tts_aligned(script, "tam-su")
+        self.assertEqual([text.startswith("[thở dài]") for text in sent], [True, False, False])
+
+    def test_every_voice_is_stretched_only_as_far_as_sounds_natural(self):
+        low, high = self.media.PACE_TEMPO_RANGE
         for voice, (_name, _mood, native) in self.media.VOICE_PRESETS.items():
-            spoken = native * self.media.pace_tempo(voice, "vieneu", 1.0) * self.media.PACE_VIDEO_FACTOR
-            self.assertTrue(3.3 <= spoken <= 4.2, (voice, round(spoken, 2)))
-        # a slow natural voice is sped up, a fast one slowed down, and the video's own speed still counts
-        self.assertGreater(self.media.pace_tempo("doc-truyen", "vieneu"), 1.2)
-        self.assertLess(self.media.pace_tempo("tam-su", "vieneu"), 0.85)
+            tempo = self.media.pace_tempo(voice, "vieneu", 1.0)
+            spoken = native * tempo * self.media.PACE_VIDEO_FACTOR
+            self.assertTrue(low <= tempo <= high, (voice, round(tempo, 2)))  # it used to be +30% and -21%
+            self.assertTrue(2.6 <= spoken <= 4.1, (voice, round(spoken, 2)))
+        # a naturally slow storyteller keeps to its own pace (about 3 words a second) instead of being forced to 3.7
+        self.assertAlmostEqual(self.media.pace_tempo("doc-truyen", "vieneu"), high)
+        self.assertLess(self.media.VOICE_PRESETS["doc-truyen"][2] * high * self.media.PACE_VIDEO_FACTOR, 3.1)
+        # the video's own reading speed still counts on top, and a Piper voice reaches the pace exactly
         self.assertAlmostEqual(self.media.pace_tempo("doc-truyen", "vieneu", 1.2) / self.media.pace_tempo("doc-truyen", "vieneu", 1.0), 1.2)
         self.assertAlmostEqual(self.media.PIPER_NATIVE_WPS * self.media.pace_tempo("doc-truyen", "piper") * self.media.PACE_VIDEO_FACTOR, 3.7)
+
+    def test_the_emotional_voices_are_the_models_storytelling_voices(self):
+        story_voices = {"Thiện Minh", "Thiền Tâm Đức", "Thái Sơn", "Thanh Bình", "Ngọc Linh", "Thục Đoan", "Mỹ Duyên", "Quỳnh Anh", "Đức Trí", "Kim Thanh"}  # style "doc_truyen"
+        for preset in ("doc-truyen", "co-trang", "co-trang-nu", "triet-ly", "tam-su"):
+            self.assertIn(self.media.VOICE_PRESETS[preset][0], story_voices, preset)
 
     def test_normal_pace_leaves_audio_untouched(self):
         self.assertEqual(self.media._time_stretch(Path("/tmp/x.wav"), 1.0), Path("/tmp/x.wav"))

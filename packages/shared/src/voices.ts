@@ -3,7 +3,7 @@
  * `id` được gửi trong `settings.voice`; local-tools/media_server.py ánh xạ id → giọng + tốc độ.
  */
 export const VOICE_PRESETS = [
-  { id: "doc-truyen", label: "Đọc truyện", hint: "Nam, giọng Bắc, nhấn nhá theo câu", sample: "Ngày xưa, ở một làng nhỏ ven sông, có một cậu bé rất thích ngắm sao." },
+  { id: "doc-truyen", label: "Đọc truyện", hint: "Nam, kể chuyện, nhấn nhá theo câu", sample: "Ngày xưa, ở một làng nhỏ ven sông, có một cậu bé rất thích ngắm sao." },
   { id: "co-trang", label: "Cổ trang / kiếm hiệp", hint: "Nam, kể chuyện, chậm và giàu khoảng lặng", sample: "Trăng treo đầu núi, kiếm khách một mình bước giữa sương khuya, áo bay trong gió." },
   { id: "co-trang-nu", label: "Cổ trang / ngôn tình (nữ)", hint: "Nữ, mềm và giàu cảm xúc theo từng câu", sample: "Hoa đào rơi trước hiên cũ, nàng lặng lẽ đợi một người đã hẹn nơi cuối con đường." },
   { id: "triet-ly", label: "Triết lý / suy ngẫm", hint: "Nam, chậm, có nhấn ở ý quan trọng", sample: "Người khôn không phải người biết nhiều, mà là người biết điều gì đáng để buông bỏ." },

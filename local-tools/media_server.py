@@ -5,8 +5,10 @@ Docker worker calls this bridge through host.docker.internal.
 """
 
 import json
+import array
 import base64
 import io
+import math
 import os
 import re
 import shutil
@@ -76,26 +78,33 @@ COMFYUI_MODEL_DIR = Path(os.getenv(
     str(LOCAL_AI_ROOT / "ComfyUI" / "models" / "checkpoints"),
 ))
 COMFYUI_TIMEOUT_S = int(os.getenv("COMFYUI_TIMEOUT_S", "900"))
-# Voice presets selectable on the website. Keep ids in sync with packages/shared/src/voices.ts.
+# Voice presets selectable on the website. Keep ids in sync with packages/shared/src/voices.ts and duration.ts.
 # (VieNeu preset voice, mood, native words/second at speed 1.0).
-# Pace is normalised per voice: the voices read at very different natural rates (2.97 w/s for Đức Trí, 4.66 for
-# Trúc Ly), so one fixed multiplier made some videos drag and others race (6 w/s). Every voice is stretched to
-# PACE_TARGET_WPS × mood × the video's own reading speed; mood keeps genre feel (calmer philosophy, brisker ads).
+#
+# Pace. Every voice is brought to PACE_TARGET_WPS × mood words per second of finished video, but only within
+# PACE_TEMPO_RANGE: a time stretch beyond about +-18% is audible (phasey, hurried or drawn-out speech), and the emotional
+# presets used to be stretched by +30% (Đức Trí) or slowed by 20% (Trúc Ly, Minh Triết, Hải Đăng). Their voices are now
+# storytelling voices (the model's own "doc_truyen" style, more pitch movement and pauses) whose native pace is close to the
+# pace wanted, and where a voice is naturally slow (Đức Trí, Thiền Tâm Đức, Kim Thanh: 2.8-2.9 w/s) the preset reads at
+# about 3 w/s rather than being forced to 3.7. Native pace = the voice's words per second, sentence by sentence, without
+# pauses, measured on 298 words of real script.
 VOICE_PRESETS = {
-    "doc-truyen": ("Đức Trí", 1.0, 2.97),
-    "co-trang": ("Hải Đăng", 0.93, 4.51),
-    "co-trang-nu": ("Mỹ Duyên", 0.95, 3.10),
-    "triet-ly": ("Minh Triết", 0.92, 4.43),
-    "tam-su": ("Trúc Ly", 0.95, 4.66),
+    "doc-truyen": ("Đức Trí", 0.80, 2.87),
+    "co-trang": ("Thiền Tâm Đức", 0.80, 2.89),
+    "co-trang-nu": ("Quỳnh Anh", 0.86, 3.58),
+    "triet-ly": ("Thái Sơn", 0.84, 3.69),
+    "tam-su": ("Kim Thanh", 0.78, 2.78),
     "tin-tuc": ("Quang Sơn", 1.05, 3.34),
     "tin-tuc-nu": ("Ngọc Huyền", 1.05, 4.16),
     "thuyet-minh": ("Phạm Tuyên", 1.02, 4.10),
     "nang-dong": ("Xuân Vĩnh", 1.05, 4.30),
 }
-# Short-form narration lands at 3.3-4.2 words/s; 3.7 is the middle. Measured on finished videos, the gaps between
-# phrases make the spoken rate about 4% lower than the raw synthesis rate.
+# Short-form narration lands at 3.3-4.2 words/s; 3.7 is the middle (before a voice's mood).
 PACE_TARGET_WPS = float(os.getenv("PACE_TARGET_WPS", "3.7"))
-PACE_VIDEO_FACTOR = 0.96
+# Share of a finished narration that is speech: the rest is the pauses between phrases (PAUSE_S below). Measured on 298 words of
+# real script read by all nine presets: 0.78-0.87, 0.835 on average (shorter sentences, more pauses).
+PACE_VIDEO_FACTOR = 0.84
+PACE_TEMPO_RANGE = (0.85, 1.18)
 PIPER_NATIVE_WPS = 4.31
 # Ordered preference for local Vietnamese engines.
 TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu,piper").split(",") if e in {"vieneu", "piper"}]
@@ -184,16 +193,14 @@ EMOTION_TAG_RE = re.compile(r"\[(?:cười|cuoi|thở dài|tho dai|hắng giọn
 EMOTION_MARKERS = {
     "sigh": (
         "mệt", "buồn", "đau", "khóc", "cô đơn", "nuối tiếc", "thất vọng", "tổn thương", "lo lắng",
-        "sợ hãi", "chia tay", "mất mát", "im lặng", "nhớ thương", "buông bỏ", "trưởng thành",
-        "bình yên", "đôi khi", "nếu hôm nay", "hãy cho phép mình nghỉ",
+        "sợ hãi", "chia tay", "mất mát", "nhớ thương", "buông bỏ", "hãy cho phép mình nghỉ", "nếu hôm nay",
     ),
     "chuckle": (
-        "vui", "hạnh phúc", "yêu đời", "tuyệt vời", "thành công", "chúc mừng", "tự hào", "may mắn",
-        "cảm ơn", "chào mừng", "phấn khởi", "rộn ràng", "ưu đãi", "quà tặng", "bất ngờ thú vị",
+        "vui", "hạnh phúc", "tuyệt vời", "chúc mừng", "tự hào", "may mắn", "phấn khởi", "rộn ràng",
+        "ưu đãi", "quà tặng", "bất ngờ thú vị",
     ),
     "clear_throat": (
-        "quan trọng", "chú ý", "cảnh báo", "đừng", "hãy nhớ", "ngay bây giờ", "sự thật là",
-        "điều cần biết", "không được", "bắt buộc", "bí quyết", "lưu ý",
+        "quan trọng", "chú ý", "cảnh báo", "lưu ý", "bắt buộc", "điều cần biết", "sự thật là", "ngay bây giờ",
     ),
 }
 EMOTION_PROFILE = {
@@ -201,6 +208,9 @@ EMOTION_PROFILE = {
     "chuckle": {"tag": "[cười]", "speed": 1.04},
     "clear_throat": {"tag": "[hắng giọng]", "speed": 0.98},
 }
+# A non-verbal cue (a sigh, a chuckle, a throat-clear) is a sound in the recording: used often it is a tic. It needs this many
+# different markers in the same sentence, and a narration (one scene) gets at most one.
+EMOTION_MIN_MARKERS = 2
 
 
 def normalize_vi_text(text):
@@ -499,6 +509,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
 
 SENTENCE_END = re.compile(r"[.!?…。！？][\"'”’)]?\s*$")
 CLAUSE_END = re.compile(r"[,;:—–][\"'”’)]?\s*$")
+CLAUSE_OR_ELLIPSIS_END = re.compile(r"(?:[,;:—–]|…|\.\.\.)[\"'”’)]?\s*$")
 
 
 def _words(tokens):
@@ -546,16 +557,22 @@ def split_speech_phrases(text):
             sentences[-1] += current
         else:
             sentences.append(current)
-    return [phrase for sentence in sentences for phrase in _split_long(sentence)]
+    # "Cuối cùng…", "Nên nhớ:", "Thế nhưng," lead into the next sentence: said alone they get a falling, finished intonation.
+    merged = []
+    for sentence in sentences:
+        if merged and _words(merged[-1]) <= 3 and CLAUSE_OR_ELLIPSIS_END.search(merged[-1][-1]):
+            merged[-1] = merged[-1] + sentence
+        else:
+            merged.append(sentence)
+    return [phrase for sentence in merged for phrase in _split_long(sentence)]
 
 
 def emotion_profile(text, voice=""):
-    """Infer a conservative speaking cue from Vietnamese words and punctuation.
+    """A speaking cue for a sentence that is clearly about one feeling, else None.
 
-    This is intentionally deterministic and local-first. It does not rewrite
-    the script or claim to understand every emotion; it adds a cue only when a
-    strong lexical/voice signal is present. VieNeu maps the three cues to its
-    trained emotion tokens.
+    Deterministic and conservative: it needs EMOTION_MIN_MARKERS different marker phrases in the one sentence, so a theme word that
+    comes back in every line ("im lặng", "người") never turns every line into a sigh. The voice plays no part; an explicit
+    [thở dài] / [cười] / [hắng giọng] typed in the script is left alone. VieNeu maps the three cues to its trained emotion tokens.
     """
     if EMOTION_TAG_RE.search(text):
         return None
@@ -564,17 +581,8 @@ def emotion_profile(text, voice=""):
         name: sum(1 for marker in markers if re.search(rf"(?<!\w){re.escape(marker)}(?!\w)", normalized))
         for name, markers in NORMALIZED_EMOTION_MARKERS.items()
     }
-    # Voice context is a tie-breaker only; words and punctuation remain the
-    # primary signal so a news voice can still sound concerned when the script
-    # calls for it.
-    if voice in {"tam-su", "triet-ly", "co-trang", "co-trang-nu"} and re.search(r"[.!?…]$", text.strip()):
-        scores["sigh"] += int(any(word in normalized for word in ("hay", "nguoi", "cuoc doi", "thoi gian")))
-    if voice == "nang-dong" and "!" in text:
-        scores["chuckle"] += 1
-    if "!" in text and scores["clear_throat"]:
-        scores["clear_throat"] += 1
     best, score = max(scores.items(), key=lambda item: item[1])
-    return EMOTION_PROFILE[best] if score > 0 else None
+    return EMOTION_PROFILE[best] if score >= EMOTION_MIN_MARKERS else None
 
 
 def expressive_text(text, voice=""):
@@ -666,22 +674,24 @@ def select_tts_engine(voice, engine=None):
 
 
 def pace_tempo(voice, engine, speed=1.0, emotion=1.0):
-    """Time-stretch factor that brings this voice to the target pace (see VOICE_PRESETS)."""
+    """Time-stretch factor that brings this voice to the target pace (see VOICE_PRESETS), never beyond PACE_TEMPO_RANGE by itself;
+    the video's own reading speed (and an emotion cue) multiply on top of that."""
     requested_speed = max(0.75, min(float(speed), 1.3))
     _name, mood, native = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0, None))
     if engine != "vieneu":
         mood, native = 1.0, PIPER_NATIVE_WPS
     if native is None:  # a voice that was never measured keeps its own pace
         return mood * requested_speed * emotion
-    target = PACE_TARGET_WPS * mood * requested_speed * emotion / PACE_VIDEO_FACTOR
-    return target / native
+    wanted = PACE_TARGET_WPS * mood / PACE_VIDEO_FACTOR
+    automatic = max(PACE_TEMPO_RANGE[0], min(wanted / native, PACE_TEMPO_RANGE[1]))
+    return automatic * requested_speed * emotion
 
 
-def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0):
+def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0, emotion_ok=True):
     vieneu_voice = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0, None))[0]
-    profile = emotion_profile(phrase, voice) if engine == "vieneu" else None
+    profile = emotion_profile(phrase, voice) if engine == "vieneu" and emotion_ok else None
     vieneu_speed = pace_tempo(voice, engine, speed, profile["speed"] if profile else 1.0)
-    input_text = expressive_text(phrase, voice) if engine == "vieneu" else phrase
+    input_text = f"{profile['tag']} {phrase.lstrip()}" if profile else phrase
     source = Path(workdir) / f"phrase-{index}-{engine}.wav"
     if engine == "vieneu":
         payload = {"input": input_text, "voice": vieneu_voice, "speed": vieneu_speed, "steps": VIENEU_STEPS}
@@ -707,6 +717,121 @@ def _time_stretch(source, tempo):
     return target
 
 
+# Pauses between spoken phrases, in seconds. These are the minimum silences VieNeu's own join puts between the chunks of one
+# request (its authors measured them on 23 voices: comma 0.30-0.45, end of sentence 0.50-0.65, paragraph 0.70). The bridge
+# synthesises one sentence per request, so it has to put them in itself: it used to join sentences with whatever silence each
+# file happened to carry, 0-270 ms, and sentences ran into each other (and scenes into each other, every scene being a call).
+PAUSE_S = {"para": 0.70, "sentence": 0.50, "ellipsis": 0.60, "minor": 0.30, "split": 0.20}
+# Reflective voices hold a pause a little longer, an ad a little shorter.
+PAUSE_MOOD = {"doc-truyen": 1.15, "co-trang": 1.25, "co-trang-nu": 1.2, "triet-ly": 1.25, "tam-su": 1.25, "nang-dong": 0.8}
+PAUSE_MAX_S = 1.0
+# A scene ends where the writer's thought ends, so the silence after its last phrase is a little shorter than between sentences.
+SCENE_END_PAUSE = 0.85
+EDGE_THRESH_DB = -45.0  # what counts as silence at the edge of a recording (VieNeu uses the same)
+LEVEL_RANGE_DB = 2.5  # a phrase louder or quieter than the narration's typical level is brought back to within this
+
+
+def pause_kind(phrase):
+    """What kind of boundary follows this phrase: para, sentence, ellipsis, minor (comma, colon, dash) or split (cut mid-clause)."""
+    body = phrase.rstrip()
+    if phrase[len(body):].count("\n") >= 2:
+        return "para"
+    core = body.rstrip("\"'”’)»]")
+    if core.endswith("…") or core.endswith("..."):
+        return "ellipsis"
+    if re.search(r"[.!?。！？]$", core):
+        return "sentence"
+    if re.search(r"[,;:—–，；]$", core):
+        return "minor"
+    return "split"
+
+
+def pause_seconds(phrase, voice):
+    """The silence wanted after a phrase: by kind, longer after a line the author ended on purpose, scaled by the voice's mood."""
+    kind = pause_kind(phrase)
+    seconds = PAUSE_S[kind]
+    if kind in ("sentence", "ellipsis") and phrase[len(phrase.rstrip()):].count("\n") == 1:
+        seconds += 0.10
+    return min(PAUSE_MAX_S, seconds * PAUSE_MOOD.get(voice, 1.0))
+
+
+def _samples(pcm):
+    values = array.array("h")
+    values.frombytes(pcm)
+    if sys.byteorder == "big":
+        values.byteswap()
+    return values
+
+
+def _pcm(values):
+    if sys.byteorder == "big":
+        values = array.array("h", values)
+        values.byteswap()
+    return values.tobytes()
+
+
+def _window_levels(values, window):
+    """Mean absolute level of each window (the last one may be shorter, and counts)."""
+    return [sum(map(abs, chunk)) / len(chunk) for chunk in (values[i:i + window] for i in range(0, len(values), window))]
+
+
+def edge_silence_frames(pcm, rate=SAMPLE_RATE):
+    """(silent frames at the start, silent frames at the end) of mono 16-bit PCM."""
+    values = _samples(pcm)
+    window = max(1, int(0.01 * rate))
+    levels = _window_levels(values, window)
+    loud = [i for i, level in enumerate(levels) if level > 32768 * 10 ** (EDGE_THRESH_DB / 20)]
+    if not loud:
+        return len(values), 0
+    return loud[0] * window, len(values) - min(len(values), (loud[-1] + 1) * window)
+
+
+def speech_level_db(pcm, rate=SAMPLE_RATE):
+    """Average level of the louder half of the windows (the speech, not the silences), in dB below full scale; None for a silent clip."""
+    levels = sorted(_window_levels(_samples(pcm), max(1, int(0.01 * rate))))
+    loud = levels[len(levels) // 2:]
+    mean = sum(loud) / len(loud) if loud else 0
+    return 20 * math.log10(mean / 32768) if mean > 0 else None
+
+
+def apply_gain_db(pcm, gain_db):
+    """The clip louder or quieter by gain_db, without ever clipping."""
+    if abs(gain_db) < 0.7:
+        return pcm
+    values = _samples(pcm)
+    factor = 10 ** (gain_db / 20)
+    peak = max((abs(v) for v in values), default=1) or 1
+    factor = min(factor, 32000 / peak)
+    return _pcm(array.array("h", (int(v * factor) for v in values)))
+
+
+def level_phrases(pcms, rate=SAMPLE_RATE):
+    """Brings a phrase that is much louder or quieter than the rest (the cue sounds, an odd take) back to within LEVEL_RANGE_DB."""
+    levels = [speech_level_db(pcm, rate) for pcm in pcms]
+    known = sorted(level for level in levels if level is not None)
+    if len(known) < 3:
+        return pcms
+    median = known[len(known) // 2]
+    return [pcm if level is None else apply_gain_db(pcm, max(-LEVEL_RANGE_DB, min(LEVEL_RANGE_DB, median - level)) if abs(median - level) > LEVEL_RANGE_DB else 0.0)
+            for pcm, level in zip(pcms, levels)]
+
+
+def with_pause(pcm, wanted_s, next_lead_frames=0, rate=SAMPLE_RATE):
+    """The phrase followed by enough silence that, together with the silence it already ends with and the one the next phrase
+    starts with, the gap is at least wanted_s. A phrase that already has the pause is left as it is."""
+    _lead, tail = edge_silence_frames(pcm, rate)
+    missing = int(wanted_s * rate) - tail - next_lead_frames
+    if missing <= 0:
+        return pcm
+    if tail < int(0.01 * rate):  # it stops abruptly: a short fade so the silence does not click
+        values = _samples(pcm)
+        fade = min(len(values), int(0.006 * rate))
+        for i in range(fade):
+            values[len(values) - fade + i] = int(values[len(values) - fade + i] * (1 - (i + 1) / fade))
+        pcm = _pcm(values)
+    return pcm + b"\x00\x00" * missing
+
+
 def tts_aligned(text, voice, engine=None, speed=1.0):
     phrases = split_speech_phrases(text)
     selected_engine = select_tts_engine(voice, engine)
@@ -718,13 +843,16 @@ def tts_aligned(text, voice, engine=None, speed=1.0):
     with tempfile.TemporaryDirectory(prefix="studio-aligned-") as workdir:
         # Phrase synthesis is independent. Keep output order deterministic while
         # overlapping a small, bounded number of local requests.
+        # A non-verbal cue (sigh, chuckle) is a sound in the recording: at most one in a narration, on the first sentence that earns it.
+        cue_index = next((index for index, phrase in enumerate(phrases) if selected_engine == "vieneu" and emotion_profile(phrase, voice)), None)
         with ThreadPoolExecutor(max_workers=min(TTS_CONCURRENCY, len(phrases))) as pool:
             futures = [
-                pool.submit(synth_phrase, phrase, workdir, index, voice, selected_engine, speed)
+                pool.submit(synth_phrase, phrase, workdir, index, voice, selected_engine, speed, index == cue_index)
                 for index, phrase in enumerate(phrases)
             ]
             sources = [future.result() for future in futures]
-        for phrase, source in zip(phrases, sources):
+        pcms = []
+        for source in sources:
             with wave.open(str(source), "rb") as audio:
                 if (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) != (sample_rate, 1, 2):
                     raise RuntimeError("Giọng đọc local trả định dạng audio không hợp lệ")
@@ -732,6 +860,13 @@ def tts_aligned(text, voice, engine=None, speed=1.0):
                 pcm = audio.readframes(frames)
                 if frames <= 0 or len(pcm) != frames * 2:
                     raise RuntimeError("Giọng đọc không tạo được âm thanh")
+            pcms.append(pcm)
+        pcms = level_phrases(pcms, sample_rate)
+        for index, (phrase, pcm) in enumerate(zip(phrases, pcms)):
+            last = index == len(phrases) - 1
+            wanted = pause_seconds(phrase, voice) * (SCENE_END_PAUSE if last else 1.0)
+            pcm = with_pause(pcm, wanted, 0 if last else edge_silence_frames(pcms[index + 1], sample_rate)[0], sample_rate)
+            frames = len(pcm) // 2
             start_ms = round(frames_total * 1000 / sample_rate)
             frames_total += frames
             cues.append({"id": str(uuid.uuid4()), "text": phrase,
