@@ -145,7 +145,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
             ? "Nội dung người dùng dài hơn thời lượng: giữ nhân vật, diễn biến chính và từ khóa, lược bớt chi tiết phụ cho vừa độ dài. "
             : "Nội dung người dùng ngắn: phát triển bằng ví dụ cụ thể, đời thường cho đủ độ dài. ") +
           retry +
-          "Câu ngắn, dễ đọc thành tiếng. " +
+          "Mỗi câu một ý, dài 8-18 từ, dễ đọc thành tiếng: không nối nhiều vế bằng dấu phẩy thành một câu dài; viết mỗi câu trên một dòng riêng. " +
           "Câu mở đầu chọn một kiểu hợp chủ đề: một câu hỏi chạm vào người xem, một tình huống quen thuộc hoặc một điều bất ngờ có thật; " +
           "đừng mặc định mở bằng 'Bạn có biết'. " +
           "Chỉ dùng từ tiếng Việt, không chèn từ tiếng Anh (viết 'bổ sung nước' chứ không viết 'hydrate'). " +
