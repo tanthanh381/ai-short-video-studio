@@ -3170,3 +3170,5 @@ input[type="radio"] {
   text-decoration: underline;
 }
 .link-button:disabled { opacity: 0.5; cursor: wait; }
+
+.sys-sync p.sys-recovery { margin-top: 6px; color: var(--tone-warn, #a64b00); }

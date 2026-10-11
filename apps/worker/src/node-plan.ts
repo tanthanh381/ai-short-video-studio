@@ -66,6 +66,7 @@ export type NodeStatus = {
     behind?: { code?: number; toolkit?: number; models?: number; ollama?: number };
     differences?: string[]; error?: string | null; restartPending?: string[];
     progress?: { doneBytes?: number; totalBytes?: number; label?: string } | null;
+    recovery?: { count?: number; lastAt?: number | null; down?: string[] };
   } | null;
 };
 

@@ -114,6 +114,7 @@ export function summarizeSync(raw: NodeStatus["sync"]): NodeSyncSummary | null {
     error: silent ? `Tiến trình đồng bộ không báo cáo suốt ${Math.round((raw.ageSeconds as number) / 60)} phút` : raw.error ?? null,
     restartPending: Array.isArray(raw.restartPending) ? raw.restartPending : [],
     progress: raw.progress ? { doneBytes: raw.progress.doneBytes ?? 0, totalBytes: raw.progress.totalBytes ?? 0, label: raw.progress.label ?? "" } : null,
+    ...(raw.recovery ? { recovery: { count: count(raw.recovery.count), lastAt: iso(raw.recovery.lastAt), down: Array.isArray(raw.recovery.down) ? raw.recovery.down.filter((name) => typeof name === "string") : [] } } : {}),
   };
 }
 

@@ -69,6 +69,7 @@ export function demoSystem(now = Date.now()): SystemSummary {
     sync: {
       state: "in-sync", checkedAt: iso(-25_000), appliedAt: iso(-3 * 3600_000), sourceVersion: "9f3a7c21b0d4", localVersion: "9f3a7c21b0d4",
       behind: { code: 0, toolkit: 0, models: 0, ollama: 0 }, differences: [], error: null, restartPending: [], progress: null,
+      recovery: { count: 1, lastAt: iso(-2 * 3600_000), down: [] },
     },
   };
   return {

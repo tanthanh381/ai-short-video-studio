@@ -248,6 +248,7 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
             <div className="sys-bar" role="progressbar" aria-valuenow={sync.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Tiến độ đồng bộ"><i style={{ width: `${Math.max(2, sync.percent)}%` }} /></div>
           ) : null}
           {sync.differences.length ? <ul>{sync.differences.map((difference) => <li key={difference}>{difference}</li>)}</ul> : null}
+          {sync.recovery ? <p className="sys-recovery">{sync.recovery}</p> : null}
         </div>
       ) : null}
 

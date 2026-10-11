@@ -159,8 +159,8 @@ main() {
   SYNC_URL="$(printf '%s' "$BUNDLE" | sed -E 's#^(https?://[^:/]+).*#\1#'):$SYNC_PORT"
   NODE_HOST="${NODE_HOST:-${AIR_NODE_HOST:-127.0.0.1}}"
   IMAGE_JSON=false; [ "$WITH_IMAGE" = "yes" ] && IMAGE_JSON=true
-  printf '{"source":"%s","node":"%s","image":%s,"repo":"%s","localAi":"%s","ollama":"http://%s:11434","bridge":"http://%s:8765"}\n' \
-    "$SYNC_URL" "$NAME" "$IMAGE_JSON" "$REPO" "$LOCAL_AI" "$NODE_HOST" "$NODE_HOST" > "$HOME_DIR/.studio-sync.json"
+  printf '{"source":"%s","node":"%s","image":%s,"repo":"%s","localAi":"%s","ollama":"http://%s:11434","bridge":"http://%s:8765","whiteboard":"http://%s:8766"}\n' \
+    "$SYNC_URL" "$NAME" "$IMAGE_JSON" "$REPO" "$LOCAL_AI" "$NODE_HOST" "$NODE_HOST" "$NODE_HOST" > "$HOME_DIR/.studio-sync.json"
   PLIST="$HOME_DIR/Library/LaunchAgents/com.ai-short-video.sync.plist"
   mkdir -p "$HOME_DIR/Library/LaunchAgents" "$REPO/tmp/local-services"
   SYNC_PY="/opt/homebrew/bin/python3.12"; [ -x "$SYNC_PY" ] || SYNC_PY="$(command -v python3.12 || command -v python3)"

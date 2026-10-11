@@ -310,6 +310,13 @@ describe("syncView: how closely a second machine follows the main one", () => {
     expect(view.differences).toHaveLength(4);
   });
 
+  it("says when the machine started its own programs again, and what is still missing", () => {
+    const view = syncView(air(inSync({ recovery: { count: 2, lastAt: "2026-10-11T07:30:00Z", down: ["Ollama"] } })), NOW)!;
+    expect(view.recovery).toBe("Đang thiếu: Ollama (máy tự khởi động lại) · Đã tự bật lại dịch vụ 2 lần, lần cuối 30 phút trước");
+    expect(syncView(air(inSync({ recovery: { count: 0, lastAt: null, down: [] } })), NOW)!.recovery).toBeNull();
+    expect(syncView(air(inSync()), NOW)!.recovery).toBeNull(); // an agent from before this existed
+  });
+
   it("reports an error, a pause and a state it does not know", () => {
     expect(syncView(air(inSync({ state: "error", error: "Không liên lạc được với Mac mini (URLError)" })), NOW)).toMatchObject({ tone: "bad", label: "Đồng bộ lỗi", detail: "Không liên lạc được với Mac mini (URLError)" });
     expect(syncView(air(inSync({ state: "paused" })), NOW)).toMatchObject({ tone: "idle", label: "Đã tạm dừng", canRequest: false });
@@ -325,6 +332,14 @@ describe("sync in the alerts and the tiles", () => {
     expect(alertIds([node("mini"), node("air", { sync: inSync({ state: "error", error: "x" }) })])).toEqual([["air-sync-error", "warn"]]);
     const behind = systemAlerts(system([node("mini"), node("air", { sync: inSync({ state: "behind", behind: { code: 1, toolkit: 0, models: 0, ollama: 0 }, differences: ["Mã media_server.py"] }) })]));
     expect(behind[0]).toMatchObject({ id: "air-sync-behind", tone: "info", detail: "Mã media_server.py" });
+  });
+
+  it("tells the owner when a program of a second machine is down while the machine is bringing it back", () => {
+    const missing = node("air", { sync: inSync({ recovery: { count: 1, lastAt: "2026-10-11T07:59:00Z", down: ["Ollama", "Whisper"] } }) });
+    const alert = systemAlerts(system([node("mini"), missing])).find((item) => item.id === "air-services-down")!;
+    expect(alert).toMatchObject({ tone: "warn", title: "Máy air đang thiếu dịch vụ: Ollama, Whisper" });
+    expect(alert.detail).toMatch(/tự khởi động lại/);
+    expect(systemAlerts(system([node("mini"), node("air", { sync: inSync({ recovery: { count: 1, lastAt: "2026-10-11T07:59:00Z", down: [] } }) })]))).toEqual([]); // it came back
   });
 
   it("does not fuss over sync on a machine that is off or has dropped out", () => {

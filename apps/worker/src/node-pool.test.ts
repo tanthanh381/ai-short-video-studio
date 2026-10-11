@@ -499,6 +499,12 @@ describe("following how closely the second machine tracks the main one", () => {
       .toEqual({ doneBytes: 3_200_000_000, totalBytes: 5_100_000_000, label: "Model image/…/unet" });
   });
 
+  it("passes on which of the machine's programs the agent had to start again, and which are still down", () => {
+    const summary = summarizeSync(report({ recovery: { count: 2, lastAt: 1_791_680_000, down: ["Ollama"] } }))!;
+    expect(summary.recovery).toEqual({ count: 2, lastAt: "2026-10-11T00:53:20.000Z", down: ["Ollama"] });
+    expect(summarizeSync(report())).not.toHaveProperty("recovery"); // an agent from before this existed
+  });
+
   it("does not trust an agent that has gone quiet, and says so", () => {
     const silent = summarizeSync(report({ ageSeconds: 1_500 }))!;
     expect(silent.state).toBe("error");

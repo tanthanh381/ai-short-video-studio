@@ -4,7 +4,9 @@ Ollama models. Runs in the background under launchd (a LaunchAgent the installer
   1. asks the main Mac (node_sync_server.py) for its manifest and compares it with what is here;
   2. downloads what is missing or different, a file at a time, with a sha256 check, so a cut download goes on where it stopped;
   3. restarts only the programs whose files changed, and only when nothing is being made on this Mac;
-  4. writes ~/.studio-sync-state.json, which the media bridge reports and the Hệ thống page shows.
+  4. writes ~/.studio-sync-state.json, which the media bridge reports and the Hệ thống page shows;
+  5. keeps this Mac's own programs running: when the media bridge, Ollama, Whisper, the picture or voice server or the hand-drawing
+     server is down (after a restart of the Mac, a crash, an update), it starts them again with scripts/Mo-May-Phu.command.
 
 Nothing is ever deleted. Big model downloads wait while the Mac runs on battery; nothing is replaced while it is making a picture
 or a voice. `node_sync_agent.py now|pause|resume|status|once` is for the person at this Mac. Standard library only.
@@ -29,6 +31,7 @@ CHECK_EVERY_S = 60
 TICK_S = 5
 MIN_FREE_GB_AFTER = 3
 BACKUPS_KEPT = 5
+RECOVERY_WAIT_S = 180  # between two attempts to start what is down; doubles after each failed attempt, up to 8x
 
 
 class Paths:
@@ -64,7 +67,7 @@ class SyncError(Exception):
 
 
 class Agent:
-    def __init__(self, config, token, paths=None, *, opener=urllib.request.urlopen, restart=None, is_idle=None, power=None, pull=None, now=time.time, log=print):
+    def __init__(self, config, token, paths=None, *, opener=urllib.request.urlopen, restart=None, is_idle=None, power=None, pull=None, services_down=None, start_services=None, now=time.time, log=print):
         self.config = config
         self.token = token
         self.paths = paths or Paths()
@@ -78,6 +81,11 @@ class Agent:
         self.is_idle = is_idle or self._bridge_idle
         self.power = power or self._power
         self.pull = pull or self._ollama_pull
+        self.services_down = services_down or self._services_down
+        self.start_services = start_services or self._start_all
+        self.recovery = {"count": 0, "lastAt": None, "down": []}
+        self.recovery_failures = 0
+        self.last_recovery_try = -1e9
         self.pending_restart = set()
         self.applied_at = None
         self.last_state = {}
@@ -174,17 +182,69 @@ class Agent:
             return True
 
     def _restart_services(self, services):
-        repo = Path(self.roots["repo"])
         for name in sorted(services - {"agent"}):
             pattern = sync_manifest.SERVICE_PATTERNS.get(name)
             if pattern:
                 subprocess.run(["pkill", "-f", pattern], check=False)
         time.sleep(2)
+        self._start_all()
+
+    def _start_all(self):
+        """scripts/Mo-May-Phu.command starts every program that is not running (and leaves the running ones alone)."""
+        repo = Path(self.roots["repo"])
         log_dir = repo / "tmp" / "local-services"
         log_dir.mkdir(parents=True, exist_ok=True)
         with open(log_dir / "sync-restart.log", "ab") as out:
             subprocess.Popen(["/bin/zsh", str(repo / "scripts" / "Mo-May-Phu.command")], cwd=repo, stdout=out, stderr=out, start_new_session=True,
                              env={**os.environ, "NODE_NAME": self.config.get("node", "air"), "PATH": f"/opt/homebrew/bin:/usr/local/bin:{os.environ.get('PATH', '')}"})
+
+    def _services_down(self):
+        """Names of this Mac's programs that do not answer: the media bridge itself, and what it says about Ollama, Whisper, pictures, voices."""
+        bridge = self.config.get("bridge")
+        if not bridge:
+            return []
+        down = []
+        try:
+            with self.open(urllib.request.Request(bridge.rstrip("/") + "/health"), timeout=5) as reply:
+                health = json.load(reply)
+            for key, name in (("ollama", "Ollama"), ("transcribe", "Whisper"), ("image", "máy vẽ ảnh"), ("tts", "giọng đọc")):
+                if health.get(key) is False:
+                    down.append(name)
+        except (OSError, ValueError):
+            down.append("cầu nối media")
+        whiteboard = self.config.get("whiteboard")
+        if whiteboard:
+            try:
+                with self.open(urllib.request.Request(whiteboard.rstrip("/") + "/health"), timeout=5):
+                    pass
+            except (OSError, ValueError):
+                down.append("máy vẽ tay")
+        return down
+
+    def supervise(self):
+        """Starts what is down, without looping on a program that will not start: the wait doubles after each failed attempt."""
+        if self.paths.paused.exists():
+            return
+        down = self.services_down()
+        self.recovery["down"] = down
+        if not down:
+            self.recovery_failures = 0
+        elif self.now() - self.last_recovery_try >= RECOVERY_WAIT_S * 2 ** min(self.recovery_failures, 3):
+            self.last_recovery_try = self.now()
+            self.log(f"[node-sync-agent] đang tắt: {', '.join(down)}; khởi động lại")
+            try:
+                self.start_services()
+            except OSError as error:
+                self.log(f"[node-sync-agent] không khởi động được: {error}")
+            self.recovery["count"] += 1
+            self.recovery["lastAt"] = self.now()
+            self.recovery_failures += 1
+        self._patch_state(recovery=dict(self.recovery))
+
+    def _patch_state(self, **fields):
+        if self.last_state:
+            self.last_state = {**self.last_state, **fields}
+            write_json(self.paths.state, self.last_state)
 
     # --- state ------------------------------------------------------------------------------------------------------------
 
@@ -192,7 +252,7 @@ class Agent:
         value = {
             "state": state, "checkedAt": self.now(), "appliedAt": self.applied_at, "agentVersion": AGENT_VERSION, "pid": os.getpid(),
             "behind": {"code": 0, "toolkit": 0, "models": 0, "ollama": 0}, "differences": [], "error": None, "restartPending": sorted(self.pending_restart),
-            "progress": None, "sourceVersion": None, "localVersion": None, **fields,
+            "progress": None, "sourceVersion": None, "localVersion": None, "recovery": dict(self.recovery), **fields,
         }
         write_json(self.paths.state, value)
         self.last_state = value
@@ -338,6 +398,10 @@ class Agent:
                     except Exception as error:  # a bug or a full disk must not stop the loop: it is reported and tried again
                         self.log(f"[node-sync-agent] {type(error).__name__}: {error}")
                         self.write_state("error", error=f"Lỗi không mong đợi: {type(error).__name__}")
+                    try:
+                        self.supervise()
+                    except Exception as error:  # watching the programs must never stop the sync
+                        self.log(f"[node-sync-agent] giám sát dịch vụ lỗi: {type(error).__name__}: {error}")
                     next_check = self.now() + CHECK_EVERY_S
                     if "agent" in self.pending_restart:
                         self.log("[node-sync-agent] chương trình đồng bộ vừa được cập nhật; khởi động lại để dùng bản mới")

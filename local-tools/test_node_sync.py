@@ -127,6 +127,8 @@ class Fixture(unittest.TestCase):
         return urllib.request.urlopen(request, timeout=10)
 
     def new_agent(self, *, image=True, idle=True, power=("ac", None), air_ollama=None, **over):
+        self.down = {"value": []}
+        self.started = []
         air_dir = self.base / "air"
         air_dir.mkdir(exist_ok=True)
         roots = {"repo": str(air_dir / "repo"), "local_ai": str(air_dir / "local-ai")}
@@ -144,6 +146,8 @@ class Fixture(unittest.TestCase):
             is_idle=lambda: self.idle["value"],
             power=lambda: power,
             pull=lambda name: self.pulls.append(name),
+            services_down=lambda: list(self.down["value"]),
+            start_services=lambda: self.started.append(1),
             log=lambda *_: None, **over,
         )
         self.air = roots
@@ -474,12 +478,112 @@ class Agent(Fixture):
         self.assertEqual(agent.last_state["state"], "in-sync")
         self.assertFalse(agent.paths.trigger.exists())  # the request was consumed
 
+    def test_a_program_that_is_down_is_started_again_but_never_in_a_loop(self):
+        clock = {"t": 1_000_000.0}
+        agent = self.new_agent(now=lambda: clock["t"])
+        agent.cycle()
+        self.down["value"] = ["Ollama", "máy vẽ ảnh"]
+        agent.supervise()
+        self.assertEqual(len(self.started), 1)
+        self.assertEqual(agent.last_state["recovery"], {"count": 1, "lastAt": clock["t"], "down": ["Ollama", "máy vẽ ảnh"]})
+        self.assertEqual(json.loads(agent.paths.state.read_text())["recovery"]["down"], ["Ollama", "máy vẽ ảnh"])  # the page can say what is missing
+        clock["t"] += 100
+        agent.supervise()
+        self.assertEqual(len(self.started), 1)  # too soon: it is still starting
+        clock["t"] += 300  # 400 s: past the 360 s that follow a first failed attempt
+        agent.supervise()
+        self.assertEqual(len(self.started), 2)
+        clock["t"] += 700  # the wait doubled again (720 s)
+        agent.supervise()
+        self.assertEqual(len(self.started), 2)
+        clock["t"] += 100
+        agent.supervise()
+        self.assertEqual(len(self.started), 3)
+        self.down["value"] = []  # it came back: the count of tries starts again
+        agent.supervise()
+        self.assertEqual(agent.last_state["recovery"]["down"], [])
+        self.assertEqual(agent.last_state["recovery"]["count"], 3)
+        self.down["value"] = ["Whisper"]
+        clock["t"] += 200
+        agent.supervise()
+        self.assertEqual(len(self.started), 4)  # a new problem is tried after the short wait, not the long one
+
+    def test_nothing_is_started_when_everything_is_up_or_while_sync_is_paused(self):
+        agent = self.new_agent()
+        agent.cycle()
+        agent.supervise()
+        self.assertEqual(self.started, [])
+        self.down["value"] = ["Ollama"]
+        agent.paths.paused.touch()
+        agent.supervise()
+        self.assertEqual(self.started, [])  # paused by the owner: the programs are left as they are
+        agent.paths.paused.unlink()
+        agent.supervise()
+        self.assertEqual(len(self.started), 1)
+
+    def test_every_round_of_the_loop_also_looks_after_the_programs(self):
+        agent = self.new_agent()
+        self.down["value"] = ["cầu nối media"]
+        agent.run_forever(sleep=lambda _: None, max_ticks=1)
+        self.assertEqual(len(self.started), 1)
+        self.assertEqual(agent.last_state["recovery"]["down"], ["cầu nối media"])
+        self.assertEqual(agent.last_state["state"], "in-sync")
+
+    def test_a_failing_check_of_the_programs_does_not_stop_the_sync(self):
+        agent = self.new_agent()
+        agent.services_down = lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+        agent.run_forever(sleep=lambda _: None, max_ticks=1)
+        self.assertEqual(agent.last_state["state"], "in-sync")
+
     def test_a_crash_in_one_round_is_reported_and_does_not_stop_the_loop(self):
         agent = self.new_agent()
         with patch.object(agent, "cycle", side_effect=RuntimeError("boom")):
             agent.run_forever(sleep=lambda _: None, max_ticks=2)
         self.assertEqual(agent.last_state["state"], "error")
         self.assertIn("RuntimeError", agent.last_state["error"])
+
+
+class ServiceProbe(unittest.TestCase):
+    """The agent's own look at this Mac's programs, against stand-ins for the media bridge and the hand-drawing server."""
+
+    def serve(self, body, status=200):
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                data = json.dumps(body).encode()
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}"
+
+    def agent(self, **config):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = {"source": "http://127.0.0.1:9", "node": "air", "image": False, "repo": tmp.name, "localAi": tmp.name, "ollama": "http://127.0.0.1:9"}
+        return node_sync_agent.Agent({**base, **config}, TOKEN, node_sync_agent.Paths(tmp.name), log=lambda *_: None)
+
+    def test_it_names_what_the_bridge_says_is_down(self):
+        bridge = self.serve({"ok": False, "image": True, "tts": True, "transcribe": False, "ollama": False})
+        self.assertEqual(self.agent(bridge=bridge).services_down(), ["Ollama", "Whisper"])
+        healthy = self.serve({"ok": True, "image": True, "tts": True, "transcribe": True, "ollama": True})
+        self.assertEqual(self.agent(bridge=healthy).services_down(), [])
+
+    def test_a_bridge_that_does_not_answer_is_down_and_so_is_a_silent_hand_drawing_server(self):
+        self.assertEqual(self.agent(bridge="http://127.0.0.1:9").services_down(), ["cầu nối media"])
+        healthy = self.serve({"image": True, "tts": True, "transcribe": True, "ollama": True})
+        self.assertEqual(self.agent(bridge=healthy, whiteboard="http://127.0.0.1:9").services_down(), ["máy vẽ tay"])
+        self.assertEqual(self.agent(bridge=healthy, whiteboard=self.serve({"ok": True})).services_down(), [])
+
+    def test_a_machine_without_a_bridge_configured_has_nothing_to_watch(self):
+        self.assertEqual(self.agent().services_down(), [])
 
 
 if __name__ == "__main__":

@@ -74,6 +74,8 @@ export type NodeSyncSummary = {
   restartPending: string[];
   /** While a download is going on. */
   progress: { doneBytes: number; totalBytes: number; label: string } | null;
+  /** The agent also starts this machine's own programs again when one is down (after a restart of the Mac, a crash). */
+  recovery?: { count: number; lastAt: string | null; down: string[] };
 };
 
 /** One look at a machine, kept for the dashboard's charts. */

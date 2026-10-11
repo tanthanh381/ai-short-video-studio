@@ -322,7 +322,7 @@ export function sparklinePath(
 
 // --- keeping a second machine identical to the main one ------------------------------------------------------------------
 
-export type SyncView = { tone: Tone; label: string; detail: string; percent: number | null; differences: string[]; canRequest: boolean };
+export type SyncView = { tone: Tone; label: string; detail: string; percent: number | null; differences: string[]; canRequest: boolean; recovery: string | null };
 
 const behindCount = (sync: NonNullable<NodeSummary["sync"]>) => sync.behind.code + sync.behind.toolkit + sync.behind.models + sync.behind.ollama;
 
@@ -331,27 +331,34 @@ export function syncView(node: NodeSummary, now = Date.now()): SyncView | null {
   if (node.role === "primary") return null;
   const sync = node.sync;
   if (!sync) {
-    return { tone: "idle", label: "Chưa bật tự động", detail: "Máy này chưa chạy tiến trình đồng bộ (hoặc còn bản cũ). Dán lại dòng lệnh cài trên máy để bật.", percent: null, differences: [], canRequest: false };
+    return { tone: "idle", label: "Chưa bật tự động", detail: "Máy này chưa chạy tiến trình đồng bộ (hoặc còn bản cũ). Dán lại dòng lệnh cài trên máy để bật.", percent: null, differences: [], canRequest: false, recovery: null };
   }
   const checked = sync.checkedAt ? `kiểm tra ${ago(sync.checkedAt, now)}` : "chưa kiểm tra";
   const version = sync.localVersion ? `phiên bản ${sync.localVersion}` : "";
+  const recovery = sync.recovery && (sync.recovery.count > 0 || sync.recovery.down.length > 0)
+    ? [
+        sync.recovery.down.length ? `Đang thiếu: ${sync.recovery.down.join(", ")} (máy tự khởi động lại)` : "",
+        sync.recovery.count > 0 ? `Đã tự bật lại dịch vụ ${sync.recovery.count} lần${sync.recovery.lastAt ? `, lần cuối ${ago(sync.recovery.lastAt, now)}` : ""}` : "",
+      ].filter(Boolean).join(" · ")
+    : null;
+  const base = { percent: null, differences: [] as string[], canRequest: true, recovery };
   switch (sync.state) {
     case "in-sync":
-      return { tone: "ok", label: "Giống Mac mini", detail: [version, checked].filter(Boolean).join(" · "), percent: null, differences: [], canRequest: true };
+      return { ...base, tone: "ok", label: "Giống Mac mini", detail: [version, checked].filter(Boolean).join(" · ") };
     case "syncing": {
       const progress = sync.progress;
       const percent = progress && progress.totalBytes > 0 ? Math.min(100, Math.round((progress.doneBytes / progress.totalBytes) * 100)) : null;
       const size = progress && progress.totalBytes > 0 ? ` (${formatGb(progress.doneBytes / 2 ** 30)} / ${formatGb(progress.totalBytes / 2 ** 30)})` : "";
-      return { tone: "warn", label: "Đang đồng bộ", detail: `${progress?.label || "Đang so sánh với Mac mini"}${size}`, percent, differences: sync.differences, canRequest: false };
+      return { ...base, tone: "warn", label: "Đang đồng bộ", detail: `${progress?.label || "Đang so sánh với Mac mini"}${size}`, percent, differences: sync.differences, canRequest: false };
     }
     case "behind":
-      return { tone: "warn", label: `Lệch ${behindCount(sync)} mục`, detail: sync.error ?? `Còn khác Mac mini · ${checked}`, percent: null, differences: sync.differences, canRequest: true };
+      return { ...base, tone: "warn", label: `Lệch ${behindCount(sync)} mục`, detail: sync.error ?? `Còn khác Mac mini · ${checked}`, differences: sync.differences };
     case "error":
-      return { tone: "bad", label: "Đồng bộ lỗi", detail: sync.error ?? "Không rõ nguyên nhân", percent: null, differences: sync.differences, canRequest: true };
+      return { ...base, tone: "bad", label: "Đồng bộ lỗi", detail: sync.error ?? "Không rõ nguyên nhân", differences: sync.differences };
     case "paused":
-      return { tone: "idle", label: "Đã tạm dừng", detail: "Chủ máy đã tạm dừng đồng bộ (bật lại: Dong-Bo-May-Phu.command resume).", percent: null, differences: [], canRequest: false };
+      return { ...base, tone: "idle", label: "Đã tạm dừng", detail: "Chủ máy đã tạm dừng đồng bộ và tự khởi động lại dịch vụ (bật lại: Dong-Bo-May-Phu.command resume).", canRequest: false };
     default:
-      return { tone: "idle", label: "Chưa rõ", detail: checked, percent: null, differences: [], canRequest: true };
+      return { ...base, tone: "idle", label: "Chưa rõ", detail: checked };
   }
 }
 
@@ -393,6 +400,8 @@ export function systemAlerts(system: SystemSummary): SystemAlert[] {
     if (sync && node.role !== "primary" && node.state !== "offline") {
       if (!node.sync) alerts.push({ id: `${node.id}-sync-off`, tone: "info", title: `Máy ${node.id} chưa bật tự động đồng bộ`, detail: sync.detail });
       else if (node.sync.state === "error") alerts.push({ id: `${node.id}-sync-error`, tone: "warn", title: `Đồng bộ máy ${node.id} đang lỗi`, detail: sync.detail });
+      else if (node.sync.state !== "paused" && node.sync.recovery && node.sync.recovery.down.length > 0)
+        alerts.push({ id: `${node.id}-services-down`, tone: "warn", title: `Máy ${node.id} đang thiếu dịch vụ: ${node.sync.recovery.down.join(", ")}`, detail: "Máy tự khởi động lại các dịch vụ này (thử lại sau 3, 6, 12 phút nếu chưa lên). Nếu kéo dài, kiểm tra máy còn mở, còn cắm điện và đã đăng nhập." });
       else if (node.sync.state === "behind") alerts.push({ id: `${node.id}-sync-behind`, tone: "info", title: `Máy ${node.id} chưa giống Mac mini (${sync.label.toLowerCase()})`, detail: sync.differences.slice(0, 3).join("; ") || sync.detail });
     }
     if (node.matchesPrimary === false && !outdated) {
