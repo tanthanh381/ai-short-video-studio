@@ -139,7 +139,7 @@ SERVICE_PATTERNS = [
     ("media", "Cầu nối media", re.compile(r"media_server\.py")),
     ("whiteboard", "Máy vẽ tay", re.compile(r"whiteboard_server\.py")),
     ("ffmpeg", "FFmpeg (ghép video)", re.compile(r"(^|/)ffmpeg( |$)")),
-    ("docker", "Docker (API + worker)", re.compile(r"Virtualization\.VirtualMachine|colima|limactl|qemu-system")),
+    ("docker", "Máy ảo (Docker, Claude Code)", re.compile(r"Virtualization\.VirtualMachine|colima|limactl|qemu-system")),
 ]
 
 

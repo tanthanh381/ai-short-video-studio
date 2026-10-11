@@ -20,7 +20,7 @@ export function demoSystem(now = Date.now()): SystemSummary {
       memUsedGb: 14.2, swapUsedGb: 8, swapTotalGb: 9, diskFreeGb: 44, diskTotalGb: 228,
       processes: [
         { id: "image", label: "Vẽ ảnh SDXL-Turbo", memGb: 3.96, count: 1 },
-        { id: "docker", label: "Docker (API + worker)", memGb: 3.14, count: 4 },
+        { id: "docker", label: "Máy ảo (Docker, Claude Code)", memGb: 3.14, count: 4 },
         { id: "ollama", label: "Ollama (viết kịch bản)", memGb: 3.2, count: 1 },
         { id: "vieneu", label: "Giọng VieNeu", memGb: 1.25, count: 1 },
         { id: "comfy", label: "ComfyUI (SDXL Base)", memGb: 0.56, count: 1 },

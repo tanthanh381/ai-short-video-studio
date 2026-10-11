@@ -252,6 +252,11 @@ export function describeEvent(event: NodeActivityEvent): string {
 
 // --- charts -------------------------------------------------------------------------------------------------------------
 
+/** Both Macs run a virtual machine (Docker on the main one, Claude Code's on a laptop); a bridge from before the rename calls it Docker. */
+export function processLabel(process: { id: string; label: string }): string {
+  return process.id === "docker" ? "Máy ảo (Docker, Claude Code)" : process.label;
+}
+
 export const HISTORY_WINDOW_MS = 30 * 60_000;
 
 /** An SVG path for one series over the last `windowMs`: gaps (no reading, or no look at all for a while) are left open, not joined. */

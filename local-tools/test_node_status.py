@@ -103,10 +103,10 @@ class ParserTests(unittest.TestCase):
         rows = {row["id"]: row for row in node_status.parse_processes(PS_LISTING, node_status.parse_top_memory(TOP_MEMORY))}
         self.assertEqual(rows["image"]["memGb"], 3.96)  # 13 MB resident, 4 GB of model in GPU memory
         self.assertEqual(rows["ollama"]["memGb"], 3.2)
-        self.assertEqual(rows["docker"]["label"], "Docker (API + worker)")
+        self.assertEqual(rows["docker"]["label"], "Máy ảo (Docker, Claude Code)")
         self.assertEqual(rows["ffmpeg"]["count"], 1)
         self.assertIn("media", rows)
-        self.assertNotIn("Claude", " ".join(row["label"] for row in rows.values()))  # unrelated apps stay out
+        self.assertEqual(set(rows), {"image", "ollama", "docker", "ffmpeg", "media"})  # the Claude app in the listing is not one of the studio's programs
         ordered = [row["memGb"] for row in node_status.parse_processes(PS_LISTING, node_status.parse_top_memory(TOP_MEMORY))]
         self.assertEqual(ordered, sorted(ordered, reverse=True))
 

@@ -4,7 +4,7 @@ import { Activity, CircleAlert, CircleCheck, Laptop, LoaderCircle, Pause, Play, 
 import type { NodeHistoryPoint, NodeSummary, SystemJob, SystemSummary } from "@studio/shared";
 import { api } from "./lib/api";
 import {
-  ago, describeEvent, formatDuration, formatGb, laneRows, machineGauges, modelRows, NODE_STATE_LABEL, sparklinePath, summaryTiles, systemAlerts, workShare,
+  ago, describeEvent, formatDuration, formatGb, laneRows, machineGauges, modelRows, NODE_STATE_LABEL, processLabel, sparklinePath, summaryTiles, systemAlerts, workShare,
   type Gauge, type Tone,
 } from "./lib/system";
 
@@ -270,7 +270,7 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
           <ul className="sys-procs">
             {processes.map((process) => (
               <li key={process.id}>
-                <span>{process.label}{process.count > 1 ? ` ×${process.count}` : ""}</span>
+                <span>{processLabel(process)}{process.count > 1 ? ` ×${process.count}` : ""}</span>
                 <div className="sys-bar" aria-hidden="true"><i style={{ width: `${Math.max(2, (process.memGb / (totalMemory || biggest)) * 100)}%` }} /></div>
                 <strong>{formatGb(process.memGb)}</strong>
               </li>

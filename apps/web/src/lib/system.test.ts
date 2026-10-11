@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NodeHistoryPoint, NodeSummary, SystemSummary } from "@studio/shared";
 import {
-  ago, describeEvent, formatDuration, formatGb, formatMs, laneRows, machineGauges, modelRows, sparklinePath, summaryTiles, systemAlerts, workShare,
+  ago, describeEvent, formatDuration, formatGb, formatMs, laneRows, machineGauges, modelRows, processLabel, sparklinePath, summaryTiles, systemAlerts, workShare,
 } from "./system";
 
 const NOW = Date.parse("2026-10-11T08:00:00Z");
@@ -223,5 +223,12 @@ describe("the demo data", () => {
     expect(systemAlerts(demo).map((alert) => alert.id)).toContain("mini-swap");
     expect(workShare(nodes)[0]).toMatchObject({ lane: "image", total: 15 });
     expect(summaryTiles(demo).map((tile) => tile.id)).toEqual(["machines", "jobs", "throughput", "share", "alerts"]);
+  });
+});
+
+describe("processLabel", () => {
+  it("names the virtual machine the same whichever bridge reported it", () => {
+    expect(processLabel({ id: "docker", label: "Docker (API + worker)" })).toBe("Máy ảo (Docker, Claude Code)");
+    expect(processLabel({ id: "image", label: "Vẽ ảnh SDXL-Turbo" })).toBe("Vẽ ảnh SDXL-Turbo");
   });
 });
