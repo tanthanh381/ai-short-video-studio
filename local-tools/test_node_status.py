@@ -235,6 +235,9 @@ class BridgeEndpointTests(unittest.TestCase):
         self.assertEqual(body["tts"]["defaultEngine"], "vieneu")
         self.assertEqual(body["image"]["state"], "ready")
         self.assertRegex(body["fingerprint"], r"^[0-9a-f]{12}$")
+        # the values behind the fingerprint travel with it, so the main machine can say which one differs
+        self.assertIn("IMAGE_STEPS", body["settings"])
+        self.assertIn("VIENEU_STEPS", body["settings"])
         self.assertIn("memPressure", body["resources"])
 
     def test_health_stays_open_for_liveness_probes(self):

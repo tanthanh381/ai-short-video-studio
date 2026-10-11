@@ -952,6 +952,8 @@ def node_status_payload(max_age_s=3.0):
             "active": METRICS.active(),
             "perf": METRICS.perf(),
             "fingerprint": node_status.fingerprint(settings, NODE_STATUS_SOURCES),
+            # lets the main machine name the setting that differs, instead of only saying that something does
+            "settings": settings,
         }
         _NODE_STATUS_CACHE.update(at=now, value=value)
         return value

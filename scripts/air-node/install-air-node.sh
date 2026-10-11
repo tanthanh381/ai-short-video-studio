@@ -138,8 +138,11 @@ main() {
 
   step start "7/7 Bật máy phụ" "Bật Ollama, Whisper, giọng đọc, vẽ ảnh, máy vẽ tay"
   if [ "$DRY" = "1" ]; then
-    echo "[dry-run] zsh $REPO/scripts/Mo-May-Phu.command"
+    echo "[dry-run] stop the services of an earlier run, then zsh $REPO/scripts/Mo-May-Phu.command"
   else
+    # The bridges carry the code and settings of the run that started them; a re-run must not leave the old ones answering.
+    for pattern in local-tools/media_server.py local-tools/image_server.py local-tools/whiteboard_server.py; do pkill -f "$pattern" 2>/dev/null || true; done
+    sleep 2
     ( cd "$REPO" && NODE_NAME="$NAME" zsh scripts/Mo-May-Phu.command )
     TS_CLI="$(command -v tailscale || echo /Applications/Tailscale.app/Contents/MacOS/Tailscale)"
     NODE_HOST="$("$TS_CLI" ip -4 2>/dev/null | head -1)"

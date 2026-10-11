@@ -35,10 +35,10 @@ fi
 export NODE_TOKEN=$(<"$token_file")
 export NODE_NAME=${NODE_NAME:-air}
 
-# Phải GIỐNG máy chính: ảnh và giọng của hai máy sẽ ghép vào cùng một video. Máy chính bỏ qua máy phụ nếu hai máy khác nhau.
-export IMAGE_STEPS=${IMAGE_STEPS:-4}
-export VIENEU_STEPS=${VIENEU_STEPS:-16}
-export TTS_BREAK_WORDS=${TTS_BREAK_WORDS:-18}
+# Ảnh và giọng của hai máy ghép vào cùng một video nên phải GIỐNG máy chính. Máy chính (chạy dưới launchd) không đặt IMAGE_STEPS,
+# VIENEU_STEPS hay TTS_BREAK_WORDS mà dùng mặc định trong media_server.py, nên máy này cũng KHÔNG đặt: một IMAGE_STEPS=4 ở đây ép mọi
+# ảnh (cả ảnh có người, vốn cần nhiều bước hơn) xuống 4 bước và làm máy chính loại máy này khỏi việc vẽ ảnh và đọc giọng.
+unset IMAGE_STEPS VIENEU_STEPS TTS_BREAK_WORDS
 
 # Chỉ mở ra mạng Tailscale (không phải 0.0.0.0). Các dịch vụ còn lại chỉ nghe trên chính máy này.
 export LOCAL_MEDIA_HOST="$tailscale_ip"

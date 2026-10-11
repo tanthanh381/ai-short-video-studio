@@ -48,7 +48,18 @@ export type NodeStatus = {
   resources?: NodeResources;
   perf?: Partial<Record<"image" | "tts" | "transcribe" | "video", number>>;
   fingerprint?: string;
+  /** The values the fingerprint is made of (everything that changes how a picture or a voice comes out). */
+  settings?: Record<string, string | number | boolean>;
 };
+
+/** Why two machines' fingerprints differ: the settings that are not equal, or (when all settings match) the code. */
+export function describeMismatch(node: NodeStatus, primary: NodeStatus): string {
+  if (!node.settings || !primary.settings) return "cấu hình hoặc mã khác máy chính";
+  const keys = [...new Set([...Object.keys(node.settings), ...Object.keys(primary.settings)])].sort();
+  const different = keys.filter((key) => node.settings?.[key] !== primary.settings?.[key]);
+  if (!different.length) return "mã media_server.py hoặc image_server.py khác phiên bản máy chính (cập nhật mã và khởi động lại ở cả hai máy)";
+  return `cấu hình khác máy chính ở ${different.join(", ")}`;
+}
 
 export type InflightTask = { startedAt: number; expectedMs: number };
 
@@ -134,7 +145,7 @@ export function assessNode(node: NodeSnapshot, lane: Lane, ctx: AssessContext): 
           return out(false);
         }
         if (status.fingerprint !== primary.status.fingerprint) {
-          reasons.push("cấu hình hoặc mã khác máy chính; ảnh và giọng sẽ không đồng nhất");
+          reasons.push(`${describeMismatch(status, primary.status)}; ảnh và giọng sẽ không đồng nhất`);
           return out(false);
         }
       }

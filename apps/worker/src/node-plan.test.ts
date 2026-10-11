@@ -47,6 +47,17 @@ describe("assessNode", () => {
     expect(assess(different, "image", { strict: false }).eligible).toBe(true);
   });
 
+  it("names the setting that differs so the owner knows what to fix", () => {
+    const base = { IMAGE_STEPS: "", VIENEU_STEPS: 16, FACE_DETAIL: true };
+    const primary = node("mini", { local: true, status: status({ settings: base }) });
+    const air = node("air", { status: status({ fingerprint: "other", settings: { ...base, IMAGE_STEPS: "4", VIENEU_STEPS: 24 } }) });
+    const reason = assessNode(air, "image", context([primary, air])).reasons[0];
+    expect(reason).toMatch(/cấu hình khác máy chính ở IMAGE_STEPS, VIENEU_STEPS/);
+    expect(reason).not.toMatch(/FACE_DETAIL/);
+    const sameSettings = node("air", { status: status({ fingerprint: "other", settings: base }) });
+    expect(assessNode(sameSettings, "image", context([primary, sameSettings])).reasons[0]).toMatch(/mã media_server\.py hoặc image_server\.py khác/);
+  });
+
   it("cannot vouch for a machine whose bridge does not report a fingerprint", () => {
     const old = node("air", { status: status({ fingerprint: undefined as unknown as string }) });
     expect(assess(old, "image").reasons[0]).toMatch(/cập nhật mã/);

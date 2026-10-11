@@ -7,7 +7,7 @@ DRY="${AIR_NODE_DRY_RUN:-0}"
 REPO="$HOME_DIR/Developer/ai-short-video-studio"
 LOCAL_AI="$HOME_DIR/Developer/local-ai"
 if [ "$DRY" != "1" ]; then
-  for pattern in "$REPO/local-tools/media_server.py" "$REPO/local-tools/image_server.py" "$REPO/local-tools/whiteboard_server.py" \
+  for pattern in "local-tools/media_server.py" "local-tools/image_server.py" "local-tools/whiteboard_server.py" \
                  "$LOCAL_AI/bin/start-" "vieneu_api:app" "tts_api:app" "whisper-server" "caffeinate -is"; do
     pkill -f "$pattern" 2>/dev/null || true
   done

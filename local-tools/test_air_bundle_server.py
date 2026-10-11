@@ -370,6 +370,21 @@ if [ "$1" = "status" ]; then echo '{"Peer":{"a":{"HostName":"air","TailscaleIPs"
         self.assertFalse(self.env_file.exists())
 
 
+class SecondMachineSettings(unittest.TestCase):
+    def test_the_air_does_not_override_what_the_main_machine_leaves_at_its_defaults(self):
+        """IMAGE_STEPS=4 on the Air (the Mac mini sets none) made every picture 4 steps and got the Air kept away from pictures and voices."""
+        script = (REPO / "scripts/Mo-May-Phu.command").read_text()
+        for name in ("IMAGE_STEPS", "VIENEU_STEPS", "TTS_BREAK_WORDS"):
+            self.assertNotRegex(script, rf"(?m)^\s*export {name}=", name)
+        self.assertRegex(script, r"(?m)^unset IMAGE_STEPS VIENEU_STEPS TTS_BREAK_WORDS$")
+
+    def test_a_re_run_stops_the_services_of_the_earlier_run_even_when_they_were_started_with_relative_paths(self):
+        for name in ("install-air-node.sh", "uninstall-air-node.sh"):
+            text = (REPO / "scripts/air-node" / name).read_text()
+            self.assertIn("local-tools/media_server.py", text, name)
+            self.assertNotIn('"$REPO/local-tools/media_server.py"', text, name)  # Mo-May-Phu starts them as `python local-tools/...`
+
+
 @unittest.skipUnless(shutil.which("zsh"), "Mo-May-Phu.command is a zsh script")
 class LoopbackOllama(unittest.TestCase):
     """An Ollama that only listens on this machine (the menu-bar app) used to stop the Air from becoming a node: it must be stopped for it."""
