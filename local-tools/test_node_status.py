@@ -80,6 +80,20 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(node_status.parse_pressure_level("garbage"), "unknown")
         self.assertEqual(node_status.parse_pressure_level(None), "unknown")
 
+    def test_the_sync_state_the_agent_wrote_is_passed_on_with_its_age(self):
+        import os
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"STUDIO_SYNC_HOME": home}):
+            self.assertIsNone(node_status.read_sync_state())  # no agent has run here
+            Path(home, ".studio-sync-state.json").write_text("not json")
+            self.assertIsNone(node_status.read_sync_state())
+            Path(home, ".studio-sync-state.json").write_text(json.dumps({"state": "in-sync", "checkedAt": time.time() - 42, "pid": 123, "behind": {"code": 0}}))
+            state = node_status.read_sync_state()
+            self.assertEqual(state["state"], "in-sync")
+            self.assertNotIn("pid", state)
+            self.assertAlmostEqual(state["ageSeconds"], 42, delta=3)
+            node_status.request_sync()
+            self.assertTrue(Path(home, ".studio-sync-now").exists())
+
     def test_memory_in_use_counts_what_is_not_free_or_reclaimable(self):
         # 16 GB, of which (6404 + 212986 + 857) pages of 16 KiB are free or cache: about 3.4 GB
         self.assertEqual(node_status.parse_vm_stat(VM_STAT, 16.0), 12.6)
@@ -246,6 +260,34 @@ class ImageServerInfoTests(unittest.TestCase):
         self.assertNotEqual(with_faces, without)
 
 
+    def test_a_different_model_or_voice_program_changes_the_fingerprint(self):
+        media = load_media_server()
+        for item in [
+            patch.object(media, "image_server_info", return_value=("ready", {})), patch.object(media, "comfyui_state", return_value=("offline", "no")),
+            patch.object(media, "tts_engines_up", return_value=["vieneu"]), patch.object(media, "find_binary", return_value="/usr/bin/ffmpeg"),
+            patch.object(media, "ltx_state", return_value=("offline", "no")), patch.object(media, "service_up", return_value=True),
+            patch.object(media, "face_detail_state", return_value=(True, "ok")),
+        ]:
+            item.start()
+            self.addCleanup(item.stop)
+        self.assertIn("MODELS_DIGEST", media.node_status_payload(max_age_s=0)["settings"])
+
+        def fingerprint():
+            return media.node_status_payload(max_age_s=0)["fingerprint"]
+
+        base = fingerprint()
+        with patch.object(media, "_models_digest", return_value="another-model-set"):
+            self.assertNotEqual(fingerprint(), base)  # a model file whose size differs on the other Mac
+        with tempfile.TemporaryDirectory() as folder:
+            voice = Path(folder, "vieneu_api.py")
+            voice.write_text("# voice server v1")
+            with patch.object(media, "NODE_STATUS_SOURCES", [*media.NODE_STATUS_SOURCES, voice]):
+                with_voice = fingerprint()
+                voice.write_text("# voice server v2")
+                self.assertNotEqual(fingerprint(), with_voice)  # the voice program changed
+        self.assertIn(Path("face_detail.py"), [Path(p.name) for p in media.NODE_STATUS_SOURCES])
+
+
 class BridgeEndpointTests(unittest.TestCase):
     """The real HTTP handler, with every downstream service mocked: auth and the /node-status contract."""
 
@@ -299,6 +341,31 @@ class BridgeEndpointTests(unittest.TestCase):
         self.assertIn("IMAGE_STEPS", body["settings"])
         self.assertIn("VIENEU_STEPS", body["settings"])
         self.assertIn("memPressure", body["resources"])
+
+    def test_node_status_carries_the_sync_state_and_sync_now_needs_the_token(self):
+        import os
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"STUDIO_SYNC_HOME": home}):
+            self.media._NODE_STATUS_CACHE.update(at=0.0, value=None)
+            self.assertIsNone(self.get("/node-status", "s3cret")[1]["sync"])
+            Path(home, ".studio-sync-state.json").write_text(json.dumps({"state": "behind", "checkedAt": time.time(), "behind": {"code": 2, "toolkit": 0, "models": 0, "ollama": 0}}))
+            self.media._NODE_STATUS_CACHE.update(at=0.0, value=None)
+            self.assertEqual(self.get("/node-status", "s3cret")[1]["sync"]["behind"]["code"], 2)
+
+            def post(token):
+                request = urllib.request.Request(f"http://127.0.0.1:{self.port}/sync-now", data=b"", method="POST")
+                if token:
+                    request.add_header("Authorization", f"Bearer {token}")
+                try:
+                    with urllib.request.urlopen(request, timeout=5) as response:
+                        return response.status
+                except urllib.error.HTTPError as error:
+                    return error.code
+
+            self.assertEqual(post(None), 401)
+            self.assertEqual(post("wrong"), 401)
+            self.assertFalse(Path(home, ".studio-sync-now").exists())
+            self.assertEqual(post("s3cret"), 200)
+            self.assertTrue(Path(home, ".studio-sync-now").exists())
 
     def test_health_stays_open_for_liveness_probes(self):
         self.assertEqual(self.get("/health")[0], 200)

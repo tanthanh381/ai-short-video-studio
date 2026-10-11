@@ -51,6 +51,7 @@ STEPS = [
     ("models", "Tải model từ Mac mini"),
     ("token", "Mã truy cập và model Ollama"),
     ("start", "Bật máy phụ"),
+    ("sync", "Đồng bộ tự động với Mac mini"),
 ]
 STEP_IDS = [step_id for step_id, _ in STEPS]
 LINGER_S = 10 * 60  # stays up this long after the Air is done, so the website can show "Xong"

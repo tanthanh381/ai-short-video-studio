@@ -189,9 +189,16 @@ scripts/kiem-tra-may.sh
 
 Script cho biết từng máy đang sẵn sàng, hạn chế (vì sao) hay mất kết nối, thời gian trung bình mỗi việc và quyết định phân việc gần nhất. Trang **Cài đặt** của website có mục "Máy cùng xử lý video" với cùng thông tin. Khi tạo video, dòng trạng thái ghi máy đang vẽ từng cảnh.
 
-### Giữ hai máy đồng bộ
+### Giữ hai máy đồng bộ (tự động)
 
-Sau mỗi lần `git pull`, khởi động lại image server (cổng 5002) và media bridge (cổng 8765) ở cả hai máy, vì hai tiến trình này đang chạy mã cũ cho tới khi được khởi động lại. Media bridge tính một dấu vân tay từ các thông số ảnh/giọng (`IMAGE_STEPS`, `VIENEU_STEPS`, `TTS_BREAK_WORDS`, voice, negative prompt...) và từ mã `media_server.py`, `image_server.py`. Hai máy khác dấu vân tay thì máy phụ không nhận vẽ ảnh và giọng đọc, và Cài đặt ghi rõ lý do. Chỉ đặt `AI_NODES_STRICT=false` khi chấp nhận ảnh hai máy có thể khác nhau.
+Mac mini là **nguồn**; máy phụ tự giữ giống nó. Hai máy dùng chung dữ liệu video qua Supabase nên không cần đồng bộ phần đó; thứ cần giống nhau là **mã chạy, bộ công cụ giọng, tệp model và danh sách model Ollama**, vì ảnh và giọng của hai máy ghép vào cùng một video.
+
+- **Trên Mac mini** `scripts/air-node/sync-server.sh install` (một lần) bật máy chủ đồng bộ dưới launchd: nghe cổng 8898 **chỉ ở địa chỉ Tailscale**, cần mã truy cập chung (`AI_NODES_TOKEN`), chỉ đọc. Nó liệt kê các tệp thuộc "bộ đồng bộ" kèm mã băm sha256 và gửi từng tệp (tải tiếp được khi bị đứt). Xem trạng thái: `sync-server.sh status`.
+- **Trên máy phụ** bộ cài (bước 8/8) đặt một tiến trình nền `com.ai-short-video.sync` (LaunchAgent). Mỗi phút nó so với Mac mini, tải phần thiếu hoặc khác (kiểm tra sha256 rồi mới thay), kéo model Ollama còn thiếu, và **chỉ khởi động lại đúng chương trình vừa đổi, khi máy đang rảnh**. Chương trình cũ bị thay được cất ở `~/.studio-sync-backups` (5 lần gần nhất). Khi chính nó được cập nhật, nó thoát để launchd bật bản mới.
+- **Bộ đồng bộ gồm:** `local-tools/**` (trừ test và các chương trình chỉ chạy ở Mac mini), `scripts/Mo-May-Phu.command`, bộ công cụ giọng (`bin/start-*.sh`, `vieneu_*.py`, `tts_api.py`), model Whisper, giọng Piper, VieNeu, mô hình mặt và, nếu máy vẽ ảnh, SDXL-Turbo. Không đồng bộ: môi trường Python (đổi `requirements-*.txt` thì dán lại dòng cài), ComfyUI và SDXL Base (chỉ ở Mac mini).
+- **Không bao giờ xóa:** tệp chỉ có ở máy phụ được giữ nguyên. Máy đang chạy bằng pin thì chỉ tải mã, hoãn tải model; thiếu chỗ trống thì không tải model.
+- **Dấu vân tay cấu hình** nay tính cả tệp sửa khuôn mặt, các chương trình giọng và tên cùng kích thước tệp model đang dùng, nên lệch ở đó cũng làm máy phụ bị loại khỏi việc ảnh và giọng cho tới khi đồng bộ xong.
+- **Theo dõi và điều khiển:** trang **Hệ thống** hiện từng máy phụ "Giống Mac mini" hay "Lệch n mục" (kèm tệp nào), tiến độ tải model và lần kiểm tra gần nhất; **Cài đặt** có nút "Đồng bộ ngay". Trên máy phụ: `scripts/Dong-Bo-May-Phu.command status|now|pause|resume|once`.
 
 ### Điều khiển
 

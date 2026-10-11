@@ -72,3 +72,14 @@ describe("machineFacts and serviceSummary", () => {
     expect(summary).toEqual({ ok: 3, total: 4, problems: [{ name: "Ollama", detail: "Không kết nối được Ollama" }] });
   });
 });
+
+describe("the sync line of each machine in Cài đặt", () => {
+  it("is shown for a second machine that is on and answering, not for the main one, a machine that is off or one that dropped out", () => {
+    const sync = { state: "in-sync" as const, checkedAt: new Date().toISOString(), appliedAt: null, sourceVersion: "a", localVersion: "a", behind: { code: 0, toolkit: 0, models: 0, ollama: 0 }, differences: [], error: null, restartPending: [], progress: null };
+    const [mini, air] = machineChoices(balancer([node("mini"), node("air", { sync })]));
+    expect(mini!.sync).toBeNull();
+    expect(air!.sync).toMatchObject({ label: "Giống Mac mini", canRequest: true });
+    expect(machineChoices(balancer([node("mini"), node("air", { sync, enabled: false, state: "disabled" })]))[1]!.sync).toBeNull();
+    expect(machineChoices(balancer([node("mini"), node("air", { sync, state: "offline" })]))[1]!.sync).toBeNull();
+  });
+});

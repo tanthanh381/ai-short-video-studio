@@ -7,6 +7,7 @@ of failing: an unreadable value must never make a healthy machine look dead.
 
 import hashlib
 import hmac
+import json
 import ipaddress
 import os
 import platform
@@ -19,6 +20,31 @@ from pathlib import Path
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 PAUSE_FILE = Path(os.getenv("NODE_PAUSE_FILE", str(Path.home() / ".studio-node-paused")))
+
+# --- keeping this Mac in step with the main one (node_sync_agent.py) ----------------------------------------------------
+
+def _sync_home():
+    return Path(os.getenv("STUDIO_SYNC_HOME") or Path.home())
+
+
+def read_sync_state():
+    """What the background sync agent last wrote about this Mac, with how old it is; None when no agent has run here."""
+    try:
+        state = json.loads((_sync_home() / ".studio-sync-state.json").read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(state, dict) or "state" not in state:
+        return None
+    state.pop("pid", None)
+    checked = state.get("checkedAt")
+    state["ageSeconds"] = round(max(0.0, time.time() - checked)) if isinstance(checked, (int, float)) else None
+    return state
+
+
+def request_sync():
+    """Asks the sync agent to look at once instead of at its next minute (it picks the file up within a few seconds)."""
+    (_sync_home() / ".studio-sync-now").touch()
+
 
 # --- token and bind rules -------------------------------------------------------------------------------------------
 

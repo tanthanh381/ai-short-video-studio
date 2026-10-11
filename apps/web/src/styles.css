@@ -3134,3 +3134,35 @@ input[type="radio"] {
   .machine-list li .machine-state { grid-column: 1; justify-self: start; }
   .machine-list li .switch { grid-row: 1; grid-column: 2; }
 }
+
+/* ---- đồng bộ máy phụ với Mac mini ---------------------------------------------------------------------------------------- */
+.sys-sync {
+  margin-top: 12px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: #f6f9fb;
+  border: 1px solid #e3e9ed;
+}
+.sys-sync.tone-warn { background: #fffaf0; border-color: #f0dfbd; }
+.sys-sync.tone-bad { background: #fff6f5; border-color: #f3c5c0; }
+.sys-sync-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
+.sys-sync p { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.55; overflow-wrap: anywhere; }
+.sys-sync .sys-bar { margin-top: 8px; }
+.sys-sync ul { margin: 8px 0 0; padding: 0 0 0 18px; font-size: 12px; color: var(--ink-2); }
+.sys-source-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.55; }
+.machine-sync { font-size: 12px; color: var(--muted); }
+.machine-sync b { color: var(--tone-idle, #5a6d7f); }
+.machine-sync.tone-ok b { color: #12805f; }
+.machine-sync.tone-warn b { color: #a64b00; }
+.machine-sync.tone-bad b { color: #c0281d; }
+.link-button {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue-dark);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.link-button:disabled { opacity: 0.5; cursor: wait; }

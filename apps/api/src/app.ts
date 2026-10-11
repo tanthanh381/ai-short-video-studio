@@ -568,6 +568,24 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.json({ settings: next, applied, balancer: balancerSnapshot });
   });
 
+  // Cài đặt → "Đồng bộ ngay": asks the worker, which asks that machine's bridge, which wakes the sync agent there.
+  app.post("/v1/sync/:node", async (req, res) => {
+    const node = nodeIdSchema.safeParse(req.params.node);
+    if (!node.success) return res.status(400).json({ error: "Tên máy không hợp lệ" });
+    await collectServiceStatuses(1_500);
+    const target = balancerSnapshot?.nodes.find((item) => item.id === node.data);
+    if (!target) return res.status(404).json({ error: `Không có máy tên ${node.data}` });
+    if (target.role === "primary") return res.status(400).json({ error: "Máy chính là nguồn: không có gì để đồng bộ về máy này." });
+    try {
+      const reply = await fetch(`${config.WORKER_HEALTH_URL.replace(/\/$/, "")}/sync/now?node=${encodeURIComponent(node.data)}`, { method: "POST", signal: AbortSignal.timeout(6_000) });
+      if (!reply.ok) return res.status(502).json({ error: `Máy ${node.data} chưa nhận được yêu cầu (chưa cài tiến trình đồng bộ, hoặc máy đang offline).` });
+    } catch {
+      return res.status(502).json({ error: "Không liên lạc được worker để gửi yêu cầu đồng bộ." });
+    }
+    req.log.info({ node: node.data }, "sync_requested");
+    res.json({ ok: true });
+  });
+
   app.get("/v1/settings", async (req, res) => {
     res.json({
       dailyBudgetUsd: req.dailyBudgetUsd,

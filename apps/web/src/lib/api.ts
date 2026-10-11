@@ -205,6 +205,8 @@ export const api = {
       ? demoApi.getJobs(id)
       : request<Job[]>(`/v1/projects/${id}/jobs`),
   getSettings: () => request<AccountSettings>("/v1/settings"),
+  /** Cài đặt → "Đồng bộ ngay": the second machine compares itself with the main one at once. */
+  syncNow: (node: string) => (appConfig.demoMode ? Promise.resolve({ ok: true }) : request<{ ok: boolean }>(`/v1/sync/${encodeURIComponent(node)}`, { method: "POST" })),
   /** Cài đặt → Máy xử lý video: switch machines off or on and choose how work is split. `applied`: the worker already follows it. */
   setBalancer: (input: { mode?: BalancerSummary["mode"] | null; disabled?: string[] }) =>
     request<{ settings: { mode: BalancerSummary["mode"] | null; disabled: string[] }; applied: boolean; balancer: BalancerSummary | null }>("/v1/balancer", { method: "PUT", body: JSON.stringify(input) }),

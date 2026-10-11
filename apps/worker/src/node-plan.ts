@@ -57,6 +57,14 @@ export type NodeStatus = {
   fingerprint?: string;
   /** The values the fingerprint is made of (everything that changes how a picture or a voice comes out). */
   settings?: Record<string, string | number | boolean>;
+  /** The background sync agent's own report (epoch seconds, as it wrote them); null when none runs on that machine. */
+  sync?: {
+    state?: string; checkedAt?: number | null; appliedAt?: number | null; ageSeconds?: number | null;
+    sourceVersion?: string | null; localVersion?: string | null;
+    behind?: { code?: number; toolkit?: number; models?: number; ollama?: number };
+    differences?: string[]; error?: string | null; restartPending?: string[];
+    progress?: { doneBytes?: number; totalBytes?: number; label?: string } | null;
+  } | null;
 };
 
 /** Why two machines' fingerprints differ: the settings that are not equal, or (when all settings match) the code. */

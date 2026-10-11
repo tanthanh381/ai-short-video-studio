@@ -209,6 +209,48 @@ describe("API", () => {
       });
     });
 
+    describe("dong bo ngay", () => {
+      const both = [node("mini", "primary"), node("air", "secondary")];
+      const stub = (syncReply: Response | "throws") => vi.stubGlobal("fetch", vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).includes("/sync/now")) {
+          expect(init?.method).toBe("POST");
+          if (syncReply === "throws") throw new Error("down");
+          return syncReply;
+        }
+        return new Response(JSON.stringify({ ok: true, services: { worker: { state: "healthy", detail: "Worker đang chạy" } }, balancer: { mode: "auto", nodes: both, decisions: [] } }));
+      }));
+      const appFor = () => createApp({ ...config, RENDER_WORKER_ENABLED: true }, owner as never);
+
+      it("chuyen yeu cau cho worker va tra loi ok", async () => {
+        stub(new Response(JSON.stringify({ ok: true })));
+        const response = await request(appFor()).post("/v1/sync/air").set("Authorization", "Bearer test");
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ ok: true });
+        expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/sync/now?node=air"))).toBe(true);
+        vi.unstubAllGlobals();
+      });
+
+      it("noi ro khi may chua nhan duoc, khi worker khong tra loi, khi la may chinh hoac may la", async () => {
+        stub(new Response("{}", { status: 502 }));
+        const post = (name: string) => request(appFor()).post(`/v1/sync/${name}`).set("Authorization", "Bearer test");
+        expect((await post("air")).status).toBe(502);
+        expect((await post("air")).body.error).toMatch(/chưa cài tiến trình đồng bộ/);
+        vi.unstubAllGlobals();
+        stub("throws");
+        expect((await post("air")).body.error).toMatch(/Không liên lạc được worker/);
+        expect((await post("mini")).status).toBe(400);
+        expect((await post("ghost")).status).toBe(404);
+        expect((await post("BAD NAME")).status).toBe(400);
+        vi.unstubAllGlobals();
+      });
+
+      it("can dang nhap", async () => {
+        stub(new Response("{}"));
+        expect((await request(appFor()).post("/v1/sync/air")).status).toBe(401);
+        vi.unstubAllGlobals();
+      });
+    });
+
     describe("bang dieu khien he thong", () => {
       const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3600_000).toISOString();
       const jobsTable = (rowsFor: (columns: string) => unknown[]) => ({

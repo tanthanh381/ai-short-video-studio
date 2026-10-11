@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import type { NodeHistoryPoint, NodeSummary, SystemSummary } from "@studio/shared";
 import {
-  ago, describeEvent, formatDuration, formatGb, formatMs, laneRows, machineGauges, modelRows, processLabel, sparklinePath, summaryTiles, systemAlerts, workShare,
+  ago, describeEvent, formatDuration, formatGb, formatMs, laneRows, machineGauges, modelRows, processLabel, sparklinePath, summaryTiles, syncView, systemAlerts, workShare,
 } from "./system";
 
 const NOW = Date.parse("2026-10-11T08:00:00Z");
 
+const inSync = (over: Partial<NonNullable<NodeSummary["sync"]>> = {}): NonNullable<NodeSummary["sync"]> => ({
+  state: "in-sync", checkedAt: "2026-10-11T07:59:30Z", appliedAt: "2026-10-11T05:00:00Z", sourceVersion: "9f3a7c21b0d4", localVersion: "9f3a7c21b0d4",
+  behind: { code: 0, toolkit: 0, models: 0, ollama: 0 }, differences: [], error: null, restartPending: [], progress: null, ...over,
+});
 const lane = (over: Partial<NodeSummary["lanes"][string]> = {}) => ({ eligible: true, reasons: [], avgMs: null, running: 0, done: 0, ...over });
 const node = (id: string, over: Partial<NodeSummary> = {}): NodeSummary => ({
   id, role: id === "mini" ? "primary" : "secondary", state: "healthy", detail: "Sẵn sàng nhận việc", rttMs: 20,
   resources: { memTotalGb: 16, memPressure: "normal", power: "ac", batteryPercent: null, thermal: "nominal", loadAvg1: 2, cpuCores: 10, memUsedGb: 8, swapUsedGb: 0, swapTotalGb: 2, diskFreeGb: 100, diskTotalGb: 228 },
   lanes: { image: lane(), tts: lane(), transcribe: lane(), whiteboard: lane(), llm: lane(), video: lane({ eligible: false, reasons: ["chưa có dịch vụ chuyển động"] }) },
   matchesPrimary: true,
+  ...(id === "mini" ? {} : { sync: inSync() }),
   ...over,
 });
 const system = (nodes: NodeSummary[], over: Partial<SystemSummary> = {}): SystemSummary => ({
@@ -222,7 +227,7 @@ describe("the demo data", () => {
     }
     expect(systemAlerts(demo).map((alert) => alert.id)).toContain("mini-swap");
     expect(workShare(nodes)[0]).toMatchObject({ lane: "image", total: 15 });
-    expect(summaryTiles(demo).map((tile) => tile.id)).toEqual(["machines", "jobs", "throughput", "share", "alerts"]);
+    expect(summaryTiles(demo).map((tile) => tile.id)).toEqual(["machines", "jobs", "throughput", "share", "sync", "alerts"]);
   });
 });
 
@@ -247,5 +252,64 @@ describe("machines switched off in Cài đặt", () => {
     const tile = summaryTiles(system([node("mini"), off])).find((item) => item.id === "machines")!;
     expect(tile).toMatchObject({ value: "1/1 hoạt động", tone: "ok" });
     expect(tile.detail).toBe("1 sẵn sàng hoàn toàn · 1 máy đã tắt");
+  });
+});
+
+describe("syncView: how closely a second machine follows the main one", () => {
+  const air = (sync: NonNullable<NodeSummary["sync"]> | null) => node("air", { sync });
+
+  it("says nothing about the main machine: it is the source", () => {
+    expect(syncView(node("mini"), NOW)).toBeNull();
+  });
+
+  it("tells a machine without the agent how to get it", () => {
+    const view = syncView(air(null), NOW)!;
+    expect(view).toMatchObject({ tone: "idle", label: "Chưa bật tự động", canRequest: false });
+    expect(view.detail).toMatch(/Dán lại dòng lệnh cài/);
+  });
+
+  it("shows the same version and when it last looked when all is well", () => {
+    expect(syncView(air(inSync()), NOW)).toMatchObject({ tone: "ok", label: "Giống Mac mini", detail: "phiên bản 9f3a7c21b0d4 · kiểm tra 30 giây trước", canRequest: true });
+  });
+
+  it("shows a download with its size and percentage, and does not offer another request meanwhile", () => {
+    const view = syncView(air(inSync({ state: "syncing", progress: { doneBytes: 3.2 * 2 ** 30, totalBytes: 5.1 * 2 ** 30, label: "Model image/…/unet" } })), NOW)!;
+    expect(view).toMatchObject({ tone: "warn", label: "Đang đồng bộ", percent: 63, canRequest: false });
+    expect(view.detail).toBe("Model image/…/unet (3,2 GB / 5,1 GB)");
+  });
+
+  it("counts what is still different and lists it", () => {
+    const view = syncView(air(inSync({ state: "behind", behind: { code: 2, toolkit: 0, models: 1, ollama: 1 }, differences: ["Mã media_server.py", "Mã node_status.py", "Model whisper/…/ggml-base.bin", "Model Ollama qwen3.5:4b"] })), NOW)!;
+    expect(view).toMatchObject({ tone: "warn", label: "Lệch 4 mục", canRequest: true });
+    expect(view.differences).toHaveLength(4);
+  });
+
+  it("reports an error, a pause and a state it does not know", () => {
+    expect(syncView(air(inSync({ state: "error", error: "Không liên lạc được với Mac mini (URLError)" })), NOW)).toMatchObject({ tone: "bad", label: "Đồng bộ lỗi", detail: "Không liên lạc được với Mac mini (URLError)" });
+    expect(syncView(air(inSync({ state: "paused" })), NOW)).toMatchObject({ tone: "idle", label: "Đã tạm dừng", canRequest: false });
+    expect(syncView(air(inSync({ state: "unknown" })), NOW)).toMatchObject({ tone: "idle", label: "Chưa rõ" });
+  });
+});
+
+describe("sync in the alerts and the tiles", () => {
+  const alertIds = (nodes: NodeSummary[]) => systemAlerts(system(nodes)).map((alert) => [alert.id, alert.tone]);
+
+  it("says it when a second machine has no sync agent, and when it is behind or failing", () => {
+    expect(alertIds([node("mini"), node("air", { sync: null })])).toEqual([["air-sync-off", "info"]]);
+    expect(alertIds([node("mini"), node("air", { sync: inSync({ state: "error", error: "x" }) })])).toEqual([["air-sync-error", "warn"]]);
+    const behind = systemAlerts(system([node("mini"), node("air", { sync: inSync({ state: "behind", behind: { code: 1, toolkit: 0, models: 0, ollama: 0 }, differences: ["Mã media_server.py"] }) })]));
+    expect(behind[0]).toMatchObject({ id: "air-sync-behind", tone: "info", detail: "Mã media_server.py" });
+  });
+
+  it("does not fuss over sync on a machine that is off or has dropped out", () => {
+    expect(alertIds([node("mini"), node("air", { state: "disabled", enabled: false, sync: null })])).toEqual([["air-disabled", "info"]]);
+    expect(alertIds([node("mini"), node("air", { state: "offline", sync: null })])).toEqual([["air-offline", "bad"]]);
+  });
+
+  it("puts the worst sync state of the second machines in a tile, and none when there is only one machine", () => {
+    const tile = (nodes: NodeSummary[]) => summaryTiles(system(nodes)).find((item) => item.id === "sync");
+    expect(tile([node("mini"), node("air")])).toMatchObject({ value: "air: giống mac mini", tone: "ok" });
+    expect(tile([node("mini"), node("air", { sync: inSync({ state: "behind", behind: { code: 3, toolkit: 0, models: 0, ollama: 0 } }) })])).toMatchObject({ value: "air: lệch 3 mục", tone: "warn" });
+    expect(tile([node("mini")])).toBeUndefined();
   });
 });

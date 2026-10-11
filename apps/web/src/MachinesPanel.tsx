@@ -6,9 +6,12 @@ import { MODE_CHOICES, disabledAfter, machineChoices, machineWarning, serviceSum
  * Cài đặt → "Máy xử lý video": the controls. Which machines take part in making videos (a switch for each), and how the
  * work is split. What the machines are doing and how they perform is read-only and lives in the Hệ thống page.
  */
-export function MachinesPanel({ balancer, busy, notice, services, onChange }: {
+export function MachinesPanel({ balancer, busy, notice, services, onChange, onSyncNow, syncing }: {
   balancer: BalancerSummary;
   busy: boolean;
+  /** The machine whose "Đồng bộ ngay" request is on its way. */
+  syncing: string | null;
+  onSyncNow: (id: string) => void;
   notice: { tone: "ok" | "warn"; text: string } | null;
   services: Record<string, { state: string; detail: string }>;
   onChange: (input: { mode?: BalancerSummary["mode"]; disabled?: string[] }) => void;
@@ -26,6 +29,16 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange }: {
               <div className="machine-text">
                 <strong>{choice.id}{choice.primary ? " (máy chính)" : ""}</strong>
                 <span>{choice.facts || "Chưa có số liệu"}</span>
+                {choice.sync ? (
+                  <span className={`machine-sync tone-${choice.sync.tone}`}>
+                    Đồng bộ với Mac mini: <b>{choice.sync.label}</b>{choice.sync.detail ? ` · ${choice.sync.detail}` : ""}
+                    {choice.sync.canRequest ? (
+                      <button type="button" className="link-button" disabled={syncing !== null} onClick={() => onSyncNow(choice.id)}>
+                        {syncing === choice.id ? "Đang gửi…" : "Đồng bộ ngay"}
+                      </button>
+                    ) : null}
+                  </span>
+                ) : null}
               </div>
               <span className={`machine-state tone-${choice.state.tone}`}>{choice.state.label}</span>
               <button

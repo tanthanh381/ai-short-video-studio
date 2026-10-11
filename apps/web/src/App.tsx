@@ -3527,6 +3527,7 @@ function SettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [machineBusy, setMachineBusy] = useState(false);
   const [machineNotice, setMachineNotice] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
+  const [syncing, setSyncing] = useState<string | null>(null);
 
   /** Reads the account's settings again; the page follows an installation or a running video without a click. */
   async function refreshSettings() {
@@ -3536,6 +3537,21 @@ function SettingsPage() {
       setSettings({ ...next, usageStats: next.usageStats ?? defaultUsageStats });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Không thể đọc cài đặt từ máy chủ");
+    }
+  }
+
+  /** "Đồng bộ ngay": the second machine compares itself with the main one at once; the page follows the result. */
+  async function syncNow(id: string) {
+    setSyncing(id);
+    setMachineNotice(null);
+    try {
+      await api.syncNow(id);
+      setMachineNotice({ tone: "ok", text: `Đã gửi yêu cầu: máy ${id} sẽ đối chiếu với Mac mini trong vài giây. Trạng thái cập nhật ngay trên trang này.` });
+      window.setTimeout(() => void refreshSettings(), 5000);
+    } catch (error) {
+      setMachineNotice({ tone: "warn", text: error instanceof Error ? error.message : "Không gửi được yêu cầu đồng bộ" });
+    } finally {
+      setSyncing(null);
     }
   }
 
@@ -3571,7 +3587,7 @@ function SettingsPage() {
 
   // While the Air is being installed, or a machine is making pictures or voices, the page follows it without a click.
   const watching = Boolean(settings.airSetup?.active)
-    || Boolean(settings.balancer?.nodes.some((node) => Object.values(node.lanes).some((lane) => lane.running > 0)));
+    || Boolean(settings.balancer?.nodes.some((node) => Object.values(node.lanes).some((lane) => lane.running > 0) || node.sync?.state === "syncing"));
   useEffect(() => {
     if (isDemo || !watching) return;
     const timer = window.setInterval(() => void refreshSettings(), 4000);
@@ -3659,6 +3675,8 @@ function SettingsPage() {
               notice={machineNotice}
               services={settings.serviceStatuses}
               onChange={(input) => void changeMachines(input)}
+              onSyncNow={(id) => void syncNow(id)}
+              syncing={syncing}
             />
           ) : (
             <p className="microcopy">

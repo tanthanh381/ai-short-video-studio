@@ -29,6 +29,7 @@ import traceback
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import node_status  # noqa: E402  (sibling module; also imported when this file is loaded by path in tests)
+import sync_manifest  # noqa: E402
 
 HOST = os.getenv("LOCAL_MEDIA_HOST", "127.0.0.1")
 # Set when this bridge is reachable from other machines (a second Mac that takes part of the work): every request except
@@ -909,7 +910,24 @@ def tts_engines_up():
     return [e for e in TTS_ENGINES if service_up({"vieneu": VIENEU_URL, "piper": PIPER_URL}.get(e, ""), "/health")]
 
 
-NODE_STATUS_SOURCES = [Path(__file__).resolve(), Path(__file__).with_name("image_server.py")]
+# Everything whose change would make this Mac's pictures or voices come out differently. Two Macs with different files here must not
+# share a video, so a change in any of them (not only in the two servers) separates the fingerprints.
+NODE_STATUS_SOURCES = [
+    Path(__file__).resolve(), Path(__file__).with_name("image_server.py"), Path(__file__).with_name("face_detail.py"),
+    LOCAL_AI_ROOT / "vieneu_api.py", LOCAL_AI_ROOT / "vieneu_tts.py", LOCAL_AI_ROOT / "tts_api.py",
+]
+_MODELS_DIGEST_CACHE = {"at": -1e9, "value": ""}
+
+
+def _models_digest(max_age_s=30.0):
+    """Names and sizes of the model files (nothing is read), so a model that differs between the Macs shows in the fingerprint."""
+    now = time.monotonic()
+    if now - _MODELS_DIGEST_CACHE["at"] >= max_age_s:
+        roots = {"repo": str(Path(__file__).resolve().parents[1]), "local_ai": str(LOCAL_AI_ROOT)}
+        _MODELS_DIGEST_CACHE.update(at=now, value=sync_manifest.models_digest(roots, (LOCAL_AI_ROOT / "models/image").is_dir()))
+    return _MODELS_DIGEST_CACHE["value"]
+
+
 _NODE_STATUS_CACHE = {"at": 0.0, "value": None}
 _NODE_STATUS_LOCK = threading.Lock()
 KIND_BY_PATH = {"/image": "image", "/video": "video", "/tts": "tts", "/tts-aligned": "tts", "/transcribe": "transcribe"}
@@ -934,6 +952,7 @@ def node_status_payload(max_age_s=3.0):
             "IMAGE_ANATOMY_GUARD": IMAGE_ANATOMY_GUARD, "IMAGE_NEGATIVE_PROMPT": IMAGE_NEGATIVE_PROMPT,
             # A machine without the face model draws faces the other machine would have redrawn.
             "FACE_DETAIL_READY": face_detail_state()[0],
+            "MODELS_DIGEST": _models_digest(),
             **{f"image_server.{key}": value for key, value in image_config.items()},
         }
         value = {
@@ -952,6 +971,8 @@ def node_status_payload(max_age_s=3.0):
             "active": METRICS.active(),
             "perf": METRICS.perf(),
             "fingerprint": node_status.fingerprint(settings, NODE_STATUS_SOURCES),
+            # how closely this Mac follows the main one (written by the background sync agent; null on the main Mac and before it is installed)
+            "sync": node_status.read_sync_state(),
             # lets the main machine name the setting that differs, instead of only saying that something does
             "settings": settings,
         }
@@ -999,6 +1020,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if not self._authorised():
+            return
+        if self.path == "/sync-now":
+            node_status.request_sync()
+            json_response(self, 200, {"ok": True})
             return
         kind = KIND_BY_PATH.get(self.path.split("?")[0])
         started = METRICS.begin(kind) if kind else None

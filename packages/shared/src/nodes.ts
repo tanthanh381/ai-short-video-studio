@@ -51,6 +51,28 @@ export type NodeModelsSummary = {
   faceDetail: boolean | null;
 };
 
+/** How closely a second machine follows the main one (its background sync agent reports this; see local-tools/node_sync_agent.py). */
+export type NodeSyncState = "in-sync" | "behind" | "syncing" | "error" | "paused" | "unknown";
+
+export type NodeSyncSummary = {
+  state: NodeSyncState;
+  /** ISO times; null before the agent has looked once. */
+  checkedAt: string | null;
+  appliedAt: string | null;
+  /** Fingerprints of the file sets: equal when the second machine has exactly what the main one offers. */
+  sourceVersion: string | null;
+  localVersion: string | null;
+  /** How many things are still different, per kind. */
+  behind: { code: number; toolkit: number; models: number; ollama: number };
+  /** The first few differences in words ("Mã media_server.py", "Model whisper/…/ggml-base.bin"). */
+  differences: string[];
+  error: string | null;
+  /** Programs updated but not restarted yet (the machine is busy). */
+  restartPending: string[];
+  /** While a download is going on. */
+  progress: { doneBytes: number; totalBytes: number; label: string } | null;
+};
+
 /** One look at a machine, kept for the dashboard's charts. */
 export type NodeHistoryPoint = {
   /** Epoch milliseconds. */
@@ -75,6 +97,8 @@ export type NodeSummary = {
   lanes: Record<string, NodeLaneSummary>;
   /** False when the owner switched the machine off in Cài đặt. */
   enabled?: boolean;
+  /** Second machines only: null when no sync agent is running there (not installed yet, or an older media bridge). */
+  sync?: NodeSyncSummary | null;
   models?: NodeModelsSummary;
   /** Oldest first, one point every few seconds for the last half hour. */
   history?: NodeHistoryPoint[];

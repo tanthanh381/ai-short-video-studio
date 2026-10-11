@@ -302,6 +302,41 @@ export function sparklinePath(
   return { line: segments.join(" "), area: areas.join(" "), last };
 }
 
+// --- keeping a second machine identical to the main one ------------------------------------------------------------------
+
+export type SyncView = { tone: Tone; label: string; detail: string; percent: number | null; differences: string[]; canRequest: boolean };
+
+const behindCount = (sync: NonNullable<NodeSummary["sync"]>) => sync.behind.code + sync.behind.toolkit + sync.behind.models + sync.behind.ollama;
+
+/** What to say about how closely a second machine follows the main one; null for the main machine (it is the source). */
+export function syncView(node: NodeSummary, now = Date.now()): SyncView | null {
+  if (node.role === "primary") return null;
+  const sync = node.sync;
+  if (!sync) {
+    return { tone: "idle", label: "Chưa bật tự động", detail: "Máy này chưa chạy tiến trình đồng bộ (hoặc còn bản cũ). Dán lại dòng lệnh cài trên máy để bật.", percent: null, differences: [], canRequest: false };
+  }
+  const checked = sync.checkedAt ? `kiểm tra ${ago(sync.checkedAt, now)}` : "chưa kiểm tra";
+  const version = sync.localVersion ? `phiên bản ${sync.localVersion}` : "";
+  switch (sync.state) {
+    case "in-sync":
+      return { tone: "ok", label: "Giống Mac mini", detail: [version, checked].filter(Boolean).join(" · "), percent: null, differences: [], canRequest: true };
+    case "syncing": {
+      const progress = sync.progress;
+      const percent = progress && progress.totalBytes > 0 ? Math.min(100, Math.round((progress.doneBytes / progress.totalBytes) * 100)) : null;
+      const size = progress && progress.totalBytes > 0 ? ` (${formatGb(progress.doneBytes / 2 ** 30)} / ${formatGb(progress.totalBytes / 2 ** 30)})` : "";
+      return { tone: "warn", label: "Đang đồng bộ", detail: `${progress?.label || "Đang so sánh với Mac mini"}${size}`, percent, differences: sync.differences, canRequest: false };
+    }
+    case "behind":
+      return { tone: "warn", label: `Lệch ${behindCount(sync)} mục`, detail: sync.error ?? `Còn khác Mac mini · ${checked}`, percent: null, differences: sync.differences, canRequest: true };
+    case "error":
+      return { tone: "bad", label: "Đồng bộ lỗi", detail: sync.error ?? "Không rõ nguyên nhân", percent: null, differences: sync.differences, canRequest: true };
+    case "paused":
+      return { tone: "idle", label: "Đã tạm dừng", detail: "Chủ máy đã tạm dừng đồng bộ (bật lại: Dong-Bo-May-Phu.command resume).", percent: null, differences: [], canRequest: false };
+    default:
+      return { tone: "idle", label: "Chưa rõ", detail: checked, percent: null, differences: [], canRequest: true };
+  }
+}
+
 // --- what needs attention -----------------------------------------------------------------------------------------------
 
 export type SystemAlert = { id: string; tone: "bad" | "warn" | "info"; title: string; detail: string };
@@ -327,6 +362,12 @@ export function systemAlerts(system: SystemSummary): SystemAlert[] {
       if (gauge.tone === "ok" || gauge.tone === "idle") continue;
       if (gauge.id === "ram" && node.resources?.memPressure === "warn" && (gauge.percent ?? 0) < 92) continue; // a warning from the system alone: the swap gauge says whether it matters
       alerts.push({ id: `${node.id}-${gauge.id}`, tone: gauge.tone === "bad" ? "bad" : "warn", title: `Máy ${node.id}: ${gauge.label} ${gauge.value}`, detail: gauge.detail });
+    }
+    const sync = node.role === "primary" || node.state === "offline" ? null : syncView(node);
+    if (sync && node.role !== "primary" && node.state !== "offline") {
+      if (!node.sync) alerts.push({ id: `${node.id}-sync-off`, tone: "info", title: `Máy ${node.id} chưa bật tự động đồng bộ`, detail: sync.detail });
+      else if (node.sync.state === "error") alerts.push({ id: `${node.id}-sync-error`, tone: "warn", title: `Đồng bộ máy ${node.id} đang lỗi`, detail: sync.detail });
+      else if (node.sync.state === "behind") alerts.push({ id: `${node.id}-sync-behind`, tone: "info", title: `Máy ${node.id} chưa giống Mac mini (${sync.label.toLowerCase()})`, detail: sync.differences.slice(0, 3).join("; ") || sync.detail });
     }
     if (node.matchesPrimary === false) {
       alerts.push({ id: `${node.id}-parity`, tone: "warn", title: `Máy ${node.id} làm ảnh và giọng khác máy chính`, detail: node.lanes.image?.reasons[0] ?? "Cấu hình hoặc mã khác máy chính nên máy này không được chia việc ảnh và giọng." });
@@ -379,6 +420,17 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
       value: share.parts.map((part) => `${part.node} ${part.done}`).join(" · "),
       detail: `${share.total} ảnh từ lúc worker khởi động`,
       tone: "idle",
+    });
+  }
+  const followers = nodes.filter((node) => node.role !== "primary");
+  if (followers.length) {
+    const views = followers.map((node) => ({ node, view: syncView(node)! }));
+    const worst = views.find((item) => item.view.tone === "bad") ?? views.find((item) => item.view.tone === "warn") ?? views.find((item) => item.view.tone === "idle") ?? views[0]!;
+    tiles.push({
+      id: "sync", label: "Đồng bộ model và mã",
+      value: views.map((item) => `${item.node.id}: ${item.view.label.toLowerCase()}`).join(" · "),
+      detail: worst.view.tone === "ok" ? "Các máy phụ tự giữ giống Mac mini mỗi phút" : worst.view.detail,
+      tone: worst.view.tone,
     });
   }
   tiles.push({

@@ -7,7 +7,7 @@
  */
 import {
   effectiveDisabled,
-  type BalancerSettings, type BalanceDecision, type BalancerSummary, type NodeActivityEvent, type NodeHistoryPoint, type NodeLaneSummary, type NodeModelsSummary, type NodeSummary,
+  type BalancerSettings, type BalanceDecision, type BalancerSummary, type NodeActivityEvent, type NodeHistoryPoint, type NodeLaneSummary, type NodeModelsSummary, type NodeSummary, type NodeSyncSummary,
 } from "@studio/shared";
 import { classifyError, NodeDownError } from "./node-errors";
 import {
@@ -91,6 +91,29 @@ function summarizeResources(resources: NonNullable<NodeStatus["resources"]>): No
     memTotalGb: resources.memTotalGb, memPressure: resources.memPressure, power: resources.power, batteryPercent: resources.batteryPercent,
     thermal: resources.thermal, loadAvg1: resources.loadAvg1, cpuCores: resources.cpuCores,
     ...optional("memUsedGb"), ...optional("swapUsedGb"), ...optional("swapTotalGb"), ...optional("diskFreeGb"), ...optional("diskTotalGb"), ...optional("processes"),
+  };
+}
+
+const SYNC_STATES = new Set(["in-sync", "behind", "syncing", "error", "paused"]);
+/** An agent that has not written anything for this long is not running, whatever its last report said. */
+const SYNC_STALE_S = 600;
+
+/** The sync agent's report as the dashboard shows it. A silent agent is an error, not a calm "in step". */
+export function summarizeSync(raw: NodeStatus["sync"]): NodeSyncSummary | null {
+  if (!raw || typeof raw !== "object") return null;
+  const iso = (seconds: number | null | undefined) => (typeof seconds === "number" && Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : null);
+  const silent = typeof raw.ageSeconds === "number" && raw.ageSeconds > SYNC_STALE_S && raw.state !== "paused";
+  const state = silent ? "error" : SYNC_STATES.has(raw.state ?? "") ? (raw.state as NodeSyncSummary["state"]) : "unknown";
+  const count = (value: number | undefined) => (typeof value === "number" && value > 0 ? value : 0);
+  return {
+    state,
+    checkedAt: iso(raw.checkedAt), appliedAt: iso(raw.appliedAt),
+    sourceVersion: raw.sourceVersion ?? null, localVersion: raw.localVersion ?? null,
+    behind: { code: count(raw.behind?.code), toolkit: count(raw.behind?.toolkit), models: count(raw.behind?.models), ollama: count(raw.behind?.ollama) },
+    differences: Array.isArray(raw.differences) ? raw.differences.filter((item) => typeof item === "string").slice(0, 10) : [],
+    error: silent ? `Tiến trình đồng bộ không báo cáo suốt ${Math.round((raw.ageSeconds as number) / 60)} phút` : raw.error ?? null,
+    restartPending: Array.isArray(raw.restartPending) ? raw.restartPending : [],
+    progress: raw.progress ? { doneBytes: raw.progress.doneBytes ?? 0, totalBytes: raw.progress.totalBytes ?? 0, label: raw.progress.label ?? "" } : null,
   };
 }
 
@@ -374,6 +397,22 @@ export class NodePool {
     }
     this.remember(entry);
     this.changed.notify();
+  }
+
+  /** Asks a second machine's sync agent to look at once (Cài đặt → Đồng bộ ngay). True when the machine's bridge took the request. */
+  async requestSync(id: string, fetchFn: typeof fetch = fetch): Promise<boolean> {
+    const entry = this.entries.get(id);
+    if (!entry || entry.spec.local) return false;
+    try {
+      const response = await fetchFn(`${entry.spec.mediaUrl}/sync-now`, {
+        method: "POST",
+        headers: entry.spec.token ? { authorization: `Bearer ${entry.spec.token}` } : {},
+        signal: AbortSignal.timeout(4_000),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   /** Adds a chart point for the machine (at most one every few seconds, so the 5-second probes do not crowd it). */
@@ -736,6 +775,7 @@ export class NodePool {
         resources: status?.resources ? summarizeResources(status.resources) : null,
         lanes,
         models: summarizeModels(snapshot),
+        ...(snapshot.local ? {} : { sync: summarizeSync(status?.sync) }),
         history: [...entry.history],
         matchesPrimary: snapshot.local ? true : status?.fingerprint && primaryFingerprint ? status.fingerprint === primaryFingerprint : null,
       };

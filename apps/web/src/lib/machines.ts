@@ -1,6 +1,6 @@
 import type { BalancerSummary, NodeSummary } from "@studio/shared";
 import { nodeActivity } from "./air-setup";
-import { formatGb } from "./system";
+import { formatGb, syncView, type SyncView } from "./system";
 
 /** The "Máy xử lý video" controls in Cài đặt: which machines are on, how work is split, a one-line state for each. Pure, so it is tested. */
 
@@ -22,6 +22,8 @@ export type MachineChoice = {
   facts: string;
   /** The last machine that is on cannot be switched off: something has to do the work. */
   canSwitchOff: boolean;
+  /** How closely a second machine follows the main one (null for the main machine). */
+  sync: SyncView | null;
 };
 
 const STATE: Record<NodeSummary["state"], MachineChoice["state"]> = {
@@ -56,6 +58,7 @@ export function machineChoices(balancer: BalancerSummary): MachineChoice[] {
       state: STATE[node.state],
       facts: on ? machineFacts(node) : "Không nhận việc mới; vẫn được theo dõi ở Hệ thống",
       canSwitchOff: !on || enabled.length > 1,
+      sync: on && node.state !== "offline" ? syncView(node) : null,
     };
   });
 }

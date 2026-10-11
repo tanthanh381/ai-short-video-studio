@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NodeDownError, NodeHttpError, classifyError } from "./node-errors";
-import { NodePool, createProbe, parseNodeSpecs, type NodeRef, type PoolOptions, type ProbeResult } from "./node-pool";
+import { NodePool, createProbe, parseNodeSpecs, summarizeSync, type NodeRef, type PoolOptions, type ProbeResult } from "./node-pool";
 import type { NodeStatus } from "./node-plan";
 
 const status = (over: Partial<NodeStatus> = {}): NodeStatus => ({
@@ -481,6 +481,59 @@ describe("what the dashboard shows", () => {
     expect(summary.recent![2]).toMatchObject({ ms: 9_000 });
     for (let i = 0; i < 60; i += 1) pool.recordSample("air", "image", 1_000);
     expect(pool.summary().recent).toHaveLength(40);
+  });
+});
+
+describe("following how closely the second machine tracks the main one", () => {
+  const report = (over: Record<string, unknown> = {}) => ({
+    state: "in-sync", checkedAt: 1_791_680_000, appliedAt: 1_791_679_000, ageSeconds: 20, sourceVersion: "abc123def456", localVersion: "abc123def456",
+    behind: { code: 0, toolkit: 0, models: 0, ollama: 0 }, differences: [], error: null, restartPending: [], progress: null, ...over,
+  });
+  const air = (pool: NodePool) => pool.summary().nodes.find((node) => node.id === "air")!;
+
+  it("turns the agent's report into what the dashboard shows", () => {
+    expect(summarizeSync(report({ state: "behind", behind: { code: 2, models: 1 }, differences: ["Mã media_server.py"] }))).toMatchObject({
+      state: "behind", checkedAt: "2026-10-11T00:53:20.000Z", behind: { code: 2, toolkit: 0, models: 1, ollama: 0 }, differences: ["Mã media_server.py"],
+    });
+    expect(summarizeSync(report({ state: "syncing", progress: { doneBytes: 3_200_000_000, totalBytes: 5_100_000_000, label: "Model image/…/unet" } }))?.progress)
+      .toEqual({ doneBytes: 3_200_000_000, totalBytes: 5_100_000_000, label: "Model image/…/unet" });
+  });
+
+  it("does not trust an agent that has gone quiet, and says so", () => {
+    const silent = summarizeSync(report({ ageSeconds: 1_500 }))!;
+    expect(silent.state).toBe("error");
+    expect(silent.error).toMatch(/không báo cáo suốt 25 phút/);
+    expect(summarizeSync(report({ state: "paused", ageSeconds: 99_999 }))?.state).toBe("paused"); // paused on purpose: it writes nothing new
+  });
+
+  it("is null without an agent, and treats a state it does not know as unknown", () => {
+    expect(summarizeSync(null)).toBeNull();
+    expect(summarizeSync(undefined)).toBeNull();
+    expect(summarizeSync(report({ state: "something-new" }))?.state).toBe("unknown");
+  });
+
+  it("reaches the second machine's card, never the main machine's", () => {
+    const { pool } = makePool();
+    pool.applyProbe("air", up({ sync: report({ state: "behind", behind: { code: 1 } }) as NonNullable<NodeStatus["sync"]> }));
+    expect(air(pool).sync).toMatchObject({ state: "behind", behind: { code: 1 } });
+    expect(pool.summary().nodes.find((node) => node.id === "mini")).not.toHaveProperty("sync");
+    pool.applyProbe("air", up({}));
+    expect(air(pool).sync).toBeNull(); // an older bridge or no agent
+  });
+
+  it("asks the second machine's bridge to sync now, with the access code", async () => {
+    const { pool } = makePool();
+    const calls: Array<[string, string | undefined, string | undefined]> = [];
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push([String(url), init?.method, (init?.headers as Record<string, string>).authorization]);
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+    expect(await pool.requestSync("air", fetchFn)).toBe(true);
+    expect(calls).toEqual([["http://100.64.0.2:8765/sync-now", "POST", "Bearer tok"]]);
+    expect(await pool.requestSync("mini", fetchFn)).toBe(false); // the main machine is the source: nothing to ask
+    expect(await pool.requestSync("ghost", fetchFn)).toBe(false);
+    expect(await pool.requestSync("air", vi.fn(async () => { throw new Error("down"); }) as unknown as typeof fetch)).toBe(false);
+    expect(await pool.requestSync("air", vi.fn(async () => new Response("no", { status: 503 })) as unknown as typeof fetch)).toBe(false);
   });
 });
 

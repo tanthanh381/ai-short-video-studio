@@ -12,6 +12,11 @@ if [ "$DRY" != "1" ]; then
     pkill -f "$pattern" 2>/dev/null || true
   done
 fi
+if [ "$DRY" != "1" ]; then
+  launchctl bootout "gui/$(id -u)/com.ai-short-video.sync" >/dev/null 2>&1 || true
+  pkill -f "local-tools/node_sync_agent.py" 2>/dev/null || true
+fi
+rm -f "$HOME_DIR/Library/LaunchAgents/com.ai-short-video.sync.plist" "$HOME_DIR/.studio-sync.json" "$HOME_DIR/.studio-sync-state.json" "$HOME_DIR/.studio-sync-paused" "$HOME_DIR/.studio-sync-now"
 rm -f "$HOME_DIR/.studio-node-token" "$HOME_DIR/.studio-node-paused"
 echo "đã dừng các dịch vụ máy phụ và xóa mã truy cập"
 if [ "${1:-}" = "--purge" ]; then

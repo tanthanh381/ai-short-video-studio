@@ -4,7 +4,7 @@ import { Activity, CircleAlert, CircleCheck, Laptop, LoaderCircle, Pause, Play, 
 import type { NodeHistoryPoint, NodeSummary, SystemJob, SystemSummary } from "@studio/shared";
 import { api } from "./lib/api";
 import {
-  ago, describeEvent, formatDuration, formatGb, laneRows, machineGauges, modelRows, NODE_STATE_LABEL, processLabel, sparklinePath, summaryTiles, systemAlerts, workShare,
+  ago, describeEvent, formatDuration, formatGb, laneRows, machineGauges, modelRows, NODE_STATE_LABEL, processLabel, sparklinePath, summaryTiles, syncView, systemAlerts, workShare,
   type Gauge, type Tone,
 } from "./lib/system";
 
@@ -216,6 +216,7 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
   const history = node.history ?? [];
   const totalMemory = node.resources?.memTotalGb ?? 0;
   const biggest = Math.max(0.01, ...processes.map((process) => process.memGb));
+  const sync = node.state === "disabled" ? null : syncView(node, now);
   const Icon = node.role === "primary" ? Server : Laptop;
   return (
     <article className={`sys-card sys-machine${node.state === "disabled" ? " is-off" : ""}`} aria-label={`Máy ${node.id}`}>
@@ -234,6 +235,21 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
         {node.role === "secondary" && node.matchesPrimary === false ? <span className="tone-warn">cấu hình khác máy chính</span> : null}
         {node.role === "secondary" && node.matchesPrimary === null ? <span className="tone-idle">chưa kiểm chứng được cấu hình</span> : null}
       </div>
+
+      {node.role === "primary" ? <p className="sys-source-note">Máy nguồn: các máy phụ tự sao chép mã, bộ công cụ, model và danh sách model Ollama từ máy này (mỗi phút một lần).</p> : null}
+      {sync ? (
+        <div className={`sys-sync tone-${sync.tone}`}>
+          <div className="sys-sync-top">
+            <strong>Đồng bộ với Mac mini</strong>
+            <span className={`sys-badge tone-${sync.tone}`}>{sync.label}</span>
+          </div>
+          <p>{sync.detail}</p>
+          {sync.percent !== null ? (
+            <div className="sys-bar" role="progressbar" aria-valuenow={sync.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Tiến độ đồng bộ"><i style={{ width: `${Math.max(2, sync.percent)}%` }} /></div>
+          ) : null}
+          {sync.differences.length ? <ul>{sync.differences.map((difference) => <li key={difference}>{difference}</li>)}</ul> : null}
+        </div>
+      ) : null}
 
       {gauges.length ? <div className="sys-meters">{gauges.map((gauge) => <Meter key={gauge.id} gauge={gauge} />)}</div> : <p className="microcopy">Máy chưa báo số liệu tài nguyên.</p>}
 

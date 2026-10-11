@@ -66,6 +66,10 @@ export function demoSystem(now = Date.now()): SystemSummary {
     },
     history: history(now, (m) => wave(m, 4, 8, 55), () => wave(now / 60_000 - 0, 7, 44, 52), 0.3, (m) => (m < 6 ? 1 : 0)),
     matchesPrimary: true,
+    sync: {
+      state: "in-sync", checkedAt: iso(-25_000), appliedAt: iso(-3 * 3600_000), sourceVersion: "9f3a7c21b0d4", localVersion: "9f3a7c21b0d4",
+      behind: { code: 0, toolkit: 0, models: 0, ollama: 0 }, differences: [], error: null, restartPending: [], progress: null,
+    },
   };
   return {
     checkedAt: iso(0),

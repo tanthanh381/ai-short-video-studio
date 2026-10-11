@@ -180,6 +180,13 @@ const healthServer = createServer(async (request, response) => {
     response.end(JSON.stringify({ ok: true, balancer: pool.summary() }));
     return;
   }
+  if (request.method === "POST" && request.url?.startsWith("/sync/now")) {
+    const node = new URL(request.url, "http://worker").searchParams.get("node") ?? "";
+    const ok = await pool.requestSync(node);
+    response.writeHead(ok ? 200 : 502, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ok }));
+    return;
+  }
   if (request.url !== "/health") {
     response.writeHead(404, { "content-type": "application/json" });
     response.end(JSON.stringify({ error: "Not found" }));

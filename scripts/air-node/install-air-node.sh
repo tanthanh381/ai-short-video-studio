@@ -44,7 +44,7 @@ on_exit() {
 trap on_exit EXIT
 
 main() {
-  step check "1/7 Kiểm tra máy"
+  step check "1/8 Kiểm tra máy"
   if [ "$DRY" != "1" ]; then
     [ "$(uname -s)" = "Darwin" ] || fail "Chỉ chạy trên macOS"
     [ "$(uname -m)" = "arm64" ] || fail "Cần máy Mac chip Apple (arm64)"
@@ -66,7 +66,7 @@ main() {
     echo "RAM ${RAM_GB} GB không đủ để vẽ ảnh (SDXL-Turbo cần khoảng 7 GB riêng): không tải model ảnh, máy chính vẫn tự làm phần ảnh. Đặt NODE_IMAGE=yes để ép cài."
   fi
 
-  step tools "2/7 Công cụ hệ thống" "Cài Python, FFmpeg, Whisper, Ollama nếu còn thiếu"
+  step tools "2/8 Công cụ hệ thống" "Cài Python, FFmpeg, Whisper, Ollama nếu còn thiếu"
   [ -z "${AIR_NODE_TEST_READ_STDIN:-}" ] || cat >/dev/null  # test only: what brew did to the first run
   if [ "$DRY" != "1" ]; then
     export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -78,7 +78,7 @@ main() {
     [ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ] || command -v tailscale >/dev/null 2>&1 || fail "Chưa cài Tailscale. Cài và đăng nhập cùng tài khoản với Mac mini rồi chạy lại lệnh này"
   fi
 
-  step code "3/7 Tải mã nguồn và công cụ từ Mac mini"
+  step code "3/8 Tải mã nguồn và công cụ từ Mac mini"
   mkdir -p "$REPO" "$LOCAL_AI/bin" "$LOCAL_AI/output" "$REPO/tmp/local-services"
   if [ "$DRY" = "1" ]; then echo "[dry-run] curl $BUNDLE/repo.tar.gz | tar -xz -C $REPO"; else curl -fsS "$BUNDLE/repo.tar.gz" | tar -xz -C "$REPO"; fi
   TOOLKIT="$REPO/local-tools/toolkit"
@@ -87,7 +87,7 @@ main() {
   cp "$TOOLKIT"/vieneu_api.py "$TOOLKIT"/vieneu_tts.py "$TOOLKIT"/tts_api.py "$LOCAL_AI/"
   chmod +x "$LOCAL_AI"/bin/*.sh
 
-  step python "4/7 Môi trường Python (vài phút)" "Dựng môi trường Python cho giọng đọc và vẽ ảnh"
+  step python "4/8 Môi trường Python (vài phút)" "Dựng môi trường Python cho giọng đọc và vẽ ảnh"
   if [ ! -x "$LOCAL_AI/venv/bin/python" ]; then run /opt/homebrew/bin/python3.12 -m venv "$LOCAL_AI/venv"; fi
   if [ ! -x "$LOCAL_AI/wb-venv/bin/python" ]; then run /opt/homebrew/bin/python3.12 -m venv "$LOCAL_AI/wb-venv"; fi
   run "$LOCAL_AI/venv/bin/pip" install --quiet --disable-pip-version-check -r "$TOOLKIT/requirements-venv.txt"
@@ -98,7 +98,7 @@ main() {
     run git -C "$LOCAL_AI/mlx-examples" checkout --quiet "$(cat "$TOOLKIT/MLX_EXAMPLES_COMMIT")"
   fi
 
-  step models "5/7 Tải model từ Mac mini (khoảng $([ "$WITH_IMAGE" = "yes" ] && echo 7 || echo 0.5) GB qua mạng nội bộ)"
+  step models "5/8 Tải model từ Mac mini (khoảng $([ "$WITH_IMAGE" = "yes" ] && echo 7 || echo 0.5) GB qua mạng nội bộ)"
   # A second run must not fetch 7 GB again: models are skipped when they are all there (the picture model by the size of its
   # biggest file, which a download cut short would not reach) or when the last run marked them complete.
   MODELS_DONE="$LOCAL_AI/models/.air-models-complete-$WITH_IMAGE"
@@ -116,7 +116,7 @@ main() {
     : > "$MODELS_DONE"
   fi
 
-  step token "6/7 Mã truy cập và model Ollama" "Lưu mã truy cập và kéo model $OLLAMA_MODEL"
+  step token "6/8 Mã truy cập và model Ollama" "Lưu mã truy cập và kéo model $OLLAMA_MODEL"
   TOKEN_FILE="$HOME_DIR/.studio-node-token"
   ( umask 077; printf '%s' "$TOKEN" > "$TOKEN_FILE" )
   echo "Đã lưu mã truy cập vào ~/.studio-node-token (chỉ bạn đọc được); Mac mini đã có cùng mã."
@@ -136,7 +136,7 @@ main() {
     fi
   fi
 
-  step start "7/7 Bật máy phụ" "Bật Ollama, Whisper, giọng đọc, vẽ ảnh, máy vẽ tay"
+  step start "7/8 Bật máy phụ" "Bật Ollama, Whisper, giọng đọc, vẽ ảnh, máy vẽ tay"
   if [ "$DRY" = "1" ]; then
     echo "[dry-run] stop the services of an earlier run, then zsh $REPO/scripts/Mo-May-Phu.command"
   else
@@ -151,6 +151,39 @@ main() {
       sleep 2
     done
     [ "${READY:-0}" = "1" ] || fail "Media bridge chưa trả lời. Xem $REPO/tmp/local-services/media.log"
+  fi
+
+  # From now on this Mac keeps itself identical to the Mac mini (programs, voice toolkit, model files, Ollama models) by itself.
+  step sync "8/8 Đồng bộ tự động với Mac mini" "Cài tiến trình nền giữ máy này giống Mac mini"
+  SYNC_PORT="${AIR_NODE_SYNC_PORT:-8898}"
+  SYNC_URL="$(printf '%s' "$BUNDLE" | sed -E 's#^(https?://[^:/]+).*#\1#'):$SYNC_PORT"
+  NODE_HOST="${NODE_HOST:-${AIR_NODE_HOST:-127.0.0.1}}"
+  IMAGE_JSON=false; [ "$WITH_IMAGE" = "yes" ] && IMAGE_JSON=true
+  printf '{"source":"%s","node":"%s","image":%s,"repo":"%s","localAi":"%s","ollama":"http://%s:11434","bridge":"http://%s:8765"}\n' \
+    "$SYNC_URL" "$NAME" "$IMAGE_JSON" "$REPO" "$LOCAL_AI" "$NODE_HOST" "$NODE_HOST" > "$HOME_DIR/.studio-sync.json"
+  PLIST="$HOME_DIR/Library/LaunchAgents/com.ai-short-video.sync.plist"
+  mkdir -p "$HOME_DIR/Library/LaunchAgents" "$REPO/tmp/local-services"
+  SYNC_PY="/opt/homebrew/bin/python3.12"; [ -x "$SYNC_PY" ] || SYNC_PY="$(command -v python3.12 || command -v python3)"
+  {
+    echo '<?xml version="1.0" encoding="UTF-8"?>'
+    echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+    echo '<plist version="1.0"><dict>'
+    echo '<key>Label</key><string>com.ai-short-video.sync</string>'
+    echo "<key>ProgramArguments</key><array><string>$SYNC_PY</string><string>$REPO/local-tools/node_sync_agent.py</string></array>"
+    echo "<key>WorkingDirectory</key><string>$REPO</string>"
+    echo '<key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>10</integer>'
+    echo "<key>StandardOutPath</key><string>$REPO/tmp/local-services/sync.log</string>"
+    echo "<key>StandardErrorPath</key><string>$REPO/tmp/local-services/sync.log</string>"
+    echo '</dict></plist>'
+  } > "$PLIST"
+  if [ "$DRY" = "1" ]; then
+    echo "[dry-run] launchctl bootstrap gui/\$UID $PLIST (nguồn đồng bộ $SYNC_URL)"
+  else
+    launchctl bootout "gui/$(id -u)/com.ai-short-video.sync" >/dev/null 2>&1 || true
+    launchctl bootstrap "gui/$(id -u)" "$PLIST" || fail "Không bật được tiến trình đồng bộ (launchctl bootstrap)"
+    launchctl kickstart -k "gui/$(id -u)/com.ai-short-video.sync" >/dev/null 2>&1 || true
+    for _ in $(seq 1 30); do [ -s "$HOME_DIR/.studio-sync-state.json" ] && break; sleep 1; done
+    if [ -s "$HOME_DIR/.studio-sync-state.json" ]; then echo "Đồng bộ: $(grep -o '"state": *"[a-z-]*"' "$HOME_DIR/.studio-sync-state.json" | head -1)"; else echo "Tiến trình đồng bộ đã bật; trạng thái sẽ có sau ít phút (log: $REPO/tmp/local-services/sync.log)"; fi
     curl -fsS -m 5 -X POST "$BUNDLE/done?name=$NAME&host=$NODE_HOST" >/dev/null 2>&1 || true
   fi
 
@@ -159,6 +192,7 @@ main() {
   echo "- Nếu macOS hỏi \"Cho phép python/ollama nhận kết nối đến?\", chọn Cho phép."
   echo "- Giữ máy cắm sạc và mở nắp. Khi cần dùng máy cho việc khác: bash $REPO/scripts/Mo-May-Phu.command pause"
   echo "- Sau khi khởi động lại máy, chạy lại: bash $REPO/scripts/Mo-May-Phu.command"
+  echo "- Máy này tự giữ giống Mac mini (mã, model, Ollama). Xem: bash $REPO/scripts/Dong-Bo-May-Phu.command status (hoặc now, pause, resume)"
   echo "- Trên Mac mini, trang Cài đặt → \"Máy cùng xử lý video\" sẽ báo máy này sẵn sàng."
 }
 

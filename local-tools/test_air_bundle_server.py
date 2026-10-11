@@ -147,7 +147,7 @@ class Progress(Fixture):
         self.assertEqual(code, 200)
         self.assertTrue(body["active"])
         self.assertFalse(body["finished"])
-        self.assertEqual([step["id"] for step in body["steps"]], ["check", "tools", "code", "python", "models", "token", "start"])
+        self.assertEqual([step["id"] for step in body["steps"]], ["check", "tools", "code", "python", "models", "token", "start", "sync"])
         self.assertTrue(all(state == "pending" for state in self.states(body).values()))
         self.assertNotIn("s3cr3tpath", json.dumps(body))  # the secret path is not handed out by the status
 
@@ -200,8 +200,8 @@ class Progress(Fixture):
 
 
 class Installer(Fixture):
-    def run_installer(self, **extra_env):
-        home = Path(self.tmp.name) / "air-home"
+    def run_installer(self, home_name="air-home", **extra_env):
+        home = Path(self.tmp.name) / home_name
         home.mkdir()
         template = (REPO / "scripts/air-node/install-air-node.sh").read_text()
         script = home / "install.sh"
@@ -227,6 +227,25 @@ class Installer(Fixture):
         self.assertIn("models.tar?image=yes", result.stdout)
         self.assertIn("Xong. Máy 'air'", result.stdout)
 
+    def test_the_last_step_sets_up_the_background_sync_pointing_at_the_main_mac(self):
+        home, result = self.run_installer(NODE_IMAGE="yes", AIR_NODE_HOST="100.64.0.9")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        config = json.loads((home / ".studio-sync.json").read_text())
+        self.assertEqual(config, {
+            "source": "http://mini:8898", "node": "air", "image": True, "repo": str(home / "Developer/ai-short-video-studio"),
+            "localAi": str(home / "Developer/local-ai"), "ollama": "http://100.64.0.9:11434", "bridge": "http://100.64.0.9:8765",
+        })
+        plist = (home / "Library/LaunchAgents/com.ai-short-video.sync.plist").read_text()
+        self.assertIn("<string>com.ai-short-video.sync</string>", plist)
+        self.assertIn("local-tools/node_sync_agent.py", plist)
+        self.assertIn("<key>KeepAlive</key><true/>", plist)  # launchd starts it again after an update or a crash
+        self.assertIn("launchctl bootstrap", result.stdout)
+        self.assertIn("8/8 Đồng bộ tự động với Mac mini", result.stdout)
+        # a Mac that makes no pictures is told so: its sync never fetches the picture model
+        home_small, small = self.run_installer("air-small", NODE_IMAGE="no")
+        self.assertEqual(small.returncode, 0, small.stdout + small.stderr)
+        self.assertIs(json.loads((home_small / ".studio-sync.json").read_text())["image"], False)
+
     def test_piped_into_bash_a_command_that_reads_stdin_does_not_eat_the_rest_of_the_script(self):
         # `curl … | bash` on the Air stopped after step 2: brew read the pipe and swallowed steps 3-7
         home = Path(self.tmp.name) / "air-home"
@@ -236,7 +255,7 @@ class Installer(Fixture):
                "AIR_NODE_TEST_READ_STDIN": "1", "NODE_IMAGE": "yes"}
         result = subprocess.run(["bash"], input=script, capture_output=True, text=True, env=env, timeout=60)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("7/7 Bật máy phụ", result.stdout)
+        self.assertIn("8/8 Đồng bộ tự động", result.stdout)
         self.assertIn("Xong. Máy 'air'", result.stdout)
         self.assertTrue((home / ".studio-node-token").exists())
 
@@ -258,7 +277,8 @@ class Installer(Fixture):
         steps = {step["id"]: step for step in bundle.status()["steps"]}
         self.assertEqual(steps["tools"]["detail"], "Cài Python, FFmpeg, Whisper, Ollama nếu còn thiếu")
         self.assertEqual(steps["python"]["detail"], "Cài thư viện cho sửa khuôn mặt và máy vẽ tay")  # the last detail of that step
-        self.assertEqual(steps["start"]["state"], "running")  # the installer reports a step when it starts it; "done" comes with /done
+        self.assertEqual(steps["start"]["state"], "done")  # reaching the next step ends the one before
+        self.assertEqual(steps["sync"]["state"], "running")  # the installer reports a step when it starts it; "done" comes with /done
         self.assertIsNone(bundle.status()["failed"])
         # a stop in step 3 (the toolkit folder is missing): the website sees which step failed and why
         broken = run_with(Path(self.tmp.name) / "no-such-toolkit")
