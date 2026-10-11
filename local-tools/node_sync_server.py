@@ -8,6 +8,7 @@ that was cut can go on where it stopped. Standard library only.
 
 import argparse
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -33,15 +34,40 @@ def env_value(env_text, key):
     return line.split("=", 1)[1].strip().strip("'\"") if line else ""
 
 
+TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")  # the range Tailscale hands out
+
+
+def valid_tailscale_ip(text):
+    """The text as a Tailscale address, or None (the CLI sometimes prints an error and still exits 0)."""
+    try:
+        address = ipaddress.ip_address((text or "").split()[0])
+    except (ValueError, IndexError):
+        return None
+    return str(address) if address in TAILSCALE_NET else None
+
+
+def tailscale_ip_from_ifconfig(text):
+    """The first address in Tailscale's range found in `ifconfig` output: works where the CLI cannot start (under launchd)."""
+    for match in re.finditer(r"\binet (\d+\.\d+\.\d+\.\d+)", text or ""):
+        found = valid_tailscale_ip(match.group(1))
+        if found:
+            return found
+    return None
+
+
 def find_tailscale():
     for candidate in ("tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"):
         try:
             out = subprocess.run([candidate, "ip", "-4"], capture_output=True, text=True, timeout=5)
-            if out.returncode == 0 and out.stdout.strip():
-                return out.stdout.split()[0]
+            found = valid_tailscale_ip(out.stdout) if out.returncode == 0 else None
+            if found:
+                return found
         except (OSError, subprocess.SubprocessError):
             continue
-    return None
+    try:
+        return tailscale_ip_from_ifconfig(subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=5).stdout)
+    except (OSError, subprocess.SubprocessError):
+        return None
 
 
 def ollama_models(url):

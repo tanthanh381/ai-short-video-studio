@@ -250,6 +250,25 @@ class SyncSet(unittest.TestCase):
         self.assertNotEqual(sync_manifest.models_digest(self.roots, False), before)
 
 
+class Tailscale(unittest.TestCase):
+    def test_only_an_address_in_tailscales_range_counts(self):
+        self.assertEqual(node_sync_server.valid_tailscale_ip("100.121.139.81\n"), "100.121.139.81")
+        for bad in ["The Tailscale CLI failed to start: failed to load preferences", "", None, "192.168.1.5", "127.0.0.1", "0.0.0.0", "100.63.0.1", "fd7a:115c:a1e0::1"]:
+            self.assertIsNone(node_sync_server.valid_tailscale_ip(bad), bad)
+
+    def test_it_finds_the_address_in_ifconfig_when_the_command_line_tool_cannot_start(self):
+        ifconfig = """lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST> mtu 16384
+\tinet 127.0.0.1 netmask 0xff000000
+en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tinet 192.168.1.20 netmask 0xffffff00 broadcast 192.168.1.255
+utun4: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1280
+\tinet 100.121.139.81 --> 100.121.139.81 netmask 0xffffffff
+"""
+        self.assertEqual(node_sync_server.tailscale_ip_from_ifconfig(ifconfig), "100.121.139.81")
+        self.assertIsNone(node_sync_server.tailscale_ip_from_ifconfig("en0:\n\tinet 192.168.1.20 netmask 0xffffff00"))
+        self.assertIsNone(node_sync_server.tailscale_ip_from_ifconfig(""))
+
+
 class Server(Fixture):
     def test_every_request_needs_the_access_code(self):
         for token in (None, "wrong"):
