@@ -1016,10 +1016,22 @@ def _ltx_up():
 
 # The big model servers sleep (their launchd job is unloaded) when nothing used them for STUDIO_IDLE_SLEEP_MIN minutes (default 5,
 # 0 = never) and wake on the next request that needs them. The weights of an idle SDXL server alone are 5 GB of a 16 GB Mac.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_LOGS = _REPO_ROOT / "tmp" / "local-services"
+
+
+def _by_script(name, port, *argv):
+    """For a Mac that starts the server from scripts/Mo-May-Phu.command (the Air) instead of from a launchd job."""
+    return idle_sleep.ProcessControl(name, port, argv, _LOGS / "asleep.json", cwd=str(_REPO_ROOT), log_path=_LOGS / f"{name}.log")
+
+
 SLEEPER = idle_sleep.Sleeper([
-    idle_sleep.Service("image", "com.ai-short-video.image", lambda: image_server_state() == "ready", wake_timeout_s=420),
-    idle_sleep.Service("vieneu", "com.ai-short-video.vieneu", lambda: service_up(VIENEU_URL), wake_timeout_s=300),
-    idle_sleep.Service("whisper", "com.ai-short-video.whisper", lambda: service_up(WHISPER_URL, "/"), wake_timeout_s=180),
+    idle_sleep.Service("image", "com.ai-short-video.image", lambda: image_server_state() == "ready", wake_timeout_s=420,
+                       process=_by_script("image", 5002, LOCAL_AI_ROOT / "venv/bin/python", _REPO_ROOT / "local-tools/image_server.py")),
+    idle_sleep.Service("vieneu", "com.ai-short-video.vieneu", lambda: service_up(VIENEU_URL), wake_timeout_s=300,
+                       process=_by_script("vieneu", 5001, "/bin/zsh", LOCAL_AI_ROOT / "bin/start-vieneu.sh")),
+    idle_sleep.Service("whisper", "com.ai-short-video.whisper", lambda: service_up(WHISPER_URL, "/"), wake_timeout_s=180,
+                       process=_by_script("whisper", 8080, "/bin/zsh", LOCAL_AI_ROOT / "bin/start-whisper.sh")),
     idle_sleep.Service("comfyui", "com.ai-short-video.comfyui", _comfy_up, wake_timeout_s=300, idle_cap_s=180),
     idle_sleep.Service("ltx", "com.ai-short-video-studio.ltx", _ltx_up, wake_timeout_s=300, idle_cap_s=180),
 ], idle_sleep.configured_idle_seconds())

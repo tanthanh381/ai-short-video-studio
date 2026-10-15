@@ -9,7 +9,10 @@ The bridge (media_server.py) owns the clock: it calls touch() around every reque
 ensure_awake() before it hands a request to a server. Standard library only; the launchctl and clock calls are injectable for tests.
 """
 
+import json
 import os
+import signal
+import socket
 import subprocess
 import threading
 import time
@@ -30,8 +33,9 @@ def configured_idle_seconds(env=None):
 
 
 class Service:
-    def __init__(self, name, label, up, wake_timeout_s=240, idle_cap_s=None):
+    def __init__(self, name, label, up, wake_timeout_s=240, idle_cap_s=None, process=None):
         self.name = name
+        self.process = process  # ProcessControl, for a Mac that runs this server without launchd (the Air)
         # a rarely used heavy server (video, ComfyUI) sleeps sooner than the limit, never later
         self.idle_cap_s = idle_cap_s
         self.label = label
@@ -64,6 +68,82 @@ class Launchd:
             raise RuntimeError(f"Không bật được dịch vụ {label}: {(result.stderr or '').strip()[:120]}")
 
 
+def listener_pid(port):
+    try:
+        out = subprocess.run(["lsof", "-tiTCP:%d" % port, "-sTCP:LISTEN"], capture_output=True, text=True, timeout=10).stdout.split()
+        return int(out[0]) if out else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def port_open(port):
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+class ProcessControl:
+    """Sleep and wake for a server that was started by a script (nohup) and not by launchd: sleeping ends its process, waking runs the
+    same command again. Which servers were put to sleep is kept in a file, so a crashed server is never mistaken for a sleeping one
+    and a bridge restart does not forget them. Same four calls as Launchd; the label is ignored."""
+
+    def __init__(self, name, port, argv, state_file, cwd=None, env=None, log_path=None):
+        self.name, self.port, self.argv = name, port, [str(a) for a in argv]
+        self.state_file, self.cwd, self.env, self.log_path = Path(state_file), cwd, env, log_path
+
+    def _flags(self):
+        try:
+            return set(json.loads(self.state_file.read_text()))
+        except (OSError, ValueError):
+            return set()
+
+    def _set_flag(self, on):
+        flags = self._flags()
+        flags.add(self.name) if on else flags.discard(self.name)
+        try:
+            self.state_file.parent.mkdir(parents=True, exist_ok=True)
+            self.state_file.write_text(json.dumps(sorted(flags)))
+        except OSError:
+            pass
+
+    def installed(self, label=None):
+        return all(Path(a).exists() for a in self.argv if a.startswith("/"))
+
+    def loaded(self, label=None):
+        return port_open(self.port) or self.name not in self._flags()
+
+    def unload(self, label=None):
+        self._set_flag(True)
+        pid = listener_pid(self.port)
+        if not pid or pid == os.getpid():
+            return
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        for _ in range(32):
+            if listener_pid(self.port) != pid:
+                return
+            time.sleep(0.25)
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    def load(self, label=None):
+        self._set_flag(False)
+        if port_open(self.port):
+            return
+        log = open(self.log_path, "ab") if self.log_path else subprocess.DEVNULL
+        try:
+            subprocess.Popen(self.argv, cwd=self.cwd, env=self.env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        finally:
+            if log is not subprocess.DEVNULL:
+                log.close()
+
+
 class Sleeper:
     def __init__(self, services, idle_s, launchd=None, clock=time.monotonic, sleep=time.sleep):
         self.services = {s.name: s for s in services}
@@ -89,10 +169,19 @@ class Sleeper:
             self.last_used[name] = self.clock()
             self.busy[name] = max(0, self.busy[name] + delta)
 
+    def control(self, service):
+        """launchd when the Mac has a job for it (the Mac mini), otherwise the process control, otherwise launchd (which finds nothing)."""
+        if service.process is not None and not self.launchd.installed(service.label):
+            return service.process
+        return self.launchd
+
     def asleep(self, name):
         """True for a service that was put to sleep: its job is unloaded although its plist is installed."""
         service = self.services.get(name)
-        return bool(service) and self.launchd.installed(service.label) and not self.launchd.loaded(service.label)
+        if not service:
+            return False
+        control = self.control(service)
+        return control.installed(service.label) and not control.loaded(service.label)
 
     def sleep_idle(self, keep=()):
         """Unloads every service idle for longer than the limit; returns the names put to sleep. `keep` is never touched."""
@@ -104,13 +193,14 @@ class Sleeper:
                 idle = self.clock() - self.last_used[name]
                 busy = self.busy[name]
             limit = min(self.idle_s, service.idle_cap_s) if service.idle_cap_s else self.idle_s
-            if name in keep or busy or idle < limit or not self.launchd.installed(service.label):
+            control = self.control(service)
+            if name in keep or busy or idle < limit or not control.installed(service.label):
                 continue
             if not self.locks[name].acquire(blocking=False):
                 continue
             try:
-                if self.launchd.loaded(service.label):
-                    self.launchd.unload(service.label)
+                if control.loaded(service.label):
+                    control.unload(service.label)
                     slept.append(name)
             finally:
                 self.locks[name].release()
@@ -122,11 +212,12 @@ class Sleeper:
         if not service:
             return False
         with self.locks[name]:
-            if not self.launchd.installed(service.label):
+            control = self.control(service)
+            if not control.installed(service.label):
                 return False
             woke = False
-            if not self.launchd.loaded(service.label):
-                self.launchd.load(service.label)
+            if not control.loaded(service.label):
+                control.load(service.label)
                 woke = True
             if woke or not service.up():
                 deadline = self.clock() + service.wake_timeout_s

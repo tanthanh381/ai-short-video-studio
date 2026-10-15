@@ -144,6 +144,53 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class ProcessControlTests(unittest.TestCase):
+    """A server started by a script, not launchd (the Air): a real throw-away HTTP server is stopped and started again."""
+
+    def test_sleeps_and_wakes_a_script_started_server(self):
+        import socket
+        import sys
+        import tempfile
+        import time
+        from pathlib import Path
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        with tempfile.TemporaryDirectory() as directory:
+            control = idle_sleep.ProcessControl("demo", port, [sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1"],
+                                                Path(directory) / "asleep.json", cwd=directory)
+            service = idle_sleep.Service("demo", "no.such.label", lambda: idle_sleep.port_open(port), wake_timeout_s=20, process=control)
+            clock = Clock()
+            sleeper = idle_sleep.Sleeper([service], 60, FakeLaunchd(installed=(), loaded=()), clock, sleep=lambda s: (time.sleep(0.2), clock.advance(0.2)))
+            try:
+                self.assertFalse(sleeper.asleep("demo"))  # never started and never put to sleep: not "asleep", just down
+                control.load()
+                deadline = time.time() + 15
+                while not idle_sleep.port_open(port) and time.time() < deadline:
+                    time.sleep(0.2)
+                self.assertTrue(idle_sleep.port_open(port))
+                clock.advance(61)
+                self.assertEqual(sleeper.sleep_idle(), ["demo"])
+                self.assertFalse(idle_sleep.port_open(port))
+                self.assertTrue(sleeper.asleep("demo"))
+                self.assertTrue(sleeper.ensure_awake("demo"))
+                self.assertTrue(idle_sleep.port_open(port))
+                self.assertFalse(sleeper.asleep("demo"))
+            finally:
+                pid = idle_sleep.listener_pid(port)
+                if pid:
+                    import os
+                    import signal
+                    os.kill(pid, signal.SIGTERM)
+
+    def test_a_crashed_server_is_not_taken_for_a_sleeping_one(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as directory:
+            control = idle_sleep.ProcessControl("demo", 1, ["/bin/sh"], Path(directory) / "asleep.json")
+            self.assertTrue(control.loaded())  # port closed but nobody asked it to sleep: the supervisor's business
+
+
 class BridgeWiringTests(unittest.TestCase):
     """Which sleeping services each bridge request needs, and that a sleeping Mac still looks capable and identical."""
 
