@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, CircleAlert, CircleCheck, Laptop, LoaderCircle, Pause, Play, RefreshCw, Server, TriangleAlert } from "lucide-react";
+import { Activity, ArrowDownToLine, Battery, CircleAlert, CircleCheck, Cpu, HardDrive, Laptop, LoaderCircle, MemoryStick, Pause, Play, RefreshCw, Server, Thermometer, TriangleAlert } from "lucide-react";
 import type { NodeHistoryPoint, NodeSummary, SystemJob, SystemSummary } from "@studio/shared";
 import { api } from "./lib/api";
 import {
@@ -21,6 +21,16 @@ const SERVICE_TONE: Record<string, { label: string; tone: Tone }> = {
   unknown: { label: "Chưa kiểm tra", tone: "idle" },
 };
 const clock = (iso: string) => new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+function GaugeIcon({ id }: { id: Gauge["id"] }) {
+  const props = { size: 16, strokeWidth: 2, "aria-hidden": true as const };
+  if (id === "ram") return <MemoryStick {...props} />;
+  if (id === "swap") return <ArrowDownToLine {...props} />;
+  if (id === "cpu") return <Cpu {...props} />;
+  if (id === "disk") return <HardDrive {...props} />;
+  if (id === "power") return <Battery {...props} />;
+  return <Thermometer {...props} />;
+}
 
 /** Re-renders every second so "cập nhật 3 giây trước" keeps counting between refreshes. */
 function useNow(intervalMs = 1_000) {
@@ -181,14 +191,17 @@ function Alerts({ system }: { system: SystemSummary }) {
 
 function Meter({ gauge }: { gauge: Gauge }) {
   return (
-    <div className={`sys-meter tone-${gauge.tone}`}>
-      <div className="sys-meter-top"><span>{gauge.label}</span><strong>{gauge.value}</strong></div>
+    <div className={`sys-meter tone-${gauge.tone}`} title={`${gauge.label}: ${gauge.detail}`}>
+      <div className="sys-meter-top">
+        <span className="sys-meter-label" role="img" aria-label={gauge.label}><GaugeIcon id={gauge.id} /></span>
+        <strong>{gauge.value}</strong>
+      </div>
       {gauge.percent !== null ? (
         <div className="sys-bar" role="meter" aria-valuenow={gauge.percent} aria-valuemin={0} aria-valuemax={100} aria-label={`${gauge.label}: ${gauge.value}`}>
           <i style={{ width: `${Math.max(2, gauge.percent)}%` }} />
         </div>
       ) : null}
-      <small>{gauge.detail}</small>
+      {gauge.tone !== "ok" ? <small>{gauge.detail}</small> : null}
     </div>
   );
 }
