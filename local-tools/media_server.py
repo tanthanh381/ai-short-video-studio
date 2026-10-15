@@ -1260,7 +1260,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/health":
             comfy_ready, _ = comfyui_state()
-            image_ready = image_server_state() != "down" or comfy_ready == "ready" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
+            image_ready = image_server_state() != "down" or SLEEPER.asleep("image") or comfy_ready == "ready" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
             engines = {"vieneu": service_up(VIENEU_URL) or SLEEPER.asleep("vieneu"), "piper": service_up(PIPER_URL)}
             ffmpeg_ready = find_binary("ffmpeg", "FFMPEG_PATH") is not None
             tts_ready = ffmpeg_ready and any(engines.get(e) for e in TTS_ENGINES)
