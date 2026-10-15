@@ -22,6 +22,7 @@ export const visualPresetSchema = z.enum([
   "chibi-dan-gian-viet",
   "chibi-co-trang-hai",
   "thuy-mac-co-phong",
+  "thuy-mac-sepia",
   "paper-storybook",
   "chibi-huyen-bi",
   "chibi-dong-vat-co-phong",
@@ -56,6 +57,9 @@ export const subtitleStyleSchema = z.object({
 });
 
 export const logoPositionSchema = z.enum(["top-left", "top-center", "top-right", "bottom-left", "bottom-right"]);
+
+/** Colours of the story card: blue (yellow title, channel footer) or sepia (beige canvas, red + white title, green karaoke: the "cổ nhân" shorts). */
+export const cardThemeSchema = z.enum(["blue", "sepia"]);
 
 /** full-bleed: ảnh phủ toàn khung. story-card: tiêu đề + dải tranh + phụ đề + chữ ký kênh trên nền màu (kiểu video truyện minh họa). */
 // paper-stage: one character on plain kraft paper, caption under it ("Đạo lý cổ phong" shorts).
@@ -186,6 +190,7 @@ export const projectSettingsSchema = z.object({
   logoOpacity: z.number().min(0.1).max(1).default(0.9),
   rewriteFullScript: z.boolean().default(false),
   layoutTemplate: layoutTemplateSchema.default("full-bleed"),
+  cardTheme: cardThemeSchema.default("blue"),
   /** Tiêu đề in hoa trên đầu thẻ truyện; để trống để tự viết từ kịch bản. */
   cardTitle: z.string().max(80).default(""),
   /** Tên kênh in ở chân thẻ truyện ("Bản quyền thuộc về: …"). */

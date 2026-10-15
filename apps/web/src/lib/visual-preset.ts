@@ -35,7 +35,7 @@ const PAPER_SUBTITLE = {
  */
 export function withLayoutTemplate(settings: ProjectSettings, layoutTemplate: ProjectSettings["layoutTemplate"]): ProjectSettings {
   if (layoutTemplate === "story-card")
-    return { ...withVisualPreset(leavePaper(settings), "cartoon"), layoutTemplate, aspectRatio: "9:16", autoMusic: true };
+    return { ...withVisualPreset(leavePaper(settings), "cartoon"), layoutTemplate, cardTheme: "blue", aspectRatio: "9:16", autoMusic: true };
   if (layoutTemplate === "paper-stage")
     return { ...withVisualPreset(settings, "chibi-co-phong"), layoutTemplate, aspectRatio: "9:16", autoMusic: true,
       captionHighlight: false, hookTitle: false, subtitle: { ...settings.subtitle, ...PAPER_SUBTITLE } };

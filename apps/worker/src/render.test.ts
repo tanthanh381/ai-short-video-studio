@@ -185,6 +185,37 @@ describe("karaoke captions", () => {
   });
 });
 
+describe("sepia story card captions", () => {
+  const project = (settings: Record<string, unknown>) => ({
+    id: crypto.randomUUID(), userId: crypto.randomUUID(), title: "t", sourceText: "x", inputMode: "idea", hook: "", suggestedTitle: "",
+    suggestedDescription: "", status: "draft", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    settings: { ...DEFAULT_PROJECT_SETTINGS, layoutTemplate: "story-card", cardTheme: "sepia", captionHighlight: true, ...settings },
+    scenes: [{
+      id: crypto.randomUUID(), order: 0, narration: "Xin chào", imagePrompt: "x", estimatedDurationMs: 2000, actualDurationMs: 2000,
+      imagePath: "a", videoPath: null, audioPath: "b", thumbnailUrl: null, mediaStatus: "ready", errorMessage: null, annotationJson: null,
+      subtitles: [{ id: crypto.randomUUID(), startMs: 0, endMs: 2000, text: "Xin chào các bạn" }],
+    }],
+  }) as unknown as Project;
+
+  it("turns spoken words light green over pale unspoken ones, with a dark brown edge, 74 px, under the picture", () => {
+    const style = createAss(project({})).split("\n").find((line) => line.startsWith("Style: Default"))!.split(",");
+    expect(style[1]).toBe("Noto Sans");
+    expect(style[2]).toBe("74");
+    expect(style[3]).toBe("&H005AF4C8"); // spoken: #C8F45A as BGR
+    expect(style[4]).toBe("&H00DDEBEE"); // unspoken: #EEEBDD
+    expect(style[5]).toBe("&H0018242B"); // edge: #2B2418
+    expect(style[16]).toBe("4");
+    expect(style[18]).toBe("8");
+    expect(style[21]).toBe("1362");
+  });
+
+  it("keeps the blue card's captions when the theme is blue", () => {
+    const style = createAss(project({ cardTheme: "blue" })).split("\n").find((line) => line.startsWith("Style: Default"))!.split(",");
+    expect(style[2]).toBe("58");
+    expect(style[3]).toBe("&H004DE1FF");
+  });
+});
+
 describe("scene motion", () => {
   it("cycles camera moves so consecutive stills never move the same way", () => {
     const moves = [0, 1, 2, 3, 4].map((index) => sceneMotion(5, index));

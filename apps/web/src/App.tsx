@@ -1597,13 +1597,24 @@ function NewProjectPage() {
               </select>
             </Field>
             {settings.layoutTemplate === "story-card" && (
-              <Field label="Tên kênh ở chân video" hint="Để trống nếu không muốn hiện chân video.">
-                <input
-                  maxLength={60}
-                  value={settings.brandName}
-                  onChange={(e) => setSettings((s) => ({ ...s, brandName: e.target.value }))}
-                />
-              </Field>
+              <>
+                <Field label="Màu thẻ truyện" hint="Xanh: tiêu đề vàng trên nền xanh. Nền be: tiêu đề đỏ + trắng, phụ đề xanh lá chạy theo lời (kiểu Quy tắc cổ nhân).">
+                  <select
+                    value={settings.cardTheme}
+                    onChange={(e) => setSettings((s) => ({ ...s, cardTheme: e.target.value as ProjectSettings["cardTheme"] }))}
+                  >
+                    <option value="blue">Nền xanh, tiêu đề vàng</option>
+                    <option value="sepia">Nền be, tiêu đề đỏ + trắng</option>
+                  </select>
+                </Field>
+                <Field label="Tên kênh ở chân video" hint="Để trống nếu không muốn hiện chân video.">
+                  <input
+                    maxLength={60}
+                    value={settings.brandName}
+                    onChange={(e) => setSettings((s) => ({ ...s, brandName: e.target.value }))}
+                  />
+                </Field>
+              </>
             )}
             <Field label="Tỷ lệ">
               <select
@@ -2910,7 +2921,16 @@ function StudioPage() {
               </Field>
               {project.settings.layoutTemplate === "story-card" && (
                 <>
-                  <Field label="Tiêu đề trên khung" hint="Để trống: AI chọn câu mở đầu hấp dẫn từ kịch bản.">
+                  <Field label="Màu thẻ truyện">
+                    <select
+                      value={project.settings.cardTheme}
+                      onChange={(e) => change({ ...project, settings: { ...project.settings, cardTheme: e.target.value as ProjectSettings["cardTheme"] } })}
+                    >
+                      <option value="blue">Nền xanh, tiêu đề vàng</option>
+                      <option value="sepia">Nền be, tiêu đề đỏ + trắng</option>
+                    </select>
+                  </Field>
+                  <Field label="Tiêu đề trên khung" hint="Để trống: AI chọn câu mở đầu hấp dẫn từ kịch bản. Nền be: gõ “DÒNG ĐỎ | DÒNG TRẮNG” để tự chia hai dòng.">
                     <input
                       maxLength={80}
                       value={project.settings.cardTitle}

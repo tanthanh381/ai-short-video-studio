@@ -14,6 +14,13 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     apply: (s) => ({ ...withLayoutTemplate(s, "story-card"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
   {
+    id: "quy-tac-co-nhan",
+    label: "Quy tắc cổ nhân",
+    hint: "Thẻ truyện nền be, tiêu đề đỏ + trắng, tranh thủy mặc nâu, phụ đề xanh lá chạy theo lời, giọng nam trầm",
+    // Measured on the reference short: beige canvas, red kicker + white title, sepia ink pictures, green karaoke captions.
+    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "story-card"), "thuy-mac-sepia"), cardTheme: "sepia", style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: false }),
+  },
+  {
     id: "dao-ly-co-phong",
     label: "Đạo lý cổ phong",
     hint: "Nhân vật chibi cổ trang trên nền giấy kraft, giọng nam trầm, phụ đề nhỏ dưới nhân vật",

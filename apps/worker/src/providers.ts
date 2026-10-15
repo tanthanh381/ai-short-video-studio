@@ -970,7 +970,7 @@ export function imageSeedFor(projectId: string): number {
  * Photographic by default; painted/cartoon looks only when the author's visual style asks for them.
  * "flat" is the 2D picture-book look (cartoon preset or an explicit flat/2D/vector request).
  */
-export type ImageStyle = "photo" | "illustration" | "flat" | "historical" | "ink" | "watercolor" | "paper-cut" | "whiteboard" | "chibi";
+export type ImageStyle = "photo" | "illustration" | "flat" | "historical" | "ink" | "ink-wash" | "watercolor" | "paper-cut" | "whiteboard" | "chibi";
 
 /** Each website preset has its own look in the image bridge; the default (cinematic) and custom wording fall back to a guess. */
 const PRESET_IMAGE_STYLE: Record<string, ImageStyle> = {
@@ -985,6 +985,7 @@ const PRESET_IMAGE_STYLE: Record<string, ImageStyle> = {
   "chibi-dan-gian-viet": "chibi",
   "chibi-co-trang-hai": "chibi",
   "thuy-mac-co-phong": "ink",
+  "thuy-mac-sepia": "ink-wash",
   "paper-storybook": "paper-cut",
   "chibi-huyen-bi": "chibi",
   "chibi-dong-vat-co-phong": "chibi",

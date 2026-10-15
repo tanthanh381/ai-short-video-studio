@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
-import { CARD, brandInitials, castForScript, cardFooterLines, cardTitleFontSize, fallbackCardTitle, splitCardTitle, usesStoryCard } from "./card-layout";
+import { CARD, SEPIA, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, castForScript, cardFooterLines, cardTitleFontSize, fallbackCardTitle, splitCardTitle, usesStoryCard } from "./card-layout";
 import { createAss } from "./render";
 import { buildAmbientMusicArgs, buildAudioMixFilter } from "./render-quality";
 
@@ -248,5 +248,33 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     expect(style[18]).toBe("8"); // top-anchored ...
     expect(style[21]).toBe(String(PAPER.captionTop)); // ... just under the character
     expect(style[15]).toBe("1"); // outline only, no box
+  });
+});
+
+describe("sepia story card", () => {
+  it("reads the theme, blue unless sepia is chosen", () => {
+    expect(cardThemeOf({})).toBe("blue");
+    expect(cardThemeOf({ cardTheme: "sepia" })).toBe("sepia");
+    expect(cardThemeOf({ cardTheme: "other" })).toBe("blue");
+  });
+
+  it("splits the title into a kicker and a title, on the author's bar or in two balanced lines", () => {
+    expect(sepiaTitleLines("Quy tắc cổ nhân | Ẩn sau lời dặn")).toEqual(["QUY TẮC CỔ NHÂN", "ẨN SAU LỜI DẶN"]);
+    expect(sepiaTitleLines("Quy tắc cổ nhân ẩn sau lời dặn")).toEqual(["QUY TẮC CỔ NHÂN", "ẨN SAU LỜI DẶN"]);
+    expect(sepiaTitleLines("a | b | c")).toEqual(["A", "B C"]);
+    expect(sepiaTitleLines("Ngắn")).toEqual(["NGẮN"]);
+  });
+
+  it("shrinks a long title line to fit the width, never below 44", () => {
+    expect(sepiaLineSize("QUY TẮC CỔ NHÂN", SEPIA.kickerSize)).toBe(SEPIA.kickerSize);
+    expect(sepiaLineSize("MỘT TIÊU ĐỀ RẤT DÀI KHÔNG THỂ NÀO VỪA MỘT DÒNG", SEPIA.titleSize)).toBeLessThan(SEPIA.titleSize);
+    expect(sepiaLineSize("X".repeat(200), SEPIA.titleSize)).toBe(44);
+  });
+
+  it("draws the teacher and, when the script speaks to the young, a young listener", () => {
+    expect(castForScript("Cổ nhân dạy rằng đừng ăn quá no.")).toMatch(/old Chinese sage with a white topknot/);
+    expect(castForScript("Cổ nhân dạy rằng đừng ăn quá no.")).not.toMatch(/young/);
+    expect(castForScript("Người xưa dặn con cháu đừng ngồi lên giường người khác.")).toMatch(/sage.*, and a young clean-shaven Chinese man/);
+    expect(castForScript("Mẹ nhường cơm cho con.")).toMatch(/mother/); // other stories keep their cast
   });
 });

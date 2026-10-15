@@ -25,6 +25,60 @@ export const CARD = {
 } as const;
 
 /**
+ * The sepia story card ("Quy tắc cổ nhân" shorts), measured on the reference short at 1080x1920: a flat beige canvas
+ * (205,182,141), a red kicker with a white edge over a white title with a black edge, the channel's round logo hanging
+ * from the picture band's top-right corner, and 2-line captions whose spoken words turn light green. The picture band
+ * is the blue card's (y 626-1300), so the same 16:10 pictures serve both.
+ */
+export const SEPIA = {
+  background: "0xCDB68D",
+  kickerColor: "0xFD3300",
+  kickerBorder: "0xFFFFFF",
+  titleColor: "0xFFFFFF",
+  titleBorder: "0x000000",
+  kickerSize: 70,
+  titleSize: 80,
+  kickerTop: 244,
+  titleTop: 366,
+  /** Logo: its top edge sits here and its right edge this far from the frame's, so it overlaps the band's corner. */
+  logoTop: 470,
+  logoRight: 63,
+  logoMinScale: 0.22,
+  footerColor: "0x5A4A2A",
+  /** Captions: unspoken words pale, spoken words green, a dark brown edge. */
+  captionFont: 74,
+  captionTop: 1362,
+  captionOutline: 4,
+  captionPale: "#EEEBDD",
+  captionSpoken: "#C8F45A",
+  captionEdge: "#2B2418",
+} as const;
+
+export type CardTheme = "blue" | "sepia";
+
+export function cardThemeOf(settings: { cardTheme?: string }): CardTheme {
+  return settings.cardTheme === "sepia" ? "sepia" : "blue";
+}
+
+/**
+ * Title lines of a sepia card: "kicker|title" when the author wrote a bar, else the same balanced two lines as the
+ * blue card (the first, shorter or equal line becomes the red kicker).
+ */
+export function sepiaTitleLines(title: string): string[] {
+  if (title.includes("|")) {
+    const parts = title.split("|").map((part) => part.normalize("NFC").trim().toLocaleUpperCase("vi")).filter(Boolean);
+    return parts.length > 2 ? [parts[0]!, parts.slice(1).join(" ")] : parts;
+  }
+  return splitCardTitle(title);
+}
+
+/** Font size so a sepia title line (bold, ~0.66 em per capital) stays inside 88% of the width. */
+export function sepiaLineSize(line: string, base: number): number {
+  const fit = Math.floor((CARD.width * 0.88) / (Math.max(1, line.length) * 0.66));
+  return Math.max(44, Math.min(base, fit));
+}
+
+/**
  * Paper stage (9:16 only): one character on plain kraft paper, a caption under it, nothing else on screen — the look
  * of "Đạo lý cổ phong" shorts. The picture is drawn square, its edges fade into a paper of its own backdrop colour,
  * and the character breathes and sways a little while the paper stays still.
@@ -242,6 +296,9 @@ const ROLE_LOOKS = {
   man: "a Vietnamese young man with short black hair, a gray shirt and jeans",
 } as const;
 
+const SAGE_LOOK = "an old Chinese sage with a white topknot and a long white beard, in a gray robe";
+const YOUTH_LOOK = "a young clean-shaven Chinese man in his twenties with a black topknot, in a blue-gray robe";
+
 /** The people a story is about: the English word an image model reads ("Japanese") and their country ("Japan"). */
 export type Nationality = { people: string; country: string };
 export const VIETNAMESE: Nationality = { people: "Vietnamese", country: "Vietnam" };
@@ -346,6 +403,12 @@ function roleCast(text: string): string {
   // "Hai anh em", "người anh … người em": a story about two siblings, whatever else it mentions.
   if (word("hai anh em|người anh").test(source) && word("người em|em mình|em trai").test(source))
     return brothersCast(isOldTimeStory(source));
+  // "Quy tắc cổ nhân", "lời người xưa dạy": the ancient teacher and, when the script speaks to them, a young listener. Never
+  // "elder"/"older" for the listener (see brothersCast): the model draws every young man with a white beard.
+  if (word("cổ nhân|người xưa|lão nhân|cụ ông|hiền triết|bậc hiền|ông lão|cụ già").test(source)) {
+    const listener = word("con cháu|người trẻ|hậu bối|chàng trai|thanh niên|học trò|đệ tử|thế hệ trẻ|giới trẻ|cháu").test(source);
+    return listener ? `${SAGE_LOOK}, and ${YOUTH_LOOK}` : SAGE_LOOK;
+  }
   const found: Array<[number, keyof typeof ROLE_LOOKS]> = [];
   const at = (role: keyof typeof ROLE_LOOKS, pattern: RegExp) => {
     const match = pattern.exec(source);

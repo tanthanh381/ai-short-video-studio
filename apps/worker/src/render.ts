@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { drawsByHand, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
 import { EXPORT_LIMIT_BYTES, buildAudioMixFilter, buildAmbientMusicArgs, exportRateArgs, exportTooLargeMessage, validateCaptionTiming } from "./render-quality";
-import { CARD, PAPER, brandInitials, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
+import { CARD, PAPER, SEPIA, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
 import { drawSceneByHand, type WhiteboardRunner } from "./whiteboard";
 
 const exec = promisify(execFile);
@@ -88,17 +88,22 @@ export function createAss(project: Project) {
   const style = project.settings.subtitle;
   const cardMode = usesStoryCard(project.settings);
   const paperMode = usesPaperStage(project.settings);
+  const sepia = cardMode && cardThemeOf(project.settings) === "sepia";
   // Story card: captions sit directly under the picture band, top-anchored, in a calmer size. Paper stage: under
   // the character, small and quiet.
   const alignment = cardMode || paperMode ? 8 : style.position === "top" ? 8 : style.position === "center" ? 5 : 2;
-  const marginV = cardMode
+  const marginV = sepia
+    ? SEPIA.captionTop
+    : cardMode
     ? CARD.subtitleTop
     : paperMode
       ? PAPER.captionTop
       : style.position === "bottom"
       ? Math.round(height * 0.16)
       : Math.round(height * 0.1);
-  const fontSize = paperMode
+  const fontSize = sepia
+    ? SEPIA.captionFont
+    : paperMode
     ? Math.round(height * 0.026)
     : cardMode
     ? Math.round(height * 0.03)
@@ -108,11 +113,14 @@ export function createAss(project: Project) {
         ? Math.round(height * 0.029)
         : Math.round(height * 0.034);
   const card = usesStoryCard(project.settings);
-  const outline = style.preset === "minimal" ? 1 : 2;
+  const outline = sepia ? SEPIA.captionOutline : style.preset === "minimal" ? 1 : 2;
   const borderStyle = card ? 1 : style.backgroundOpacity > 0 ? 3 : 1;
   const highlight = project.settings.captionHighlight === true;
   // Karaoke: words start in the caption colour (secondary) and switch to the highlight (primary) when spoken.
-  const primary = highlight ? assColor(highlightColor(style.fontColor)) : assColor(style.fontColor);
+  // The sepia card has its own pale words, green spoken words and dark brown edge whatever the caption colours say.
+  const unspoken = sepia ? SEPIA.captionPale : style.fontColor;
+  const primary = highlight ? assColor(sepia ? SEPIA.captionSpoken : highlightColor(style.fontColor)) : assColor(unspoken);
+  const edge = sepia ? SEPIA.captionEdge : style.outlineColor;
   let offset = 0;
   const lines: string[] = [];
   for (const scene of project.scenes) {
@@ -124,7 +132,7 @@ export function createAss(project: Project) {
     }
     offset += scene.actualDurationMs ?? scene.estimatedDurationMs;
   }
-  return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Noto Sans,${fontSize},${primary},${assColor(style.fontColor)},${assColor(style.outlineColor)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
+  return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Noto Sans,${fontSize},${primary},${assColor(unspoken)},${assColor(edge)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
 }
 
 /** Camera moves cycled across scenes so consecutive stills never move the same way. */
@@ -210,7 +218,8 @@ const FONT_ITALIC = process.env.CARD_FONT_ITALIC ?? "/usr/share/fonts/truetype/n
 /** Static story-card background: gradient + vignette + title banner + channel footer, rendered once per video. */
 export async function buildCardFrame(config: WorkerConfig, workdir: string, project: Project): Promise<string> {
   const title = project.settings.cardTitle.trim() || project.suggestedTitle.trim() || fallbackCardTitle(project.sourceText);
-  const lines = splitCardTitle(title);
+  if (cardThemeOf(project.settings) === "sepia") return buildSepiaFrame(config, workdir, project, title);
+  const lines = splitCardTitle(title.replace(/\s*\|\s*/gu, " "));
   const titleSize = cardTitleFontSize(lines);
   const textFile = async (name: string, text: string) => { const path = join(workdir, name); await writeFile(path, text, "utf8"); return path; };
   const draw: string[] = [];
@@ -242,6 +251,40 @@ export async function buildCardFrame(config: WorkerConfig, workdir: string, proj
   await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", gradient, "-f", "lavfi", "-i", `color=c=black:s=${size}x${size}:d=1:r=1`,
     "-filter_complex", `${background};${badge};[bg][badge]overlay=(W-w)/2:${CARD.badgeY}:format=auto[out]`, "-map", "[out]", "-frames:v", "1", "-update", "1", frame],
     { timeout: 60_000 });
+  return frame;
+}
+
+/** The sepia card: flat beige canvas, red kicker over a white title, optional small footer and, without a logo, a round initials badge. */
+async function buildSepiaFrame(config: WorkerConfig, workdir: string, project: Project, title: string): Promise<string> {
+  const lines = sepiaTitleLines(title);
+  const textFile = async (name: string, text: string) => { const path = join(workdir, name); await writeFile(path, text, "utf8"); return path; };
+  const draw: string[] = [];
+  for (const [index, line] of lines.entries()) {
+    const file = await textFile(`card-title-${index}.txt`, line);
+    const kicker = lines.length > 1 && index === 0;
+    const size = sepiaLineSize(line, kicker ? SEPIA.kickerSize : SEPIA.titleSize);
+    draw.push(`drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${size}:fontcolor=${kicker ? SEPIA.kickerColor : SEPIA.titleColor}:borderw=${kicker ? 4 : 5}:bordercolor=${kicker ? SEPIA.kickerBorder : SEPIA.titleBorder}:x=(w-text_w)/2:y=${kicker ? SEPIA.kickerTop : lines.length > 1 ? SEPIA.titleTop : SEPIA.kickerTop + 60}`);
+  }
+  for (const [index, line] of cardFooterLines(project.settings.brandName).entries()) {
+    const file = await textFile(`card-footer-${index}.txt`, line);
+    draw.push(`drawtext=fontfile=${FONT_ITALIC}:textfile=${file}:fontsize=${CARD.footerSize}:fontcolor=${SEPIA.footerColor}:x=(w-text_w)/2:y=${CARD.footerTop + index * 44}`);
+  }
+  const canvas = `color=c=${SEPIA.background}:s=${CARD.width}x${CARD.height}:d=1:r=1`;
+  const background = `[0:v]format=rgb24${draw.length ? "," + draw.join(",") : ""}[bg]`;
+  const frame = join(workdir, "card-frame.png");
+  const initials = brandInitials(project.settings.brandName);
+  if (!initials || project.settings.logoPath) {
+    await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", canvas, "-filter_complex", `${background};[bg]null[out]`, "-map", "[out]", "-frames:v", "1", "-update", "1", frame], { timeout: 60_000 });
+    return frame;
+  }
+  const size = 237;
+  const centre = size / 2;
+  const initialsFile = await textFile("card-badge.txt", initials);
+  const inside = `lte(hypot(X-${centre},Y-${centre}),${centre - 10})`;
+  const badge = `[1:v]format=rgba,geq=r='if(${inside},60,248)':g='if(${inside},48,240)':b='if(${inside},30,222)':a='if(lte(hypot(X-${centre},Y-${centre}),${centre - 2}),255,0)',`
+    + `drawtext=fontfile=${FONT_BOLD}:textfile=${initialsFile}:fontsize=${Math.round(size * 0.4)}:fontcolor=0xF3E3B0:x=(w-text_w)/2:y=(h-text_h)/2-4[badge]`;
+  await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", canvas, "-f", "lavfi", "-i", `color=c=black:s=${size}x${size}:d=1:r=1`,
+    "-filter_complex", `${background};${badge};[bg][badge]overlay=${CARD.width - size - SEPIA.logoRight}:${SEPIA.logoTop}:format=auto[out]`, "-map", "[out]", "-frames:v", "1", "-update", "1", frame], { timeout: 60_000 });
   return frame;
 }
 
@@ -445,9 +488,11 @@ export async function renderProject(
     let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}${hook}format=yuv420p[base]`;
     if (logoPath) {
       const margin = Math.round(width * 0.04);
-      const x = project.settings.logoPosition === "top-center" ? "(W-w)/2" : project.settings.logoPosition.endsWith("right") ? `W-w-${margin}` : `${margin}`;
-      const y = project.settings.logoPosition.startsWith("bottom") ? `H-h-${margin}` : `${margin}`;
-      const logoWidth = Math.round(width * project.settings.logoScale);
+      // Sepia card: the logo hangs from the picture band's top-right corner, as in the reference, whatever the corner chosen.
+      const sepiaLogo = usesStoryCard(project.settings) && cardThemeOf(project.settings) === "sepia";
+      const x = sepiaLogo ? `W-w-${SEPIA.logoRight}` : project.settings.logoPosition === "top-center" ? "(W-w)/2" : project.settings.logoPosition.endsWith("right") ? `W-w-${margin}` : `${margin}`;
+      const y = sepiaLogo ? `${SEPIA.logoTop}` : project.settings.logoPosition.startsWith("bottom") ? `H-h-${margin}` : `${margin}`;
+      const logoWidth = Math.round(width * (sepiaLogo ? Math.max(project.settings.logoScale, SEPIA.logoMinScale) : project.settings.logoScale));
       filter += `;[1:v]scale=${logoWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=${project.settings.logoOpacity}[logo];[base][logo]overlay=x=${x}:y=${y}:format=auto[v]`;
     } else {
       filter += ";[base]null[v]";

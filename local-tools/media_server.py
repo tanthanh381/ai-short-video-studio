@@ -234,6 +234,8 @@ IMAGE_STYLES = {
     # tokens, so a style placed after the scene text is silently dropped and every preset looks the same.
     "historical": "cinematic historical period photo, traditional clothing, ancient architecture, warm lantern light",
     "ink": "ink pen line drawing, bold black outlines, crosshatch shading, off-white paper, monochrome sketch, no color",
+    # "Quy tắc cổ nhân" shorts: soft sepia ink-and-watercolor storybook pictures (not the black pen drawing of "ink").
+    "ink-wash": "soft sepia ink and watercolor storybook illustration, ancient China, muted grey-brown palette, gentle misty wash, thin brush outlines, detailed faces",
     "watercolor": "delicate watercolor painting, soft bleeding washes, visible paper grain, pastel palette",
     "paper-cut": "layered paper-cut art, colored paper shapes, clean silhouettes, soft cast shadows",
     # Drawn by the hand renderer: it inks the dark outlines first, then washes in the flat colours. Photos have no
@@ -243,7 +245,7 @@ IMAGE_STYLES = {
     "chibi": "cute chibi illustration, plain beige kraft paper background, olive green ancient robe, clean ink outlines, full body, empty background",
 }
 # Drawn looks: photo skin/anatomy wording would pull them back towards photographs.
-STYLIZED_IMAGE_STYLES = {"flat", "ink", "watercolor", "paper-cut", "whiteboard", "chibi"}
+STYLIZED_IMAGE_STYLES = {"flat", "ink", "ink-wash", "watercolor", "paper-cut", "whiteboard", "chibi"}
 IMAGE_ANATOMY_GUARD = os.getenv("IMAGE_ANATOMY_GUARD", "true").lower() not in {"0", "false", "no"}
 IMAGE_NEGATIVE_PROMPT = os.getenv(
     "IMAGE_NEGATIVE_PROMPT",
