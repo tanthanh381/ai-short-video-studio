@@ -101,6 +101,18 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual("".join(phrases), script)
         self.assertTrue(all(phrase.strip() for phrase in phrases))
 
+    def test_still_video_fallback_has_bounded_ken_burns_motion(self):
+        with patch.object(self.media, "require_ffmpeg", return_value="ffmpeg"), \
+             patch.object(self.media.subprocess, "run") as process, \
+             patch.object(self.media.Path, "read_bytes", return_value=b"MP4"):
+            result = self.media.still_video_fallback(base64.b64encode(b"PNG").decode(), "9:16")
+        self.assertEqual(result, b"MP4")
+        command = [str(item) for item in process.call_args.args[0]]
+        vf = command[command.index("-vf") + 1]
+        self.assertIn("zoompan", vf)
+        self.assertIn("s=576x1024", vf)
+        self.assertIn("fps=24", vf)
+
     def test_long_sentence_stays_inside_subtitle_schema_limit(self):
         script = " ".join(["giữ nguyên từng dấu tiếng Việt và thứ tự lời đọc"] * 14) + "."
         phrases = self.media.split_speech_phrases(script)

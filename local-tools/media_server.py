@@ -86,9 +86,17 @@ def still_video_fallback(image_base64, aspect_ratio="9:16"):
         image_path = root / "reference.png"
         output_path = root / "fallback.mp4"
         image_path.write_bytes(raw)
+        motion_width = int(width * 1.06)
+        motion_height = int(height * 1.06)
+        # The fallback is used when LTX cannot fit in shared Apple memory. It must still feel like a video:
+        # a restrained Ken-Burns move keeps the subject alive without inventing anatomy or motion that was not generated.
         vf = (
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},format=yuv420p"
+            f"scale={motion_width}:{motion_height}:force_original_aspect_ratio=increase,"
+            f"crop={motion_width}:{motion_height},"
+            f"zoompan=z='min(zoom+0.0012,1.06)':"
+            f"x='iw/2-(iw/zoom/2)+sin(on/20)*iw*0.015':"
+            f"y='ih/2-(ih/zoom/2)+cos(on/24)*ih*0.01':"
+            f"d=1:s={width}x{height}:fps=24,format=yuv420p"
         )
         subprocess.run(
             [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image_path),
