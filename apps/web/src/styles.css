@@ -3006,6 +3006,54 @@ input[type="radio"] {
 .sys-services li > .sys-dot { margin-top: 0; }
 .sys-jobs .sys-bar { max-width: 320px; margin-top: 5px; }
 .sys-foot { margin-top: 6px; }
+.sys-details {
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  overflow: hidden;
+}
+.sys-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px 16px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.sys-details summary::-webkit-details-marker { display: none; }
+.sys-details summary::after {
+  content: "Xem ▾";
+  color: var(--blue-dark);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sys-details[open] summary::after { content: "Thu gọn ▴"; }
+.sys-details summary small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.sys-details > .sys-two,
+.sys-details > .sys-section,
+.sys-details > .sys-sparks {
+  margin: 0;
+  padding: 0 16px 16px;
+}
+.sys-details > .sys-two { padding-top: 0; }
+.sys-details > .sys-two .sys-card { padding: 16px; }
+.sys-machine-details { margin-top: 16px; margin-bottom: 0; }
+.sys-machine-details > .sys-section,
+.sys-machine-details > .sys-sparks { border-top: 1px solid #e3e9ed; padding-top: 14px; }
+.sys-secondary-details { margin-top: 0; }
 @media (max-width: 720px) {
   .sys-live { width: 100%; }
   .sys-procs li { grid-template-columns: minmax(90px, 1fr) 1fr 56px; }

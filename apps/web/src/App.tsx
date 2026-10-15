@@ -3792,14 +3792,14 @@ function SettingsPage() {
   return (
     <SimplePage
       title="Cài đặt"
-      subtitle="Chọn máy nào làm video và cách chia việc, dịch vụ trả phí tùy chọn, hàng đợi và ngân sách. Hiệu năng và tình trạng máy xem ở trang Hệ thống."
+      subtitle="Chọn cách tạo video, máy xử lý và giới hạn chi phí. Trạng thái thực tế xem ở Hệ thống."
     >
       <div className="settings-page-grid">
         <section>
           <div className="section-heading-row">
             <div>
               <h2>Máy xử lý video</h2>
-              <p>Tắt một máy để nó không nhận việc mới; việc đang chạy vẫn xong. Luôn cần giữ ít nhất một máy bật.</p>
+              <p>Bật máy bạn muốn dùng cho các video mới. Việc đang chạy không bị dừng.</p>
             </div>
           </div>
           {settings.balancer && settings.balancer.nodes.length ? (
@@ -3843,7 +3843,7 @@ function SettingsPage() {
           </details>
         </section>
         <section>
-          <h2>Hàng đợi và giới hạn</h2>
+          <h2>Hàng đợi và chi phí</h2>
           <Field
             label="Số video tạo cùng lúc"
             hint="Máy mini xử lý nhanh nhất khi tạo 1 video một lúc; video sau tự xếp hàng."

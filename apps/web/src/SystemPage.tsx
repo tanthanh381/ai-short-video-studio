@@ -119,10 +119,18 @@ export function SystemPage() {
               <p>Mọi việc đang chạy trên máy chính. Thêm máy phụ (ví dụ MacBook Air) để chia việc vẽ ảnh, giọng đọc song song: xem hướng dẫn "Thêm máy phụ" trong <code>docs/TU-HOST.md</code>.</p>
             </section>
           )}
-          <div className="sys-two">
-            {system.balancer && system.balancer.nodes.length > 1 ? <WorkShare system={system} now={now} /> : null}
-            {system.balancer?.recent?.length ? <ActivityFeed system={system} now={now} /> : null}
-          </div>
+          {(Boolean(system.balancer && system.balancer.nodes.length > 1) || Boolean(system.balancer?.recent?.length)) ? (
+            <details className="sys-details sys-secondary-details">
+              <summary>
+                <span>Nhật ký vận hành</span>
+                <small>{system.balancer?.recent?.length ? `${system.balancer.recent.length} hoạt động gần đây` : "Chia việc giữa các máy"}</small>
+              </summary>
+              <div className="sys-two">
+                {system.balancer && system.balancer.nodes.length > 1 ? <WorkShare system={system} now={now} /> : null}
+                {system.balancer?.recent?.length ? <ActivityFeed system={system} now={now} /> : null}
+              </div>
+            </details>
+          ) : null}
           <div className="sys-two">
             <JobsCard jobs={system.jobs.recent} />
             <ServicesCard services={system.services} />
@@ -254,70 +262,78 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
 
       {gauges.length ? <div className="sys-meters">{gauges.map((gauge) => <Meter key={gauge.id} gauge={gauge} />)}</div> : <p className="microcopy">Máy chưa báo số liệu tài nguyên.</p>}
 
-      {history.length > 1 ? (
-        <div className="sys-sparks">
-          <h3>30 phút gần nhất</h3>
-          <Spark label="CPU" points={history} pick={(point) => point.load} max={100} now={now} format={(value) => `${value}%`} />
-          <Spark label="RAM" points={history} pick={(point) => point.mem} max={100} now={now} format={(value) => `${value}%`} />
-          <Spark label="Việc đang chạy" points={history} pick={(point) => point.running} max={Math.max(2, ...history.map((point) => point.running))} now={now} format={(value) => String(value)} />
-          <div className="sys-axis"><span>30 phút trước</span><span>bây giờ</span></div>
-        </div>
-      ) : null}
+      {(history.length > 1 || models.length || processes.length || lanes.length) ? (
+        <details className="sys-details sys-machine-details">
+          <summary>
+            <span>Chi tiết kỹ thuật</span>
+            <small>{models.length ? `${models.length} model` : "Số liệu máy và tác vụ"}</small>
+          </summary>
+          {history.length > 1 ? (
+            <div className="sys-sparks">
+              <h3>30 phút gần nhất</h3>
+              <Spark label="CPU" points={history} pick={(point) => point.load} max={100} now={now} format={(value) => `${value}%`} />
+              <Spark label="RAM" points={history} pick={(point) => point.mem} max={100} now={now} format={(value) => `${value}%`} />
+              <Spark label="Việc đang chạy" points={history} pick={(point) => point.running} max={Math.max(2, ...history.map((point) => point.running))} now={now} format={(value) => String(value)} />
+              <div className="sys-axis"><span>30 phút trước</span><span>bây giờ</span></div>
+            </div>
+          ) : null}
 
-      {models.length ? (
-        <div className="sys-section">
-          <h3>Mô hình AI</h3>
-          <ul className="sys-models">
-            {models.map((row) => (
-              <li key={row.id}>
-                <span className={`sys-dot tone-${row.state === "ready" ? "ok" : row.state === "loading" ? "warn" : row.state === "idle" ? "idle" : "bad"}`} aria-hidden="true" />
-                <div>
-                  <strong>{row.label}</strong>
-                  <span>{row.detail}</span>
-                  {row.chips.length ? <em>{row.chips.map((chip) => <code key={chip}>{chip}</code>)}</em> : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+          {models.length ? (
+            <div className="sys-section">
+              <h3>Mô hình AI</h3>
+              <ul className="sys-models">
+                {models.map((row) => (
+                  <li key={row.id}>
+                    <span className={`sys-dot tone-${row.state === "ready" ? "ok" : row.state === "loading" ? "warn" : row.state === "idle" ? "idle" : "bad"}`} aria-hidden="true" />
+                    <div>
+                      <strong>{row.label}</strong>
+                      <span>{row.detail}</span>
+                      {row.chips.length ? <em>{row.chips.map((chip) => <code key={chip}>{chip}</code>)}</em> : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
-      {processes.length ? (
-        <div className="sys-section">
-          <h3>Bộ nhớ theo chương trình</h3>
-          <ul className="sys-procs">
-            {processes.map((process) => (
-              <li key={process.id}>
-                <span>{processLabel(process)}{process.count > 1 ? ` ×${process.count}` : ""}</span>
-                <div className="sys-bar" aria-hidden="true"><i style={{ width: `${Math.max(2, (process.memGb / (totalMemory || biggest)) * 100)}%` }} /></div>
-                <strong>{formatGb(process.memGb)}</strong>
-              </li>
-            ))}
-          </ul>
-          <p className="microcopy">Đo bằng bộ nhớ vật lý chương trình giữ, kể cả model nằm trong bộ nhớ GPU.</p>
-        </div>
-      ) : null}
+          {processes.length ? (
+            <div className="sys-section">
+              <h3>Bộ nhớ theo chương trình</h3>
+              <ul className="sys-procs">
+                {processes.map((process) => (
+                  <li key={process.id}>
+                    <span>{processLabel(process)}{process.count > 1 ? ` ×${process.count}` : ""}</span>
+                    <div className="sys-bar" aria-hidden="true"><i style={{ width: `${Math.max(2, (process.memGb / (totalMemory || biggest)) * 100)}%` }} /></div>
+                    <strong>{formatGb(process.memGb)}</strong>
+                  </li>
+                ))}
+              </ul>
+              <p className="microcopy">Đo bằng bộ nhớ vật lý chương trình giữ, kể cả model nằm trong bộ nhớ GPU.</p>
+            </div>
+          ) : null}
 
-      {lanes.length ? (
-        <div className="sys-section">
-          <h3>Loại việc máy này nhận</h3>
-          <table className="sys-lanes">
-            <thead><tr><th scope="col">Việc</th><th scope="col">Trạng thái</th><th scope="col">Đã xong</th><th scope="col">Mỗi việc</th></tr></thead>
-            <tbody>
-              {lanes.map((row) => (
-                <tr key={row.id} className={row.eligible ? "" : "is-off"}>
-                  <th scope="row">{row.label}</th>
-                  <td>
-                    <span className={`sys-dot tone-${row.running ? "ok" : row.eligible ? "idle" : "bad"}`} aria-hidden="true" /> {row.status}
-                    {row.reason ? <small>{row.reason}</small> : null}
-                  </td>
-                  <td>{row.done}</td>
-                  <td>{row.avg}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          {lanes.length ? (
+            <div className="sys-section">
+              <h3>Loại việc máy này nhận</h3>
+              <table className="sys-lanes">
+                <thead><tr><th scope="col">Việc</th><th scope="col">Trạng thái</th><th scope="col">Đã xong</th><th scope="col">Mỗi việc</th></tr></thead>
+                <tbody>
+                  {lanes.map((row) => (
+                    <tr key={row.id} className={row.eligible ? "" : "is-off"}>
+                      <th scope="row">{row.label}</th>
+                      <td>
+                        <span className={`sys-dot tone-${row.running ? "ok" : row.eligible ? "idle" : "bad"}`} aria-hidden="true" /> {row.status}
+                        {row.reason ? <small>{row.reason}</small> : null}
+                      </td>
+                      <td>{row.done}</td>
+                      <td>{row.avg}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </details>
       ) : null}
     </article>
   );
