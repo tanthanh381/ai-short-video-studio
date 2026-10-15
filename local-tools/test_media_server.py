@@ -113,6 +113,19 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertIn("s=576x1024", vf)
         self.assertIn("fps=24", vf)
 
+    def test_ltx_timeout_returns_to_still_fallback(self):
+        with patch.object(self.media, "ltx_state", return_value=("ready", "ok")), \
+             patch.object(self.media.urllib.request, "urlopen", side_effect=TimeoutError), \
+             patch.object(self.media, "still_video_fallback", return_value=b"fallback") as fallback:
+            result = self.media.local_video(base64.b64encode(b"PNG").decode(), "gentle movement", model="ltxv-2b-0.9.8-distilled")
+        self.assertEqual(result, b"fallback")
+        fallback.assert_called_once()
+
+    def test_degraded_ltx_does_not_wait_for_wake_timeout(self):
+        with patch.object(self.media, "ltx_state", return_value=("offline", "LTX needs more RAM")), \
+             patch.object(self.media.SLEEPER, "asleep", return_value=False):
+            self.assertEqual(self.media.services_for("/video", b"{}"), [])
+
     def test_long_sentence_stays_inside_subtitle_schema_limit(self):
         script = " ".join(["giữ nguyên từng dấu tiếng Việt và thứ tự lời đọc"] * 14) + "."
         phrases = self.media.split_speech_phrases(script)

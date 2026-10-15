@@ -120,6 +120,7 @@ VIENEU_URL = os.getenv("VIENEU_URL", "http://127.0.0.1:5001")
 PIPER_URL = os.getenv("PIPER_URL", "http://127.0.0.1:5000")
 VIENEU_VOICE = os.getenv("VIENEU_VOICE", "Đức Trí")
 LTX_VIDEO_URL = os.getenv("LTX_VIDEO_URL", "http://127.0.0.1:8770")
+LTX_REQUEST_TIMEOUT_S = max(30, min(int(os.getenv("LTX_REQUEST_TIMEOUT_S", "180")), 1800))
 NODE_START_SCRIPT = os.getenv("NODE_START_SCRIPT", "")
 COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
 COMFYUI_CHECKPOINT = os.getenv("COMFYUI_CHECKPOINT", "sd_xl_base_1.0_0.9vae.safetensors")
@@ -1107,7 +1108,11 @@ def services_for(path, body):
     if route == "/transcribe":
         return ["whisper"]
     if route == "/video":
-        return ["ltx"]
+        # Do not wait for the 5-minute wake timeout when LTX is known to be incompatible with this host's RAM.
+        # An actually sleeping service is still woken on demand; an installed-but-degraded service goes straight to
+        # the bounded still-motion fallback.
+        state, _detail = ltx_state()
+        return ["ltx"] if state == "ready" or SLEEPER.asleep("ltx") else []
     return []
 
 
@@ -1143,7 +1148,7 @@ def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None
     request = urllib.request.Request(f"{LTX_VIDEO_URL.rstrip('/')}/video", data=payload,
                                      headers={"Content-Type": "application/json"})
     try:
-        with VIDEO_LOCK, urllib.request.urlopen(request, timeout=1800) as response:
+        with VIDEO_LOCK, urllib.request.urlopen(request, timeout=LTX_REQUEST_TIMEOUT_S) as response:
             data = response.read()
         if not data.startswith(b"\x00\x00\x00") and not data.startswith(b"RIFF"):
             raise RuntimeError("LTX runtime trả về dữ liệu video không hợp lệ")

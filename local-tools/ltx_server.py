@@ -11,6 +11,8 @@ import base64
 import gc
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -28,6 +30,18 @@ MAX_BODY = 12 * 1024 * 1024
 GENERATION_LOCK = threading.Lock()
 CPU_FALLBACK = os.getenv("LTX_VIDEO_CPU_FALLBACK", "0").lower() not in {"0", "false", "no"}
 TRY_NATIVE_FIRST = os.getenv("LTX_VIDEO_TRY_NATIVE_FIRST", "0").lower() in {"1", "true", "yes"}
+ALLOW_LOW_MEMORY = os.getenv("LTX_VIDEO_ALLOW_LOW_MEMORY", "0").lower() in {"1", "true", "yes"}
+MIN_MPS_MEMORY_BYTES = int(os.getenv("LTX_VIDEO_MIN_MPS_MEMORY_GB", "24")) * 1024**3
+
+
+def host_memory_bytes():
+    """Return physical RAM on macOS; unknown means do not make a memory assumption."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        return int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip())
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
 
 
 def json_response(handler, status, payload):
@@ -55,6 +69,9 @@ def binary_response(handler, data):
 
 
 def runtime_status():
+    memory = host_memory_bytes()
+    if DEVICE == "mps" and memory is not None and memory < MIN_MPS_MEMORY_BYTES and not ALLOW_LOW_MEMORY:
+        return "offline", f"LTX cần ít nhất {MIN_MPS_MEMORY_BYTES // 1024**3} GB RAM khi chạy MPS; máy hiện có {memory // 1024**3} GB"
     if not CHECKPOINT.is_file():
         return "offline", f"Thiếu checkpoint LTX: {CHECKPOINT}"
     if not TEXT_ENCODER:
