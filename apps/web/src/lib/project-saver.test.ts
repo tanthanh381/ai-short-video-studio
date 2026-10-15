@@ -95,6 +95,16 @@ describe("ProjectSaver", () => {
     expect(h.states.at(-1)).toEqual({ status: "saved" });
   });
 
+  it("holds a manual-mode edit as unsaved until flush, then writes it", async () => {
+    const h = harness();
+    h.saver.edit(project({ title: "Chỉ lưu khi bấm" }), false);
+    expect(h.states.at(-1)).toEqual({ status: "unsaved" });
+    expect(h.serverNow().title).toBe("Video");
+    await h.saver.flush();
+    expect(h.serverNow().title).toBe("Chỉ lưu khi bấm");
+    expect(h.states.at(-1)).toEqual({ status: "saved" });
+  });
+
   it("carries an edit over a server-side change instead of failing as stale", async () => {
     const h = harness();
     h.touchServer({ status: "completed", scenes: [scene(1, { imagePath: "img1-v2" }), scene(2)] }); // a job finished after the page loaded

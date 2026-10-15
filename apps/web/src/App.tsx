@@ -100,6 +100,7 @@ import { OPENAI_VOICES, hookTitleAllowed, withMediaProvider } from "./lib/option
 import { CHANNEL_PRESETS, estimatedNarrationSeconds } from "./lib/channel-presets";
 import { projectIsProcessing } from "./lib/video-submission";
 import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
+import { InfoPopover } from "./components/Disclosure";
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
@@ -677,9 +678,7 @@ function DashboardPage() {
       <div className="page-heading">
         <div>
           <h1>Hôm nay mình kể câu chuyện gì?</h1>
-          <p>
-            Dán kịch bản, bấm Tạo video và nhận bản MP4 hoàn chỉnh.
-          </p>
+          <InfoPopover title="Tạo video">Dán kịch bản, bấm Tạo video và nhận bản MP4 hoàn chỉnh.</InfoPopover>
         </div>
         <Button onClick={() => navigate("/new")}>
           <Plus size={18} /> Tạo video mới
@@ -810,9 +809,8 @@ function Field({
 }) {
   return (
     <label className="field">
-      <span>{label}</span>
+      <span className="field-label">{label}{hint ? <InfoPopover title={label}>{hint}</InfoPopover> : null}</span>
       {children}
-      {hint && <small>{hint}</small>}
     </label>
   );
 }
@@ -905,7 +903,7 @@ function TextToSpeechPage() {
       <div className="tts-page-grid">
         <section className="tts-editor-card">
           <div className="section-heading-row">
-            <div><h2>Văn bản cần đọc</h2><p>Tối đa 10.000 ký tự · tự nhấn nhá cảm xúc theo từng câu trên máy self-host.</p></div>
+            <div className="section-title-with-info"><h2>Văn bản cần đọc</h2><InfoPopover title="Văn bản cần đọc">Tối đa 10.000 ký tự. Giọng đọc tự nhấn nhá cảm xúc theo từng câu trên máy self-host.</InfoPopover></div>
             <span className="tts-counter">{text.length.toLocaleString("vi-VN")} / 10.000</span>
           </div>
           <textarea
@@ -932,7 +930,7 @@ function TextToSpeechPage() {
           )}
         </section>
         <section className="tts-options-card">
-          <div className="section-heading-row"><div><h2>Tùy chọn giọng</h2><p>Giọng Việt theo thể loại nội dung</p></div></div>
+          <div className="section-heading-row"><div className="section-title-with-info"><h2>Tùy chọn giọng</h2><InfoPopover title="Tùy chọn giọng">Chọn chất giọng, engine local và tốc độ đọc phù hợp với nội dung.</InfoPopover></div></div>
           <label className="field"><span>Engine local</span>
             <select value={engine ?? ""} onChange={(event) => setEngine(event.target.value || null)} disabled={!catalog?.tts.models.length}>
               {!catalog?.tts.models.length && <option value="">Chưa kết nối</option>}
@@ -1533,9 +1531,9 @@ function NewProjectPage() {
         <ArrowLeft size={17} /> Quay lại
       </button>
       <div className="page-heading">
-        <div>
+        <div className="page-title-with-info">
           <h1>Kịch bản của bạn, video hoàn chỉnh.</h1>
-          <p>Studio tự chia cảnh, tạo ảnh, đọc tiếng Việt, đồng bộ phụ đề và ghép video.</p>
+          <InfoPopover title="Quy trình tạo video">Studio tự chia cảnh, tạo ảnh, đọc tiếng Việt, đồng bộ phụ đề và ghép video.</InfoPopover>
         </div>
       </div>
       <form className="creation-form" onSubmit={submit}>
@@ -1951,6 +1949,14 @@ function StudioPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [saveState, setSaveState] = useState<SaveState>({ status: "saved" });
   const saved = saveState.status === "saved";
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  // Two ways to keep a script safe: saved by itself a moment after each edit (default), or only when the person presses Save.
+  // The choice belongs to the person's browser, not to the project.
+  const [autoSave, setAutoSave] = useState(() => {
+    try { return localStorage.getItem("studio.autosave") !== "off"; } catch { return true; }
+  });
+  const autoSaveRef = useRef(autoSave);
+  autoSaveRef.current = autoSave;
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>((location.state as { notice?: string } | null)?.notice ?? null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -1976,7 +1982,7 @@ function StudioPage() {
     save: (next) => api.updateProject(next),
     load: () => api.getProject(id),
     onSaved: (updated) => setProject(updated),
-    onState: setSaveState,
+    onState: (state) => { setSaveState(state); if (state.status === "saved") setSavedAt(new Date()); },
   });
   const locked = useRef(false);
   const previewRefreshes = useRef(new Set<string>());
@@ -2079,10 +2085,37 @@ function StudioPage() {
   function change(next: Project) {
     if (locked.current) return;
     setProject(next);
-    saver.current?.edit(next);
+    saver.current?.edit(next, autoSaveRef.current);
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => void flushEdits().catch(() => {}), 700);
+    if (autoSaveRef.current) saveTimer.current = window.setTimeout(() => void flushEdits().catch(() => {}), 700);
   }
+  function chooseAutoSave(on: boolean) {
+    setAutoSave(on);
+    autoSaveRef.current = on;
+    try { localStorage.setItem("studio.autosave", on ? "on" : "off"); } catch { /* a private window: the choice lasts for this visit */ }
+    if (on) void flushEdits().catch(() => {}); // edits waiting for Save are written as soon as auto-save is turned on
+    else {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (saver.current?.hasPending) setSaveState({ status: "unsaved" });
+    }
+  }
+  // Leaving with edits that were never written would lose them: the browser asks first.
+  useEffect(() => {
+    if (saveState.status === "saved") return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [saveState.status]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void flushEdits().catch(() => {});
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   /** Writes every queued edit; throws (and shows the reason beside the title) when it cannot. */
   async function flushEdits() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -2519,19 +2552,34 @@ function StudioPage() {
           <span className={`save-state ${saveState.status === "error" ? "save-failed" : ""}`} role="status" aria-live="polite">
             {saveState.status === "saved" ? (
               <>
-                <Check size={14} /> Đã lưu
+                <Check size={14} /> Đã lưu{savedAt ? ` ${savedAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}` : ""}
               </>
             ) : saveState.status === "saving" ? (
               <>
                 <LoaderCircle className="spin" size={14} /> Đang lưu
               </>
+            ) : saveState.status === "unsaved" ? (
+              <>
+                <PenLine size={14} /> Chưa lưu
+              </>
             ) : (
               <>
                 <CircleAlert size={14} /> Chưa lưu được
-                <button type="button" className="link-button" onClick={() => void flushEdits().catch(() => {})}>Thử lại</button>
               </>
             )}
           </span>
+          <Button
+            variant="secondary"
+            onClick={() => void flushEdits().catch(() => {})}
+            disabled={saveState.status === "saved" || saveState.status === "saving"}
+            title="Lưu ngay mọi chỉnh sửa (Ctrl/⌘ + S)"
+          >
+            <Save size={15} /> Lưu
+          </Button>
+          <label className="check auto-save" title="Bật: tự lưu sau mỗi chỉnh sửa. Tắt: chỉ lưu khi bạn bấm Lưu (hoặc khi bấm Tạo video).">
+            <input type="checkbox" checked={autoSave} onChange={(e) => chooseAutoSave(e.target.checked)} />
+            <span>Tự động lưu</span>
+          </label>
         </div>
         <div className="studio-actions">
           <Button onClick={() => void createVideo()} busy={busyAction === "create_video"} disabled={processing || Boolean(busyAction) || sourceDraft.trim().length < 10}>
@@ -3462,7 +3510,7 @@ function SettingsPage() {
     setMachineNotice(null);
     try {
       await api.syncNow(id);
-      setMachineNotice({ tone: "ok", text: `Đã gửi yêu cầu: máy ${id} sẽ đối chiếu với Mac mini trong vài giây. Trạng thái cập nhật ngay trên trang này.` });
+      setMachineNotice({ tone: "ok", text: `Đã gửi yêu cầu: máy ${id} sẽ đối chiếu với Mac Mini trong vài giây. Trạng thái cập nhật ngay trên trang này.` });
       window.setTimeout(() => void refreshSettings(), 5000);
     } catch (error) {
       setMachineNotice({ tone: "warn", text: error instanceof Error ? error.message : "Không gửi được yêu cầu đồng bộ" });
@@ -3579,9 +3627,9 @@ function SettingsPage() {
       <div className="settings-page-grid">
         <section>
           <div className="section-heading-row">
-            <div>
+            <div className="section-title-with-info">
               <h2>Thiết bị xử lý</h2>
-              <p>Chọn thiết bị nhận các tác vụ mới. Tác vụ đang chạy vẫn tiếp tục.</p>
+              <InfoPopover title="Thiết bị xử lý">Chọn thiết bị nhận các tác vụ mới. Tác vụ đang chạy vẫn tiếp tục.</InfoPopover>
             </div>
           </div>
           {settings.balancer && settings.balancer.nodes.length ? (
@@ -3625,10 +3673,10 @@ function SettingsPage() {
           </details>
         </section>
         <section>
-          <h2>Hiệu suất và chi phí</h2>
+          <div className="section-title-with-info"><h2>Hiệu suất và chi phí</h2><InfoPopover title="Hiệu suất và chi phí">Giới hạn số video chạy cùng lúc và theo dõi ngân sách cho các dịch vụ trả phí. AI local không tính phí API.</InfoPopover></div>
           <Field
             label="Số video tạo cùng lúc"
-            hint="Máy mini xử lý nhanh nhất khi tạo 1 video một lúc; video sau tự xếp hàng."
+            hint="Mac Mini xử lý nhanh nhất khi tạo một video một lúc; video sau tự xếp hàng."
           >
             <input
               type="number"
@@ -3703,9 +3751,9 @@ function SimplePage({
   return (
     <div className="page">
       <div className="page-heading">
-        <div>
+        <div className="page-title-with-info">
           <h1>{title}</h1>
-          <p>{subtitle}</p>
+          <InfoPopover title={title}>{subtitle}</InfoPopover>
         </div>
       </div>
       {children}

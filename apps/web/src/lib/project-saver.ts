@@ -1,7 +1,8 @@
 import type { Project } from "@studio/shared";
 import { rebaseEdits } from "./project-merge";
 
-export type SaveState = { status: "saved" | "saving" | "error"; message?: string };
+/** "unsaved": edits waiting for the person to press Save (auto-save off); "saving": being written; "error": the write failed. */
+export type SaveState = { status: "saved" | "saving" | "unsaved" | "error"; message?: string };
 
 /** A save refused because the project changed on the server after this copy was loaded (HTTP 409 "đã được cập nhật"). */
 export function isStaleSave(error: unknown): boolean {
@@ -32,9 +33,10 @@ export class ProjectSaver {
     this.confirmed = project;
   }
 
-  edit(project: Project) {
+  /** Queues an edit. With `auto` off it only waits (the page shows "unsaved") until flush() is called. */
+  edit(project: Project, auto = true) {
     this.pending = project;
-    this.deps.onState({ status: "saving" });
+    this.deps.onState({ status: auto ? "saving" : "unsaved" });
   }
 
   get hasPending() {
@@ -48,6 +50,7 @@ export class ProjectSaver {
         await this.running;
         continue;
       }
+      this.deps.onState({ status: "saving" });
       this.running = this.drain();
       try { await this.running; } finally { this.running = null; }
     }
