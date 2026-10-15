@@ -1020,8 +1020,8 @@ SLEEPER = idle_sleep.Sleeper([
     idle_sleep.Service("image", "com.ai-short-video.image", lambda: image_server_state() == "ready", wake_timeout_s=420),
     idle_sleep.Service("vieneu", "com.ai-short-video.vieneu", lambda: service_up(VIENEU_URL), wake_timeout_s=300),
     idle_sleep.Service("whisper", "com.ai-short-video.whisper", lambda: service_up(WHISPER_URL, "/"), wake_timeout_s=180),
-    idle_sleep.Service("comfyui", "com.ai-short-video.comfyui", _comfy_up, wake_timeout_s=300),
-    idle_sleep.Service("ltx", "com.ai-short-video-studio.ltx", _ltx_up, wake_timeout_s=300),
+    idle_sleep.Service("comfyui", "com.ai-short-video.comfyui", _comfy_up, wake_timeout_s=300, idle_cap_s=180),
+    idle_sleep.Service("ltx", "com.ai-short-video-studio.ltx", _ltx_up, wake_timeout_s=300, idle_cap_s=180),
 ], idle_sleep.configured_idle_seconds())
 
 

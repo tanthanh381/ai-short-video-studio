@@ -82,6 +82,17 @@ class SleepTests(unittest.TestCase):
         clock.advance(600)
         self.assertEqual(sleeper.sleep_idle(), ["image"])
 
+    def test_a_rarely_used_heavy_server_sleeps_sooner_but_never_later(self):
+        clock = Clock()
+        launchd = FakeLaunchd()
+        services = [idle_sleep.Service("image", "img", lambda: True), idle_sleep.Service("tts", "tts", lambda: True, idle_cap_s=180)]
+        sleeper = idle_sleep.Sleeper(services, 600, launchd, clock)
+        clock.advance(200)
+        self.assertEqual(sleeper.sleep_idle(), ["tts"])
+        short = idle_sleep.Sleeper([idle_sleep.Service("tts", "tts", lambda: True, idle_cap_s=900)], 60, FakeLaunchd(), clock)
+        clock.advance(100)
+        self.assertEqual(short.sleep_idle(), ["tts"])  # the global limit, when shorter, wins
+
     def test_keep_and_disabled_and_missing_plist(self):
         sleeper, launchd, clock = make()
         clock.advance(5000)

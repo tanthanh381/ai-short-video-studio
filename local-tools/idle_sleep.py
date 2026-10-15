@@ -30,8 +30,10 @@ def configured_idle_seconds(env=None):
 
 
 class Service:
-    def __init__(self, name, label, up, wake_timeout_s=240):
+    def __init__(self, name, label, up, wake_timeout_s=240, idle_cap_s=None):
         self.name = name
+        # a rarely used heavy server (video, ComfyUI) sleeps sooner than the limit, never later
+        self.idle_cap_s = idle_cap_s
         self.label = label
         self.up = up  # () -> bool: answers its health check
         self.wake_timeout_s = wake_timeout_s
@@ -101,7 +103,8 @@ class Sleeper:
             with self.lock:
                 idle = self.clock() - self.last_used[name]
                 busy = self.busy[name]
-            if name in keep or busy or idle < self.idle_s or not self.launchd.installed(service.label):
+            limit = min(self.idle_s, service.idle_cap_s) if service.idle_cap_s else self.idle_s
+            if name in keep or busy or idle < limit or not self.launchd.installed(service.label):
                 continue
             if not self.locks[name].acquire(blocking=False):
                 continue
