@@ -55,7 +55,8 @@ describe("channel presets", () => {
 
   it("the cổ nhân preset is the sepia story card with sepia ink pictures and green karaoke captions", () => {
     const settings = CHANNEL_PRESETS.find((preset) => preset.id === "quy-tac-co-nhan")!.apply(DEFAULT_PROJECT_SETTINGS);
-    expect(settings).toMatchObject({ layoutTemplate: "story-card", cardTheme: "sepia", visualPreset: "thuy-mac-sepia", captionHighlight: true, aspectRatio: "9:16" });
+    expect(settings).toMatchObject({ layoutTemplate: "story-card", cardTheme: "sepia", visualPreset: "thuy-mac-sepia", captionHighlight: true, aspectRatio: "9:16", progressBar: true, sceneSfx: true, targetDurationSec: 45 });
+    expect(settings.outroText).toMatch(/Theo dõi/u);
     // choosing the plain story card afterwards goes back to the blue one
     expect(withLayoutTemplate(settings, "story-card").cardTheme).toBe("blue");
     expect(withLayoutTemplate(settings, "full-bleed").layoutTemplate).toBe("full-bleed");

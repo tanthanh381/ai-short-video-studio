@@ -254,7 +254,7 @@ export async function buildCardFrame(config: WorkerConfig, workdir: string, proj
   return frame;
 }
 
-/** The sepia card: flat beige canvas, red kicker over a white title, optional small footer and, without a logo, a round initials badge. */
+/** The sepia card: flat beige canvas, red kicker over a white title and an optional small footer. */
 async function buildSepiaFrame(config: WorkerConfig, workdir: string, project: Project, title: string): Promise<string> {
   const lines = sepiaTitleLines(title);
   const textFile = async (name: string, text: string) => { const path = join(workdir, name); await writeFile(path, text, "utf8"); return path; };
@@ -272,20 +272,22 @@ async function buildSepiaFrame(config: WorkerConfig, workdir: string, project: P
   const canvas = `color=c=${SEPIA.background}:s=${CARD.width}x${CARD.height}:d=1:r=1`;
   const background = `[0:v]format=rgb24${draw.length ? "," + draw.join(",") : ""}[bg]`;
   const frame = join(workdir, "card-frame.png");
-  const initials = brandInitials(project.settings.brandName);
-  if (!initials || project.settings.logoPath) {
-    await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", canvas, "-filter_complex", `${background};[bg]null[out]`, "-map", "[out]", "-frames:v", "1", "-update", "1", frame], { timeout: 60_000 });
-    return frame;
-  }
+  await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", canvas, "-filter_complex", `${background};[bg]null[out]`, "-map", "[out]", "-frames:v", "1", "-update", "1", frame], { timeout: 60_000 });
+  return frame;
+}
+
+/** The sepia card's default logo (no upload): a round badge with the channel's initials. Overlaid last, so it hangs over the picture band's corner. */
+async function buildSepiaBadge(config: WorkerConfig, workdir: string, initials: string): Promise<string> {
   const size = 237;
   const centre = size / 2;
-  const initialsFile = await textFile("card-badge.txt", initials);
+  const initialsFile = join(workdir, "card-badge.txt");
+  await writeFile(initialsFile, initials, "utf8");
   const inside = `lte(hypot(X-${centre},Y-${centre}),${centre - 10})`;
-  const badge = `[1:v]format=rgba,geq=r='if(${inside},60,248)':g='if(${inside},48,240)':b='if(${inside},30,222)':a='if(lte(hypot(X-${centre},Y-${centre}),${centre - 2}),255,0)',`
-    + `drawtext=fontfile=${FONT_BOLD}:textfile=${initialsFile}:fontsize=${Math.round(size * 0.4)}:fontcolor=0xF3E3B0:x=(w-text_w)/2:y=(h-text_h)/2-4[badge]`;
-  await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", canvas, "-f", "lavfi", "-i", `color=c=black:s=${size}x${size}:d=1:r=1`,
-    "-filter_complex", `${background};${badge};[bg][badge]overlay=${CARD.width - size - SEPIA.logoRight}:${SEPIA.logoTop}:format=auto[out]`, "-map", "[out]", "-frames:v", "1", "-update", "1", frame], { timeout: 60_000 });
-  return frame;
+  const filter = `format=rgba,geq=r='if(${inside},60,248)':g='if(${inside},48,240)':b='if(${inside},30,222)':a='if(lte(hypot(X-${centre},Y-${centre}),${centre - 2}),255,0)',`
+    + `drawtext=fontfile=${FONT_BOLD}:textfile=${initialsFile}:fontsize=${Math.round(size * 0.4)}:fontcolor=0xF3E3B0:x=(w-text_w)/2:y=(h-text_h)/2-4`;
+  const badge = join(workdir, "badge.png");
+  await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", `color=c=black:s=${size}x${size}:d=1:r=1`, "-vf", filter, "-frames:v", "1", "-update", "1", badge], { timeout: 60_000 });
+  return badge;
 }
 
 export async function renderProject(
@@ -453,6 +455,9 @@ export async function renderProject(
       logoPath = join(workdir, "logo");
       await writeFile(logoPath, await getFile(project.settings.logoPath));
       args.push("-loop", "1", "-i", logoPath);
+    } else if (usesStoryCard(project.settings) && cardThemeOf(project.settings) === "sepia" && brandInitials(project.settings.brandName)) {
+      logoPath = await buildSepiaBadge(config, workdir, brandInitials(project.settings.brandName));
+      args.push("-loop", "1", "-i", logoPath);
     }
     let musicPath: string | null = null;
     let musicVolume = project.settings.musicVolume;
@@ -485,7 +490,24 @@ export async function renderProject(
       hookFiles.push(file);
     }
     const hook = hookFiles.length ? `${hookOverlayFilters(hookFiles, hookLines, width, height).join(",")},` : "";
-    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}${hook}format=yuv420p[base]`;
+    // Retention aids: a closing call to action faded in over the last seconds, and a thin bar that fills as the video plays.
+    const cardLook = usesStoryCard(project.settings) ? (cardThemeOf(project.settings) === "sepia" ? { fill: SEPIA.kickerColor, edge: SEPIA.kickerBorder } : { fill: CARD.titleColor, edge: "0x14202a" }) : { fill: "0xFFFFFF", edge: "0x000000" };
+    const outro = project.settings.outroText.trim();
+    let outroFilter = "";
+    if (outro && total > 6000) {
+      const file = join(workdir, "outro.txt");
+      await writeFile(file, outro, "utf8");
+      const from = Math.max(0, total / 1000 - 2.8).toFixed(3);
+      const outroSize = Math.max(34, Math.min(58, Math.floor((width * 0.88) / (Math.max(1, [...outro].length) * 0.6))));
+      outroFilter = `drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${outroSize}:fontcolor=${cardLook.fill}:borderw=4:bordercolor=${cardLook.edge}:x=(w-text_w)/2:y=${usesStoryCard(project.settings) ? 1650 : Math.round(height * 0.8)}:alpha='min(1,(t-${from})/0.4)':enable='gte(t,${from})',`;
+    }
+    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}${hook}${outroFilter}format=yuv420p[base]`;
+    let baseLabel = "base";
+    if (project.settings.progressBar) {
+      const seconds = (total / 1000).toFixed(3);
+      filter += `;color=c=${cardLook.fill}:s=${width}x12:r=30:d=${seconds}[bar];[base][bar]overlay=x='-w+w*t/${seconds}':y=H-h:eval=frame,format=yuv420p[withbar]`;
+      baseLabel = "withbar";
+    }
     if (logoPath) {
       const margin = Math.round(width * 0.04);
       // Sepia card: the logo hangs from the picture band's top-right corner, as in the reference, whatever the corner chosen.
@@ -493,11 +515,16 @@ export async function renderProject(
       const x = sepiaLogo ? `W-w-${SEPIA.logoRight}` : project.settings.logoPosition === "top-center" ? "(W-w)/2" : project.settings.logoPosition.endsWith("right") ? `W-w-${margin}` : `${margin}`;
       const y = sepiaLogo ? `${SEPIA.logoTop}` : project.settings.logoPosition.startsWith("bottom") ? `H-h-${margin}` : `${margin}`;
       const logoWidth = Math.round(width * (sepiaLogo ? Math.max(project.settings.logoScale, SEPIA.logoMinScale) : project.settings.logoScale));
-      filter += `;[1:v]scale=${logoWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=${project.settings.logoOpacity}[logo];[base][logo]overlay=x=${x}:y=${y}:format=auto[v]`;
+      filter += `;[1:v]scale=${logoWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=${project.settings.logoOpacity}[logo];[${baseLabel}][logo]overlay=x=${x}:y=${y}:format=auto,format=yuv420p[v]`;
     } else {
-      filter += ";[base]null[v]";
+      filter += `;[${baseLabel}]null[v]`;
     }
-    filter += `;${buildAudioMixFilter(Boolean(musicPath), musicVolume, total, logoPath ? 2 : 1, true)}`;
+    const cutsMs: number[] = [];
+    if (project.settings.sceneSfx) {
+      let at = 0;
+      for (const item of timelineScenes) { if (at > 0) cutsMs.push(at); at += item.actualDurationMs ?? item.estimatedDurationMs; }
+    }
+    filter += `;${buildAudioMixFilter(Boolean(musicPath), musicVolume, total, logoPath ? 2 : 1, true, cutsMs)}`;
     args.push(
       "-filter_complex",
       filter,

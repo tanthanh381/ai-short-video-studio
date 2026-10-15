@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Scene } from "@studio/shared";
-import { buildAudioMixFilter, validateCaptionTiming, EXPORT_AUDIO_BITS, EXPORT_LIMIT_BYTES, exportRateArgs, exportRateCap, exportTooLargeMessage } from "./render-quality";
+import { buildAudioMixFilter, sfxSource, validateCaptionTiming, EXPORT_AUDIO_BITS, EXPORT_LIMIT_BYTES, exportRateArgs, exportRateCap, exportTooLargeMessage } from "./render-quality";
 
 const scene = (cues: Array<{ startMs: number; endMs: number; text: string }>) =>
   ({ order: 0, subtitles: cues.map((cue) => ({ id: crypto.randomUUID(), ...cue })) }) as Scene;
@@ -59,5 +59,25 @@ describe("exports fit the storage limit", () => {
 
   it("says in Vietnamese when a video cannot fit", () => {
     expect(exportTooLargeMessage(900_000)).toMatch(/900 giây.*50 MB.*chia thành nhiều phần/u);
+  });
+});
+
+describe("scene-change ticks", () => {
+  it("writes one decaying tick per cut inside the filter graph, and none for a cut outside the video", () => {
+    const source = sfxSource([3300, 6100, 99_000], 10_000);
+    expect(source.match(/between\(t-/gu)?.length).toBe(4); // two cuts, in each of the two channels
+    expect(source).toContain("t-3.300");
+    expect(source).toContain("t-6.100");
+    expect(source).not.toContain("99.000");
+    expect(source).toContain("d=10.000");
+  });
+
+  it("joins the ticks to the narration before the music ducks, and leaves the old graph untouched without cuts", () => {
+    const withTicks = buildAudioMixFilter(true, 0.12, 10_000, 2, true, [3300]);
+    expect(withTicks).toMatch(/^aevalsrc=.*\[sfx\];\[0:a\]aformat=.*\[vo\];\[vo\]\[sfx\]amix=inputs=2:duration=first:normalize=0\[v0\];\[v0\]asplit=2\[voice\]\[sidechain\];/u);
+    expect(withTicks).toContain("[2:a]");
+    expect(buildAudioMixFilter(false, 0.12, 10_000, 1, true, [3300])).toMatch(/\[v0\]loudnorm/u);
+    expect(buildAudioMixFilter(true, 0.12, 10_000, 1, true, [])).toBe(buildAudioMixFilter(true, 0.12, 10_000, 1, true));
+    expect(buildAudioMixFilter(true, 0.12, 10_000, 1, true, [])).toMatch(/^\[0:a\]aformat=.*,asplit=2\[voice\]\[sidechain\];/u);
   });
 });

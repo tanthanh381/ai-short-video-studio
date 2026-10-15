@@ -22,7 +22,19 @@ export function validateCaptionTiming(scene: Scene, audioDurationMs: number) {
 // The explicit layout after aresample matters: ffmpeg 5.1 cannot hand aresample's output to alimiter otherwise.
 const LOUDNESS = "loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo";
 
-export function buildAudioMixFilter(hasMusic: boolean, volume: number, durationMs: number, musicInputIndex = 1, normalize = false) {
+/**
+ * A soft tick (620 Hz, 0.12 s, fast decay) at each cut, synthesised inside the filter graph: no extra input or file. The
+ * level is low on purpose; it must be felt, not heard over the voice.
+ */
+export function sfxSource(cutsMs: number[], durationMs: number, level = 0.16): string {
+  const terms = cutsMs.filter((ms) => ms > 0 && ms < durationMs).map((ms) => {
+    const at = (ms / 1000).toFixed(3);
+    return `if(between(t-${at},0,0.12),sin(2*PI*620*(t-${at}))*exp(-34*(t-${at})),0)`;
+  });
+  return `aevalsrc='${level}*(${terms.join("+") || "0"})|${level}*(${terms.join("+") || "0"})':s=48000:d=${(durationMs / 1000).toFixed(3)}`;
+}
+
+export function buildAudioMixFilter(hasMusic: boolean, volume: number, durationMs: number, musicInputIndex = 1, normalize = false, cutsMs: number[] = []) {
   if (!Number.isFinite(volume) || volume < 0 || volume > 1)
     throw new Error("Music volume must be between 0 and 1");
   if (!Number.isFinite(durationMs) || durationMs <= 0)
@@ -33,9 +45,12 @@ export function buildAudioMixFilter(hasMusic: boolean, volume: number, durationM
   const format = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo";
   // Mono narration has only a "guessed" channel layout, which loudnorm -> aresample -> alimiter cannot negotiate;
   // fix it to stereo before the loudness chain.
-  if (!hasMusic) return normalize ? `[0:a]${format},${tail}[a]` : `[0:a]${tail}[a]`;
+  // Scene-change ticks join the narration before everything else, so the music ducks for them as for the voice.
+  const ticks = cutsMs.some((ms) => ms > 0 && ms < durationMs);
+  const head = ticks ? `${sfxSource(cutsMs, durationMs)}[sfx];[0:a]${format}[vo];[vo][sfx]amix=inputs=2:duration=first:normalize=0[v0];` : "";
+  if (!hasMusic) return ticks ? `${head}[v0]${tail}[a]` : normalize ? `[0:a]${format},${tail}[a]` : `[0:a]${tail}[a]`;
   const fadeStart = Math.max(0, durationMs / 1000 - 1).toFixed(3);
-  return `[0:a]${format},asplit=2[voice][sidechain];`
+  return `${head}${ticks ? "[v0]" : `[0:a]${format},`}asplit=2[voice][sidechain];`
     + `[${musicInputIndex}:a]${format},volume=${volume},afade=t=out:st=${fadeStart}:d=1[music];`
     + "[music][sidechain]sidechaincompress=threshold=0.03:ratio=8:attack=15:release=250:makeup=1[ducked];"
     + `[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,${tail}[a]`;

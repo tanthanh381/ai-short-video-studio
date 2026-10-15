@@ -66,6 +66,9 @@ export const DEFAULT_PROJECT_SETTINGS = {
   autoMusic: false,
   captionHighlight: false,
   hookTitle: false,
+  progressBar: false,
+  outroText: "",
+  sceneSfx: false,
   trimSilence: false,
   subtitle: {
     enabled: true,

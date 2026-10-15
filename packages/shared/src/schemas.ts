@@ -203,6 +203,12 @@ export const projectSettingsSchema = z.object({
   captionHighlight: z.boolean().default(false),
   /** Big title over the first seconds of a full-frame video (the story card already has a title banner). */
   hookTitle: z.boolean().default(false),
+  /** A thin bar along the bottom that fills as the video plays: shows how little is left and keeps viewers to the end. */
+  progressBar: z.boolean().default(false),
+  /** A call to action faded in over the last seconds ("Theo dõi để xem thêm"); empty = none. */
+  outroText: z.string().trim().max(60).default(""),
+  /** A soft tick at every scene change, a pattern interrupt that keeps the ear awake. */
+  sceneSfx: z.boolean().default(false),
   trimSilence: z.boolean().default(false),
   subtitle: subtitleStyleSchema.default({
     enabled: true,

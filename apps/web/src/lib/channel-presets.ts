@@ -18,7 +18,9 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     label: "Quy tắc cổ nhân",
     hint: "Thẻ truyện nền be, tiêu đề đỏ + trắng, tranh thủy mặc nâu, phụ đề xanh lá chạy theo lời, giọng nam trầm",
     // Measured on the reference short: beige canvas, red kicker + white title, sepia ink pictures, green karaoke captions.
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "story-card"), "thuy-mac-sepia"), cardTheme: "sepia", style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: false }),
+    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "story-card"), "thuy-mac-sepia"), cardTheme: "sepia", style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: false,
+      // Short-form retention: under a minute, a bar that shows the end is near, a soft tick at each cut, a call to action at the close.
+      targetDurationSec: 45, progressBar: true, sceneSfx: true, outroText: "Theo dõi để xem thêm quy tắc cổ nhân" }),
   },
   {
     id: "dao-ly-co-phong",

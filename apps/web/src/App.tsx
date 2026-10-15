@@ -1543,6 +1543,29 @@ function NewProjectPage() {
             <label className="check">
               <input
                 type="checkbox"
+                checked={settings.progressBar}
+                onChange={(e) => setSettings((s) => ({ ...s, progressBar: e.target.checked }))}
+              />
+              <span>Thanh tiến độ ở chân video (giữ người xem đến cuối)</span>
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.sceneSfx}
+                onChange={(e) => setSettings((s) => ({ ...s, sceneSfx: e.target.checked }))}
+              />
+              <span>Âm “tích” nhẹ mỗi lần chuyển cảnh</span>
+            </label>
+            <Field label="Lời kêu gọi cuối video" hint="Hiện mờ dần ở 3 giây cuối, ví dụ “Theo dõi để xem thêm”. Để trống nếu không cần.">
+              <input
+                maxLength={60}
+                value={settings.outroText}
+                onChange={(e) => setSettings((s) => ({ ...s, outroText: e.target.value }))}
+              />
+            </Field>
+            <label className="check">
+              <input
+                type="checkbox"
                 checked={settings.trimSilence}
                 onChange={(e) =>
                   setSettings((s) => ({ ...s, trimSilence: e.target.checked }))
@@ -3095,6 +3118,29 @@ function StudioPage() {
                 />
                 <span>Tiêu đề lớn ở 3 giây đầu{project.settings.layoutTemplate === "story-card" ? " (thẻ truyện đã có tiêu đề)" : ""}</span>
               </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={project.settings.progressBar}
+                  onChange={(e) => change({ ...project, settings: { ...project.settings, progressBar: e.target.checked } })}
+                />
+                <span>Thanh tiến độ ở chân video (giữ người xem đến cuối)</span>
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={project.settings.sceneSfx}
+                  onChange={(e) => change({ ...project, settings: { ...project.settings, sceneSfx: e.target.checked } })}
+                />
+                <span>Âm “tích” nhẹ mỗi lần chuyển cảnh</span>
+              </label>
+              <Field label="Lời kêu gọi cuối video" hint="Hiện mờ dần ở 3 giây cuối, ví dụ “Theo dõi để xem thêm”. Để trống nếu không cần.">
+                <input
+                  maxLength={60}
+                  value={project.settings.outroText}
+                  onChange={(e) => change({ ...project, settings: { ...project.settings, outroText: e.target.value } })}
+                />
+              </Field>
               <Field label="Kiểu chữ">
                 <select
                   value={project.settings.subtitle.preset}
