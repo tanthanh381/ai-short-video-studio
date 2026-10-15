@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
-import { CARD, SEPIA, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, castForScript, cardFooterLines, cardTitleFontSize, fallbackCardTitle, splitCardTitle, usesStoryCard } from "./card-layout";
+import { CARD, PAPER, SEPIA, progressBarY, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, castForScript, cardFooterLines, cardTitleFontSize, fallbackCardTitle, splitCardTitle, usesStoryCard } from "./card-layout";
 import { createAss } from "./render";
 import { buildAmbientMusicArgs, buildAudioMixFilter } from "./render-quality";
 
@@ -276,5 +276,17 @@ describe("sepia story card", () => {
     expect(castForScript("Cổ nhân dạy rằng đừng ăn quá no.")).not.toMatch(/young/);
     expect(castForScript("Người xưa dặn con cháu đừng ngồi lên giường người khác.")).toMatch(/sage.*, and a young clean-shaven Chinese man/);
     expect(castForScript("Mẹ nhường cơm cho con.")).toMatch(/mother/); // other stories keep their cast
+  });
+});
+
+describe("progress bar position", () => {
+  it("never crosses the captions: under the picture band, above the paper-stage captions, under full-frame captions", () => {
+    expect(progressBarY({ layoutTemplate: "story-card", aspectRatio: "9:16" }, 1080, 1920)).toBe(CARD.bandY + CARD.bandH + 6);
+    expect(progressBarY({ layoutTemplate: "paper-stage", aspectRatio: "9:16" }, 1080, 1920)).toBe(1296);
+    // full frame: captions end at 24% of the height above the bottom (1459 px), so the bar starts below that
+    const bar = progressBarY({ layoutTemplate: "full-bleed", aspectRatio: "9:16" }, 1080, 1920);
+    expect(bar).toBe(1471);
+    expect(bar).toBeGreaterThan(1920 - Math.round(1920 * 0.24));
+    expect(progressBarY({ layoutTemplate: "full-bleed", aspectRatio: "16:9" }, 1920, 1080)).toBe(1068);
   });
 });

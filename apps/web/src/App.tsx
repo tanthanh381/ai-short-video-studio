@@ -3404,7 +3404,7 @@ function ApiKeyCard({
         <b className={status.saved ? "configured" : "unknown"}>{status.saved ? `Đã lưu …${status.last4 ?? ""}` : "Chưa có khóa"}</b>
       </div>
       {!enabled && !demo && (
-        <Notice tone="warn">Máy chủ chưa bật lưu khóa API (thiếu API_KEYS_SECRET). Hãy báo người quản trị máy.</Notice>
+        <Notice tone="warn">Máy chủ chưa bật tính năng lưu khóa API. Hãy báo người quản trị máy.</Notice>
       )}
       {showForm && enabled && (
         <form className="api-key-form" onSubmit={submit}>

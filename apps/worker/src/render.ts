@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { drawsByHand, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
 import { EXPORT_LIMIT_BYTES, buildAudioMixFilter, buildAmbientMusicArgs, exportRateArgs, exportTooLargeMessage, validateCaptionTiming } from "./render-quality";
-import { CARD, PAPER, SAFE, SEPIA, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
+import { CARD, PAPER, SAFE, SEPIA, progressBarY, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
 import { drawSceneByHand, type WhiteboardRunner } from "./whiteboard";
 
 const exec = promisify(execFile);
@@ -532,7 +532,7 @@ export async function renderProject(
     if (project.settings.progressBar) {
       const seconds = (total / 1000).toFixed(3);
       // Not on the very bottom edge: the phone app draws its own scrubber and navigation there. Under the picture band, or just above the app's bottom row.
-      const barY = usesStoryCard(project.settings) ? CARD.bandY + CARD.bandH + 6 : height - SAFE.bottom - 12;
+      const barY = progressBarY(project.settings, width, height);
       filter += `;color=c=${cardLook.fill}:s=${width}x12:r=30:d=${seconds}[bar];[base][bar]overlay=x='-w+w*t/${seconds}':y=${barY}:eval=frame,format=yuv420p[withbar]`;
       baseLabel = "withbar";
     }

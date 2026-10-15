@@ -273,4 +273,15 @@ describe("OllamaStoryboardAdapter.writeScript", () => {
     expect(bodies[0]!.system).toContain("lược bớt chi tiết phụ");
     expect(bodies[0]!.options.num_ctx).toBe(8192);
   });
+
+  it("does not push a family onto a first-person script: the cast prompt names no mother-and-child example and bans invented relatives", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ response: JSON.stringify({ character: "a Vietnamese man in his 30s with short black hair, a gray shirt and dark trousers" }) }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const cast = await new OllamaStoryboardAdapter("http://localhost:11434").describeCast({ title: "Tranh cãi", sourceText: "Tôi từng cãi nhau cả buổi tối.", cartoon: true });
+    expect(cast).toMatch(/man in his 30s/);
+    const system = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).system as string;
+    expect(system).not.toMatch(/mother and her child|her young son/);
+    expect(system).toMatch(/Never add a spouse, child, parent or friend the script does not mention/);
+    expect(system).toMatch(/narrator who says 'tôi'/);
+  });
 });

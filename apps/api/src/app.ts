@@ -144,6 +144,19 @@ function autoTitle(source: string) {
   return text.trim().split(/\r?\n/)[0]!.slice(0, 120) || "Video của tôi";
 }
 
+const REFUSED_ORIGIN = "Nguồn truy cập không được phép";
+
+/** What a request-level failure means for the caller, or null when it is a genuine server fault. */
+export function clientFault(error: unknown): { status: number; message: string; type: string } | null {
+  const failure = error as { type?: string; status?: number; statusCode?: number; message?: string } | null;
+  if (failure?.message === REFUSED_ORIGIN) return { status: 403, message: REFUSED_ORIGIN, type: "origin" };
+  if (failure?.type === "entity.too.large" || failure?.status === 413 || failure?.statusCode === 413)
+    return { status: 413, message: "Dữ liệu gửi lên quá lớn. Hãy rút gọn nội dung rồi thử lại.", type: "too_large" };
+  if (failure?.type === "entity.parse.failed" || failure?.type === "encoding.unsupported" || failure?.type === "charset.unsupported")
+    return { status: 400, message: "Dữ liệu gửi lên không đọc được. Hãy tải lại trang rồi thử lại.", type: "unreadable" };
+  return null;
+}
+
 export function createApp(config: AppConfig, db: AdminClient) {
   const app = express();
   const allowedOrigins = config.ALLOWED_ORIGINS.split(",")
@@ -290,7 +303,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       origin(origin, callback) {
         if (!origin || allowedOrigins.includes(origin))
           return callback(null, true);
-        callback(new Error("Nguồn truy cập không được phép"));
+        callback(new Error(REFUSED_ORIGIN));
       },
       credentials: false,
     }),
@@ -1336,7 +1349,14 @@ export function createApp(config: AppConfig, db: AdminClient) {
           })),
         });
       }
-      req.log.error({ err: error }, "request_failed");
+      // Errors raised before the request logger exists (a refused origin, an unreadable or oversized body) are the caller's
+      // mistake, not a server fault: answer them in the API's own JSON with the right 4xx instead of a bare HTML 500.
+      const known = clientFault(error);
+      if (known) {
+        req.log?.warn({ type: known.type }, "request_refused");
+        return res.status(known.status).json({ error: known.message });
+      }
+      (req.log ?? console).error({ err: error }, "request_failed");
       res.status(500).json({
         error:
           "Máy chủ gặp lỗi. Vui lòng thử lại; dữ liệu dự án vẫn được giữ nguyên.",
