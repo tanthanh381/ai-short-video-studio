@@ -2,14 +2,14 @@ import type { BalancerSummary, NodeSummary } from "@studio/shared";
 import { nodeActivity } from "./air-setup";
 import { SWAP_HURTS_MBPS, formatGb, syncView, type SyncView } from "./system";
 
-/** The "Máy xử lý video" controls in Cài đặt: which machines are on, how work is split, a one-line state for each. Pure, so it is tested. */
+/** Thiết lập thiết bị xử lý trong Cài đặt: thiết bị đang bật, cách phân bổ tác vụ và trạng thái tóm tắt. */
 
 export type Mode = BalancerSummary["mode"];
 
 export const MODE_CHOICES: Array<{ id: Mode; label: string; hint: string }> = [
-  { id: "auto", label: "Tự động", hint: "Hệ thống đánh giá từng đợt rồi chọn chạy một máy hay song song, tùy cách nào nhanh hơn." },
-  { id: "single", label: "Một máy", hint: "Mỗi đợt chỉ dùng một máy (máy chính nếu đang bật); máy còn lại chờ dự phòng." },
-  { id: "parallel", label: "Luôn song song", hint: "Dùng mọi máy đang bật và sẵn sàng, kể cả khi chia ra không nhanh hơn bao nhiêu." },
+  { id: "auto", label: "Tự động", hint: "Tự chọn xử lý đơn lẻ hoặc song song dựa trên tải hiện tại." },
+  { id: "single", label: "Một thiết bị", hint: "Mỗi đợt tác vụ chỉ dùng một thiết bị; thiết bị còn lại ở chế độ dự phòng." },
+  { id: "parallel", label: "Song song", hint: "Sử dụng tất cả thiết bị đang sẵn sàng để rút ngắn thời gian xử lý." },
 ];
 
 export type MachineChoice = {
@@ -56,7 +56,7 @@ export function machineChoices(balancer: BalancerSummary): MachineChoice[] {
       primary: node.role === "primary",
       enabled: on,
       state: STATE[node.state],
-      facts: on ? machineFacts(node) : "Không nhận việc mới; vẫn được theo dõi ở Hệ thống",
+      facts: on ? machineFacts(node) : "Đang tắt · không nhận tác vụ mới",
       canSwitchOff: !on || enabled.length > 1,
       sync: on && node.state !== "offline" ? syncView(node) : null,
     };
@@ -77,15 +77,15 @@ export function machineWarning(balancer: BalancerSummary): string | null {
   const others = balancer.nodes.filter((node) => node.role !== "primary" && node.enabled !== false);
   if (primary && primary.enabled === false) {
     const names = others.map((node) => node.id).join(", ");
-    return `Máy chính đang tắt: mọi việc AI chạy trên ${names || "máy còn lại"}. Nếu máy đó mất kết nối, video sẽ không chạy được cho tới khi bạn bật lại máy chính. Bước ghép video (FFmpeg) vẫn chạy trên máy chính.`;
+    return `Thiết bị chính đang tắt. Tác vụ được chuyển sang ${names || "thiết bị còn lại"}; nếu thiết bị này mất kết nối, video mới sẽ tạm dừng. Render vẫn được thực hiện trên thiết bị chính.`;
   }
-  if (others.length === 0 && balancer.nodes.length > 1) return "Các máy phụ đang tắt: mọi việc chạy trên máy chính, không còn chia song song.";
+  if (others.length === 0 && balancer.nodes.length > 1) return "Thiết bị phụ đang tắt. Tất cả tác vụ hiện được xử lý trên thiết bị chính.";
   return null;
 }
 
 export const SERVICE_NAMES: Array<[string, string]> = [
-  ["api", "Backend API"], ["supabase", "Supabase"], ["worker", "Worker dựng video"], ["render", "FFmpeg"],
-  ["ollama", "Ollama"], ["localMedia", "Media local"], ["faceDetail", "Sửa khuôn mặt"], ["whiteboard", "Máy vẽ tay"],
+  ["api", "API ứng dụng"], ["supabase", "Cơ sở dữ liệu"], ["worker", "Bộ xử lý video"], ["render", "Bộ xuất video"],
+  ["ollama", "Ollama · nội dung"], ["localMedia", "Bộ tạo media"], ["faceDetail", "Tăng cường khuôn mặt"], ["whiteboard", "Bảng vẽ"],
 ];
 
 /** "7/8 dịch vụ hoạt động" and the ones that are not: all Cài đặt says about services; the full list is in Hệ thống. */

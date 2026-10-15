@@ -10,8 +10,8 @@ import {
 
 const REFRESH_MS = 3_000;
 const SERVICE_ORDER: Array<[string, string]> = [
-  ["api", "Backend API"], ["supabase", "Supabase"], ["worker", "Worker dựng video"], ["render", "FFmpeg"],
-  ["ollama", "Ollama"], ["localMedia", "Media local"], ["faceDetail", "Sửa khuôn mặt"], ["whiteboard", "Máy vẽ tay"],
+  ["api", "API ứng dụng"], ["supabase", "Cơ sở dữ liệu"], ["worker", "Bộ xử lý video"], ["render", "Bộ xuất video"],
+  ["ollama", "Ollama · nội dung"], ["localMedia", "Bộ tạo media"], ["faceDetail", "Tăng cường khuôn mặt"], ["whiteboard", "Bảng vẽ"],
 ];
 const SERVICE_TONE: Record<string, { label: string; tone: Tone }> = {
   healthy: { label: "Hoạt động", tone: "ok" },
@@ -85,7 +85,7 @@ export function SystemPage() {
       <div className="page-heading">
         <div>
           <h1>Hệ thống</h1>
-          <p>Hiệu năng từng máy, mô hình AI đang chạy và việc đang làm; chỉ để theo dõi, tự cập nhật mỗi {REFRESH_MS / 1000} giây khi bạn mở trang này. Muốn bật hoặc tắt một máy, đổi cách chia việc: vào <Link to="/settings">Cài đặt</Link>.</p>
+          <p>Theo dõi trạng thái xử lý, tài nguyên và dịch vụ. Dữ liệu tự cập nhật mỗi {REFRESH_MS / 1000} giây. Cấu hình thiết bị và cách phân bổ tác vụ trong <Link to="/settings">Cài đặt</Link>.</p>
         </div>
         <div className="sys-live" role="status" aria-live="polite">
           <span className={`sys-dot tone-${live.tone}`} aria-hidden="true" />
@@ -104,7 +104,7 @@ export function SystemPage() {
       {!system ? (
         error
           ? <div className="sys-banner tone-bad" role="alert"><CircleAlert size={16} /> {error}</div>
-          : <div className="empty"><LoaderCircle className="spin" /> Đang đọc số liệu từ các máy…</div>
+          : <div className="empty"><LoaderCircle className="spin" /> Đang tải trạng thái hệ thống…</div>
       ) : (
         <>
           <Tiles system={system} />
@@ -115,15 +115,15 @@ export function SystemPage() {
             </section>
           ) : (
             <section className="sys-card sys-solo">
-              <h2>Chỉ có một máy</h2>
-              <p>Mọi việc đang chạy trên máy chính. Thêm máy phụ (ví dụ MacBook Air) để chia việc vẽ ảnh, giọng đọc song song: xem hướng dẫn "Thêm máy phụ" trong <code>docs/TU-HOST.md</code>.</p>
+              <h2>Một thiết bị đang hoạt động</h2>
+              <p>Tất cả tác vụ hiện được xử lý trên thiết bị chính. Kết nối thêm thiết bị để tăng năng lực xử lý song song.</p>
             </section>
           )}
           {(Boolean(system.balancer && system.balancer.nodes.length > 1) || Boolean(system.balancer?.recent?.length)) ? (
             <details className="sys-details sys-secondary-details">
               <summary>
                 <span>Nhật ký vận hành</span>
-                <small>{system.balancer?.recent?.length ? `${system.balancer.recent.length} hoạt động gần đây` : "Chia việc giữa các máy"}</small>
+                <small>{system.balancer?.recent?.length ? `${system.balancer.recent.length} hoạt động gần đây` : "Phân bổ tác vụ"}</small>
               </summary>
               <div className="sys-two">
                 {system.balancer && system.balancer.nodes.length > 1 ? <WorkShare system={system} now={now} /> : null}
@@ -136,8 +136,8 @@ export function SystemPage() {
             <ServicesCard services={system.services} />
           </div>
           <p className="microcopy sys-foot">
-            Số đếm việc tính từ lúc worker khởi động{system.balancer?.since ? ` (${new Date(system.balancer.since).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })})` : ""}.
-            Bật hoặc tắt máy, cách chia việc, khóa API và dịch vụ trả phí nằm ở <Link to="/settings">Cài đặt</Link>.
+            Số liệu tác vụ tính từ lần khởi động dịch vụ gần nhất{system.balancer?.since ? ` (${new Date(system.balancer.since).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })})` : ""}.
+            Cấu hình thiết bị, API và giới hạn sử dụng trong <Link to="/settings">Cài đặt</Link>.
           </p>
         </>
       )}
@@ -162,7 +162,7 @@ function Tiles({ system }: { system: SystemSummary }) {
 function Alerts({ system }: { system: SystemSummary }) {
   const alerts = systemAlerts(system);
   if (!alerts.length) {
-    return <div className="sys-banner tone-ok"><CircleCheck size={16} /> Mọi máy, mô hình và dịch vụ đang bình thường.</div>;
+    return <div className="sys-banner tone-ok"><CircleCheck size={16} /> Hệ thống đang hoạt động bình thường.</div>;
   }
   return (
     <section className="sys-alerts" aria-label="Cần chú ý">
@@ -236,19 +236,19 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
         </div>
         <span className={`sys-badge tone-${state.tone}`}>{state.label}</span>
       </header>
-      {node.state === "disabled" ? <p className="sys-off-note">Máy này đang tắt nên không nhận việc mới, nhưng vẫn được theo dõi. <Link to="/settings">Bật lại ở Cài đặt</Link>.</p> : null}
+      {node.state === "disabled" ? <p className="sys-off-note">Thiết bị đang tắt và không nhận tác vụ mới. <Link to="/settings">Bật lại trong Cài đặt</Link>.</p> : null}
       <div className="sys-chips">
         {node.rttMs !== null && node.role === "secondary" ? <span>độ trễ mạng {node.rttMs} ms</span> : null}
-        {node.role === "secondary" && node.matchesPrimary === true ? <span className="tone-ok">cấu hình giống máy chính</span> : null}
-        {node.role === "secondary" && node.matchesPrimary === false ? <span className="tone-warn">cấu hình khác máy chính</span> : null}
-        {node.role === "secondary" && node.matchesPrimary === null ? <span className="tone-idle">chưa kiểm chứng được cấu hình</span> : null}
+        {node.role === "secondary" && node.matchesPrimary === true ? <span className="tone-ok">đã đồng bộ cấu hình</span> : null}
+        {node.role === "secondary" && node.matchesPrimary === false ? <span className="tone-warn">cấu hình chưa đồng bộ</span> : null}
+        {node.role === "secondary" && node.matchesPrimary === null ? <span className="tone-idle">chưa xác định cấu hình</span> : null}
       </div>
 
-      {node.role === "primary" ? <p className="sys-source-note">Máy nguồn: các máy phụ tự sao chép mã, bộ công cụ, model và danh sách model Ollama từ máy này (mỗi phút một lần).</p> : null}
+      {node.role === "primary" ? <p className="sys-source-note">Thiết bị chính cung cấp mã nguồn, công cụ và model cho các thiết bị phụ. Đồng bộ tự động mỗi phút.</p> : null}
       {sync ? (
         <div className={`sys-sync tone-${sync.tone}`}>
           <div className="sys-sync-top">
-            <strong>Đồng bộ với Mac mini</strong>
+            <strong>Đồng bộ thiết bị</strong>
             <span className={`sys-badge tone-${sync.tone}`}>{sync.label}</span>
           </div>
           <p>{sync.detail}</p>
@@ -260,13 +260,13 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
         </div>
       ) : null}
 
-      {gauges.length ? <div className="sys-meters">{gauges.map((gauge) => <Meter key={gauge.id} gauge={gauge} />)}</div> : <p className="microcopy">Máy chưa báo số liệu tài nguyên.</p>}
+      {gauges.length ? <div className="sys-meters">{gauges.map((gauge) => <Meter key={gauge.id} gauge={gauge} />)}</div> : <p className="microcopy">Chưa có số liệu tài nguyên.</p>}
 
       {(history.length > 1 || models.length || processes.length || lanes.length) ? (
         <details className="sys-details sys-machine-details">
           <summary>
             <span>Chi tiết kỹ thuật</span>
-            <small>{models.length ? `${models.length} model` : "Số liệu máy và tác vụ"}</small>
+            <small>{models.length ? `${models.length} model đang theo dõi` : "Số liệu thiết bị và tác vụ"}</small>
           </summary>
           {history.length > 1 ? (
             <div className="sys-sparks">
@@ -314,9 +314,9 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
 
           {lanes.length ? (
             <div className="sys-section">
-              <h3>Loại việc máy này nhận</h3>
+              <h3>Tác vụ được phân công</h3>
               <table className="sys-lanes">
-                <thead><tr><th scope="col">Việc</th><th scope="col">Trạng thái</th><th scope="col">Đã xong</th><th scope="col">Mỗi việc</th></tr></thead>
+                <thead><tr><th scope="col">Tác vụ</th><th scope="col">Trạng thái</th><th scope="col">Đã hoàn tất</th><th scope="col">Thời gian TB</th></tr></thead>
                 <tbody>
                   {lanes.map((row) => (
                     <tr key={row.id} className={row.eligible ? "" : "is-off"}>
@@ -347,8 +347,8 @@ function WorkShare({ system, now }: { system: SystemSummary; now: number }) {
   const rows = workShare(balancer.nodes);
   return (
     <section className="sys-card">
-      <h2>Chia việc giữa các máy</h2>
-      <p className="microcopy">Mỗi thanh cho biết máy nào đã làm bao nhiêu việc từ lúc worker khởi động.</p>
+      <h2>Phân bổ tác vụ</h2>
+      <p className="microcopy">Số lượng tác vụ đã xử lý trên từng thiết bị kể từ lần khởi động dịch vụ gần nhất.</p>
       <div className="sys-legend">
         {balancer.nodes.map((node, index) => <span key={node.id}><i style={{ background: NODE_COLORS[index % NODE_COLORS.length] }} /> {node.id}</span>)}
       </div>
@@ -367,8 +367,8 @@ function WorkShare({ system, now }: { system: SystemSummary; now: number }) {
             </li>
           ))}
         </ul>
-      ) : <p className="microcopy">Chưa có việc nào hoàn thành kể từ lúc khởi động.</p>}
-      <h3>Quyết định phân việc gần nhất</h3>
+      ) : <p className="microcopy">Chưa có tác vụ hoàn tất kể từ lần khởi động dịch vụ gần nhất.</p>}
+      <h3>Lịch sử điều phối</h3>
       {balancer.decisions.length ? (
         <ul className="sys-decisions">
           {balancer.decisions.slice(0, 5).map((decision) => (
@@ -379,7 +379,7 @@ function WorkShare({ system, now }: { system: SystemSummary; now: number }) {
             </li>
           ))}
         </ul>
-      ) : <p className="microcopy">Chưa có lần phân việc nào.</p>}
+      ) : <p className="microcopy">Chưa có hoạt động điều phối.</p>}
     </section>
   );
 }
@@ -388,7 +388,7 @@ function ActivityFeed({ system, now }: { system: SystemSummary; now: number }) {
   const events = system.balancer?.recent ?? [];
   return (
     <section className="sys-card">
-      <h2><Activity size={16} aria-hidden="true" /> Hoạt động gần đây</h2>
+      <h2><Activity size={16} aria-hidden="true" /> Nhật ký hoạt động</h2>
       <ul className="sys-feed">
         {events.slice(0, 14).map((event, index) => (
           <li key={`${event.at}-${index}`} className={event.ok ? "" : "tone-bad"}>
@@ -410,7 +410,7 @@ function JobsCard({ jobs }: { jobs: SystemJob[] }) {
   };
   return (
     <section className="sys-card">
-      <h2>Video gần đây</h2>
+      <h2>Tác vụ gần đây</h2>
       {jobs.length ? (
         <ul className="sys-jobs">
           {jobs.map((job) => (
@@ -433,7 +433,7 @@ function ServicesCard({ services }: { services: SystemSummary["services"] }) {
   const rows = SERVICE_ORDER.filter(([id]) => services[id]);
   return (
     <section className="sys-card">
-      <h2>Dịch vụ trên máy chính</h2>
+      <h2>Dịch vụ tích hợp</h2>
       <ul className="sys-services">
         {rows.map(([id, name]) => {
           const service = services[id]!;

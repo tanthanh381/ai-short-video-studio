@@ -3,8 +3,8 @@ import type { BalancerSummary } from "@studio/shared";
 import { MODE_CHOICES, disabledAfter, machineChoices, machineWarning, serviceSummary } from "./lib/machines";
 
 /**
- * Cài đặt → "Máy xử lý video": the controls. Which machines take part in making videos (a switch for each), and how the
- * work is split. What the machines are doing and how they perform is read-only and lives in the Hệ thống page.
+ * Cài đặt → thiết bị xử lý: chọn thiết bị nhận tác vụ mới và cách phân bổ tác vụ.
+ * Trạng thái vận hành chi tiết được hiển thị trong Hệ thống.
  */
 export function MachinesPanel({ balancer, busy, notice, services, onChange, onSyncNow, syncing }: {
   balancer: BalancerSummary;
@@ -21,17 +21,17 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
   const summary = serviceSummary(services);
   return (
     <div className="machines-panel">
-      <ul className="machine-list" aria-label="Máy tham gia làm video">
+      <ul className="machine-list" aria-label="Thiết bị tham gia xử lý">
         {choices.map((choice) => {
           const locked = busy || (choice.enabled && !choice.canSwitchOff);
           return (
             <li key={choice.id} className={choice.enabled ? "" : "is-off"}>
               <div className="machine-text">
-                <strong>{choice.id}{choice.primary ? " (máy chính)" : ""}</strong>
-                  <span>{choice.facts || (choice.enabled ? "Chưa có số liệu" : "Đã dừng model AI local và các server Python; vẫn giữ API/worker để bật lại")}</span>
+                <strong>{choice.id}{choice.primary ? " (chính)" : ""}</strong>
+                <span>{choice.facts || (choice.enabled ? "Chưa có số liệu" : "Đang tắt · không nhận tác vụ mới")}</span>
                 {choice.sync ? (
                   <span className={`machine-sync tone-${choice.sync.tone}`}>
-                    Đồng bộ với Mac mini: <b>{choice.sync.label}</b>{choice.sync.detail ? ` · ${choice.sync.detail}` : ""}
+                    Đồng bộ thiết bị: <b>{choice.sync.label}</b>{choice.sync.detail ? ` · ${choice.sync.detail}` : ""}
                     {choice.sync.canRequest ? (
                       <button type="button" className="link-button" disabled={syncing !== null} onClick={() => onSyncNow(choice.id)}>
                         {syncing === choice.id ? "Đang gửi…" : "Đồng bộ ngay"}
@@ -45,10 +45,10 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
                 type="button"
                 role="switch"
                 aria-checked={choice.enabled}
-                aria-label={`${choice.enabled ? "Tắt" : "Bật"} máy ${choice.id}`}
+                aria-label={`${choice.enabled ? "Tắt" : "Bật"} thiết bị ${choice.id}`}
                 className="switch"
                 disabled={locked}
-                title={choice.enabled && !choice.canSwitchOff ? "Cần giữ ít nhất một máy đang bật" : choice.enabled ? `Tắt máy ${choice.id}: không giao việc mới` : `Bật máy ${choice.id}`}
+                title={choice.enabled && !choice.canSwitchOff ? "Cần duy trì ít nhất một thiết bị đang bật" : choice.enabled ? `Tắt ${choice.id}: không nhận tác vụ mới` : `Bật ${choice.id}`}
                 onClick={() => onChange({ disabled: disabledAfter(balancer, choice.id, !choice.enabled) })}
               >
                 <span className="switch-knob" aria-hidden="true" />
@@ -61,7 +61,7 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
       {warning ? <p className="machine-warning" role="note">{warning}</p> : null}
 
       <fieldset className="mode-choice" disabled={busy}>
-        <legend>Cách chia việc</legend>
+        <legend>Phân bổ tác vụ</legend>
         {MODE_CHOICES.map((choice) => (
           <label key={choice.id} className={balancer.mode === choice.id ? "is-chosen" : ""}>
             <input type="radio" name="balance-mode" checked={balancer.mode === choice.id} onChange={() => onChange({ mode: choice.id })} />
@@ -72,8 +72,8 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
       {notice ? <p className={`microcopy machine-notice tone-${notice.tone}`} role="status">{notice.text}</p> : null}
 
       <p className="machine-links">
-        {summary.total ? `${summary.ok}/${summary.total} dịch vụ trên máy chính đang hoạt động. ` : ""}
-        Hiệu năng, mô hình AI và việc đang chạy: <Link to="/system">mở Hệ thống</Link>.
+        {summary.total ? `${summary.ok}/${summary.total} dịch vụ đang hoạt động. ` : ""}
+        Xem hiệu năng và tác vụ đang chạy tại <Link to="/system">Hệ thống</Link>.
       </p>
       {summary.problems.length ? (
         <ul className="machine-problems">
