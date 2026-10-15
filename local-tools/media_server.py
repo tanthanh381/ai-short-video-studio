@@ -60,6 +60,45 @@ def require_ffmpeg():
     return path
 
 
+VIDEO_FALLBACK_ENABLED = os.getenv("VIDEO_FALLBACK_ENABLED", "1").lower() not in {"0", "false", "no"}
+VIDEO_FALLBACK_SECONDS = max(1.0, min(float(os.getenv("VIDEO_FALLBACK_SECONDS", "2.0")), 8.0))
+
+
+def still_video_fallback(image_base64, aspect_ratio="9:16"):
+    """Return a valid short MP4 when the optional I2V runtime is unavailable.
+
+    This is deliberately a last-resort availability fallback, not a claim that the
+    still image contains AI motion. It keeps preview/export usable on machines whose
+    shared memory cannot fit LTX after model relocation.
+    """
+    encoded = str(image_base64 or "")
+    if "," in encoded and encoded.lower().split(",", 1)[0].startswith("data:"):
+        encoded = encoded.split(",", 1)[1]
+    raw = base64.b64decode(encoded, validate=True)
+    if not raw or len(raw) > 8 * 1024 * 1024:
+        raise ValueError("Ảnh fallback trống hoặc vượt giới hạn 8 MB")
+    width, height = {"9:16": (576, 1024), "1:1": (720, 720), "16:9": (1024, 576)}.get(
+        aspect_ratio, (576, 1024)
+    )
+    ffmpeg = require_ffmpeg()
+    with tempfile.TemporaryDirectory(prefix="studio-video-fallback-") as directory:
+        root = Path(directory)
+        image_path = root / "reference.png"
+        output_path = root / "fallback.mp4"
+        image_path.write_bytes(raw)
+        vf = (
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},format=yuv420p"
+        )
+        subprocess.run(
+            [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image_path),
+             "-t", str(VIDEO_FALLBACK_SECONDS), "-vf", vf, "-r", "24", "-an", "-c:v", "libx264",
+             "-preset", "veryfast", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output_path)],
+            check=True, timeout=120, capture_output=True,
+        )
+        return output_path.read_bytes()
+
+
 PORT = int(os.getenv("LOCAL_MEDIA_PORT", "8765"))
 LOCAL_AI_ROOT = Path(os.getenv(
     "LOCAL_AI_ROOT",
@@ -132,7 +171,10 @@ def json_response(handler, status, value):
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
-    handler.wfile.write(data)
+    try:
+        handler.wfile.write(data)
+    except BrokenPipeError:
+        pass
 
 
 def binary_response(handler, content_type, data):
@@ -140,7 +182,10 @@ def binary_response(handler, content_type, data):
     handler.send_header("Content-Type", content_type)
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
-    handler.wfile.write(data)
+    try:
+        handler.wfile.write(data)
+    except BrokenPipeError:
+        pass
 
 
 def clean_image_prompt(prompt):
@@ -1074,10 +1119,13 @@ def ltx_state():
 
 
 def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None, preset=None):
-    """Proxy a bounded image-to-video request to the separately installed LTX runtime."""
+    """Proxy I2V to LTX and preserve export availability with a bounded last resort."""
     check_choice("video", model, {"ltxv-2b-0.9.8-distilled": "LTX-Video 2B Distilled"})
     state, detail = ltx_state()
     if state != "ready":
+        if VIDEO_FALLBACK_ENABLED:
+            print(f"[video] LTX state={state}; using FFmpeg still fallback: {detail}", flush=True)
+            return still_video_fallback(image_base64, aspect_ratio)
         raise RuntimeError(detail)
     if not image_base64 or len(image_base64) > 8 * 1024 * 1024:
         raise ValueError("Ảnh tham chiếu LTX trống hoặc vượt giới hạn 8 MB")
@@ -1085,11 +1133,17 @@ def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None
                           "seed": seed, "preset": preset, "imageBase64": image_base64}).encode()
     request = urllib.request.Request(f"{LTX_VIDEO_URL.rstrip('/')}/video", data=payload,
                                      headers={"Content-Type": "application/json"})
-    with VIDEO_LOCK, urllib.request.urlopen(request, timeout=1800) as response:
-        data = response.read()
-    if not data.startswith(b"\x00\x00\x00") and not data.startswith(b"RIFF"):
-        raise RuntimeError("LTX runtime trả về dữ liệu video không hợp lệ")
-    return data
+    try:
+        with VIDEO_LOCK, urllib.request.urlopen(request, timeout=1800) as response:
+            data = response.read()
+        if not data.startswith(b"\x00\x00\x00") and not data.startswith(b"RIFF"):
+            raise RuntimeError("LTX runtime trả về dữ liệu video không hợp lệ")
+        return data
+    except Exception as error:
+        if not VIDEO_FALLBACK_ENABLED:
+            raise
+        print(f"[video] LTX request failed ({type(error).__name__}); using FFmpeg still fallback", flush=True)
+        return still_video_fallback(image_base64, aspect_ratio)
 
 
 def model_catalog():

@@ -8,6 +8,7 @@ still-image fallback.
 """
 
 import base64
+import gc
 import json
 import os
 import tempfile
@@ -25,6 +26,8 @@ DEVICE = os.getenv("LTX_VIDEO_DEVICE", "mps")
 MODEL_ID = "ltxv-2b-0.9.8-distilled"
 MAX_BODY = 12 * 1024 * 1024
 GENERATION_LOCK = threading.Lock()
+CPU_FALLBACK = os.getenv("LTX_VIDEO_CPU_FALLBACK", "0").lower() not in {"0", "false", "no"}
+TRY_NATIVE_FIRST = os.getenv("LTX_VIDEO_TRY_NATIVE_FIRST", "0").lower() in {"1", "true", "yes"}
 
 
 def json_response(handler, status, payload):
@@ -33,7 +36,11 @@ def json_response(handler, status, payload):
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
-    handler.wfile.write(body)
+    try:
+        handler.wfile.write(body)
+    except BrokenPipeError:
+        # Health polling clients can disconnect while a response is in flight.
+        pass
 
 
 def binary_response(handler, data):
@@ -41,7 +48,10 @@ def binary_response(handler, data):
     handler.send_header("Content-Type", "video/mp4")
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
-    handler.wfile.write(data)
+    try:
+        handler.wfile.write(data)
+    except BrokenPipeError:
+        pass
 
 
 def runtime_status():
@@ -65,6 +75,29 @@ def output_size(aspect_ratio):
     return {"9:16": (576, 1024), "1:1": (704, 704), "16:9": (1024, 576)}.get(aspect_ratio, (576, 1024))
 
 
+def compact_size(aspect_ratio):
+    """A memory-safe fallback that preserves the requested aspect ratio."""
+    return {"9:16": (256, 448), "1:1": (384, 384), "16:9": (448, 256)}.get(aspect_ratio, (256, 448))
+
+
+def is_memory_error(error):
+    message = str(error).lower()
+    return "out of memory" in message or "mps backend" in message or "allocat" in message and "memory" in message
+
+
+def clear_accelerator_cache():
+    """Release failed-attempt tensors before retrying without taking down the service."""
+    gc.collect()
+    try:
+        import torch
+        if hasattr(torch, "mps") and torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+            torch.mps.synchronize()
+    except Exception:
+        # Cache cleanup is best-effort; the original inference error remains the source of truth.
+        pass
+
+
 def generate(payload):
     state, detail = runtime_status()
     if state != "ready":
@@ -77,9 +110,12 @@ def generate(payload):
     prompt = str(payload.get("prompt", "")).strip()
     if not prompt or len(prompt) > 3000:
         raise ValueError("Prompt LTX trống hoặc quá dài")
-    width, height = output_size(payload.get("aspectRatio", "9:16"))
+    aspect_ratio = payload.get("aspectRatio", "9:16")
+    width, height = output_size(aspect_ratio)
     preset = payload.get("preset") if payload.get("preset") in {"fast", "balanced", "quality"} else "balanced"
     frames = {"fast": 25, "balanced": 41, "quality": 65}[preset]
+    safe_width, safe_height = compact_size(aspect_ratio)
+    safe_frames = {"fast": 17, "balanced": 25, "quality": 33}[preset]
     seed = int(payload.get("seed") or 8703) % (2**31)
     with tempfile.TemporaryDirectory(prefix="studio-ltx-") as directory:
         root = Path(directory)
@@ -107,28 +143,59 @@ def generate(payload):
             ]) + "\n",
             encoding="utf-8",
         )
-        from ltx_video.inference import InferenceConfig, infer
-        with GENERATION_LOCK:
-            old = os.getcwd()
+        from ltx_video import inference as ltx_inference
+
+        def run_inference(render_width, render_height, render_frames, force_cpu=False):
+            original_get_device = ltx_inference.get_device
+            if force_cpu:
+                ltx_inference.get_device = lambda: "cpu"
             try:
-                os.chdir(str(LTX_ROOT))
-                infer(InferenceConfig(
-                    prompt=prompt,
-                    output_path=output,
-                    pipeline_config=str(config_path),
-                    seed=seed,
-                    height=height,
-                    width=width,
-                    num_frames=frames,
-                    frame_rate=24,
-                    negative_prompt="worst quality, inconsistent motion, blurry, jittery, distorted, deformed face, extra limbs, flicker",
-                    conditioning_media_paths=[str(image)],
-                    conditioning_start_frames=[0],
-                    image_cond_noise_scale=0.15,
-                    offload_to_cpu=False,
-                ))
+                old = os.getcwd()
+                try:
+                    os.chdir(str(LTX_ROOT))
+                    ltx_inference.infer(ltx_inference.InferenceConfig(
+                        prompt=prompt,
+                        output_path=output,
+                        pipeline_config=str(config_path),
+                        seed=seed,
+                        height=render_height,
+                        width=render_width,
+                        num_frames=render_frames,
+                        frame_rate=24,
+                        negative_prompt="worst quality, inconsistent motion, blurry, jittery, distorted, deformed face, extra limbs, flicker",
+                        conditioning_media_paths=[str(image)],
+                        conditioning_start_frames=[0],
+                        image_cond_noise_scale=0.15,
+                        offload_to_cpu=False,
+                    ))
+                finally:
+                    os.chdir(old)
             finally:
-                os.chdir(old)
+                ltx_inference.get_device = original_get_device
+
+        if DEVICE == "mps":
+            attempts = [(safe_width, safe_height, safe_frames, False, "compact-mps")]
+            if TRY_NATIVE_FIRST:
+                attempts.insert(0, (width, height, frames, False, "native"))
+            if CPU_FALLBACK:
+                attempts.append((safe_width, safe_height, min(safe_frames, 17), True, "compact-cpu"))
+        else:
+            attempts = [(width, height, frames, False, "native")]
+        last_error = None
+        with GENERATION_LOCK:
+            for render_width, render_height, render_frames, force_cpu, label in attempts:
+                try:
+                    print(f"[ltx] generation attempt={label} size={render_width}x{render_height} frames={render_frames} device={'cpu' if force_cpu else DEVICE}", flush=True)
+                    run_inference(render_width, render_height, render_frames, force_cpu)
+                    break
+                except Exception as error:
+                    last_error = error
+                    if not is_memory_error(error) or label == attempts[-1][4]:
+                        raise
+                    print(f"[ltx] memory pressure on attempt={label}; retrying with a safer profile", flush=True)
+                    clear_accelerator_cache()
+            else:
+                raise last_error
         files = sorted(output.glob("*.mp4"), key=lambda item: item.stat().st_mtime, reverse=True)
         if not files:
             raise RuntimeError("LTX không tạo được file MP4")
