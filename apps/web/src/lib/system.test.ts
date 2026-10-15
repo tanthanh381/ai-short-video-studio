@@ -61,11 +61,19 @@ describe("machineGauges", () => {
   });
 
   it("turns red for a machine that has run out of memory and is writing to disk right now", () => {
-    const squeezed = node("mini", { resources: { ...node("mini").resources!, memUsedGb: 15.2, memPressure: "warn", swapUsedGb: 8, swapTotalGb: 9, swapOutMBps: 12 } });
+    const squeezed = node("mini", { resources: { ...node("mini").resources!, memUsedGb: 15.2, memPressure: "warn", swapUsedGb: 8, swapTotalGb: 9, swapOutMBps: 60 } });
     const gauges = byId(squeezed);
-    expect(gauges.swap).toMatchObject({ percent: 89, tone: "bad", value: "8 GB / 9 GB · ghi 12 MB/s" });
-    expect(gauges.swap!.detail).toMatch(/ảnh và giọng đang chậm lại/);
+    expect(gauges.swap).toMatchObject({ percent: 89, tone: "bad", value: "8 GB / 9 GB · ghi 60 MB/s" });
+    expect(gauges.swap!.detail).toMatch(/ảnh và giọng đang chậm hẳn/);
     expect(gauges.ram!.tone).toBe("warn");
+  });
+
+  it("tiers the swap alarm by write rate: housekeeping is a note, real paging is amber", () => {
+    const at = (rate: number) => node("mini", { resources: { ...node("mini").resources!, memPressure: "warn", swapUsedGb: 3, swapTotalGb: 4, swapOutMBps: rate } });
+    expect(byId(at(6)).swap).toMatchObject({ tone: "ok", value: "3 GB / 4 GB · ghi 6 MB/s" }); // the idle Mini's 5-8 MB/s
+    expect(byId(at(20)).swap).toMatchObject({ tone: "warn" });
+    expect(byId(at(60)).swap).toMatchObject({ tone: "bad" });
+    expect(systemAlerts(system([at(6), node("air")]))).toEqual([]);
   });
 
   it("does not raise the alarm for a swap that is merely full: macOS leaves old pages there after the pressure is gone", () => {
@@ -195,7 +203,7 @@ describe("systemAlerts and summaryTiles", () => {
   });
 
   it("puts a machine that dropped out and a squeezed Mac first, then the rest", () => {
-    const squeezed = node("mini", { resources: { ...node("mini").resources!, memUsedGb: 12, memPressure: "warn", swapUsedGb: 8, swapTotalGb: 9, swapOutMBps: 12 } });
+    const squeezed = node("mini", { resources: { ...node("mini").resources!, memUsedGb: 12, memPressure: "warn", swapUsedGb: 8, swapTotalGb: 9, swapOutMBps: 60 } });
     const off = node("air", { state: "offline", detail: "cầu nối media không kết nối được", matchesPrimary: null });
     const alerts = systemAlerts(system([squeezed, off], { jobs: { running: 0, queued: 0, completed24h: 2, failed24h: 1, avgVideoSeconds24h: 300, recent: [] }, services: { ollama: { state: "offline", detail: "Không kết nối được Ollama", checkedAt: "x" }, supabase: { state: "healthy", detail: "ok", checkedAt: "x" } } }));
     expect(alerts.map((alert) => alert.id)).toEqual(["mini-swap", "air-offline", "service-ollama", "jobs-failed"]); // red ones first, in the order found

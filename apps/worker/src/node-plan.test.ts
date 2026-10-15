@@ -102,12 +102,22 @@ describe("assessNode", () => {
     const hot = node("air", { status: status({ resources: resources({ thermal: "throttled" }) }) });
     expect(assess(hot, "image").speed).toBeCloseTo(1.6);
     const tight = node("air", { status: status({ resources: resources({ memPressure: "warn" }) }) });
-    expect(assess(tight, "image").speed).toBeCloseTo(1.3);
+    expect(assess(tight, "image").speed).toBeCloseTo(1.3); // a bridge that does not measure paging keeps the caution
     const critical = node("air", { status: status({ resources: resources({ memPressure: "critical" }) }) });
     expect(assess(critical, "image").eligible).toBe(false);
     expect(assess(critical, "tts").eligible).toBe(true);
     const busy = node("air", { status: status({ resources: resources({ loadAvg1: 16 }) }) });
     expect(assess(busy, "image").speed).toBeCloseTo(2);
+  });
+
+  it("does not call a machine tight for the OS's 'warn' alone: only paging that is going on now slows the work", () => {
+    const quiet = node("air", { status: status({ resources: resources({ memPressure: "warn", swapOutMBps: 6 }) }) }); // the Mini, idle: 6-8 MB/s
+    expect(assess(quiet, "image")).toMatchObject({ eligible: true, speed: 1, reasons: [] });
+    const paging = node("air", { status: status({ resources: resources({ memPressure: "warn", swapOutMBps: 20 }) }) });
+    expect(assess(paging, "image")).toMatchObject({ eligible: true, reasons: ["RAM đang căng"] });
+    expect(assess(paging, "image").speed).toBeCloseTo(1.3);
+    const critical = node("air", { status: status({ resources: resources({ memPressure: "critical", swapOutMBps: 0 }) }) });
+    expect(assess(critical, "image").eligible).toBe(false); // critical is critical whatever the rate
   });
 
   it("checks Ollama separately: installed model, warm-up when it is not resident", () => {

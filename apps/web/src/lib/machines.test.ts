@@ -62,8 +62,8 @@ describe("machineWarning", () => {
 describe("machineFacts and serviceSummary", () => {
   it("mentions swap only while the machine is writing to it, and battery only when on battery", () => {
     expect(machineFacts(node("air", { resources: { ...node("air").resources!, swapUsedGb: 0.3, swapTotalGb: 2, power: "battery", batteryPercent: 40 }, lanes: {} }))).toBe("RAM 12,9 GB/16 GB · pin 40%");
-    expect(machineFacts(node("air", { resources: { ...node("air").resources!, swapOutMBps: 14 }, lanes: {} }))).toBe("RAM 12,9 GB/16 GB · đang ghi swap 14 MB/s");
-    expect(machineFacts(node("air", { resources: { ...node("air").resources!, swapOutMBps: 0.2 }, lanes: {} }))).toBe("RAM 12,9 GB/16 GB");
+    expect(machineFacts(node("air", { resources: { ...node("air").resources!, swapOutMBps: 20 }, lanes: {} }))).toBe("RAM 12,9 GB/16 GB · đang ghi swap 20 MB/s");
+    expect(machineFacts(node("air", { resources: { ...node("air").resources!, swapOutMBps: 6 }, lanes: {} }))).toBe("RAM 12,9 GB/16 GB");
   });
 
   it("counts the services that are running and names the ones that are not", () => {

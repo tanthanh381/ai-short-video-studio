@@ -74,8 +74,14 @@ export type Gauge = {
   tone: Tone;
 };
 
-/** Swapping out faster than this (MB/s, averaged over a minute) means the machine is short of memory right now. */
-const SWAP_WRITING_MBPS = 5;
+/**
+ * Swapping out (MB/s, averaged over the last minute). macOS pages a little in the background all the time: the idle Mac mini wrote
+ * 6-8 MB/s with no job running. Below SWAP_LIGHT it is nothing, up to SWAP_HURTS it is housekeeping that is mentioned and not
+ * flagged, from SWAP_HURTS the work is slowed (amber), from SWAP_THRASH the machine is thrashing (red).
+ */
+export const SWAP_LIGHT_MBPS = 3;
+export const SWAP_HURTS_MBPS = 15;
+export const SWAP_THRASH_MBPS = 50;
 
 const PRESSURE_TEXT = { normal: "áp lực bộ nhớ bình thường", warn: "hệ điều hành báo bộ nhớ đang căng", critical: "bộ nhớ ở mức nghiêm trọng", unknown: "chưa rõ áp lực bộ nhớ" } as const;
 
@@ -98,16 +104,21 @@ export function machineGauges(node: NodeSummary): Gauge[] {
     const swapPercent = resources.swapTotalGb > 0 ? percentOf(resources.swapUsedGb, resources.swapTotalGb) : 0;
     const full = (swapPercent ?? 0) >= 50;
     const writing = resources.swapOutMBps ?? null; // MB/s going out to disk over the last minute; null from a bridge that does not measure it
-    const active = writing !== null && writing >= SWAP_WRITING_MBPS;
+    const hurts = writing !== null && writing >= SWAP_HURTS_MBPS;
+    const light = writing !== null && writing >= SWAP_LIGHT_MBPS && !hurts;
     // A full swap alone proves nothing: macOS leaves old pages there long after the pressure is gone. Only pages going out now do.
     let tone: Tone = "ok";
     let detail = "bình thường";
-    if (active) {
-      tone = full ? "bad" : "warn";
-      detail = `đang ghi ${decimal(writing!)} MB/s ra ổ đĩa vì thiếu RAM: ảnh và giọng đang chậm lại`;
+    if (hurts) {
+      tone = writing! >= SWAP_THRASH_MBPS ? "bad" : "warn";
+      detail = tone === "bad"
+        ? `đang ghi nặng ${decimal(writing!)} MB/s ra ổ đĩa vì thiếu RAM: ảnh và giọng đang chậm hẳn`
+        : `đang ghi ${decimal(writing!)} MB/s ra ổ đĩa vì thiếu RAM: ảnh và giọng có thể chậm đi`;
     } else if (writing === null) {
       tone = resources.memPressure === "critical" ? "bad" : resources.memPressure === "warn" && (swapPercent ?? 0) >= 80 ? "warn" : "ok";
       if (full) detail = "chưa biết máy có đang ghi ra swap không (máy này chưa báo hoạt động swap)";
+    } else if (light) {
+      detail = `hệ điều hành đang ghi nhẹ ${decimal(writing)} MB/s ra ổ đĩa (việc nền, chưa làm chậm việc đang chạy)`;
     } else if (full) {
       detail = "Swap còn đầy nhưng máy không ghi thêm ra đĩa trong phút qua: đó là phần cũ còn nằm lại, không làm chậm việc đang chạy";
     }
@@ -115,7 +126,7 @@ export function machineGauges(node: NodeSummary): Gauge[] {
       id: "swap",
       label: "Swap (RAM ảo)",
       percent: swapPercent,
-      value: resources.swapTotalGb > 0 ? `${formatGb(resources.swapUsedGb)} / ${formatGb(resources.swapTotalGb)}${active ? ` · ghi ${decimal(writing!)} MB/s` : ""}` : "chưa dùng",
+      value: resources.swapTotalGb > 0 ? `${formatGb(resources.swapUsedGb)} / ${formatGb(resources.swapTotalGb)}${hurts || light ? ` · ghi ${decimal(writing!)} MB/s` : ""}` : "chưa dùng",
       detail,
       tone,
     });

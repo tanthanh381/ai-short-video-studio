@@ -25,6 +25,8 @@ export const PRIOR_MS: Record<Lane, number> = {
 export const LANE_CAPACITY: Record<Lane, number> = { image: 1, tts: 1, video: 1, transcribe: 1, whiteboard: 2, llm: 1 };
 /** Loading the Ollama model into memory when it is not resident yet. */
 const LLM_WARMUP_MS = 15_000;
+/** MB/s swapped out (averaged over the last minute) from which the work is really slowed down; below it the paging is the system's own housekeeping. */
+export const SWAP_HURTS_MBPS = 15;
 /** A measurement older than this no longer proves a node is slow: it gets another chance. */
 const STALE_MS = 20 * 60_000;
 
@@ -246,8 +248,14 @@ export function assessNode(node: NodeSnapshot, lane: Lane, ctx: AssessContext): 
       if (lane !== "transcribe" && lane !== "tts") return out(false);
       speed *= 1.5;
     } else if (resources.memPressure === "warn") {
-      reasons.push("RAM đang căng");
-      speed *= 1.3;
+      // macOS says "warn" for long stretches on a 16 GB Mac that merely holds big models while it is idle (it did, with no job
+      // running and 6-8 MB/s of background paging). Only paging that is going on now, at a rate that slows the work, counts; a bridge
+      // that does not measure it keeps the old caution.
+      const paging = resources.swapOutMBps;
+      if (paging === undefined || paging === null || paging >= SWAP_HURTS_MBPS) {
+        reasons.push("RAM đang căng");
+        speed *= 1.3;
+      }
     }
     if (resources.thermal === "throttled") {
       reasons.push("máy nóng, đang giảm xung");
