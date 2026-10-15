@@ -257,9 +257,9 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
         {node.role === "secondary" && node.matchesPrimary === null ? <span className="tone-idle">chưa xác định cấu hình</span> : null}
       </div>
 
-      {node.role === "primary" ? <p className="sys-source-note">Thiết bị chính cung cấp mã nguồn, công cụ và model cho các thiết bị phụ. Đồng bộ tự động mỗi phút.</p> : null}
+      {node.role === "primary" ? <p className="sys-source-note sys-machine-context">Thiết bị chính cung cấp mã nguồn, công cụ và model cho các thiết bị phụ. Đồng bộ tự động mỗi phút.</p> : null}
       {sync ? (
-        <div className={`sys-sync tone-${sync.tone}`}>
+        <div className={`sys-sync sys-machine-context tone-${sync.tone}`}>
           <div className="sys-sync-top">
             <strong>Đồng bộ thiết bị</strong>
             <span className={`sys-badge tone-${sync.tone}`}>{sync.label}</span>

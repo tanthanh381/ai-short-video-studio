@@ -2708,7 +2708,7 @@ input[type="radio"] {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr));
   gap: 18px;
   margin-bottom: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 .sys-card {
   background: white;
@@ -2738,6 +2738,10 @@ input[type="radio"] {
   color: var(--muted);
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+.sys-machine {
+  display: flex;
+  flex-direction: column;
 }
 .sys-badge {
   flex: none;
@@ -3060,7 +3064,7 @@ input[type="radio"] {
 }
 .sys-details > .sys-two { padding-top: 0; }
 .sys-details > .sys-two .sys-card { padding: 16px; }
-.sys-machine-details { margin-top: 16px; margin-bottom: 0; }
+.sys-machine-details { margin-top: auto; margin-bottom: 0; }
 .sys-machine-details > .sys-section,
 .sys-machine-details > .sys-sparks { border-top: 1px solid #e3e9ed; padding-top: 14px; }
 .sys-secondary-details { margin-top: 0; }
@@ -3205,13 +3209,28 @@ input[type="radio"] {
   background: #f6f9fb;
   border: 1px solid #e3e9ed;
 }
+.sys-machine-context {
+  min-height: 92px;
+  box-sizing: border-box;
+}
 .sys-sync.tone-warn { background: #fffaf0; border-color: #f0dfbd; }
 .sys-sync.tone-bad { background: #fff6f5; border-color: #f3c5c0; }
 .sys-sync-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
 .sys-sync p { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.55; overflow-wrap: anywhere; }
 .sys-sync .sys-bar { margin-top: 8px; }
 .sys-sync ul { margin: 8px 0 0; padding: 0 0 0 18px; font-size: 12px; color: var(--ink-2); }
-.sys-source-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.55; }
+.sys-source-note {
+  display: flex;
+  align-items: center;
+  margin: 12px 0 0;
+  padding: 11px 13px;
+  border: 1px solid #e3e9ed;
+  border-radius: 10px;
+  background: #f6f9fb;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+}
 .machine-sync { font-size: 12px; color: var(--muted); }
 .machine-sync b { color: var(--tone-idle, #5a6d7f); }
 .machine-sync.tone-ok b { color: #12805f; }
