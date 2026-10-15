@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Activity, ArrowDownToLine, Battery, CircleAlert, CircleCheck, Cpu, HardDrive, Laptop, LoaderCircle, MemoryStick, Pause, Play, RefreshCw, Server, Thermometer, TriangleAlert } from "lucide-react";
 import type { NodeHistoryPoint, NodeSummary, SystemJob, SystemSummary } from "@studio/shared";
 import { api } from "./lib/api";
+import { InfoPopover, Metric } from "./components/Disclosure";
 import {
   ago, describeEvent, formatDuration, formatGb, laneRows, machineGauges, modelRows, nodeDisplayName, NODE_STATE_LABEL, processLabel, sparklinePath, summaryTiles, syncView, systemAlerts, workShare,
   type Gauge, type Tone,
@@ -93,9 +94,11 @@ export function SystemPage() {
   return (
     <div className="page system-page">
       <div className="page-heading">
-        <div>
+        <div className="page-title-with-info">
           <h1>Hệ thống</h1>
-          <p>Theo dõi trạng thái xử lý, tài nguyên và dịch vụ. Dữ liệu tự cập nhật mỗi {REFRESH_MS / 1000} giây. Cấu hình thiết bị và cách phân bổ tác vụ trong <Link to="/settings">Cài đặt</Link>.</p>
+          <InfoPopover title="Hệ thống">
+            Theo dõi trạng thái xử lý, tài nguyên và dịch vụ. Dữ liệu tự cập nhật mỗi {REFRESH_MS / 1000} giây; cấu hình thiết bị và cách phân bổ tác vụ trong <Link to="/settings">Cài đặt</Link>.
+          </InfoPopover>
         </div>
         <div className="sys-live" role="status" aria-live="polite">
           <span className={`sys-dot tone-${live.tone}`} aria-hidden="true" />
@@ -190,20 +193,7 @@ function Alerts({ system }: { system: SystemSummary }) {
 }
 
 function Meter({ gauge }: { gauge: Gauge }) {
-  return (
-    <div className={`sys-meter tone-${gauge.tone}`} title={`${gauge.label}: ${gauge.detail}`}>
-      <div className="sys-meter-top">
-        <span className="sys-meter-label" role="img" aria-label={gauge.label}><GaugeIcon id={gauge.id} /></span>
-        <strong>{gauge.value}</strong>
-      </div>
-      {gauge.percent !== null ? (
-        <div className="sys-bar" role="meter" aria-valuenow={gauge.percent} aria-valuemin={0} aria-valuemax={100} aria-label={`${gauge.label}: ${gauge.value}`}>
-          <i style={{ width: `${Math.max(2, gauge.percent)}%` }} />
-        </div>
-      ) : null}
-      {gauge.tone !== "ok" ? <small>{gauge.detail}</small> : null}
-    </div>
-  );
+  return <Metric icon={<GaugeIcon id={gauge.id} />} label={gauge.label} value={gauge.value} detail={gauge.detail} percent={gauge.percent} tone={gauge.tone} />;
 }
 
 function Spark({ label, points, pick, max, now, format }: {
@@ -257,14 +247,19 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
         {node.role === "secondary" && node.matchesPrimary === null ? <span className="tone-idle">chưa xác định cấu hình</span> : null}
       </div>
 
-      {node.role === "primary" ? <p className="sys-source-note sys-machine-context">Thiết bị chính cung cấp mã nguồn, công cụ và model cho các thiết bị phụ. Đồng bộ tự động mỗi phút.</p> : null}
+      {node.role === "primary" ? (
+        <div className="sys-source-note sys-machine-context">
+          <span>Source device · Synced</span>
+          <InfoPopover title="Mac Mini là thiết bị chính">Cung cấp mã nguồn, công cụ và model cho các thiết bị phụ. Đồng bộ tự động mỗi phút.</InfoPopover>
+        </div>
+      ) : null}
       {sync ? (
         <div className={`sys-sync sys-machine-context tone-${sync.tone}`}>
           <div className="sys-sync-top">
             <strong>Đồng bộ thiết bị</strong>
             <span className={`sys-badge tone-${sync.tone}`}>{sync.label}</span>
           </div>
-          <p>{sync.detail}</p>
+          {sync.tone === "ok" ? <InfoPopover title="Chi tiết đồng bộ">{sync.detail}</InfoPopover> : <p>{sync.detail}</p>}
           {sync.percent !== null ? (
             <div className="sys-bar" role="progressbar" aria-valuenow={sync.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Tiến độ đồng bộ"><i style={{ width: `${Math.max(2, sync.percent)}%` }} /></div>
           ) : null}
