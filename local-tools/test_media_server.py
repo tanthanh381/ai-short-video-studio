@@ -332,6 +332,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
     def test_image_quality_guard_adds_face_constraints(self):
         payload = self._turbo_payload("Portrait close-up of a young woman", preset="balanced")
         self.assertIn("symmetrical natural facial features", payload["prompt"])
+        self.assertIn("fully inside the frame", payload["prompt"])
 
     def test_turbo_runs_without_guidance_and_with_few_steps_unless_quality_is_chosen(self):
         # A realistic person: 6 steps, no negative prompt (CFG would double the time for no visible gain).

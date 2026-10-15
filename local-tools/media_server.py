@@ -497,7 +497,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     is_human = bool(HUMAN_PROMPT_RE.search(clean))
     anatomy = (
         "one person only, one face, two aligned eyes, symmetrical natural facial features, natural skin texture, "
-        "anatomically correct hands, natural body proportions, complete limbs"
+        "anatomically correct hands, natural body proportions, complete limbs, "
+        "keep the head, face, hands and essential object fully inside the frame, portrait-safe composition"
         if IMAGE_ANATOMY_GUARD and is_human and not stylized
         else ""
     )
