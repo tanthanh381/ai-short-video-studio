@@ -4,7 +4,7 @@ import { Activity, ArrowDownToLine, Battery, CircleAlert, CircleCheck, Cpu, Hard
 import type { NodeHistoryPoint, NodeSummary, SystemJob, SystemSummary } from "@studio/shared";
 import { api } from "./lib/api";
 import {
-  ago, describeEvent, formatDuration, formatGb, laneRows, machineGauges, modelRows, NODE_STATE_LABEL, processLabel, sparklinePath, summaryTiles, syncView, systemAlerts, workShare,
+  ago, describeEvent, formatDuration, formatGb, laneRows, machineGauges, modelRows, nodeDisplayName, NODE_STATE_LABEL, processLabel, sparklinePath, summaryTiles, syncView, systemAlerts, workShare,
   type Gauge, type Tone,
 } from "./lib/system";
 
@@ -240,11 +240,11 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
   const sync = node.state === "disabled" ? null : syncView(node, now);
   const Icon = node.role === "primary" ? Server : Laptop;
   return (
-    <article className={`sys-card sys-machine${node.state === "disabled" ? " is-off" : ""}`} aria-label={`Máy ${node.id}`}>
+    <article className={`sys-card sys-machine${node.state === "disabled" ? " is-off" : ""}`} aria-label={nodeDisplayName(node.id, node.role)}>
       <header>
         <Icon size={22} aria-hidden="true" />
         <div>
-          <h2>{node.id}{node.role === "primary" ? " (máy chính)" : ""}</h2>
+          <h2>{nodeDisplayName(node.id, node.role)}</h2>
           <p>{node.detail}</p>
         </div>
         <span className={`sys-badge tone-${state.tone}`}>{state.label}</span>
@@ -363,17 +363,17 @@ function WorkShare({ system, now }: { system: SystemSummary; now: number }) {
       <h2>Phân bổ tác vụ</h2>
       <p className="microcopy">Số lượng tác vụ đã xử lý trên từng thiết bị kể từ lần khởi động dịch vụ gần nhất.</p>
       <div className="sys-legend">
-        {balancer.nodes.map((node, index) => <span key={node.id}><i style={{ background: NODE_COLORS[index % NODE_COLORS.length] }} /> {node.id}</span>)}
+        {balancer.nodes.map((node, index) => <span key={node.id}><i style={{ background: NODE_COLORS[index % NODE_COLORS.length] }} /> {nodeDisplayName(node.id, node.role)}</span>)}
       </div>
       {rows.length ? (
         <ul className="sys-share">
           {rows.map((row) => (
             <li key={row.lane}>
               <span>{row.label}</span>
-              <div className="sys-stack" role="img" aria-label={row.parts.map((part) => `${part.node} ${part.done}`).join(", ")}>
+              <div className="sys-stack" role="img" aria-label={row.parts.map((part) => `${nodeDisplayName(part.node)} ${part.done}`).join(", ")}>
                 {row.parts.filter((part) => part.done > 0).map((part) => {
                   const index = balancer.nodes.findIndex((node) => node.id === part.node);
-                  return <i key={part.node} style={{ width: `${part.percent}%`, background: NODE_COLORS[index % NODE_COLORS.length] }} title={`${part.node}: ${part.done} (${part.percent}%)`}>{part.percent >= 12 ? part.done : ""}</i>;
+                  return <i key={part.node} style={{ width: `${part.percent}%`, background: NODE_COLORS[index % NODE_COLORS.length] }} title={`${nodeDisplayName(part.node)}: ${part.done} (${part.percent}%)`}>{part.percent >= 12 ? part.done : ""}</i>;
                 })}
               </div>
               <strong>{row.total}</strong>

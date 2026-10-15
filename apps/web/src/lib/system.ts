@@ -4,6 +4,12 @@ import type { NodeActivityEvent, NodeHistoryPoint, NodeSummary, SystemSummary } 
 
 export type Tone = "ok" | "warn" | "bad" | "idle";
 
+/** Human-facing device names; internal node IDs remain lowercase for config and routing. */
+export function nodeDisplayName(id: string, role?: NodeSummary["role"]): string {
+  const name = id === "mini" ? "Mac Mini" : id === "air" ? "MacBook Air" : id;
+  return role === "primary" ? `${name} (máy chính)` : name;
+}
+
 export const LANE_LABELS: Record<string, string> = {
   image: "Vẽ ảnh",
   tts: "Giọng đọc",
@@ -356,15 +362,15 @@ export function syncView(node: NodeSummary, now = Date.now()): SyncView | null {
   const base = { percent: null, differences: [] as string[], canRequest: true, recovery };
   switch (sync.state) {
     case "in-sync":
-      return { ...base, tone: "ok", label: "Giống Mac mini", detail: [version, checked].filter(Boolean).join(" · ") };
+      return { ...base, tone: "ok", label: "Giống Mac Mini", detail: [version, checked].filter(Boolean).join(" · ") };
     case "syncing": {
       const progress = sync.progress;
       const percent = progress && progress.totalBytes > 0 ? Math.min(100, Math.round((progress.doneBytes / progress.totalBytes) * 100)) : null;
       const size = progress && progress.totalBytes > 0 ? ` (${formatGb(progress.doneBytes / 2 ** 30)} / ${formatGb(progress.totalBytes / 2 ** 30)})` : "";
-      return { ...base, tone: "warn", label: "Đang đồng bộ", detail: `${progress?.label || "Đang so sánh với Mac mini"}${size}`, percent, differences: sync.differences, canRequest: false };
+      return { ...base, tone: "warn", label: "Đang đồng bộ", detail: `${progress?.label || "Đang so sánh với Mac Mini"}${size}`, percent, differences: sync.differences, canRequest: false };
     }
     case "behind":
-      return { ...base, tone: "warn", label: `Lệch ${behindCount(sync)} mục`, detail: sync.error ?? `Còn khác Mac mini · ${checked}`, differences: sync.differences };
+      return { ...base, tone: "warn", label: `Lệch ${behindCount(sync)} mục`, detail: sync.error ?? `Còn khác Mac Mini · ${checked}`, differences: sync.differences };
     case "error":
       return { ...base, tone: "bad", label: "Đồng bộ lỗi", detail: sync.error ?? "Không rõ nguyên nhân", differences: sync.differences };
     case "paused":
@@ -387,37 +393,38 @@ const SERVICE_NAMES: Record<string, string> = {
 export function systemAlerts(system: SystemSummary): SystemAlert[] {
   const alerts: SystemAlert[] = [];
   for (const node of system.balancer?.nodes ?? []) {
+    const displayName = nodeDisplayName(node.id, node.role);
     // A second machine that has not been updated yet runs the old media bridge and has no sync agent: it differs from the main one in
     // everything at once. That is one thing to do (update it once), not three alarms.
     const outdated = node.role !== "primary" && node.state !== "offline" && node.state !== "disabled" && !node.sync && node.matchesPrimary === false;
     if (node.state === "disabled") {
       // switched off by the owner: nothing to fix, and its readings are not a problem either
-      alerts.push({ id: `${node.id}-disabled`, tone: "info", title: `Máy ${node.id} đang tắt`, detail: "Đã tắt trong Cài đặt: máy này không nhận việc mới. Bật lại ở Cài đặt → Máy xử lý video." });
+      alerts.push({ id: `${node.id}-disabled`, tone: "info", title: `${displayName} đang tắt`, detail: "Đã tắt trong Cài đặt: máy này không nhận việc mới. Bật lại ở Cài đặt → Máy xử lý video." });
       continue;
     }
-    if (node.state === "offline") alerts.push({ id: `${node.id}-offline`, tone: "bad", title: `Máy ${node.id} mất kết nối`, detail: node.detail });
-    else if (node.state === "paused") alerts.push({ id: `${node.id}-paused`, tone: "info", title: `Máy ${node.id} đang tạm dừng`, detail: "Chủ máy đã tạm dừng: máy chính không giao việc mới cho máy này (bật lại bằng Mo-May-Phu.command resume)." });
+    if (node.state === "offline") alerts.push({ id: `${node.id}-offline`, tone: "bad", title: `${displayName} mất kết nối`, detail: node.detail });
+    else if (node.state === "paused") alerts.push({ id: `${node.id}-paused`, tone: "info", title: `${displayName} đang tạm dừng`, detail: "Chủ máy đã tạm dừng: máy chính không giao việc mới cho máy này (bật lại bằng Mo-May-Phu.command resume)." });
     else if (outdated) {
       alerts.push({
-        id: `${node.id}-outdated`, tone: "warn", title: `Máy ${node.id} đang chạy bản cũ`,
-        detail: `Cập nhật một lần: mở Terminal trên máy ${node.id} và dán dòng lệnh cài (Cài đặt → Máy xử lý video, hoặc docs/TU-HOST.md). Từ lần sau máy tự đồng bộ với Mac mini. Trong lúc này ${node.id} chưa được giao việc vẽ ảnh và đọc giọng vì hai máy làm ra kết quả khác nhau.`,
+        id: `${node.id}-outdated`, tone: "warn", title: `${displayName} đang chạy bản cũ`,
+        detail: `Cập nhật một lần: mở Terminal trên ${displayName} và dán dòng lệnh cài (Cài đặt → Máy xử lý video, hoặc docs/TU-HOST.md). Từ lần sau máy tự đồng bộ với Mac Mini. Trong lúc này ${displayName} chưa được giao việc vẽ ảnh và đọc giọng vì hai máy làm ra kết quả khác nhau.`,
       });
-    } else if (node.state === "degraded") alerts.push({ id: `${node.id}-degraded`, tone: "warn", title: `Máy ${node.id} bị hạn chế`, detail: node.detail });
+    } else if (node.state === "degraded") alerts.push({ id: `${node.id}-degraded`, tone: "warn", title: `${displayName} bị hạn chế`, detail: node.detail });
     for (const gauge of machineGauges(node)) {
       if (gauge.tone === "ok" || gauge.tone === "idle") continue;
       if (gauge.id === "ram" && node.resources?.memPressure === "warn" && (gauge.percent ?? 0) < 92) continue; // a warning from the system alone: the swap gauge says whether it matters
-      alerts.push({ id: `${node.id}-${gauge.id}`, tone: gauge.tone === "bad" ? "bad" : "warn", title: `Máy ${node.id}: ${gauge.label} ${gauge.value}`, detail: gauge.detail });
+      alerts.push({ id: `${node.id}-${gauge.id}`, tone: gauge.tone === "bad" ? "bad" : "warn", title: `${displayName}: ${gauge.label} ${gauge.value}`, detail: gauge.detail });
     }
     const sync = node.role === "primary" || node.state === "offline" || outdated ? null : syncView(node);
     if (sync && node.role !== "primary" && node.state !== "offline") {
-      if (!node.sync) alerts.push({ id: `${node.id}-sync-off`, tone: "info", title: `Máy ${node.id} chưa bật tự động đồng bộ`, detail: sync.detail });
-      else if (node.sync.state === "error") alerts.push({ id: `${node.id}-sync-error`, tone: "warn", title: `Đồng bộ máy ${node.id} đang lỗi`, detail: sync.detail });
+      if (!node.sync) alerts.push({ id: `${node.id}-sync-off`, tone: "info", title: `${displayName} chưa bật tự động đồng bộ`, detail: sync.detail });
+      else if (node.sync.state === "error") alerts.push({ id: `${node.id}-sync-error`, tone: "warn", title: `Đồng bộ ${displayName} đang lỗi`, detail: sync.detail });
       else if (node.sync.state !== "paused" && node.sync.recovery && node.sync.recovery.down.length > 0)
-        alerts.push({ id: `${node.id}-services-down`, tone: "warn", title: `Máy ${node.id} đang thiếu dịch vụ: ${node.sync.recovery.down.join(", ")}`, detail: "Máy tự khởi động lại các dịch vụ này (thử lại sau 3, 6, 12 phút nếu chưa lên). Nếu kéo dài, kiểm tra máy còn mở, còn cắm điện và đã đăng nhập." });
-      else if (node.sync.state === "behind") alerts.push({ id: `${node.id}-sync-behind`, tone: "info", title: `Máy ${node.id} chưa giống Mac mini (${sync.label.toLowerCase()})`, detail: sync.differences.slice(0, 3).join("; ") || sync.detail });
+        alerts.push({ id: `${node.id}-services-down`, tone: "warn", title: `${displayName} đang thiếu dịch vụ: ${node.sync.recovery.down.join(", ")}`, detail: "Máy tự khởi động lại các dịch vụ này (thử lại sau 3, 6, 12 phút nếu chưa lên). Nếu kéo dài, kiểm tra máy còn mở, còn cắm điện và đã đăng nhập." });
+      else if (node.sync.state === "behind") alerts.push({ id: `${node.id}-sync-behind`, tone: "info", title: `${displayName} chưa giống Mac Mini (${sync.label.toLowerCase()})`, detail: sync.differences.slice(0, 3).join("; ") || sync.detail });
     }
     if (node.matchesPrimary === false && !outdated) {
-      alerts.push({ id: `${node.id}-parity`, tone: "warn", title: `Máy ${node.id} làm ảnh và giọng khác máy chính`, detail: node.lanes.image?.reasons[0] ?? "Cấu hình hoặc mã khác máy chính nên máy này không được chia việc ảnh và giọng." });
+      alerts.push({ id: `${node.id}-parity`, tone: "warn", title: `${displayName} làm ảnh và giọng khác máy chính`, detail: node.lanes.image?.reasons[0] ?? "Cấu hình hoặc mã khác máy chính nên máy này không được chia việc ảnh và giọng." });
     }
   }
   for (const [id, service] of Object.entries(system.services)) {
@@ -475,8 +482,8 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
     const worst = views.find((item) => item.view.tone === "bad") ?? views.find((item) => item.view.tone === "warn") ?? views.find((item) => item.view.tone === "idle") ?? views[0]!;
     tiles.push({
       id: "sync", label: "Đồng bộ model và mã",
-      value: views.map((item) => `${item.node.id}: ${item.view.label.toLowerCase()}`).join(" · "),
-      detail: worst.view.tone === "ok" ? "Các máy phụ tự giữ giống Mac mini mỗi phút" : worst.view.detail,
+      value: views.map((item) => `${nodeDisplayName(item.node.id, item.node.role)}: ${item.view.label.toLowerCase()}`).join(" · "),
+      detail: worst.view.tone === "ok" ? "Các máy phụ tự giữ giống Mac Mini mỗi phút" : worst.view.detail,
       tone: worst.view.tone,
     });
   }

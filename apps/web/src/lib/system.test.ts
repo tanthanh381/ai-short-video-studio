@@ -207,7 +207,7 @@ describe("systemAlerts and summaryTiles", () => {
     const off = node("air", { state: "offline", detail: "cầu nối media không kết nối được", matchesPrimary: null });
     const alerts = systemAlerts(system([squeezed, off], { jobs: { running: 0, queued: 0, completed24h: 2, failed24h: 1, avgVideoSeconds24h: 300, recent: [] }, services: { ollama: { state: "offline", detail: "Không kết nối được Ollama", checkedAt: "x" }, supabase: { state: "healthy", detail: "ok", checkedAt: "x" } } }));
     expect(alerts.map((alert) => alert.id)).toEqual(["mini-swap", "air-offline", "service-ollama", "jobs-failed"]); // red ones first, in the order found
-    expect(alerts[1]).toMatchObject({ tone: "bad", title: "Máy air mất kết nối" });
+    expect(alerts[1]).toMatchObject({ tone: "bad", title: "MacBook Air mất kết nối" });
     expect(alerts.find((alert) => alert.id === "mini-ram")).toBeUndefined(); // a warning from the system alone, swap tells the story
   });
 
@@ -303,7 +303,7 @@ describe("syncView: how closely a second machine follows the main one", () => {
   });
 
   it("shows the same version and when it last looked when all is well", () => {
-    expect(syncView(air(inSync()), NOW)).toMatchObject({ tone: "ok", label: "Giống Mac mini", detail: "phiên bản 9f3a7c21b0d4 · kiểm tra 30 giây trước", canRequest: true });
+    expect(syncView(air(inSync()), NOW)).toMatchObject({ tone: "ok", label: "Giống Mac Mini", detail: "phiên bản 9f3a7c21b0d4 · kiểm tra 30 giây trước", canRequest: true });
   });
 
   it("shows a download with its size and percentage, and does not offer another request meanwhile", () => {
@@ -326,7 +326,7 @@ describe("syncView: how closely a second machine follows the main one", () => {
   });
 
   it("reports an error, a pause and a state it does not know", () => {
-    expect(syncView(air(inSync({ state: "error", error: "Không liên lạc được với Mac mini (URLError)" })), NOW)).toMatchObject({ tone: "bad", label: "Đồng bộ lỗi", detail: "Không liên lạc được với Mac mini (URLError)" });
+    expect(syncView(air(inSync({ state: "error", error: "Không liên lạc được với Mac Mini (URLError)" })), NOW)).toMatchObject({ tone: "bad", label: "Đồng bộ lỗi", detail: "Không liên lạc được với Mac Mini (URLError)" });
     expect(syncView(air(inSync({ state: "paused" })), NOW)).toMatchObject({ tone: "idle", label: "Đã tạm dừng", canRequest: false });
     expect(syncView(air(inSync({ state: "unknown" })), NOW)).toMatchObject({ tone: "idle", label: "Chưa rõ" });
   });
@@ -345,7 +345,7 @@ describe("sync in the alerts and the tiles", () => {
   it("tells the owner when a program of a second machine is down while the machine is bringing it back", () => {
     const missing = node("air", { sync: inSync({ recovery: { count: 1, lastAt: "2026-10-11T07:59:00Z", down: ["Ollama", "Whisper"] } }) });
     const alert = systemAlerts(system([node("mini"), missing])).find((item) => item.id === "air-services-down")!;
-    expect(alert).toMatchObject({ tone: "warn", title: "Máy air đang thiếu dịch vụ: Ollama, Whisper" });
+    expect(alert).toMatchObject({ tone: "warn", title: "MacBook Air đang thiếu dịch vụ: Ollama, Whisper" });
     expect(alert.detail).toMatch(/tự khởi động lại/);
     expect(systemAlerts(system([node("mini"), node("air", { sync: inSync({ recovery: { count: 1, lastAt: "2026-10-11T07:59:00Z", down: [] } }) })]))).toEqual([]); // it came back
   });
@@ -357,8 +357,8 @@ describe("sync in the alerts and the tiles", () => {
 
   it("puts the worst sync state of the second machines in a tile, and none when there is only one machine", () => {
     const tile = (nodes: NodeSummary[]) => summaryTiles(system(nodes)).find((item) => item.id === "sync");
-    expect(tile([node("mini"), node("air")])).toMatchObject({ value: "air: giống mac mini", tone: "ok" });
-    expect(tile([node("mini"), node("air", { sync: inSync({ state: "behind", behind: { code: 3, toolkit: 0, models: 0, ollama: 0 } }) })])).toMatchObject({ value: "air: lệch 3 mục", tone: "warn" });
+    expect(tile([node("mini"), node("air")])).toMatchObject({ value: "MacBook Air: giống mac mini", tone: "ok" });
+    expect(tile([node("mini"), node("air", { sync: inSync({ state: "behind", behind: { code: 3, toolkit: 0, models: 0, ollama: 0 } }) })])).toMatchObject({ value: "MacBook Air: lệch 3 mục", tone: "warn" });
     expect(tile([node("mini")])).toBeUndefined();
   });
 });

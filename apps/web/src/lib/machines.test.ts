@@ -80,7 +80,7 @@ describe("the sync line of each machine in Cài đặt", () => {
     const sync = { state: "in-sync" as const, checkedAt: new Date().toISOString(), appliedAt: null, sourceVersion: "a", localVersion: "a", behind: { code: 0, toolkit: 0, models: 0, ollama: 0 }, differences: [], error: null, restartPending: [], progress: null };
     const [mini, air] = machineChoices(balancer([node("mini"), node("air", { sync })]));
     expect(mini!.sync).toBeNull();
-    expect(air!.sync).toMatchObject({ label: "Giống Mac mini", canRequest: true });
+    expect(air!.sync).toMatchObject({ label: "Giống Mac Mini", canRequest: true });
     expect(machineChoices(balancer([node("mini"), node("air", { sync, enabled: false, state: "disabled" })]))[1]!.sync).toBeNull();
     expect(machineChoices(balancer([node("mini"), node("air", { sync, state: "offline" })]))[1]!.sync).toBeNull();
   });
