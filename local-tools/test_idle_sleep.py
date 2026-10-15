@@ -209,7 +209,8 @@ class BridgeWiringTests(unittest.TestCase):
         self.assertEqual(m.services_for("/image", b"not json"), ["image"])
         self.assertEqual(m.services_for("/tts-aligned", b"{}"), ["vieneu"])
         self.assertEqual(m.services_for("/transcribe?model=x", b""), ["whisper"])
-        self.assertEqual(m.services_for("/video", b"{}"), ["ltx"])
+        with unittest.mock.patch.object(m, "ltx_state", return_value=("ready", "ok")):
+            self.assertEqual(m.services_for("/video", b"{}"), ["ltx"])
         self.assertEqual(m.services_for("/sync-now", b""), [])
 
     def test_image_settings_are_remembered_while_the_server_sleeps(self):
