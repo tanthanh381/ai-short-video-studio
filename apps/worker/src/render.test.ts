@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assTime, createAss, hookOverlayFilters, karaokeText, mapWithConcurrency, renderProject, sceneMotion, videoEncoderPreset, videoSize } from "./render";
+import { assTime, createAss, hookOverlayFilters, karaokeText, mapWithConcurrency, renderProject, sceneMotion, validateRenderedOutput, videoEncoderPreset, videoSize } from "./render";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
 
 describe("render helpers", () => {
@@ -12,6 +12,19 @@ describe("render helpers", () => {
     expect(videoEncoderPreset("balanced")).toBe("faster");
     expect(videoEncoderPreset("quality")).toBe("medium");
     expect(videoEncoderPreset(undefined)).toBe("faster");
+  });
+  it("rejects a rendered file without the expected video and audio streams", () => {
+    expect(() => validateRenderedOutput({ format: { duration: "4.2" }, streams: [
+      { codec_type: "video", codec_name: "h264", width: 1080, height: 1920 },
+      { codec_type: "audio", codec_name: "aac" },
+    ] }, { width: 1080, height: 1920 })).not.toThrow();
+    expect(() => validateRenderedOutput({ format: { duration: "4.2" }, streams: [
+      { codec_type: "video", codec_name: "h264", width: 1080, height: 1920 },
+    ] }, { width: 1080, height: 1920 })).toThrow(/audio/i);
+    expect(() => validateRenderedOutput({ format: { duration: "4.2" }, streams: [
+      { codec_type: "video", codec_name: "h264", width: 720, height: 1280 },
+      { codec_type: "audio", codec_name: "aac" },
+    ] }, { width: 1080, height: 1920 })).toThrow(/kích thước/i);
   });
   it("dinh dang thoi gian ASS", () => {
     expect(assTime(65_230)).toBe("0:01:05.23");
@@ -261,4 +274,3 @@ describe("hook title overlay", () => {
     expect(size * 0.62 * 17).toBeLessThanOrEqual(1080 * 0.88 + size); // the longest line fits the width
   });
 });
-

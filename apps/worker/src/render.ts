@@ -29,6 +29,32 @@ export function videoSize(ratio: string) {
 export function videoEncoderPreset(preset?: string) {
   return preset === "fast" ? "veryfast" : preset === "quality" ? "medium" : "faster";
 }
+
+type OutputProbe = {
+  format?: { duration?: string };
+  streams?: Array<{ codec_type?: string; codec_name?: string; width?: number; height?: number }>;
+};
+
+/**
+ * The renderer is the last boundary before a file becomes user-visible. Keep this
+ * check deliberately small and deterministic: semantic quality is reviewed by the
+ * storyboard/media gates, while this prevents a corrupt or incomplete MP4 from
+ * being uploaded as a successful export.
+ */
+export function validateRenderedOutput(probe: OutputProbe, expected: { width: number; height: number }) {
+  const streams = probe.streams ?? [];
+  const video = streams.find((stream) => stream.codec_type === "video");
+  const audio = streams.find((stream) => stream.codec_type === "audio");
+  const duration = Number(probe.format?.duration);
+  if (!video || video.codec_name !== "h264" || video.width !== expected.width || video.height !== expected.height)
+    throw new Error("Bản xuất không đạt định dạng video H.264 hoặc sai kích thước khung hình");
+  if (!audio || audio.codec_name !== "aac")
+    throw new Error("Bản xuất không có audio AAC hợp lệ");
+  if (!Number.isFinite(duration) || duration <= 0)
+    throw new Error("Bản xuất có thời lượng không hợp lệ");
+  return duration;
+}
+
 export function assTime(ms: number) {
   const cs = Math.max(0, Math.round(ms / 10));
   const h = Math.floor(cs / 360000);
@@ -588,12 +614,24 @@ export async function renderProject(
       ],
       { timeout: 60_000 },
     );
+    const { stdout: outputProbeJson } = await exec(
+      config.FFPROBE_PATH,
+      [
+        "-v", "error",
+        "-show_entries", "format=duration:stream=codec_type,codec_name,width,height",
+        "-of", "json",
+        output,
+      ],
+      { timeout: 30_000, maxBuffer: 2_000_000 },
+    );
+    const outputProbe = JSON.parse(outputProbeJson) as OutputProbe;
+    const verifiedDuration = validateRenderedOutput(outputProbe, { width, height });
     await onProgress(94, "Đang tải bản xuất lên kho riêng tư");
     return {
       output,
       thumbnail,
       workdir,
-      durationMs: await durationMs(config, output),
+      durationMs: Math.round(verifiedDuration * 1000),
     };
   } catch (error) {
     await rm(workdir, { recursive: true, force: true });
