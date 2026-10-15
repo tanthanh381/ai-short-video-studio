@@ -31,6 +31,7 @@ from pathlib import Path
 import traceback
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import idle_sleep  # noqa: E402
 import node_status  # noqa: E402  (sibling module; also imported when this file is loaded by path in tests)
 import sync_manifest  # noqa: E402
 
@@ -1005,6 +1006,43 @@ def service_up(url, path="/health"):
         return False
 
 
+def _comfy_up():
+    return comfyui_state()[0] == "ready"
+
+
+def _ltx_up():
+    return ltx_state()[0] == "ready"
+
+
+# The big model servers sleep (their launchd job is unloaded) when nothing used them for STUDIO_IDLE_SLEEP_MIN minutes (default 15,
+# 0 = never) and wake on the next request that needs them. The weights of an idle SDXL server alone are 5 GB of a 16 GB Mac.
+SLEEPER = idle_sleep.Sleeper([
+    idle_sleep.Service("image", "com.ai-short-video.image", lambda: image_server_state() == "ready", wake_timeout_s=420),
+    idle_sleep.Service("vieneu", "com.ai-short-video.vieneu", lambda: service_up(VIENEU_URL), wake_timeout_s=300),
+    idle_sleep.Service("whisper", "com.ai-short-video.whisper", lambda: service_up(WHISPER_URL, "/"), wake_timeout_s=180),
+    idle_sleep.Service("comfyui", "com.ai-short-video.comfyui", _comfy_up, wake_timeout_s=300),
+    idle_sleep.Service("ltx", "com.ai-short-video-studio.ltx", _ltx_up, wake_timeout_s=300),
+], idle_sleep.configured_idle_seconds())
+
+
+def services_for(path, body):
+    """The sleeping-capable services a request needs (the ComfyUI one only when the picture asks for that model)."""
+    route = path.split("?")[0]
+    if route == "/image":
+        try:
+            model = json.loads(body).get("model")
+        except (ValueError, AttributeError):
+            model = None
+        return ["image", "comfyui"] if model == COMFYUI_IMAGE_MODEL else ["image"]
+    if route in ("/tts", "/tts-aligned"):
+        return ["vieneu"]
+    if route == "/transcribe":
+        return ["whisper"]
+    if route == "/video":
+        return ["ltx"]
+    return []
+
+
 def ltx_state():
     """Return the real LTX runtime state; never infer readiness from a feature flag."""
     try:
@@ -1095,8 +1133,26 @@ def image_server_info():
         return "down", {}
 
 
+def remembered_image_config(config):
+    """The image server's settings are part of this Mac's fingerprint. While it sleeps they cannot be read, so the last ones seen
+    (kept in a file, to survive a bridge restart) stand in; otherwise a sleeping Mac would look different from the main one."""
+    cache = SERVICE_LOG_DIR / "image-config.json"
+    if config:
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            if not cache.exists() or json.loads(cache.read_text()) != config:
+                cache.write_text(json.dumps(config))
+        except (OSError, ValueError):
+            pass
+        return config
+    try:
+        return json.loads(cache.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def tts_engines_up():
-    return [e for e in TTS_ENGINES if service_up({"vieneu": VIENEU_URL, "piper": PIPER_URL}.get(e, ""), "/health")]
+    return [e for e in TTS_ENGINES if service_up({"vieneu": VIENEU_URL, "piper": PIPER_URL}.get(e, ""), "/health") or SLEEPER.asleep(e)]
 
 
 # Everything whose change would make this Mac's pictures or voices come out differently. Two Macs with different files here must not
@@ -1129,11 +1185,17 @@ def node_status_payload(max_age_s=3.0):
         if _NODE_STATUS_CACHE["value"] is not None and now - _NODE_STATUS_CACHE["at"] < max_age_s:
             return _NODE_STATUS_CACHE["value"]
         image_state, image_config = image_server_info()
+        if image_state == "down" and SLEEPER.asleep("image"):
+            image_state = "asleep"  # not broken: it wakes for the next picture, which costs a minute of loading
+            image_config = remembered_image_config({})
+        elif image_state == "ready":
+            image_config = remembered_image_config(image_config)
         comfy_ready, _ = comfyui_state()
         image_models = list(available_image_models())
         engines = tts_engines_up()
         ffmpeg_ready = find_binary("ffmpeg", "FFMPEG_PATH") is not None
         ltx_ready, _ = ltx_state()
+        ltx_ok = ltx_ready == "ready" or SLEEPER.asleep("ltx")
         settings = {
             "IMAGE_PRESET": IMAGE_PRESET, "IMAGE_STEPS": IMAGE_STEPS_OVERRIDE or "", "IMAGE_PERSON_STEPS": IMAGE_PERSON_STEPS,
             "VIENEU_STEPS": VIENEU_STEPS, "TTS_BREAK_WORDS": TTS_BREAK_WORDS, "TTS_ENGINES": ",".join(TTS_ENGINES),
@@ -1151,14 +1213,15 @@ def node_status_payload(max_age_s=3.0):
             "capabilities": {
                 "image": image_state != "down" or comfy_ready == "ready",
                 "tts": ffmpeg_ready and bool(engines),
-                "transcribe": service_up(WHISPER_URL, "/"),
-                "video": ltx_ready == "ready",
+                "transcribe": service_up(WHISPER_URL, "/") or SLEEPER.asleep("whisper"),
+                "video": ltx_ok,
             },
             "image": {"state": image_state, "models": image_models, "defaultModel": image_models[0] if image_models else None},
             "tts": {"engines": engines, "defaultEngine": engines[0] if engines else None},
             "resources": node_status.read_resources(),
             "active": METRICS.active(),
             "perf": METRICS.perf(),
+            "idleSleep": {"minutes": SLEEPER.idle_s / 60, "services": SLEEPER.snapshot()},
             "fingerprint": node_status.fingerprint(settings, NODE_STATUS_SOURCES),
             # how closely this Mac follows the main one (written by the background sync agent; null on the main Mac and before it is installed)
             "sync": node_status.read_sync_state(),
@@ -1186,10 +1249,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             comfy_ready, _ = comfyui_state()
             image_ready = image_server_state() != "down" or comfy_ready == "ready" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
-            engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL)}
+            engines = {"vieneu": service_up(VIENEU_URL) or SLEEPER.asleep("vieneu"), "piper": service_up(PIPER_URL)}
             ffmpeg_ready = find_binary("ffmpeg", "FFMPEG_PATH") is not None
             tts_ready = ffmpeg_ready and any(engines.get(e) for e in TTS_ENGINES)
-            transcribe_ready = service_up(WHISPER_URL, "/")
+            transcribe_ready = service_up(WHISPER_URL, "/") or SLEEPER.asleep("whisper")
             ltx_ready, ltx_detail = ltx_state()
             comfy_ready, comfy_detail = comfyui_state()
             ollama_ready = service_up(OLLAMA_URL, "/api/tags")
@@ -1236,12 +1299,19 @@ class Handler(BaseHTTPRequestHandler):
         kind = KIND_BY_PATH.get(self.path.split("?")[0])
         started = METRICS.begin(kind) if kind else None
         served = False
+        needed = []
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0 or length > 25 * 1024 * 1024:
                 json_response(self, 413, {"error": "Dữ liệu trống hoặc vượt giới hạn 25 MB"})
                 return
             body = self.rfile.read(length)
+            needed = services_for(self.path, body)
+            for name in needed:  # in use from here, so the timer cannot put it back to sleep while it is waking or working
+                SLEEPER.touch(name, +1)
+            for name in needed:
+                if SLEEPER.ensure_awake(name):
+                    print(f"[idle-sleep] {name} thức dậy cho {self.path}", flush=True)
             if self.path == "/image":
                 payload = json.loads(body)
                 prompt = str(payload.get("prompt", ""))
@@ -1274,6 +1344,8 @@ class Handler(BaseHTTPRequestHandler):
             # Never include a subprocess command (which contains the private script).
             json_response(self, 500, {"error": "Không hoàn thành xử lý media local; kiểm tra máy và thử lại"})
         finally:
+            for name in needed:
+                SLEEPER.touch(name, -1)
             if kind:
                 METRICS.end(kind, started, ok=served)
 
@@ -1307,4 +1379,7 @@ if __name__ == "__main__":
         print(f"[local-media] trimmed log {name}", flush=True)
     node_status.require_token_for_host(HOST, NODE_TOKEN, os.getenv("NODE_ALLOW_NO_TOKEN") == "1")
     print(f"Local media server '{NODE_NAME}' listening on {HOST}:{PORT}" + (" (token required)" if NODE_TOKEN else ""), flush=True)
+    if SLEEPER.enabled:
+        threading.Thread(target=SLEEPER.run, daemon=True).start()
+        print(f"Idle sleep: model servers sleep after {SLEEPER.idle_s / 60:.0f} min unused", flush=True)
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

@@ -46,7 +46,7 @@ export type NodeModelsSummary = {
     /** Models Ollama holds in memory right now; it unloads one after a few idle minutes. */
     loaded: Array<{ name: string; sizeGb: number | null; expiresAt: string | null }>;
   };
-  image: { state: "ready" | "loading" | "down" | "unknown"; models: string[]; defaultModel: string | null };
+  image: { state: "ready" | "loading" | "asleep" | "down" | "unknown"; models: string[]; defaultModel: string | null };
   tts: { engines: string[]; defaultEngine: string | null };
   transcribe: boolean | null;
   whiteboard: boolean;

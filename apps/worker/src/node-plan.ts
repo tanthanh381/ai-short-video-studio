@@ -25,6 +25,8 @@ export const PRIOR_MS: Record<Lane, number> = {
 export const LANE_CAPACITY: Record<Lane, number> = { image: 1, tts: 1, video: 1, transcribe: 1, whiteboard: 2, llm: 1 };
 /** Loading the Ollama model into memory when it is not resident yet. */
 const LLM_WARMUP_MS = 15_000;
+/** A sleeping image server has to load its model (~1 minute) before the first picture; later ones are as fast as ever. */
+const IMAGE_WAKE_MS = 60_000;
 /** MB/s swapped out (averaged over the last minute) from which the work is really slowed down; below it the paging is the system's own housekeeping. */
 export const SWAP_HURTS_MBPS = 15;
 /** A measurement older than this no longer proves a node is slow: it gets another chance. */
@@ -54,7 +56,7 @@ export type NodeStatus = {
   node?: string;
   accepting: boolean;
   capabilities: { image: boolean; tts: boolean; transcribe: boolean; video: boolean };
-  image?: { state: "ready" | "loading" | "down"; models: string[]; defaultModel: string | null };
+  image?: { state: "ready" | "loading" | "asleep" | "down"; models: string[]; defaultModel: string | null };
   tts?: { engines: string[]; defaultEngine: string | null };
   resources?: NodeResources;
   perf?: Partial<Record<"image" | "tts" | "transcribe" | "video", number>>;
@@ -197,6 +199,7 @@ export function assessNode(node: NodeSnapshot, lane: Lane, ctx: AssessContext): 
         reasons.push("đang nạp model ảnh");
         return out(false);
       }
+      if (status.image?.state === "asleep") warmupMs = Math.max(warmupMs, IMAGE_WAKE_MS);
       const models = status.image?.models ?? [];
       const wanted = request.imageModel ?? (node.local ? null : primary?.status?.image?.defaultModel ?? null);
       if (wanted && models.length && !models.includes(wanted)) {

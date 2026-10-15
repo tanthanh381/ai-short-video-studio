@@ -216,8 +216,9 @@ export function modelRows(node: NodeSummary, now = Date.now()): ModelRow[] {
   const image = models.image;
   rows.push({
     id: "image", label: "Vẽ ảnh",
-    state: image.state === "ready" ? "ready" : image.state === "loading" ? "loading" : "down",
+    state: image.state === "ready" ? "ready" : image.state === "loading" ? "loading" : image.state === "asleep" ? "idle" : "down",
     detail: image.state === "loading" ? "Đang nạp model ảnh vào bộ nhớ"
+      : image.state === "asleep" ? "Đang ngủ để nhả RAM · tự thức khi có ảnh cần vẽ (mất khoảng 1 phút nạp model)"
       : image.state === "ready" ? `Sẵn sàng · mặc định ${image.defaultModel ?? "—"}`
       : image.state === "down" ? "Máy vẽ ảnh không phản hồi" : "Chưa có thông tin",
     chips: image.models,

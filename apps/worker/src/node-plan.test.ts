@@ -85,6 +85,12 @@ describe("assessNode", () => {
     expect(assess(sameVoices, "tts", { request: { ttsEngine: "xtts" } }).eligible).toBe(false);
   });
 
+  it("treats a sleeping image server as available at the price of its loading time, without calling the machine degraded", () => {
+    const asleep = node("air", { status: status({ image: { state: "asleep", models: ["sdxl-turbo"], defaultModel: "sdxl-turbo" } }) });
+    expect(assess(asleep, "image")).toMatchObject({ eligible: true, reasons: [], warmupMs: 60_000 });
+    expect(assess(asleep, "tts").warmupMs).toBe(0);
+  });
+
   it("waits for the image model instead of sending requests that would be refused", () => {
     const loading = node("air", { status: status({ image: { state: "loading", models: ["sdxl-turbo"], defaultModel: "sdxl-turbo" } }) });
     expect(assess(loading, "image").reasons[0]).toMatch(/nạp model/);
