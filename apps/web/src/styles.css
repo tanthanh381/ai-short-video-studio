@@ -3249,3 +3249,15 @@ input[type="radio"] {
 .link-button:disabled { opacity: 0.5; cursor: wait; }
 
 .sys-sync p.sys-recovery { margin-top: 6px; color: var(--tone-warn, #a64b00); }
+
+.save-state.save-failed { color: var(--danger, #b42318); }
+.save-state .link-button { margin-left: 6px; }
+
+.video-options {
+  margin-top: 16px;
+  border: 1px solid #dde5e9;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.video-options .setting-group:last-of-type { border-bottom: 0; }
+.video-options .microcopy { padding: 0 15px 12px; }

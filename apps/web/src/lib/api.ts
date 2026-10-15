@@ -100,9 +100,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ?.map((item) => [item.path, item.message].filter(Boolean).join(": "))
       .filter(Boolean)
       .join("; ");
-    throw new Error(
+    throw Object.assign(new Error(
       detail ? `${body.error ?? "Dữ liệu không hợp lệ"}: ${detail}` : body.error ?? "Không thể kết nối máy chủ",
-    );
+    ), { status: response.status });
   }
   return body as T;
 }

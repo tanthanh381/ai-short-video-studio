@@ -987,8 +987,8 @@ async function run(job: JobRow) {
   const draws = job.job_type === "render_whiteboard" || (drawsByHand(project.settings) && ["create_video", "render_video"].includes(job.job_type));
   if (draws && !pool.laneAvailable("whiteboard") && !(await whiteboardReady(config))) throw new Error(WHITEBOARD_DOWN);
   if (job.job_type === "create_video") {
-    if (project.settings.textProvider !== "ollama" || project.settings.mediaProvider !== "local")
-      throw new Error("Tạo video tự động chỉ dùng Ollama và media local để tránh phát sinh phí.");
+    // The API already refuses a paid provider the person has no key for (paidProviderUnavailable), and the stages below read
+    // that person's own key, so the one-click pipeline honours the provider chosen in the options like the manual steps do.
     await runVideoPipeline(job.payload, {
       getProject: () => getProject(job.project_id),
       storyboard: (current) => storyboard(job, current),

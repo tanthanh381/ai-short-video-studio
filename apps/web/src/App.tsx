@@ -46,6 +46,7 @@ import {
   NavLink,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useParams,
 } from "react-router-dom";
@@ -93,6 +94,9 @@ import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoRes
 import { appConfig } from "./lib/config";
 import { resetPasswordView } from "./lib/auth";
 import { withLayoutTemplate, withVisualPreset } from "./lib/visual-preset";
+import { ProjectSaver, type SaveState } from "./lib/project-saver";
+import { withScriptFromScenes } from "./lib/script-sync";
+import { OPENAI_VOICES, hookTitleAllowed, withMediaProvider } from "./lib/options";
 import { CHANNEL_PRESETS, estimatedNarrationSeconds } from "./lib/channel-presets";
 import { projectIsProcessing } from "./lib/video-submission";
 import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
@@ -1197,6 +1201,199 @@ const LOCAL_MODEL_TASKS: Array<{ key: keyof LocalModels; label: string }> = [
   { key: "transcribe", label: "Đồng bộ phụ đề (Whisper)" },
 ];
 
+/** The video options both the create page and the studio show. One component, so a choice made before the video is made
+ * reads, and can be changed, exactly as in the studio afterwards. The studio adds what only a saved project has
+ * (logo, music upload, caption style and timing, "listen to this scene") through the `...Extra` slots. */
+function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, localModels, frameExtra, voiceExtra, musicExtra, subtitleExtra }: {
+  settings: ProjectSettings;
+  onChange(next: ProjectSettings): void;
+  scriptMode: Project["inputMode"];
+  isDemo: boolean;
+  /** What this account can use right now; null where it is not known yet (the create page). */
+  capabilities: { openai: boolean; anthropic: boolean; ollama: boolean; localMedia: boolean } | null;
+  localModels: LocalModelCatalog | null;
+  frameExtra?: ReactNode;
+  voiceExtra?: ReactNode;
+  musicExtra?: ReactNode;
+  subtitleExtra?: ReactNode;
+}) {
+  const set = (patch: Partial<ProjectSettings>) => onChange({ ...settings, ...patch });
+  const setSubtitle = (patch: Partial<ProjectSettings["subtitle"]>) => onChange({ ...settings, subtitle: { ...settings.subtitle, ...patch } });
+  const paidText = settings.textProvider === "anthropic" || settings.textProvider === "openai";
+  const paidMedia = settings.mediaProvider === "openai";
+  const missingText = paidText && capabilities !== null && !capabilities[settings.textProvider as "anthropic" | "openai"];
+  const missingMedia = paidMedia && capabilities !== null && !capabilities.openai;
+  const hookAllowed = hookTitleAllowed(settings);
+  const local = settings.mediaProvider === "local";
+  return (
+    <>
+      <div className="setting-group">
+        <h3><Sparkles /> Máy và dịch vụ tạo video</h3>
+        <Field label="AI viết kịch bản">
+          <select value={settings.textProvider} onChange={(e) => set({ textProvider: e.target.value as ProjectSettings["textProvider"] })}>
+            <option value="ollama">Ollama local — không tốn phí API</option>
+            <option value="anthropic">Claude — dùng API trả phí</option>
+            <option value="openai">OpenAI — dùng API trả phí</option>
+          </select>
+        </Field>
+        <Field label="Tạo ảnh và giọng đọc">
+          <select value={settings.mediaProvider} onChange={(e) => onChange(withMediaProvider(settings, e.target.value as ProjectSettings["mediaProvider"]))}>
+            <option value="local">Máy đã kết nối — không tốn phí API</option>
+            <option value="openai">OpenAI — dùng API trả phí</option>
+          </select>
+        </Field>
+        {(missingText || missingMedia) && (
+          <Notice tone="info">
+            Chưa có khóa API {missingText ? KEY_PROVIDER_INFO[settings.textProvider as "anthropic" | "openai"].name : "OpenAI"}. <Link to="/settings">Dán khóa của bạn ở Cài đặt</Link> để dùng, hoặc chọn Ollama và máy đã kết nối.
+          </Notice>
+        )}
+        {capabilities === null && (paidText || paidMedia) && (
+          <Notice tone="info">
+            Cần lưu khóa API tương ứng tại <Link to="/settings">Cài đặt → Dịch vụ trả phí</Link> trước khi bắt đầu. Chi phí do tài khoản nhà cung cấp của bạn chi trả.
+          </Notice>
+        )}
+      </div>
+      <div className="setting-group">
+        <h3><BookOpenText /> Nội dung</h3>
+        <Field label="Phong cách">
+          <select value={settings.style} onChange={(e) => set({ style: e.target.value as ProjectSettings["style"] })}>
+            <option value="ke-chuyen">Kể chuyện</option>
+            <option value="kien-thuc">Kiến thức</option>
+            <option value="truyen-cam-hung">Truyền cảm hứng</option>
+            <option value="meo-cuoc-song">Mẹo cuộc sống</option>
+          </select>
+        </Field>
+        <Field label="Đối tượng người xem">
+          <input maxLength={500} value={settings.targetAudience} onChange={(e) => set({ targetAudience: e.target.value })} />
+        </Field>
+        {scriptMode !== "idea" && (
+          <label className="check">
+            <input type="checkbox" checked={settings.rewriteFullScript} onChange={(e) => set({ rewriteFullScript: e.target.checked })} />
+            <span>Cho phép AI viết lại kịch bản trước khi tạo video (mặc định giữ nguyên từng câu)</span>
+          </label>
+        )}
+      </div>
+      <div className="setting-group">
+        <h3><Image /> Hình ảnh và khung video</h3>
+        <Field label="Phong cách hình ảnh" hint={VISUAL_PRESET_OPTIONS.find((item) => item.id === settings.visualPreset)?.description ?? "Chọn phong cách hình ảnh cho các cảnh."}>
+          <select value={settings.visualPreset} onChange={(e) => onChange(withVisualPreset(settings, e.target.value as ProjectSettings["visualPreset"]))}>
+            {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
+        </Field>
+        <Field label="Mô tả nét hình" hint="Giữ nhân vật và chất liệu nhất quán giữa các cảnh. AI nhận cả phong cách ở trên và mô tả này.">
+          <input value={settings.visualStyle} onChange={(e) => set({ visualStyle: e.target.value })} />
+        </Field>
+        <Field label="Kiểu khung" hint="Thẻ truyện: tiêu đề trên nền màu, tranh minh họa ở giữa, phụ đề bên dưới. Nhân vật trên nền giấy: một nhân vật chibi giữa tờ giấy kraft. Cả hai chỉ cho video dọc 9:16.">
+          <select value={settings.layoutTemplate} onChange={(e) => onChange(withLayoutTemplate(settings, e.target.value as ProjectSettings["layoutTemplate"]))}>
+            <option value="full-bleed">Toàn khung hình</option>
+            <option value="story-card">Thẻ truyện (tranh minh họa)</option>
+            <option value="paper-stage">Nhân vật trên nền giấy</option>
+          </select>
+        </Field>
+        {settings.layoutTemplate === "story-card" && (
+          <>
+            <Field label="Màu thẻ truyện" hint="Nền xanh: tiêu đề vàng. Nền be: tiêu đề đỏ + trắng, phụ đề xanh lá chạy theo lời (kiểu Quy tắc cổ nhân).">
+              <select value={settings.cardTheme} onChange={(e) => set({ cardTheme: e.target.value as ProjectSettings["cardTheme"] })}>
+                <option value="blue">Nền xanh, tiêu đề vàng</option>
+                <option value="sepia">Nền be, tiêu đề đỏ + trắng</option>
+              </select>
+            </Field>
+            <Field label="Tiêu đề trên khung" hint="Để trống: AI chọn câu mở đầu hấp dẫn từ kịch bản. Nền be: gõ “DÒNG ĐỎ | DÒNG TRẮNG” để tự chia hai dòng.">
+              <input maxLength={80} value={settings.cardTitle} onChange={(e) => set({ cardTitle: e.target.value })} />
+            </Field>
+            <Field label="Tên kênh ở chân video" hint="Để trống nếu không muốn hiện chân video.">
+              <input maxLength={60} value={settings.brandName} onChange={(e) => set({ brandName: e.target.value })} />
+            </Field>
+          </>
+        )}
+        <Field label="Tỷ lệ">
+          <select value={settings.aspectRatio} onChange={(e) => set({ aspectRatio: e.target.value as ProjectSettings["aspectRatio"] })}>
+            <option>9:16</option>
+            <option>1:1</option>
+            <option>16:9</option>
+          </select>
+        </Field>
+        <Field label="Tốc độ tạo ảnh" hint="Fast: 2 bước · Balanced: 4 bước · Quality: 8 bước SDXL-Turbo; Quality giảm lỗi khuôn mặt và tay.">
+          <select value={settings.generationPreset ?? "balanced"} onChange={(e) => set({ generationPreset: e.target.value as ProjectSettings["generationPreset"] })}>
+            <option value="fast">Fast — nhanh nhất</option>
+            <option value="balanced">Balanced — khuyên dùng</option>
+            <option value="quality">Quality — chất lượng cao</option>
+          </select>
+        </Field>
+        <label className="check">
+          <input type="checkbox" checked={settings.allowUploads} onChange={(e) => set({ allowUploads: e.target.checked })} />
+          <span>Cho phép dùng ảnh tự tải lên</span>
+        </label>
+        <p className="microcopy">Đổi kiểu khung, màu hay tỷ lệ xong hãy bấm Tạo video lại để áp dụng cho video đã có.</p>
+      </div>
+      {frameExtra}
+      <div className="setting-group">
+        <h3><Mic2 /> Giọng đọc</h3>
+        <Field label="Giọng tiếng Việt" hint={local ? voiceHint(settings.voice) : ""}>
+          <select value={settings.voice} onChange={(e) => set({ voice: e.target.value })}>
+            {local ? <>
+              {!isVoicePreset(settings.voice) && <option value={settings.voice}>Giọng tiếng Việt trên máy</option>}
+              {VOICE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+            </> : OPENAI_VOICES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </select>
+        </Field>
+        {local && (
+          <>
+            <VoicePreview voice={settings.voice} engine={settings.localModels.tts} disabled={isDemo} />
+            <LocalModelPicker catalog={localModels} value={settings.localModels} onChange={(next) => set({ localModels: next })} />
+          </>
+        )}
+        <Field label="Tốc độ đọc">
+          <input type="range" min="0.8" max="1.3" step="0.05" value={settings.voiceSpeed} onChange={(e) => set({ voiceSpeed: Number(e.target.value) })} />
+          <small>{settings.voiceSpeed.toFixed(2)}× · 1.00× là nhịp chuẩn video ngắn (~3,7 từ/giây)</small>
+        </Field>
+        <label className="check">
+          <input type="checkbox" checked={settings.trimSilence} onChange={(e) => set({ trimSilence: e.target.checked })} />
+          <span>Cắt khoảng lặng đầu/cuối giọng đọc</span>
+        </label>
+        {voiceExtra}
+        <p className="microcopy">Cảnh đã có giọng đọc giữ nguyên; giọng mới áp dụng cho cảnh tạo mới.</p>
+      </div>
+      <div className="setting-group">
+        <h3><Music2 /> Nhạc và âm thanh</h3>
+        <label className="check">
+          <input type="checkbox" checked={settings.autoMusic} onChange={(e) => set({ autoMusic: e.target.checked })} />
+          <span>Nhạc nền êm tự tạo (không lo bản quyền)</span>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.sceneSfx} onChange={(e) => set({ sceneSfx: e.target.checked })} />
+          <span>Âm “tích” nhẹ mỗi lần chuyển cảnh</span>
+        </label>
+        {musicExtra}
+      </div>
+      <div className="setting-group">
+        <h3><Subtitles /> Phụ đề và giữ chân người xem</h3>
+        <p className="microcopy">Chữ lấy đúng từ kịch bản, thời điểm lấy từ giọng đọc thực tế.</p>
+        <label className="check">
+          <input type="checkbox" checked={settings.subtitle.enabled} onChange={(e) => setSubtitle({ enabled: e.target.checked })} />
+          <span>Chèn phụ đề vào video</span>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.captionHighlight} disabled={!settings.subtitle.enabled} onChange={(e) => set({ captionHighlight: e.target.checked })} />
+          <span>Phụ đề sáng dần theo từng từ (kiểu karaoke)</span>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.hookTitle && hookAllowed} disabled={!hookAllowed} onChange={(e) => set({ hookTitle: e.target.checked })} />
+          <span>Tiêu đề lớn ở 3 giây đầu{hookAllowed ? "" : " (thẻ truyện đã có tiêu đề)"}</span>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.progressBar} onChange={(e) => set({ progressBar: e.target.checked })} />
+          <span>Thanh tiến độ ở chân video (giữ người xem đến cuối)</span>
+        </label>
+        <Field label="Lời kêu gọi cuối video" hint="Hiện mờ dần ở 3 giây cuối, ví dụ “Theo dõi để xem thêm”. Để trống nếu không cần.">
+          <input maxLength={60} value={settings.outroText} onChange={(e) => set({ outroText: e.target.value })} />
+        </Field>
+        {subtitleExtra}
+      </div>
+    </>
+  );
+}
+
 function LocalModelPicker({ value, onChange, catalog }: {
   value: LocalModels;
   onChange(next: LocalModels): void;
@@ -1280,6 +1477,30 @@ function NewProjectPage() {
       navigate(`/studio/${project.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chưa thể bắt đầu tạo video. Hãy thử lại.");
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  }
+  /** Makes the project, cuts the script into scenes and stops there, so the scenes can be read and edited before any picture or voice is made. */
+  async function splitFirst() {
+    if (submitting.current || sourceText.trim().length < 10) return;
+    submitting.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const title = spokenText.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới";
+      const project = await api.createProject({ title, sourceText, inputMode, settings });
+      try {
+        await api.queue(project.id, "storyboard");
+      } catch (e) {
+        // The draft exists; the studio opens on it and says what is missing, instead of the script being lost.
+        navigate(`/studio/${project.id}`, { state: { notice: e instanceof Error ? e.message : "Chưa chia được cảnh." } });
+        return;
+      }
+      navigate(`/studio/${project.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể chia cảnh.");
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -1471,270 +1692,24 @@ function NewProjectPage() {
           </button>
         </section>
         <section hidden={!advanced}>
-          <div className="form-grid advanced-panel">
-            <Field label="AI viết kịch bản">
-              <select
-                value={settings.textProvider}
-                onChange={(event) => setSettings((current) => ({ ...current, textProvider: event.target.value as ProjectSettings["textProvider"] }))}
-              >
-                <option value="ollama">Ollama local — không tốn phí API</option>
-                <option value="anthropic">Claude — dùng API trả phí</option>
-                <option value="openai">OpenAI — dùng API trả phí</option>
-              </select>
-            </Field>
-            <Field label="Tạo ảnh và giọng đọc">
-              <select
-                value={settings.mediaProvider}
-                onChange={(event) => setSettings((current) => ({ ...current, mediaProvider: event.target.value as ProjectSettings["mediaProvider"] }))}
-              >
-                <option value="local">Self-host local — không tốn phí API</option>
-                <option value="openai">OpenAI — dùng API trả phí</option>
-              </select>
-            </Field>
-            {(settings.textProvider !== "ollama" || settings.mediaProvider === "openai") && (
-              <Notice tone="info">
-                Cần lưu khóa API tương ứng tại <Link to="/settings">Cài đặt → Dịch vụ trả phí</Link> trước khi bắt đầu. Chi phí do tài khoản nhà cung cấp của bạn chi trả.
-              </Notice>
-            )}
+          <div className="video-options">
+            <VideoOptions
+              settings={settings}
+              onChange={setSettings}
+              scriptMode={inputMode}
+              isDemo={isDemo}
+              capabilities={null}
+              localModels={localModels}
+            />
+            <p className="microcopy">Các lựa chọn này giống hệt mục “Tùy chọn” trong Studio sau khi tạo: bạn đổi ở đâu cũng được.</p>
           </div>
-        </section>
-        <section hidden={!advanced}>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={settings.rewriteFullScript}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    rewriteFullScript: e.target.checked,
-                  }))
-                }
-              />
-              <span>Cho phép viết lại kịch bản trước khi tạo video</span>
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={settings.subtitle.enabled}
-                onChange={(e) => setSettings((s) => ({
-                  ...s,
-                  subtitle: { ...s.subtitle, enabled: e.target.checked },
-                }))}
-              />
-              <span>Chèn phụ đề vào video</span>
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={settings.captionHighlight}
-                disabled={!settings.subtitle.enabled}
-                onChange={(e) => setSettings((s) => ({ ...s, captionHighlight: e.target.checked }))}
-              />
-              <span>Phụ đề sáng dần theo từng từ (kiểu karaoke)</span>
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={settings.hookTitle}
-                onChange={(e) => setSettings((s) => ({ ...s, hookTitle: e.target.checked }))}
-              />
-              <span>Tiêu đề lớn ở 3 giây đầu (giữ chân người xem)</span>
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={settings.progressBar}
-                onChange={(e) => setSettings((s) => ({ ...s, progressBar: e.target.checked }))}
-              />
-              <span>Thanh tiến độ ở chân video (giữ người xem đến cuối)</span>
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={settings.sceneSfx}
-                onChange={(e) => setSettings((s) => ({ ...s, sceneSfx: e.target.checked }))}
-              />
-              <span>Âm “tích” nhẹ mỗi lần chuyển cảnh</span>
-            </label>
-            <Field label="Lời kêu gọi cuối video" hint="Hiện mờ dần ở 3 giây cuối, ví dụ “Theo dõi để xem thêm”. Để trống nếu không cần.">
-              <input
-                maxLength={60}
-                value={settings.outroText}
-                onChange={(e) => setSettings((s) => ({ ...s, outroText: e.target.value }))}
-              />
-            </Field>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={settings.trimSilence}
-                onChange={(e) =>
-                  setSettings((s) => ({ ...s, trimSilence: e.target.checked }))
-                }
-              />
-              <span>Cắt khoảng lặng đầu/cuối giọng đọc (trim silence)</span>
-            </label>
-        </section>
-        <section hidden={!advanced}>
-          <h2>Định dạng video</h2>
-          <div className="form-grid">
-            <Field label="Đối tượng người xem">
-              <input
-                value={settings.targetAudience}
-                onChange={(e) =>
-                  setSettings((s) => ({ ...s, targetAudience: e.target.value }))
-                }
-              />
-            </Field>
-            <Field label="Phong cách">
-              <select
-                value={settings.style}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    style: e.target.value as ProjectSettings["style"],
-                  }))
-                }
-              >
-                <option value="ke-chuyen">Kể chuyện</option>
-                <option value="kien-thuc">Kiến thức</option>
-                <option value="truyen-cam-hung">Truyền cảm hứng</option>
-                <option value="meo-cuoc-song">Mẹo cuộc sống</option>
-              </select>
-            </Field>
-            <Field label="Bảng màu" hint="Nét mực trắng đen sẽ ép ảnh và video về đơn sắc, phù hợp video kể chuyện tối giản.">
-              <select
-                value={settings.visualPreset}
-                onChange={(e) => setSettings((s) => withVisualPreset(s, e.target.value as ProjectSettings["visualPreset"]))}
-              >
-                {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-              </select>
-            </Field>
-            <Field label="Khung video" hint="Thẻ truyện: tiêu đề vàng trên nền xanh, tranh minh họa ở giữa, phụ đề bên dưới. Nhân vật trên nền giấy: một nhân vật chibi giữa tờ giấy kraft, phụ đề nhỏ ngay dưới (video dọc 9:16).">
-              <select
-                value={settings.layoutTemplate}
-                onChange={(e) => setSettings((s) => withLayoutTemplate(s, e.target.value as ProjectSettings["layoutTemplate"]))}
-              >
-                <option value="full-bleed">Toàn khung hình</option>
-                <option value="story-card">Thẻ truyện (tranh minh họa)</option>
-                <option value="paper-stage">Nhân vật trên nền giấy</option>
-              </select>
-            </Field>
-            {settings.layoutTemplate === "story-card" && (
-              <>
-                <Field label="Màu thẻ truyện" hint="Xanh: tiêu đề vàng trên nền xanh. Nền be: tiêu đề đỏ + trắng, phụ đề xanh lá chạy theo lời (kiểu Quy tắc cổ nhân).">
-                  <select
-                    value={settings.cardTheme}
-                    onChange={(e) => setSettings((s) => ({ ...s, cardTheme: e.target.value as ProjectSettings["cardTheme"] }))}
-                  >
-                    <option value="blue">Nền xanh, tiêu đề vàng</option>
-                    <option value="sepia">Nền be, tiêu đề đỏ + trắng</option>
-                  </select>
-                </Field>
-                <Field label="Tên kênh ở chân video" hint="Để trống nếu không muốn hiện chân video.">
-                  <input
-                    maxLength={60}
-                    value={settings.brandName}
-                    onChange={(e) => setSettings((s) => ({ ...s, brandName: e.target.value }))}
-                  />
-                </Field>
-              </>
-            )}
-            <Field label="Tỷ lệ">
-              <select
-                value={settings.aspectRatio}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    aspectRatio: e.target
-                      .value as ProjectSettings["aspectRatio"],
-                  }))
-                }
-              >
-                <option>9:16</option>
-                <option>1:1</option>
-                <option>16:9</option>
-              </select>
-            </Field>
-            <Field label="Preset tạo video" hint="Fast ưu tiên tốc độ; Quality dùng nhiều bước SDXL hơn để giảm lỗi khuôn mặt và tay.">
-              <select
-                value={settings.generationPreset ?? "balanced"}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    generationPreset: e.target.value as ProjectSettings["generationPreset"],
-                  }))
-                }
-              >
-                <option value="fast">Fast — nhanh nhất</option>
-                <option value="balanced">Balanced — khuyên dùng</option>
-                <option value="quality">Quality — chất lượng cao</option>
-              </select>
-            </Field>
-          </div>
-        </section>
-        <section hidden={!advanced}>
-            <div className="form-grid advanced-panel">
-              <Field label="Mô tả nét hình" hint="Dùng để giữ nhất quán nhân vật và chất liệu giữa các cảnh. AI local sẽ nhận cả preset và mô tả này.">
-                <input
-                  value={settings.visualStyle}
-                  onChange={(e) => setSettings((s) => ({ ...s, visualStyle: e.target.value }))}
-                />
-              </Field>
-              <Field label="Giọng đọc theo nội dung" hint={voiceHint(settings.voice)}>
-                <select
-                  value={settings.voice}
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, voice: e.target.value }))
-                  }
-                >
-                  {VOICE_PRESETS.map((preset) => (
-                    <option key={preset.id} value={preset.id}>{preset.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <VoicePreview voice={settings.voice} engine={settings.localModels.tts} disabled={isDemo} />
-              <Field label="Tốc độ đọc">
-                <input
-                  type="range"
-                  min="0.8"
-                  max="1.3"
-                  step="0.05"
-                  value={settings.voiceSpeed}
-                  onChange={(e) => setSettings((s) => ({ ...s, voiceSpeed: Number(e.target.value) }))}
-                />
-                <small>{settings.voiceSpeed.toFixed(2)}× · 1.00× là nhịp chuẩn video ngắn (~3,7 từ/giây)</small>
-              </Field>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={settings.autoMusic}
-                  onChange={(e) => setSettings((s) => ({ ...s, autoMusic: e.target.checked }))}
-                />
-                <span>Nhạc nền êm tự tạo (không lo bản quyền)</span>
-              </label>
-              <LocalModelPicker
-                catalog={localModels}
-                value={settings.localModels}
-                onChange={(next) => setSettings((s) => ({ ...s, localModels: next }))}
-              />
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={settings.allowUploads}
-                  onChange={(e) =>
-                    setSettings((s) => ({
-                      ...s,
-                      allowUploads: e.target.checked,
-                    }))
-                  }
-                />
-                <span>Cho phép dùng ảnh tự tải lên</span>
-              </label>
-            </div>
         </section>
         <div className="form-actions">
           <Button type="button" variant="ghost" disabled={busy || sourceText.trim().length < 10} onClick={() => void saveDraft()}>
             <Save size={17} /> Lưu bản nháp
+          </Button>
+          <Button type="button" variant="secondary" disabled={busy || isDemo || sourceText.trim().length < 10} onClick={() => void splitFirst()} title="Chia kịch bản thành cảnh để đọc và sửa từng cảnh, chưa tạo ảnh hay giọng">
+            <WandSparkles size={17} /> Chia cảnh để sửa trước
           </Button>
           <Button type="submit" busy={busy} disabled={isDemo}>
             <Clapperboard size={18} /> Tạo video
@@ -1964,6 +1939,7 @@ function SceneMoreMenu({
 function StudioPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isDemo } = useAuth();
   const localModels = useLocalModels(isDemo);
   const [project, setProject] = useState<Project | null>(null);
@@ -1973,9 +1949,10 @@ function StudioPage() {
   // Phones show the scene list or the preview, not both stacked; a finished video opens on the preview.
   const [phoneTab, setPhoneTab] = useState<"scenes" | "preview" | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [saved, setSaved] = useState(true);
+  const [saveState, setSaveState] = useState<SaveState>({ status: "saved" });
+  const saved = saveState.status === "saved";
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>((location.state as { notice?: string } | null)?.notice ?? null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [result, setResult] = useState<VideoResult | null>(null);
@@ -1993,8 +1970,14 @@ function StudioPage() {
       : null,
   );
   const saveTimer = useRef<number | null>(null);
-  const pendingEdits = useRef<Project | null>(null);
-  const saving = useRef<Promise<void> | null>(null);
+  // Writes edits in order, on the newest stamp, and carries them over a server-side change (see lib/project-saver.ts).
+  const saver = useRef<ProjectSaver | null>(null);
+  saver.current ??= new ProjectSaver({
+    save: (next) => api.updateProject(next),
+    load: () => api.getProject(id),
+    onSaved: (updated) => setProject(updated),
+    onState: setSaveState,
+  });
   const locked = useRef(false);
   const previewRefreshes = useRef(new Set<string>());
   const freshResult = useRef<VideoResult | null>(null);
@@ -2011,6 +1994,7 @@ function StudioPage() {
       isDemo ? Promise.resolve(null) : api.getSettings(),
     ])
       .then(([p, j, account]) => {
+        saver.current?.confirm(p);
         setProject(p);
         setSourceDraft(p.sourceText);
         setJobs(j);
@@ -2031,6 +2015,7 @@ function StudioPage() {
         .then(([nextJobs, nextProject]) => {
           if (!active) return;
           setJobs(nextJobs);
+          saver.current?.confirm(nextProject);
           setProject(nextProject);
           setSourceDraft(nextProject.sourceText);
           setError(null);
@@ -2059,6 +2044,8 @@ function StudioPage() {
     return startSignedPreviewRefresh(() => api.getResult(id), (next) => { freshResult.current = next; freshResultSignedAt.current = Date.now(); });
   }, [id, isDemo, processing, result?.id]);
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+  // "Lời đọc gốc" always shows the script the scenes spell out, so an edit made in a scene shows there at once.
+  useEffect(() => { if (project) setSourceDraft(project.sourceText); }, [project?.sourceText]);
   // Sign the preview only when the picture itself changes: every status refresh replaces `project.scenes`, and
   // re-signing on each one (a request every 2 s) pushed the studio into the API's rate limit (HTTP 429).
   const activeImagePath = project?.scenes[selected]?.imagePath ?? null;
@@ -2092,39 +2079,22 @@ function StudioPage() {
   function change(next: Project) {
     if (locked.current) return;
     setProject(next);
-    setSaved(false);
-    pendingEdits.current = next;
+    saver.current?.edit(next);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => void flushEdits().catch(() => {}), 700);
   }
+  /** Writes every queued edit; throws (and shows the reason beside the title) when it cannot. */
   async function flushEdits() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    if (saving.current) {
-      await saving.current;
-      if (pendingEdits.current) return flushEdits();
-      return;
-    }
-    const write = async () => {
-      while (pendingEdits.current) {
-        const next = pendingEdits.current;
-        pendingEdits.current = null;
-        try {
-          const updated = await api.updateProject(next);
-          if (!pendingEdits.current) { setProject(updated); setSaved(true); }
-        } catch (e) {
-          pendingEdits.current ??= next;
-          setSaved(false);
-          setError(e instanceof Error ? e.message : "Chưa lưu được chỉnh sửa. Hãy thử lại trước khi tạo video.");
-          throw e;
-        }
-      }
-    };
-    saving.current = write();
-    try { await saving.current; } finally { saving.current = null; }
+    await saver.current?.flush();
   }
   async function createVideo() {
     if (locked.current) return;
     if (isDemo) { setError("Chế độ mẫu chỉ lưu bản nháp. Tạo MP4 cần kết nối máy xử lý thật."); return; }
+    if (project && sourceDraft !== project.sourceText) {
+      setError("Bạn đã sửa “Lời đọc gốc” nhưng chưa bấm “Áp dụng”. Hãy áp dụng (chia lại cảnh) hoặc hủy thay đổi trước khi tạo video.");
+      return;
+    }
     locked.current = true;
     setBusyAction("create_video");
     setError(null);
@@ -2135,6 +2105,15 @@ function StudioPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể bắt đầu tạo video.");
     } finally { setBusyAction(null); }
+  }
+  function applySourceDraft() {
+    if (!project || sourceDraft === project.sourceText) return;
+    if (sourceDraft.trim().length < 10) { setError("Kịch bản cần ít nhất 10 ký tự. Nội dung cũ vẫn được giữ."); return; }
+    if (project.scenes.length && !window.confirm("Chia lại cảnh sẽ thay toàn bộ cảnh hiện có, kể cả phần bạn đã sửa và ảnh, giọng đã tạo. Tiếp tục?")) return;
+    setError(null);
+    setSelected(0);
+    setResult(null);
+    change({ ...project, sourceText: sourceDraft, inputMode: "full-script", scenes: [], status: "draft" });
   }
   async function downloadResult() {
     if (!result) return;
@@ -2167,7 +2146,7 @@ function StudioPage() {
       ...(narrationChanged ? { audioPath: null, actualDurationMs: null, subtitles: [], mediaStatus: "pending" as const } : {}),
       ...(imageChanged ? { imagePath: null, videoPath: null, mediaStatus: "pending" as const } : {}),
     };
-    change({ ...project, scenes, status: "draft" });
+    change(withScriptFromScenes({ ...project, scenes, status: "draft" }));
   }
   function moveScene(index: number, direction: -1 | 1) {
     if (!project) return;
@@ -2180,7 +2159,7 @@ function StudioPage() {
     scenes[index] = { ...b, order: index };
     scenes[nextIndex] = { ...a, order: nextIndex };
     setSelected(nextIndex);
-    change({ ...project, scenes });
+    change(withScriptFromScenes({ ...project, scenes }));
   }
   function addScene() {
     if (!project) return;
@@ -2200,7 +2179,7 @@ function StudioPage() {
       annotationJson: null,
       subtitles: [],
     };
-    change({ ...project, scenes: [...project.scenes, scene] });
+    change(withScriptFromScenes({ ...project, scenes: [...project.scenes, scene] }));
     setSelected(project.scenes.length);
   }
   function deleteScene(index: number) {
@@ -2208,7 +2187,7 @@ function StudioPage() {
     const scenes = project.scenes
       .filter((_, i) => i !== index)
       .map((s, i) => ({ ...s, order: i }));
-    change({ ...project, scenes });
+    change(withScriptFromScenes({ ...project, scenes }));
     setSelected(Math.max(0, index - 1));
   }
   async function runAction(
@@ -2309,8 +2288,7 @@ function StudioPage() {
       };
       const next = { ...project, scenes: project.scenes.map((item, sceneIndex) => sceneIndex === index ? updatedScene : item), status: "draft" as const };
       setProject(next);
-      pendingEdits.current = next;
-      setSaved(false);
+      saver.current?.edit(next);
       await flushEdits();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tải file");
@@ -2433,8 +2411,7 @@ function StudioPage() {
         settings: { ...project.settings, backgroundMusicPath: path },
       };
       setProject(next);
-      pendingEdits.current = next;
-      setSaved(false);
+      saver.current?.edit(next);
       await flushEdits();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tải nhạc");
@@ -2455,8 +2432,7 @@ function StudioPage() {
       const path = await api.uploadMedia(id, file, "logo");
       const next = { ...project, settings: { ...project.settings, logoPath: path } };
       setProject(next);
-      pendingEdits.current = next;
-      setSaved(false);
+      saver.current?.edit(next);
       await flushEdits();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tải logo");
@@ -2540,14 +2516,19 @@ function StudioPage() {
             disabled={processing || Boolean(busyAction)}
             onChange={(e) => change({ ...project, title: e.target.value })}
           />
-          <span className="save-state">
-            {saved ? (
+          <span className={`save-state ${saveState.status === "error" ? "save-failed" : ""}`} role="status" aria-live="polite">
+            {saveState.status === "saved" ? (
               <>
                 <Check size={14} /> Đã lưu
               </>
-            ) : (
+            ) : saveState.status === "saving" ? (
               <>
                 <LoaderCircle className="spin" size={14} /> Đang lưu
+              </>
+            ) : (
+              <>
+                <CircleAlert size={14} /> Chưa lưu được
+                <button type="button" className="link-button" onClick={() => void flushEdits().catch(() => {})}>Thử lại</button>
               </>
             )}
           </span>
@@ -2705,29 +2686,45 @@ function StudioPage() {
               <summary>Kịch bản đầy đủ <ChevronDown size={16} /></summary>
               <label className="field">
                 <span>Lời đọc gốc</span>
-                <textarea value={sourceDraft} rows={7} maxLength={30000} onChange={(e) => setSourceDraft(e.target.value)} onBlur={() => {
-                  if (sourceDraft === project.sourceText) return;
-                  if (sourceDraft.trim().length < 10) { setError("Kịch bản cần ít nhất 10 ký tự. Nội dung cũ vẫn được giữ."); return; }
-                  setSelected(0);
-                  setResult(null);
-                  change({ ...project, sourceText: sourceDraft, inputMode: "full-script", scenes: [], status: "draft" });
-                }} />
-                <small>Sửa kịch bản sẽ chia lại cảnh khi bấm Tạo video. Mặc định giữ nguyên lời.</small>
+                <textarea value={sourceDraft} rows={7} maxLength={30000} onChange={(e) => setSourceDraft(e.target.value)} />
+                <small>Luôn khớp với lời đọc của các cảnh bên dưới: sửa ở từng cảnh thì kịch bản này tự cập nhật và được lưu.</small>
               </label>
+              {project && sourceDraft !== project.sourceText && (
+                <Notice tone="warn">
+                  <span>Sửa ở đây sẽ <b>chia lại toàn bộ cảnh</b> từ kịch bản mới; các cảnh, ảnh và giọng đã có sẽ bị thay.</span>
+                  <Button type="button" variant="secondary" onClick={() => applySourceDraft()}>Áp dụng và chia lại cảnh</Button>
+                  <Button type="button" variant="ghost" onClick={() => setSourceDraft(project.sourceText)}>Hủy thay đổi</Button>
+                </Notice>
+              )}
             </details>
           {project.scenes.length === 0 ? (
             <div className="empty-scenes">
               <BookOpenText />
               <h3>Chưa có cảnh</h3>
               <p>
-                {processing ? "Studio đang chia kịch bản thành các cảnh. Cảnh thật sẽ xuất hiện khi bước này hoàn tất." : "Bấm Tạo video để studio tự thực hiện, hoặc thêm cảnh để soạn thủ công."}
+                {processing
+                  ? "Studio đang chia kịch bản thành các cảnh. Cảnh thật sẽ xuất hiện khi bước này hoàn tất."
+                  : "Chia cảnh trước để xem và sửa lời đọc từng cảnh, hoặc bấm Tạo video ở trên để studio làm một lèo từ đầu đến cuối."}
               </p>
+              <Button
+                onClick={() => void runAction("storyboard")}
+                busy={busyAction === "storyboard"}
+                disabled={processing || Boolean(busyAction) || (!isDemo && !storyboardEnabled)}
+                title={storyboardEnabled ? "Chia kịch bản thành cảnh và viết mô tả ảnh; chưa tạo ảnh hay giọng" : "Chưa có máy hoặc khóa API để chia cảnh; hãy thêm cảnh thủ công"}
+              >
+                <WandSparkles size={17} /> Chia cảnh để chỉnh sửa
+              </Button>
               <Button variant="secondary" onClick={addScene}>
-                <Plus size={17} /> Thêm cảnh đầu tiên
+                <Plus size={17} /> Thêm cảnh thủ công
               </Button>
             </div>
           ) : (
             <div className="scene-list">
+              {project.status === "draft" && !processing && (
+                <Notice tone="info">
+                  Sửa lời đọc hoặc mô tả ảnh ngay trong từng ô; mọi thay đổi tự lưu. Xong bấm <b>Tạo video</b>: chỉ các cảnh bạn đã sửa được tạo lại ảnh và giọng, cảnh còn lại giữ nguyên.
+                </Notice>
+              )}
               {project.scenes.map((scene, index) => (
                 <SceneCard
                   key={scene.id}
@@ -2866,111 +2863,14 @@ function StudioPage() {
             <h2>Thiết lập</h2>
           </div>
           <fieldset className="settings-scroll" disabled={processing || Boolean(busyAction)}>
-            <div className="setting-group">
-              <h3>
-                <Sparkles /> AI kịch bản
-              </h3>
-              <Field label="Nhà cung cấp">
-                <select
-                  value={project.settings.textProvider}
-                  onChange={(e) =>
-                    change({
-                      ...project,
-                      settings: {
-                        ...project.settings,
-                        textProvider: e.target
-                          .value as ProjectSettings["textProvider"],
-                      },
-                    })
-                  }
-                >
-                  <option value="anthropic">Claude</option>
-                  <option value="openai">ChatGPT / OpenAI</option>
-                  <option value="ollama">Ollama (cục bộ)</option>
-                </select>
-              </Field>
-              <p className="microcopy">
-                Chọn máy xử lý kịch bản. Tạo video tự động mặc định dùng máy đã kết nối.
-              </p>
-              {capabilities && (project.settings.textProvider === "anthropic" || project.settings.textProvider === "openai") && !capabilities[project.settings.textProvider] && (
-                <Notice tone="info">
-                  Chưa có khóa API {KEY_PROVIDER_INFO[project.settings.textProvider].name}. <Link to="/settings">Dán khóa của bạn ở Cài đặt</Link> để dùng, hoặc chọn Ollama.
-                </Notice>
-              )}
-            </div>
-            <div className="setting-group">
-              <h3><Sparkles /> Nét hình</h3>
-              <Field label="Phong cách hình ảnh" hint={VISUAL_PRESET_OPTIONS.find((item) => item.id === project.settings.visualPreset)?.description ?? "Chọn phong cách hình ảnh cho các cảnh."}>
-                <select
-                  value={project.settings.visualPreset}
-                  onChange={(e) => change({ ...project, settings: withVisualPreset(project.settings, e.target.value as ProjectSettings["visualPreset"]) })}
-                >
-                  {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Mô tả nét hình">
-                <input
-                  value={project.settings.visualStyle}
-                  onChange={(e) => change({ ...project, settings: { ...project.settings, visualStyle: e.target.value } })}
-                />
-              </Field>
-              <p className="microcopy">AI local sẽ dùng preset này khi viết prompt storyboard và tạo ảnh từng cảnh. {visualPresetPrompt(project.settings.visualPreset)}</p>
-            </div>
-            <div className="setting-group">
-              <h3><Image /> Hình ảnh và giọng đọc</h3>
-              <Field label="Cách tạo media">
-                <select value={project.settings.mediaProvider} onChange={(e) => change({ ...project, settings: { ...project.settings, mediaProvider: e.target.value as ProjectSettings["mediaProvider"] } })}>
-                  <option value="local">Máy đã kết nối — không tốn phí API</option>
-                  <option value="openai">OpenAI — có phí API (khóa của bạn)</option>
-                </select>
-              </Field>
-              {capabilities && project.settings.mediaProvider === "openai" && !capabilities.openai && (
-                <Notice tone="info">
-                  Chưa có khóa API OpenAI. <Link to="/settings">Dán khóa của bạn ở Cài đặt</Link> để tạo ảnh và giọng đọc bằng OpenAI, hoặc chọn media trên máy.
-                </Notice>
-              )}
-            </div>
-            <div className="setting-group">
-              <h3><Image /> Khung video</h3>
-              <Field label="Kiểu khung">
-                <select
-                  value={project.settings.layoutTemplate}
-                  onChange={(e) => change({ ...project, settings: withLayoutTemplate(project.settings, e.target.value as ProjectSettings["layoutTemplate"]) })}
-                >
-                  <option value="full-bleed">Toàn khung hình</option>
-                  <option value="story-card">Thẻ truyện (tranh minh họa)</option>
-                <option value="paper-stage">Nhân vật trên nền giấy</option>
-                </select>
-              </Field>
-              {project.settings.layoutTemplate === "story-card" && (
-                <>
-                  <Field label="Màu thẻ truyện">
-                    <select
-                      value={project.settings.cardTheme}
-                      onChange={(e) => change({ ...project, settings: { ...project.settings, cardTheme: e.target.value as ProjectSettings["cardTheme"] } })}
-                    >
-                      <option value="blue">Nền xanh, tiêu đề vàng</option>
-                      <option value="sepia">Nền be, tiêu đề đỏ + trắng</option>
-                    </select>
-                  </Field>
-                  <Field label="Tiêu đề trên khung" hint="Để trống: AI chọn câu mở đầu hấp dẫn từ kịch bản. Nền be: gõ “DÒNG ĐỎ | DÒNG TRẮNG” để tự chia hai dòng.">
-                    <input
-                      maxLength={80}
-                      value={project.settings.cardTitle}
-                      onChange={(e) => change({ ...project, settings: { ...project.settings, cardTitle: e.target.value } })}
-                    />
-                  </Field>
-                  <Field label="Tên kênh ở chân video">
-                    <input
-                      maxLength={60}
-                      value={project.settings.brandName}
-                      onChange={(e) => change({ ...project, settings: { ...project.settings, brandName: e.target.value } })}
-                    />
-                  </Field>
-                </>
-              )}
-              <p className="microcopy">Thẻ truyện chỉ dùng cho video dọc 9:16; đổi kiểu khung xong hãy tạo lại video để áp dụng.</p>
-            </div>
+            <VideoOptions
+              settings={project.settings}
+              onChange={(settings) => change({ ...project, settings })}
+              scriptMode={project.inputMode}
+              isDemo={isDemo}
+              capabilities={capabilities}
+              localModels={localModels}
+              frameExtra={<>
             <div className="setting-group">
               <h3><Image /> Logo video</h3>
               <p className="microcopy">Logo được chèn lên mọi cảnh khi xuất MP4. Khuyến nghị PNG nền trong suốt, tối đa 5 MB.</p>
@@ -3016,53 +2916,8 @@ function StudioPage() {
                 </>
               )}
             </div>
-            <div className="setting-group">
-              <h3>
-                <Mic2 /> Giọng đọc
-              </h3>
-              <Field label="Giọng tiếng Việt">
-                <select
-                  value={project.settings.voice}
-                  onChange={(e) =>
-                    change({
-                      ...project,
-                      settings: { ...project.settings, voice: e.target.value },
-                    })
-                  }
-                >
-                  {project.settings.mediaProvider === "local" ? <>
-                    {!isVoicePreset(project.settings.voice) && <option value={project.settings.voice}>Giọng tiếng Việt trên máy</option>}
-                    {VOICE_PRESETS.map((preset) => (
-                      <option key={preset.id} value={preset.id}>{preset.label}</option>
-                    ))}
-                  </> : <>
-                    <option value="alloy">Ấm, trung tính</option>
-                    <option value="nova">Sáng, tự nhiên</option>
-                    <option value="onyx">Trầm, điềm tĩnh</option>
-                  </>}
-                </select>
-              </Field>
-              {project.settings.mediaProvider === "local" && (
-                <>
-                  <VoicePreview voice={project.settings.voice} engine={project.settings.localModels.tts} disabled={isDemo} />
-                  <LocalModelPicker
-                    catalog={localModels}
-                    value={project.settings.localModels}
-                    onChange={(next) => change({ ...project, settings: { ...project.settings, localModels: next } })}
-                  />
-                </>
-              )}
-              <Field label="Tốc độ đọc">
-                <input
-                  type="range"
-                  min="0.8"
-                  max="1.3"
-                  step="0.05"
-                  value={project.settings.voiceSpeed}
-                  onChange={(e) => change({ ...project, settings: { ...project.settings, voiceSpeed: Number(e.target.value) } })}
-                />
-                <small>{project.settings.voiceSpeed.toFixed(2)}× · 1.00× là nhịp chuẩn video ngắn (~3,7 từ/giây)</small>
-              </Field>
+              </>}
+              voiceExtra={<>
               <Button
                 variant="ghost"
                 disabled={isDemo || !activeScene?.audioPath}
@@ -3075,72 +2930,47 @@ function StudioPage() {
                   ? `${voiceHint(project.settings.voice)}. Cảnh đã có giọng đọc giữ nguyên; giọng mới áp dụng cho cảnh tạo mới.`
                   : "Giọng đọc tổng hợp từ kịch bản của bạn."}
               </p>
-            </div>
-            <div className="setting-group">
-              <h3>
-                <Subtitles /> Phụ đề
-              </h3>
-              <p className="microcopy">Lấy đúng chữ từ kịch bản và thời điểm từ giọng đọc thực tế.</p>
-              <label className="toggle">
+              </>}
+              musicExtra={<>
+              <Field label="Âm lượng">
                 <input
-                  type="checkbox"
-                  checked={project.settings.subtitle.enabled}
+                  type="range"
+                  min="0"
+                  max="0.5"
+                  step="0.01"
+                  value={project.settings.musicVolume}
                   onChange={(e) =>
                     change({
                       ...project,
                       settings: {
                         ...project.settings,
-                        subtitle: {
-                          ...project.settings.subtitle,
-                          enabled: e.target.checked,
-                        },
+                        musicVolume: Number(e.target.value),
                       },
                     })
                   }
                 />
-                <span /> Bật phụ đề
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={project.settings.captionHighlight}
-                  disabled={!project.settings.subtitle.enabled}
-                  onChange={(e) => change({ ...project, settings: { ...project.settings, captionHighlight: e.target.checked } })}
-                />
-                <span>Sáng dần theo từng từ (kiểu karaoke)</span>
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={project.settings.hookTitle}
-                  disabled={project.settings.layoutTemplate === "story-card"}
-                  onChange={(e) => change({ ...project, settings: { ...project.settings, hookTitle: e.target.checked } })}
-                />
-                <span>Tiêu đề lớn ở 3 giây đầu{project.settings.layoutTemplate === "story-card" ? " (thẻ truyện đã có tiêu đề)" : ""}</span>
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={project.settings.progressBar}
-                  onChange={(e) => change({ ...project, settings: { ...project.settings, progressBar: e.target.checked } })}
-                />
-                <span>Thanh tiến độ ở chân video (giữ người xem đến cuối)</span>
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={project.settings.sceneSfx}
-                  onChange={(e) => change({ ...project, settings: { ...project.settings, sceneSfx: e.target.checked } })}
-                />
-                <span>Âm “tích” nhẹ mỗi lần chuyển cảnh</span>
-              </label>
-              <Field label="Lời kêu gọi cuối video" hint="Hiện mờ dần ở 3 giây cuối, ví dụ “Theo dõi để xem thêm”. Để trống nếu không cần.">
-                <input
-                  maxLength={60}
-                  value={project.settings.outroText}
-                  onChange={(e) => change({ ...project, settings: { ...project.settings, outroText: e.target.value } })}
-                />
+                <small>
+                  {Math.round(project.settings.musicVolume * 100)}% · tự động
+                  thấp hơn lời đọc
+                </small>
               </Field>
+              <label className="button button-ghost file-button">
+                <Upload size={16} />
+                {project.settings.backgroundMusicPath
+                  ? "Thay nhạc nền"
+                  : "Tải nhạc có bản quyền"}
+                <input
+                  type="file"
+                  accept="audio/mpeg,audio/wav,audio/mp4,audio/aac"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void uploadMusic(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              </>}
+              subtitleExtra={<>
               <Field label="Kiểu chữ">
                 <select
                   value={project.settings.subtitle.preset}
@@ -3270,102 +3100,8 @@ function StudioPage() {
                   )}
                 </div>
               )}
-            </div>
-            <div className="setting-group">
-              <h3>
-                <Music2 /> Nhạc nền
-              </h3>
-              <Field label="Âm lượng">
-                <input
-                  type="range"
-                  min="0"
-                  max="0.5"
-                  step="0.01"
-                  value={project.settings.musicVolume}
-                  onChange={(e) =>
-                    change({
-                      ...project,
-                      settings: {
-                        ...project.settings,
-                        musicVolume: Number(e.target.value),
-                      },
-                    })
-                  }
-                />
-                <small>
-                  {Math.round(project.settings.musicVolume * 100)}% · tự động
-                  thấp hơn lời đọc
-                </small>
-              </Field>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={project.settings.autoMusic}
-                  onChange={(e) => change({ ...project, settings: { ...project.settings, autoMusic: e.target.checked } })}
-                />
-                <span>Tự tạo nhạc nền êm khi chưa tải nhạc</span>
-              </label>
-              <label className="button button-ghost file-button">
-                <Upload size={16} />
-                {project.settings.backgroundMusicPath
-                  ? "Thay nhạc nền"
-                  : "Tải nhạc có bản quyền"}
-                <input
-                  type="file"
-                  accept="audio/mpeg,audio/wav,audio/mp4,audio/aac"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void uploadMusic(file);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-            </div>
-            <details className="setting-group">
-              <summary>
-                Xuất video <ChevronDown size={17} />
-              </summary>
-              <Field label="Tỷ lệ">
-                <select
-                  value={project.settings.aspectRatio}
-                  onChange={(e) =>
-                    change({
-                      ...project,
-                      settings: {
-                        ...project.settings,
-                        aspectRatio: e.target
-                          .value as ProjectSettings["aspectRatio"],
-                      },
-                    })
-                  }
-                >
-                  <option>9:16</option>
-                  <option>1:1</option>
-                  <option>16:9</option>
-                </select>
-              </Field>
-              <p className="microcopy">
-                Preset dọc xuất ở 1080 × 1920, H.264 + AAC.
-              </p>
-              <Field label="Preset tạo ảnh local" hint="Fast: 2 bước · Balanced: 4 bước · Quality: 8 bước SDXL-Turbo.">
-                <select
-                  value={project.settings.generationPreset ?? "balanced"}
-                  onChange={(e) =>
-                    change({
-                      ...project,
-                      settings: {
-                        ...project.settings,
-                        generationPreset: e.target.value as ProjectSettings["generationPreset"],
-                      },
-                    })
-                  }
-                >
-                  <option value="fast">Fast — nhanh nhất</option>
-                  <option value="balanced">Balanced — khuyên dùng</option>
-                  <option value="quality">Quality — chất lượng cao</option>
-                </select>
-              </Field>
-            </details>
+              </>}
+            />
           </fieldset>
         </aside>
       </div>
