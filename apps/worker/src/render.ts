@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { drawsByHand, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
 import { EXPORT_LIMIT_BYTES, buildAudioMixFilter, buildAmbientMusicArgs, exportRateArgs, exportTooLargeMessage, validateCaptionTiming } from "./render-quality";
-import { CARD, PAPER, SEPIA, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
+import { CARD, PAPER, SAFE, SEPIA, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
 import { drawSceneByHand, type WhiteboardRunner } from "./whiteboard";
 
 const exec = promisify(execFile);
@@ -99,7 +99,7 @@ export function createAss(project: Project) {
     : paperMode
       ? PAPER.captionTop
       : style.position === "bottom"
-      ? Math.round(height * 0.16)
+      ? Math.round(height * (height > width ? 0.24 : 0.16)) // portrait: above the phone apps' caption and sound row (see SAFE)
       : Math.round(height * 0.1);
   const fontSize = sepia
     ? SEPIA.captionFont
@@ -185,7 +185,7 @@ export function hookOverlayFilters(lineFiles: string[], lines: string[], width: 
   const longest = Math.max(1, ...lines.map((line) => line.length));
   const size = Math.max(40, Math.min(Math.round(Math.min(width, height) * 0.085), Math.floor((width * 0.88) / (longest * 0.62))));
   // High enough to clear most faces (portraits put eyes at 15-30%), with a translucent box so it reads on any picture.
-  const top = Math.round(height * 0.09);
+  const top = Math.round(height * (height > width ? 0.12 : 0.09)); // portrait: below the phone apps' top bar (see SAFE)
   return lineFiles.map((file, index) =>
     `drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${size}:fontcolor=0xFFE14D:borderw=5:bordercolor=0x101010`
     + `:box=1:boxcolor=0x000000@0.38:boxborderw=14`
@@ -278,7 +278,7 @@ async function buildSepiaFrame(config: WorkerConfig, workdir: string, project: P
 
 /** The sepia card's default logo (no upload): a round badge with the channel's initials. Overlaid last, so it hangs over the picture band's corner. */
 async function buildSepiaBadge(config: WorkerConfig, workdir: string, initials: string): Promise<string> {
-  const size = 237;
+  const size = SEPIA.badge;
   const centre = size / 2;
   const initialsFile = join(workdir, "card-badge.txt");
   await writeFile(initialsFile, initials, "utf8");
@@ -499,21 +499,27 @@ export async function renderProject(
       await writeFile(file, outro, "utf8");
       const from = Math.max(0, total / 1000 - 2.8).toFixed(3);
       const outroSize = Math.max(34, Math.min(58, Math.floor((width * 0.88) / (Math.max(1, [...outro].length) * 0.6))));
-      outroFilter = `drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${outroSize}:fontcolor=${cardLook.fill}:borderw=4:bordercolor=${cardLook.edge}:x=(w-text_w)/2:y=${usesStoryCard(project.settings) ? 1650 : Math.round(height * 0.8)}:alpha='min(1,(t-${from})/0.4)':enable='gte(t,${from})',`;
+      outroFilter = `drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${outroSize}:fontcolor=${cardLook.fill}:borderw=4:bordercolor=${cardLook.edge}:x=(w-text_w)/2:y=${usesStoryCard(project.settings) ? 1585 : Math.round(height * 0.68)}:alpha='min(1,(t-${from})/0.4)':enable='gte(t,${from})',`;
     }
     let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}${hook}${outroFilter}format=yuv420p[base]`;
     let baseLabel = "base";
     if (project.settings.progressBar) {
       const seconds = (total / 1000).toFixed(3);
-      filter += `;color=c=${cardLook.fill}:s=${width}x12:r=30:d=${seconds}[bar];[base][bar]overlay=x='-w+w*t/${seconds}':y=H-h:eval=frame,format=yuv420p[withbar]`;
+      // Not on the very bottom edge: the phone app draws its own scrubber and navigation there. Under the picture band, or just above the app's bottom row.
+      const barY = usesStoryCard(project.settings) ? CARD.bandY + CARD.bandH + 6 : height - SAFE.bottom - 12;
+      filter += `;color=c=${cardLook.fill}:s=${width}x12:r=30:d=${seconds}[bar];[base][bar]overlay=x='-w+w*t/${seconds}':y=${barY}:eval=frame,format=yuv420p[withbar]`;
       baseLabel = "withbar";
     }
     if (logoPath) {
-      const margin = Math.round(width * 0.04);
+      // Portrait videos keep logos out of the phone apps' own interface (see SAFE); other shapes use a plain margin.
+      const portrait = height > width;
+      const margin = portrait ? SAFE.side : Math.round(width * 0.04);
+      const topMargin = portrait ? SAFE.top : margin;
+      const bottomMargin = portrait ? SAFE.bottom : margin;
       // Sepia card: the logo hangs from the picture band's top-right corner, as in the reference, whatever the corner chosen.
       const sepiaLogo = usesStoryCard(project.settings) && cardThemeOf(project.settings) === "sepia";
       const x = sepiaLogo ? `W-w-${SEPIA.logoRight}` : project.settings.logoPosition === "top-center" ? "(W-w)/2" : project.settings.logoPosition.endsWith("right") ? `W-w-${margin}` : `${margin}`;
-      const y = sepiaLogo ? `${SEPIA.logoTop}` : project.settings.logoPosition.startsWith("bottom") ? `H-h-${margin}` : `${margin}`;
+      const y = sepiaLogo ? `${SEPIA.logoTop}` : project.settings.logoPosition.startsWith("bottom") ? `H-h-${bottomMargin}` : `${topMargin}`;
       const logoWidth = Math.round(width * (sepiaLogo ? Math.max(project.settings.logoScale, SEPIA.logoMinScale) : project.settings.logoScale));
       filter += `;[1:v]scale=${logoWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=${project.settings.logoOpacity}[logo];[${baseLabel}][logo]overlay=x=${x}:y=${y}:format=auto,format=yuv420p[v]`;
     } else {

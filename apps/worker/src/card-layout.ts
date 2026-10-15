@@ -20,8 +20,9 @@ export const CARD = {
   titleColor: "0xFFE82E",
   footerColor: "0xFFD21F",
   /** Default round badge (brand initials) shown when no logo is uploaded. */
-  badgeSize: 200,
-  badgeY: 70,
+  // Clear of the platform's top bar (see SAFE): the badge used to sit at y=70, under TikTok's tabs.
+  badgeSize: 160,
+  badgeY: 200,
 } as const;
 
 /**
@@ -41,9 +42,12 @@ export const SEPIA = {
   kickerTop: 244,
   titleTop: 366,
   /** Logo: its top edge sits here and its right edge this far from the frame's, so it overlaps the band's corner. */
-  logoTop: 470,
-  logoRight: 63,
-  logoMinScale: 0.22,
+  /** Logo: inside the band's top-right corner, a little below its edge, so it sits in the picture and not up in the title area. */
+  logoTop: 649,
+  logoRight: 56,
+  logoMinScale: 0.18,
+  /** Default round badge (no upload): the same width as the smallest logo. */
+  badge: 194,
   footerColor: "0x5A4A2A",
   /** Captions: unspoken words pale, spoken words green, a dark brown edge. */
   captionFont: 74,
@@ -53,6 +57,13 @@ export const SEPIA = {
   captionSpoken: "#C8F45A",
   captionEdge: "#2B2418",
 } as const;
+
+/**
+ * Where TikTok, Reels and Shorts draw their own interface over a 1080x1920 video: the tabs and search along the top
+ * (about 170 px), the caption, sound and buttons along the bottom (about 480 px) and the like/comment/share column down
+ * the right edge. A logo or title inside these bands is hidden or crowded on the phone; text and logos stay out of them.
+ */
+export const SAFE = { top: 230, bottom: 500, side: 64 } as const;
 
 export type CardTheme = "blue" | "sepia";
 
