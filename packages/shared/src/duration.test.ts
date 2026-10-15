@@ -26,6 +26,7 @@ describe("video length from an idea", () => {
         const sum = plan.beats.reduce((total, beat) => total + beat.words, 0);
         expect(Math.abs(sum - plan.words.target), `${style} ${seconds}s`).toBeLessThanOrEqual(1);
         expect(plan.beats[0]!.label).toBe("Mở đầu");
+        expect(plan.beats[0]!.words).toBeLessThanOrEqual(12);
         expect(plan.beats.at(-1)!.label).toBe("Kết");
         expect(plan.beats.every((beat) => beat.words >= 6)).toBe(true);
       }

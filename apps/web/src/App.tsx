@@ -1435,7 +1435,7 @@ function NewProjectPage() {
   const [autoScript, setAutoScript] = useState(false);
   const [settings, setSettings] = useState<ProjectSettings>(
     // 1.0x is already the short-form pace: the voice bridge brings every voice to about 3.7 words per second.
-    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, captionHighlight: true, hookTitle: true },
+    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, autoMusic: true, captionHighlight: true, hookTitle: true },
   );
   const [channelPreset, setChannelPreset] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);

@@ -93,7 +93,9 @@ const clamp = (value: number, low: number, high: number) => Math.min(high, Math.
 
 export function contentPlan(durationSec: number, style: string, voice: string, voiceSpeed = 1): ContentPlan {
   const words = wordBudget(durationSec, voice, voiceSpeed);
-  const hookWords = clamp(Math.round(words.target * 0.12), 7, 22);
+  // Keep the spoken hook short enough to land in the first ~3 seconds of a short-form video.
+  // The lower bound still gives the model enough room for a real question or concrete promise.
+  const hookWords = clamp(Math.round(words.target * 0.12), 7, 12);
   const endWords = clamp(Math.round(words.target * 0.13), 7, 28);
   const points = pointsFor(durationSec);
   const middle: Array<Omit<ContentBeat, "words">> = [];
