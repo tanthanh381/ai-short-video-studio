@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 LAUNCH_AGENTS = Path.home() / "Library" / "LaunchAgents"
-DEFAULT_IDLE_MINUTES = 15.0
+DEFAULT_IDLE_MINUTES = 5.0
 
 
 def configured_idle_seconds(env=None):

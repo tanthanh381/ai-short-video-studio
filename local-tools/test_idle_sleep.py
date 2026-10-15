@@ -52,8 +52,8 @@ def make(idle_s=600, up=lambda: True, **fake):
 class ConfigTests(unittest.TestCase):
     def test_minutes_from_the_environment(self):
         self.assertEqual(idle_sleep.configured_idle_seconds({"STUDIO_IDLE_SLEEP_MIN": "5"}), 300)
-        self.assertEqual(idle_sleep.configured_idle_seconds({}), 15 * 60)
-        self.assertEqual(idle_sleep.configured_idle_seconds({"STUDIO_IDLE_SLEEP_MIN": "abc"}), 15 * 60)
+        self.assertEqual(idle_sleep.configured_idle_seconds({}), 5 * 60)
+        self.assertEqual(idle_sleep.configured_idle_seconds({"STUDIO_IDLE_SLEEP_MIN": "abc"}), 5 * 60)
         self.assertEqual(idle_sleep.configured_idle_seconds({"STUDIO_IDLE_SLEEP_MIN": "0"}), 0)
         self.assertEqual(idle_sleep.configured_idle_seconds({"STUDIO_IDLE_SLEEP_MIN": "-3"}), 0)
 

@@ -1014,7 +1014,7 @@ def _ltx_up():
     return ltx_state()[0] == "ready"
 
 
-# The big model servers sleep (their launchd job is unloaded) when nothing used them for STUDIO_IDLE_SLEEP_MIN minutes (default 15,
+# The big model servers sleep (their launchd job is unloaded) when nothing used them for STUDIO_IDLE_SLEEP_MIN minutes (default 5,
 # 0 = never) and wake on the next request that needs them. The weights of an idle SDXL server alone are 5 GB of a 16 GB Mac.
 SLEEPER = idle_sleep.Sleeper([
     idle_sleep.Service("image", "com.ai-short-video.image", lambda: image_server_state() == "ready", wake_timeout_s=420),
