@@ -94,11 +94,9 @@ export function SystemPage() {
   return (
     <div className="page system-page">
       <div className="page-heading">
-        <div className="page-title-with-info">
+        <div>
           <h1>Hệ thống</h1>
-          <InfoPopover title="Hệ thống">
-            Theo dõi trạng thái xử lý, tài nguyên và dịch vụ. Dữ liệu tự cập nhật mỗi {REFRESH_MS / 1000} giây; cấu hình thiết bị và cách phân bổ tác vụ trong <Link to="/settings">Cài đặt</Link>.
-          </InfoPopover>
+          <p>Trạng thái máy, tài nguyên và dịch vụ, tự cập nhật mỗi {REFRESH_MS / 1000} giây. Đổi thiết bị và cách chia việc trong <Link to="/settings">Cài đặt</Link>.</p>
         </div>
         <div className="sys-live" role="status" aria-live="polite">
           <span className={`sys-dot tone-${live.tone}`} aria-hidden="true" />

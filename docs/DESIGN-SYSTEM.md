@@ -106,7 +106,20 @@ Chip trạng thái nhỏ trong một trong năm tone (class `.badge.tone-*`).
 
 Nhãn bọc control, nên bấm vào nhãn sẽ focus control. `hint` hiện sau nút (i) để form gọn.
 
-## 5. Nên / Không nên
+## 5. Quy tắc tương tác
+
+- **Nút chính luôn bấm được.** Thiếu dữ liệu (ô trống, kịch bản quá ngắn) thì bấm sẽ hiện `Notice tone="bad"` ngay
+  cạnh ô, nói rõ cần nhập gì; lỗi tự mất khi người dùng sửa. Chỉ khóa nút khi lý do đang hiện trên màn hình (ví dụ
+  banner chế độ mẫu) hoặc khi đang chạy (`busy`).
+- **Máy chưa kết nối** luôn kèm đường đi: dòng chú thích và link sang trang Hệ thống (`EngineSelect` làm sẵn việc này).
+- **Mô tả trang** viết thành một dòng `<p>` dưới tiêu đề, không giấu trong (i). Chỉ dùng (i) / `hint` của `Field` cho
+  giải thích không bắt buộc đọc và gắn với đúng một ô.
+- **Tên máy** luôn đi qua `nodeDisplayName()` ("Mac Mini (máy chính)", "MacBook Air"); id nội bộ `mini`/`air` không
+  hiện ra giao diện.
+- **Trên điện thoại** (≤ 760 px), thao tác chính của Studio nằm trong thanh dính ở đáy; thao tác phụ vào menu ⋯.
+  Vùng chạm tối thiểu 44 px; nút icon nhỏ được mở rộng vùng chạm bằng `::before`.
+
+## 6. Nên / Không nên
 
 | ✅ Nên | ❌ Không nên |
 |---|---|

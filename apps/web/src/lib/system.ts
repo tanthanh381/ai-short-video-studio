@@ -10,6 +10,11 @@ export function nodeDisplayName(id: string, role?: NodeSummary["role"]): string 
   return role === "primary" ? `${name} (máy chính)` : name;
 }
 
+/** Job stages arrive from the worker with the node id ("· máy air"); the page shows the same names everywhere. */
+export function withDisplayNames(text: string): string {
+  return text.replace(/\bmáy (mini|air)\b/gu, (_, id: string) => nodeDisplayName(id));
+}
+
 export const LANE_LABELS: Record<string, string> = {
   image: "Vẽ ảnh",
   tts: "Giọng đọc",
@@ -450,8 +455,6 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
   const ready = nodes.filter((node) => node.state === "healthy").length;
   const usable = nodes.filter((node) => node.state === "healthy" || node.state === "degraded").length;
   const share = system.balancer ? workShare(system.balancer.nodes).find((row) => row.lane === "image") : undefined;
-  const alerts = systemAlerts(system);
-  const worst = alerts[0]?.tone;
   const tiles: SummaryTile[] = [
     {
       id: "machines", label: "Máy xử lý",
@@ -464,7 +467,7 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
     {
       id: "jobs", label: "Video đang làm",
       value: `${system.jobs.running} chạy · ${system.jobs.queued} chờ`,
-      detail: system.jobs.running ? (system.jobs.recent.find((job) => job.status === "running")?.stage ?? "Đang xử lý") : "Không có video nào đang chạy",
+      detail: system.jobs.running ? withDisplayNames(system.jobs.recent.find((job) => job.status === "running")?.stage ?? "Đang xử lý") : "Không có video nào đang chạy",
       tone: system.jobs.running ? "ok" : "idle",
     },
     {
@@ -477,8 +480,8 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
   if (share) {
     tiles.push({
       id: "share", label: "Chia việc vẽ ảnh",
-      value: share.parts.map((part) => `${part.node} ${part.done}`).join(" · "),
-      detail: `${share.total} ảnh từ lúc worker khởi động`,
+      value: `${share.total} ảnh`,
+      detail: `${share.parts.map((part) => `${nodeDisplayName(part.node)} ${part.done}`).join(" · ")} · từ lúc worker khởi động`,
       tone: "idle",
     });
   }
@@ -488,16 +491,13 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
     const worst = views.find((item) => item.view.tone === "bad") ?? views.find((item) => item.view.tone === "warn") ?? views.find((item) => item.view.tone === "idle") ?? views[0]!;
     tiles.push({
       id: "sync", label: "Đồng bộ model và mã",
-      value: views.map((item) => `${nodeDisplayName(item.node.id, item.node.role)}: ${item.view.label.toLowerCase()}`).join(" · "),
-      detail: worst.view.tone === "ok" ? "Các máy phụ tự giữ giống Mac Mini mỗi phút" : worst.view.detail,
+      // One helper Mac (the usual case): the state is the value and the name goes in the line below.
+      value: views.length === 1 ? views[0]!.view.label : views.map((item) => `${nodeDisplayName(item.node.id)}: ${item.view.label}`).join(" · "),
+      detail: worst.view.tone === "ok"
+        ? `${views.map((item) => nodeDisplayName(item.node.id)).join(", ")} tự giữ giống Mac Mini mỗi phút`
+        : `${views.length === 1 ? `${nodeDisplayName(views[0]!.node.id)}: ` : ""}${worst.view.detail}`,
       tone: worst.view.tone,
     });
   }
-  tiles.push({
-    id: "alerts", label: "Cần chú ý",
-    value: alerts.length ? `${alerts.length} mục` : "Không có",
-    detail: alerts[0]?.title ?? "Máy, mô hình và dịch vụ đều bình thường",
-    tone: worst === "bad" ? "bad" : worst === "warn" ? "warn" : "ok",
-  });
   return tiles;
 }
