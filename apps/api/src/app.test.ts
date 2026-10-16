@@ -327,4 +327,23 @@ describe("API", () => {
     expect(huge.body.error).toMatch(/quá lớn/);
     expect(JSON.stringify([refused.body, broken.body, huge.body])).not.toMatch(/stack|at .*\.ts|node_modules/);
   });
+
+  it("answers an id that is not a UUID with 404 (was a 500 from the database)", async () => {
+    const owner = {
+      auth: { getUser: vi.fn(async () => ({ data: { user: { id: "user-1", email: "owner@example.com" } }, error: null })) },
+      from: () => {
+        const query = { select: () => query, eq: () => query, gte: () => query, maybeSingle: async () => ({ data: { user_id: "user-1", is_active: true, daily_budget_usd: 3, max_concurrent_jobs: 1 }, error: null }) };
+        return query;
+      },
+    };
+    const app = createApp(config, owner as never);
+    for (const path of ["/v1/projects/not-a-uuid", "/v1/projects/not-a-uuid/result", "/v1/exports/12345/download"]) {
+      const response = await request(app).get(path).set("Authorization", "Bearer test");
+      expect(response.status, path).toBe(404);
+      expect(response.body.error).toMatch(/Không tìm thấy/);
+    }
+    const scene = await request(app).delete("/v1/projects/00000000-0000-4000-8000-000000000001/scenes/x/annotation").set("Authorization", "Bearer test");
+    expect(scene.status).toBe(404);
+    expect(scene.body.error).toMatch(/Không tìm thấy/);
+  });
 });

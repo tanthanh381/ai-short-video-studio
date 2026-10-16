@@ -309,6 +309,14 @@ export function createApp(config: AppConfig, db: AdminClient) {
     }),
   );
   app.use(express.json({ limit: "1mb" }));
+  // A project, scene, job or export id that is not a UUID can never exist: answer 404 here instead of letting the database
+  // reject the malformed value and the request end as a 500.
+  const asUuid = (_req: Request, res: Response, next: NextFunction, value: string) => {
+    if (!z.string().uuid().safeParse(value).success) return res.status(404).json({ error: "Không tìm thấy nội dung này" });
+    next();
+  };
+  app.param("id", asUuid);
+  app.param("sceneId", asUuid);
   app.use(
     pinoHttp({
       redact: [
@@ -1272,19 +1280,17 @@ export function createApp(config: AppConfig, db: AdminClient) {
         } => item !== null,
       );
     });
-    const result = await Promise.all(
-      media.map(async (item) => {
-        const { data: signed } = await db.storage
-          .from("private-media")
-          .createSignedUrl(item.path, 300);
-        return {
-          id: item.id,
-          kind: item.kind,
-          projectTitle: item.projectTitle,
-          url: signed?.signedUrl ?? "",
-        };
-      }),
-    );
+    // One storage call for every picture and voice: signing them one by one took 11 s for 110 files.
+    const { data: signedBatch } = media.length
+      ? await db.storage.from("private-media").createSignedUrls(media.map((item) => item.path), 300)
+      : { data: [] as Array<{ path: string | null; signedUrl: string }> };
+    const urlByPath = new Map((signedBatch ?? []).map((entry) => [entry.path, entry.signedUrl]));
+    const result = media.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      projectTitle: item.projectTitle,
+      url: urlByPath.get(item.path) ?? "",
+    }));
     res.json(result);
   });
 
