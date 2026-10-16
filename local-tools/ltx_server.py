@@ -40,7 +40,7 @@ AUTO_DOWNLOAD_UPSCALER = os.getenv("LTX_VIDEO_AUTO_DOWNLOAD_UPSCALER", "1").lowe
 MPS_FP16 = os.getenv("LTX_VIDEO_MPS_FP16", "0").lower() not in {"0", "false", "no"}
 # MPS denoising is retained, but CPU VAE decode avoids the flat-frame failure
 # seen on some Apple Silicon builds and costs far less than a full CPU retry.
-CPU_VAE_DECODE = os.getenv("LTX_VIDEO_CPU_VAE", "1").lower() not in {"0", "false", "no"}
+CPU_VAE_DECODE = os.getenv("LTX_VIDEO_CPU_VAE", "0").lower() not in {"0", "false", "no"}
 MIN_MPS_MEMORY_BYTES = int(os.getenv("LTX_VIDEO_MIN_MPS_MEMORY_GB", "24")) * 1024**3
 # Runtime is sync-managed so a changed LTX configuration is applied on the secondary Mac after its next sync.
 # 0.15 is the upstream default. A small increase makes image-to-video motion visible on short-form shots,
