@@ -786,6 +786,12 @@ export function createApp(config: AppConfig, db: AdminClient) {
       textProvider: "ollama",
       mediaProvider: "local",
       voice: DEFAULT_PROJECT_SETTINGS.voice,
+      // One-click creation must produce a publishable short even when an older
+      // client sends only the script. The Studio UI sends these explicitly too;
+      // keeping the server default aligned prevents silent plain-image exports.
+      autoMusic: true,
+      captionHighlight: true,
+      hookTitle: true,
       ...input.settings,
     });
     const unavailable = await paidProviderUnavailable(settings, req.userId!);
