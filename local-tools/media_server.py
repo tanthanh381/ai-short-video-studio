@@ -124,7 +124,10 @@ VIENEU_URL = os.getenv("VIENEU_URL", "http://127.0.0.1:5001")
 PIPER_URL = os.getenv("PIPER_URL", "http://127.0.0.1:5000")
 VIENEU_VOICE = os.getenv("VIENEU_VOICE", "Đức Trí")
 LTX_VIDEO_URL = os.getenv("LTX_VIDEO_URL", "http://127.0.0.1:8770")
-LTX_REQUEST_TIMEOUT_S = max(30, min(int(os.getenv("LTX_REQUEST_TIMEOUT_S", "180")), 1800))
+# Official multi-scale inference can exceed three minutes on a 24 GB Apple
+# Silicon machine, especially after an MPS->CPU recovery. Do not turn a still
+# running LTX job into a misleading zoompan success at the old 180 s cutoff.
+LTX_REQUEST_TIMEOUT_S = max(30, min(int(os.getenv("LTX_REQUEST_TIMEOUT_S", "900")), 1800))
 NODE_START_SCRIPT = os.getenv("NODE_START_SCRIPT", "")
 COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
 COMFYUI_CHECKPOINT = os.getenv("COMFYUI_CHECKPOINT", "sd_xl_base_1.0_0.9vae.safetensors")
