@@ -32,6 +32,7 @@ CPU_FALLBACK = os.getenv("LTX_VIDEO_CPU_FALLBACK", "0").lower() not in {"0", "fa
 TRY_NATIVE_FIRST = os.getenv("LTX_VIDEO_TRY_NATIVE_FIRST", "0").lower() in {"1", "true", "yes"}
 ALLOW_LOW_MEMORY = os.getenv("LTX_VIDEO_ALLOW_LOW_MEMORY", "0").lower() in {"1", "true", "yes"}
 MIN_MPS_MEMORY_BYTES = int(os.getenv("LTX_VIDEO_MIN_MPS_MEMORY_GB", "24")) * 1024**3
+# Runtime is sync-managed so a changed LTX configuration is applied on the secondary Mac after its next sync.
 # 0.15 is the upstream default. A small increase makes image-to-video motion visible on short-form shots,
 # while the clamp prevents a machine-level environment override from turning into face/anatomy drift.
 IMAGE_COND_NOISE_SCALE = max(0.12, min(float(os.getenv("LTX_VIDEO_IMAGE_COND_NOISE_SCALE", "0.18")), 0.24))
