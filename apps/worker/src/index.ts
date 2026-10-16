@@ -816,6 +816,11 @@ async function generateMedia(job: JobRow, project: Project) {
       finished++;
       newlyGenerated++;
     } catch (error) {
+      if (error instanceof JobCancelled) {
+        // Not a failure of this scene: leave it as it stands (ready when both files exist) and stop the whole job.
+        await updateScene(scene.id, { media_status: scene.imagePath && scene.audioPath ? "ready" : "pending", error_message: null });
+        throw error;
+      }
       const message =
         error instanceof Error ? error.message : "Không thể tạo media";
       firstMediaError ??= message;
