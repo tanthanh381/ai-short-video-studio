@@ -523,11 +523,32 @@ class Agent(Fixture):
 
     def test_every_round_of_the_loop_also_looks_after_the_programs(self):
         agent = self.new_agent()
-        self.down["value"] = ["cầu nối media"]
+        self.down["value"] = ["Ollama"]
         agent.run_forever(sleep=lambda _: None, max_ticks=1)
         self.assertEqual(len(self.started), 1)
-        self.assertEqual(agent.last_state["recovery"]["down"], ["cầu nối media"])
+        self.assertEqual(agent.last_state["recovery"]["down"], ["Ollama"])
         self.assertEqual(agent.last_state["state"], "in-sync")
+
+    def test_one_missed_check_of_the_bridge_is_not_a_reason_to_restart_anything(self):
+        agent = self.new_agent()
+        self.down["value"] = ["cầu nối media"]
+        agent.supervise()
+        self.assertEqual(self.started, [])
+        self.assertEqual(agent.recovery["down"], [])  # the page does not say "missing" for a bridge that was only slow once
+        self.down["value"] = []
+        agent.supervise()  # it answered again: the count starts over
+        self.down["value"] = ["cầu nối media"]
+        agent.supervise()
+        self.assertEqual(self.started, [])
+        agent.supervise()  # second miss in a row
+        self.assertEqual(len(self.started), 1)
+        self.assertEqual(agent.recovery["down"], ["cầu nối media"])
+
+    def test_other_programs_are_still_restarted_at_the_first_miss(self):
+        agent = self.new_agent()
+        self.down["value"] = ["Ollama"]
+        agent.supervise()
+        self.assertEqual(len(self.started), 1)
 
     def test_a_failing_check_of_the_programs_does_not_stop_the_sync(self):
         agent = self.new_agent()

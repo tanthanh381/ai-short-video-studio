@@ -32,6 +32,8 @@ TICK_S = 5
 MIN_FREE_GB_AFTER = 3
 BACKUPS_KEPT = 5
 RECOVERY_WAIT_S = 180  # between two attempts to start what is down; doubles after each failed attempt, up to 8x
+BRIDGE = "cầu nối media"
+BRIDGE_MISSES_BEFORE_RESTART = 2
 
 
 class Paths:
@@ -85,6 +87,7 @@ class Agent:
         self.start_services = start_services or self._start_all
         self.recovery = {"count": 0, "lastAt": None, "down": []}
         self.recovery_failures = 0
+        self.bridge_misses = 0
         self.last_recovery_try = -1e9
         self.pending_restart = set()
         self.applied_at = None
@@ -205,13 +208,13 @@ class Agent:
             return []
         down = []
         try:
-            with self.open(urllib.request.Request(bridge.rstrip("/") + "/health"), timeout=5) as reply:
+            with self.open(urllib.request.Request(bridge.rstrip("/") + "/health"), timeout=12) as reply:
                 health = json.load(reply)
             for key, name in (("ollama", "Ollama"), ("transcribe", "Whisper"), ("image", "máy vẽ ảnh"), ("tts", "giọng đọc")):
                 if health.get(key) is False:
                     down.append(name)
         except (OSError, ValueError):
-            down.append("cầu nối media")
+            down.append(BRIDGE)
         whiteboard = self.config.get("whiteboard")
         if whiteboard:
             try:
@@ -226,6 +229,14 @@ class Agent:
         if self.paths.paused.exists():
             return
         down = self.services_down()
+        # A bridge that missed one check is usually only slow (the Mac is paging); restarting for that alarms the owner for
+        # nothing. It counts as down once two checks in a row failed.
+        if BRIDGE in down:
+            self.bridge_misses += 1
+            if self.bridge_misses < BRIDGE_MISSES_BEFORE_RESTART:
+                down = [name for name in down if name != BRIDGE]
+        else:
+            self.bridge_misses = 0
         self.recovery["down"] = down
         if not down:
             self.recovery_failures = 0
