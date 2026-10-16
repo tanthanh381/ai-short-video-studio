@@ -7,6 +7,7 @@ export * from "./duration";
 export * from "./api-keys";
 export * from "./nodes";
 export * from "./node-settings";
+export * from "./logo";
 
 import type { VisualPreset } from "./schemas";
 
@@ -57,6 +58,7 @@ export const DEFAULT_PROJECT_SETTINGS = {
   logoPosition: "top-right" as const,
   logoScale: 0.14,
   logoOpacity: 0.9,
+  logoShape: "original" as const,
   rewriteFullScript: false,
   layoutTemplate: "full-bleed" as const,
   cardTheme: "blue" as const,

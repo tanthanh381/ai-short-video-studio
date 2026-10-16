@@ -98,6 +98,7 @@ import { ProjectSaver, type SaveState } from "./lib/project-saver";
 import { Button, Field, Notice } from "./components/ui";
 import { askConfirm, ConfirmHost } from "./components/ConfirmDialog";
 import { DEMO_ONLY, DEMO_VOICE } from "./lib/copy";
+import { LOGO_MAX_BYTES, checkLogoFile, logoPreviewStyle } from "./lib/logo";
 import { withScriptFromScenes } from "./lib/script-sync";
 import { OPENAI_VOICES, hookTitleAllowed, withMediaProvider } from "./lib/options";
 import { CHANNEL_PRESETS, estimatedNarrationSeconds } from "./lib/channel-presets";
@@ -2018,6 +2019,7 @@ function StudioPage() {
   const [error, setError] = useState<string | null>((location.state as { notice?: string } | null)?.notice ?? null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [logoNote, setLogoNote] = useState<string | null>(null);
   const [result, setResult] = useState<VideoResult | null>(null);
   const [resultLoading, setResultLoading] = useState(false);
   const [capabilities, setCapabilities] = useState<{
@@ -2555,11 +2557,19 @@ function StudioPage() {
       setError(DEMO_ONLY);
       return;
     }
+    if (file.size > LOGO_MAX_BYTES) {
+      setError("Logo lớn hơn 5 MB. Hãy dùng ảnh nhỏ hơn (logo chỉ chiếm một góc nhỏ của video).");
+      return;
+    }
     setBusyAction("logo");
     locked.current = true;
+    setLogoNote(null);
     try {
+      // A round logo saved on a white square would show as a box on the video: cut it to a circle, and say so.
+      const round = await checkLogoFile(file);
       const path = await api.uploadMedia(id, file, "logo");
-      const next = { ...project, settings: { ...project.settings, logoPath: path } };
+      const next = { ...project, settings: { ...project.settings, logoPath: path, logoShape: round ? "circle" as const : "original" as const } };
+      if (round) setLogoNote("Logo có nền trắng quanh hình tròn nên đã được cắt tròn. Đổi lại ở “Hình dạng logo” nếu cần.");
       setProject(next);
       saver.current?.edit(next);
       await flushEdits();
@@ -2976,6 +2986,15 @@ function StudioPage() {
                   </span>
                 </div>
               )}
+              {logoPreviewUrl && (
+                // Same place, size and look as in the MP4 (lib/logo.ts uses the export's own rule).
+                <img
+                  className={`stage-logo ${project.settings.logoShape === "circle" ? "is-circle" : ""}`}
+                  src={logoPreviewUrl}
+                  alt=""
+                  style={logoPreviewStyle(project.settings)}
+                />
+              )}
               {project.settings.subtitle.enabled && activeScene && (
                 <div
                   className={`subtitle-preview subtitle-${project.settings.subtitle.position}`}
@@ -3041,8 +3060,9 @@ function StudioPage() {
               frameExtra={<>
             <div className="setting-group">
               <h3><Image /> Logo video</h3>
-              <p className="microcopy">Logo được chèn lên mọi cảnh khi xuất MP4. Khuyến nghị PNG nền trong suốt, tối đa 5 MB.</p>
-              {logoPreviewUrl && <img className="logo-preview" src={logoPreviewUrl} alt="Logo đang chọn" />}
+              <p className="microcopy">Logo được chèn lên mọi cảnh khi xuất MP4 và hiện ngay trên khung xem trước. Nên dùng PNG nền trong suốt, tối đa 5 MB.</p>
+              {logoPreviewUrl && <img className={`logo-preview ${project.settings.logoShape === "circle" ? "is-circle" : ""}`} src={logoPreviewUrl} alt="Logo đang chọn" />}
+              {logoNote && <Notice tone="info">{logoNote}</Notice>}
               <label className="button button-ghost file-button">
                 <Upload size={16} />
                 {project.settings.logoPath ? "Thay logo" : "Tải logo lên"}
@@ -3058,7 +3078,7 @@ function StudioPage() {
               </label>
               {project.settings.logoPath && (
                 <>
-                  <Button variant="danger" onClick={() => change({ ...project, settings: { ...project.settings, logoPath: null } })}>
+                  <Button variant="danger" onClick={() => { setLogoNote(null); change({ ...project, settings: { ...project.settings, logoPath: null } }); }}>
                     Bỏ logo khỏi video
                   </Button>
                   <Field label="Vị trí logo">
@@ -3071,6 +3091,16 @@ function StudioPage() {
                       <option value="top-right">Trên phải</option>
                       <option value="bottom-left">Dưới trái</option>
                       <option value="bottom-right">Dưới phải</option>
+                    </select>
+                    {project.settings.layoutTemplate === "story-card" && <small>Với khung Thẻ truyện, logo nằm ở góc của khung tranh, không đè lên tiêu đề và phụ đề.</small>}
+                  </Field>
+                  <Field label="Hình dạng logo" hint="Cắt tròn: dành cho logo hình tròn được lưu trên nền vuông (JPG nền trắng), để video không hiện ô vuông trắng.">
+                    <select
+                      value={project.settings.logoShape}
+                      onChange={(e) => change({ ...project, settings: { ...project.settings, logoShape: e.target.value as ProjectSettings["logoShape"] } })}
+                    >
+                      <option value="original">Giữ nguyên như ảnh tải lên</option>
+                      <option value="circle">Cắt tròn</option>
                     </select>
                   </Field>
                   <Field label="Kích thước logo">

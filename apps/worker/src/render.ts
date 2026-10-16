@@ -4,10 +4,10 @@ import { dirname, join } from "node:path";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
-import { drawsByHand, type Project, type Scene } from "@studio/shared";
+import { drawsByHand, logoAnchor, logoOverlayXY, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
 import { EXPORT_LIMIT_BYTES, buildAudioMixFilter, buildAmbientMusicArgs, exportRateArgs, exportTooLargeMessage, validateCaptionTiming } from "./render-quality";
-import { CARD, PAPER, SAFE, SEPIA, progressBarY, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
+import { CARD, PAPER, SEPIA, progressBarY, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
 import { drawSceneByHand, type WhiteboardRunner } from "./whiteboard";
 
 const exec = promisify(execFile);
@@ -330,6 +330,21 @@ async function buildSepiaFrame(config: WorkerConfig, workdir: string, project: P
   return frame;
 }
 
+/**
+ * The logo input's filter chain: scaled to `width`, optionally cut to a circle (for a round logo saved on a white or
+ * coloured square, which would otherwise show as a box), then made as transparent as chosen.
+ */
+export function logoInputFilter(width: number, circle: boolean, opacity: number): string {
+  if (!circle) return `scale=${width}:-1,format=rgba,colorchannelmixer=aa=${opacity}`;
+  const c = width / 2;
+  // 1.5% inside the edge, which trims the thin white rim such logos have; the alpha falls off over one pixel so the
+  // edge is smooth instead of jagged.
+  const r = +(c * 0.985).toFixed(2);
+  return `crop='min(iw,ih)':'min(iw,ih)',scale=${width}:${width},format=rgba,`
+    + `geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*clip(${r}-hypot(X+0.5-${c},Y+0.5-${c})+0.5,0,1)',`
+    + `colorchannelmixer=aa=${opacity}`;
+}
+
 /** The sepia card's default logo (no upload): a round badge with the channel's initials. Overlaid last, so it hangs over the picture band's corner. */
 async function buildSepiaBadge(config: WorkerConfig, workdir: string, initials: string): Promise<string> {
   const size = SEPIA.badge;
@@ -565,17 +580,20 @@ export async function renderProject(
       baseLabel = "withbar";
     }
     if (logoPath) {
-      // Portrait videos keep logos out of the phone apps' own interface (see SAFE); other shapes use a plain margin.
-      const portrait = height > width;
-      const margin = portrait ? SAFE.side : Math.round(width * 0.04);
-      const topMargin = portrait ? SAFE.top : margin;
-      const bottomMargin = portrait ? SAFE.bottom : margin;
-      // Sepia card: the logo hangs from the picture band's top-right corner, as in the reference, whatever the corner chosen.
-      const sepiaLogo = usesStoryCard(project.settings) && cardThemeOf(project.settings) === "sepia";
-      const x = sepiaLogo ? `W-w-${SEPIA.logoRight}` : project.settings.logoPosition === "top-center" ? "(W-w)/2" : project.settings.logoPosition.endsWith("right") ? `W-w-${margin}` : `${margin}`;
-      const y = sepiaLogo ? `${SEPIA.logoTop}` : project.settings.logoPosition.startsWith("bottom") ? `H-h-${bottomMargin}` : `${topMargin}`;
-      const logoWidth = Math.round(width * (sepiaLogo ? Math.max(project.settings.logoScale, SEPIA.logoMinScale) : project.settings.logoScale));
-      filter += `;[1:v]scale=${logoWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=${project.settings.logoOpacity}[logo];[${baseLabel}][logo]overlay=x=${x}:y=${y}:format=auto,format=yuv420p[v]`;
+      // Uploaded logo: where and how big the person chose (packages/shared/src/logo.ts, the same rule as the studio
+      // preview). The sepia card's own initials badge (no upload) keeps its spot on the picture band's corner.
+      const opacity = project.settings.logoOpacity;
+      let logoFilter: string;
+      let at: { x: string; y: string };
+      if (project.settings.logoPath) {
+        const anchor = logoAnchor(project.settings, { width, height });
+        at = logoOverlayXY(anchor);
+        logoFilter = logoInputFilter(anchor.width, project.settings.logoShape === "circle", opacity);
+      } else {
+        at = { x: `W-w-${SEPIA.logoRight}`, y: `${SEPIA.logoTop}` };
+        logoFilter = logoInputFilter(Math.round(width * Math.max(project.settings.logoScale, SEPIA.logoMinScale)), false, opacity);
+      }
+      filter += `;[1:v]${logoFilter}[logo];[${baseLabel}][logo]overlay=x=${at.x}:y=${at.y}:format=auto,format=yuv420p[v]`;
     } else {
       filter += `;[${baseLabel}]null[v]`;
     }

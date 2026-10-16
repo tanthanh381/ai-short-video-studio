@@ -57,6 +57,8 @@ export const subtitleStyleSchema = z.object({
 });
 
 export const logoPositionSchema = z.enum(["top-left", "top-center", "top-right", "bottom-left", "bottom-right"]);
+/** original: the picture as uploaded; circle: cut to a circle (a round logo saved on a white or coloured square). */
+export const logoShapeSchema = z.enum(["original", "circle"]);
 
 /** Colours of the story card: blue (yellow title, channel footer) or sepia (beige canvas, red + white title, green karaoke: the "cổ nhân" shorts). */
 export const cardThemeSchema = z.enum(["blue", "sepia"]);
@@ -188,6 +190,7 @@ export const projectSettingsSchema = z.object({
   logoPosition: logoPositionSchema.default("top-right"),
   logoScale: z.number().min(0.05).max(0.35).default(0.14),
   logoOpacity: z.number().min(0.1).max(1).default(0.9),
+  logoShape: logoShapeSchema.default("original"),
   rewriteFullScript: z.boolean().default(false),
   layoutTemplate: layoutTemplateSchema.default("full-bleed"),
   cardTheme: cardThemeSchema.default("blue"),
