@@ -38,6 +38,9 @@ AUTO_DOWNLOAD_UPSCALER = os.getenv("LTX_VIDEO_AUTO_DOWNLOAD_UPSCALER", "1").lowe
 # FP16. The default stays on the conservative BF16 path plus the blank-frame
 # quality gate; operators can enable this experimentally per node.
 MPS_FP16 = os.getenv("LTX_VIDEO_MPS_FP16", "0").lower() not in {"0", "false", "no"}
+# MPS denoising is retained, but CPU VAE decode avoids the flat-frame failure
+# seen on some Apple Silicon builds and costs far less than a full CPU retry.
+CPU_VAE_DECODE = os.getenv("LTX_VIDEO_CPU_VAE", "1").lower() not in {"0", "false", "no"}
 MIN_MPS_MEMORY_BYTES = int(os.getenv("LTX_VIDEO_MIN_MPS_MEMORY_GB", "24")) * 1024**3
 # Runtime is sync-managed so a changed LTX configuration is applied on the secondary Mac after its next sync.
 # 0.15 is the upstream default. A small increase makes image-to-video motion visible on short-form shots,
@@ -235,6 +238,8 @@ def generate(payload):
             original_get_device = ltx_inference.get_device
             original_create_pipeline = ltx_inference.create_ltx_video_pipeline
             original_create_upsampler = ltx_inference.create_latent_upsampler
+            from ltx_video.pipelines import pipeline_ltx_video
+            original_vae_decode = pipeline_ltx_video.vae_decode
             if force_cpu:
                 ltx_inference.get_device = lambda: "cpu"
             if DEVICE == "mps" and MPS_FP16 and not force_cpu:
@@ -258,6 +263,21 @@ def generate(payload):
 
                 ltx_inference.create_ltx_video_pipeline = create_pipeline_fp16
                 ltx_inference.create_latent_upsampler = create_upsampler_fp16
+            if DEVICE == "mps" and CPU_VAE_DECODE and not force_cpu:
+                import torch
+
+                def decode_vae_on_cpu(latents, vae, is_video, split_size=1, vae_per_channel_normalize=False, timestep=None):
+                    vae.to(device="cpu", dtype=torch.float32)
+                    return original_vae_decode(
+                        latents.to(device="cpu", dtype=torch.float32),
+                        vae,
+                        is_video,
+                        split_size=split_size,
+                        vae_per_channel_normalize=vae_per_channel_normalize,
+                        timestep=timestep,
+                    )
+
+                pipeline_ltx_video.vae_decode = decode_vae_on_cpu
             try:
                 old = os.getcwd()
                 try:
@@ -283,6 +303,7 @@ def generate(payload):
                 ltx_inference.get_device = original_get_device
                 ltx_inference.create_ltx_video_pipeline = original_create_pipeline
                 ltx_inference.create_latent_upsampler = original_create_upsampler
+                pipeline_ltx_video.vae_decode = original_vae_decode
 
         if DEVICE == "mps":
             attempts = [(safe_width, safe_height, safe_frames, False, "compact-mps")]
