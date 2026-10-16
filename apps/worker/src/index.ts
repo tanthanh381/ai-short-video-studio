@@ -167,7 +167,7 @@ async function workerHealth() {
     workerId,
     checkedAt: new Date().toISOString(),
     services: {
-      worker: { state: "healthy" as const, detail: "Worker đang chạy và sẵn sàng nhận job" },
+      worker: { state: "healthy" as const, detail: "Đang chạy, sẵn sàng nhận việc" },
       render: {
         state: renderReady ? "healthy" as const : "offline" as const,
         detail: renderReady
@@ -833,7 +833,7 @@ async function generateMedia(job: JobRow, project: Project) {
         throw error;
       }
       const message =
-        error instanceof Error ? error.message : "Không thể tạo media";
+        error instanceof Error ? error.message : "Chưa tạo được ảnh và giọng. Hãy thử lại.";
       firstMediaError ??= message;
       await updateScene(scene.id, {
           media_status: "failed",

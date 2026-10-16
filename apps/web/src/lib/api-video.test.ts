@@ -21,7 +21,7 @@ describe("Video API integration", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ project: { id: "project-1" }, job: { id: "job-1" } }), { status: 202 }));
     vi.stubGlobal("fetch", fetcher);
     const input = { sourceText: "Lời đọc giữ nguyên cho video kiểm thử." };
-    await expect(api.createVideo(input)).rejects.toThrow("kiểm tra máy xử lý đang bật");
+    await expect(api.createVideo(input)).rejects.toThrow("Kiểm tra máy đang bật");
     await expect(api.createVideo(input)).resolves.toMatchObject({ id: "project-1" });
     const first = fetcher.mock.calls[0]?.[1] as RequestInit;
     const retry = fetcher.mock.calls[1]?.[1] as RequestInit;
@@ -57,7 +57,7 @@ describe("Video API integration", () => {
 
   it("returns an actionable message when the backend is unreachable", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
-    await expect(api.listProjects()).rejects.toThrow("kiểm tra máy xử lý đang bật");
+    await expect(api.listProjects()).rejects.toThrow("Kiểm tra máy đang bật");
   });
 
   it("keeps motion video items available in the media library response", async () => {

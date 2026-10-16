@@ -393,11 +393,24 @@ export function syncView(node: NodeSummary, now = Date.now()): SyncView | null {
 
 // --- what needs attention -----------------------------------------------------------------------------------------------
 
+const GAUGE_ALERT: Partial<Record<Gauge["id"], string>> = {
+  swap: "thiếu RAM, đang dùng ổ đĩa thay RAM nên ảnh và giọng chậm hơn",
+  ram: "sắp hết RAM",
+  disk: "sắp đầy ổ đĩa",
+  cpu: "đang quá tải",
+  thermal: "đang nóng, máy tự giảm tốc độ",
+};
+
+function gaugeAlertTitle(name: string, gauge: Gauge): string {
+  const words = GAUGE_ALERT[gauge.id];
+  return words ? `${name} ${words}` : `${name}: ${gauge.label} ${gauge.value}`;
+}
+
 export type SystemAlert = { id: string; tone: "bad" | "warn" | "info"; title: string; detail: string };
 
 const SERVICE_NAMES: Record<string, string> = {
-  api: "Backend API", supabase: "Supabase", worker: "Worker dựng video", render: "FFmpeg",
-  ollama: "Ollama", localMedia: "Media local", faceDetail: "Sửa khuôn mặt", whiteboard: "Máy vẽ tay",
+  api: "Dịch vụ ứng dụng", supabase: "Cơ sở dữ liệu", worker: "Bộ dựng video", render: "Bộ xuất video (FFmpeg)",
+  ollama: "Ollama", localMedia: "Bộ tạo ảnh và giọng", faceDetail: "Sửa khuôn mặt", whiteboard: "Máy vẽ tay",
 };
 
 /** What the owner should look at first: a machine that dropped out, one short of memory, a service down, videos that failed. */
@@ -410,7 +423,7 @@ export function systemAlerts(system: SystemSummary): SystemAlert[] {
     const outdated = node.role !== "primary" && node.state !== "offline" && node.state !== "disabled" && !node.sync && node.matchesPrimary === false;
     if (node.state === "disabled") {
       // switched off by the owner: nothing to fix, and its readings are not a problem either
-      alerts.push({ id: `${node.id}-disabled`, tone: "info", title: `${displayName} đang tắt`, detail: "Đã tắt trong Cài đặt: máy này không nhận việc mới. Bật lại ở Cài đặt → Máy xử lý video." });
+      alerts.push({ id: `${node.id}-disabled`, tone: "info", title: `${displayName} đang tắt`, detail: "Đã tắt trong Cài đặt: máy này không nhận việc mới. Bật lại ở Cài đặt → Máy tạo video." });
       continue;
     }
     if (node.state === "offline") alerts.push({ id: `${node.id}-offline`, tone: "bad", title: `${displayName} mất kết nối`, detail: node.detail });
@@ -424,7 +437,8 @@ export function systemAlerts(system: SystemSummary): SystemAlert[] {
     for (const gauge of machineGauges(node)) {
       if (gauge.tone === "ok" || gauge.tone === "idle") continue;
       if (gauge.id === "ram" && node.resources?.memPressure === "warn" && (gauge.percent ?? 0) < 92) continue; // a warning from the system alone: the swap gauge says whether it matters
-      alerts.push({ id: `${node.id}-${gauge.id}`, tone: gauge.tone === "bad" ? "bad" : "warn", title: `${displayName}: ${gauge.label} ${gauge.value}`, detail: gauge.detail });
+      // The title says what is wrong in words; the numbers go to the detail line.
+      alerts.push({ id: `${node.id}-${gauge.id}`, tone: gauge.tone === "bad" ? "bad" : "warn", title: gaugeAlertTitle(nodeDisplayName(node.id), gauge), detail: GAUGE_ALERT[gauge.id] ? `${gauge.label}: ${gauge.value}` : gauge.detail });
     }
     const sync = node.role === "primary" || node.state === "offline" || outdated ? null : syncView(node);
     if (sync && node.role !== "primary" && node.state !== "offline") {
@@ -457,7 +471,7 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
   const share = system.balancer ? workShare(system.balancer.nodes).find((row) => row.lane === "image") : undefined;
   const tiles: SummaryTile[] = [
     {
-      id: "machines", label: "Máy xử lý",
+      id: "machines", label: "Máy tạo video",
       value: nodes.length ? `${usable}/${nodes.length} hoạt động` : "1 máy",
       detail: nodes.length
         ? `${ready} sẵn sàng hoàn toàn${nodes.length > ready ? `, ${nodes.length - ready} hạn chế` : ""}${switchedOff ? ` · ${switchedOff} máy đã tắt` : ""}`
@@ -481,7 +495,7 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
     tiles.push({
       id: "share", label: "Chia việc vẽ ảnh",
       value: `${share.total} ảnh`,
-      detail: `${share.parts.map((part) => `${nodeDisplayName(part.node)} ${part.done}`).join(" · ")} · từ lúc worker khởi động`,
+      detail: `${share.parts.map((part) => `${nodeDisplayName(part.node)} ${part.done}`).join(" · ")} · từ lần khởi động gần nhất`,
       tone: "idle",
     });
   }

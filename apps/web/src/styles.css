@@ -3712,3 +3712,25 @@ input[type="radio"] {
   .mobile-close, .menu-button, button[aria-label="Mở menu"] { min-width: 44px; min-height: 44px; }
   .link-button { display: inline-flex; align-items: center; padding-top: 6px; padding-bottom: 6px; }
 }
+
+/* Confirmation box (components/ConfirmDialog.tsx). */
+.confirm-dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-3);
+}
+.confirm-dialog::backdrop { background: rgba(7, 18, 28, 0.5); }
+.confirm-body { padding: var(--space-5); }
+.confirm-body h2 { margin: 0; font-size: var(--text-lg); line-height: 1.4; color: var(--text-strong); }
+.confirm-body p { margin: var(--space-2) 0 0; font-size: var(--text-base); line-height: 1.55; color: var(--text-2); }
+.confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-5); }
+@media (max-width: 560px) {
+  .confirm-actions { flex-direction: column-reverse; }
+  .confirm-actions .button { width: 100%; justify-content: center; }
+}
+/* A link styled as a button (empty states) reads as a button, not as underlined text. */
+a.button { text-decoration: none; }

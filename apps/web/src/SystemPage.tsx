@@ -87,7 +87,7 @@ export function SystemPage() {
   const { system, error, updatedAt, refreshing, refresh } = useSystem(paused);
   const now = useNow();
   const live = paused ? { tone: "idle", text: "Đã dừng cập nhật" }
-    : error ? { tone: "bad", text: "Mất kết nối tới máy chủ" }
+    : error ? { tone: "bad", text: "Mất kết nối tới máy chính" }
     : updatedAt ? { tone: "ok", text: `Cập nhật ${ago(new Date(updatedAt).toISOString(), now)}` }
     : { tone: "idle", text: "Đang tải…" };
 
@@ -126,15 +126,15 @@ export function SystemPage() {
             </section>
           ) : (
             <section className="sys-card sys-solo">
-              <h2>Một thiết bị đang hoạt động</h2>
-              <p>Tất cả tác vụ hiện được xử lý trên thiết bị chính. Kết nối thêm thiết bị để tăng năng lực xử lý song song.</p>
+              <h2>Một máy đang hoạt động</h2>
+              <p>Mọi việc đang chạy trên máy chính. Thêm máy phụ để làm nhiều việc cùng lúc.</p>
             </section>
           )}
           {(Boolean(system.balancer && system.balancer.nodes.length > 1) || Boolean(system.balancer?.recent?.length)) ? (
             <details className="sys-details sys-secondary-details">
               <summary>
                 <span>Nhật ký vận hành</span>
-                <small>{system.balancer?.recent?.length ? `${system.balancer.recent.length} hoạt động gần đây` : "Phân bổ tác vụ"}</small>
+                <small>{system.balancer?.recent?.length ? `${system.balancer.recent.length} hoạt động gần đây` : "Chia việc"}</small>
               </summary>
               <div className="sys-two">
                 {system.balancer && system.balancer.nodes.length > 1 ? <WorkShare system={system} now={now} /> : null}
@@ -237,7 +237,7 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
         </div>
         <span className={`sys-badge tone-${state.tone}`}>{state.label}</span>
       </header>
-      {node.state === "disabled" ? <p className="sys-off-note">Thiết bị đang tắt và không nhận tác vụ mới. <Link to="/settings">Bật lại trong Cài đặt</Link>.</p> : null}
+      {node.state === "disabled" ? <p className="sys-off-note">Máy đang tắt và không nhận việc mới. <Link to="/settings">Bật lại trong Cài đặt</Link>.</p> : null}
       <div className="sys-chips">
         {node.rttMs !== null && node.role === "secondary" ? <span>độ trễ mạng {node.rttMs} ms</span> : null}
         {node.role === "secondary" && node.matchesPrimary === true ? <span className="tone-ok">đã đồng bộ cấu hình</span> : null}
@@ -248,13 +248,13 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
       {node.role === "primary" ? (
         <div className="sys-source-note sys-machine-context">
           <span>Máy nguồn: các máy phụ tự sao chép chương trình và model từ máy này</span>
-          <InfoPopover title="Mac Mini là thiết bị chính">Cung cấp mã nguồn, công cụ và model cho các thiết bị phụ. Đồng bộ tự động mỗi phút.</InfoPopover>
+          <InfoPopover title="Mac Mini là máy chính">Cung cấp mã nguồn, công cụ và model cho các máy phụ. Đồng bộ tự động mỗi phút.</InfoPopover>
         </div>
       ) : null}
       {sync ? (
         <div className={`sys-sync sys-machine-context tone-${sync.tone}`}>
           <div className="sys-sync-top">
-            <strong>Đồng bộ thiết bị</strong>
+            <strong>Đồng bộ máy</strong>
             <span className={`sys-badge tone-${sync.tone}`}>{sync.label}</span>
           </div>
           {sync.tone === "ok" ? <InfoPopover title="Chi tiết đồng bộ">{sync.detail}</InfoPopover> : <p>{sync.detail}</p>}
@@ -272,7 +272,7 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
         <details className="sys-details sys-machine-details">
           <summary>
             <span>Chi tiết kỹ thuật</span>
-            <small>{models.length ? `${models.length} model đang theo dõi` : "Số liệu thiết bị và tác vụ"}</small>
+            <small>{models.length ? `${models.length} model đang theo dõi` : "Số liệu máy và việc"}</small>
           </summary>
           {history.length > 1 ? (
             <div className="sys-sparks">
@@ -320,9 +320,9 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
 
           {lanes.length ? (
             <div className="sys-section">
-              <h3>Tác vụ được phân công</h3>
+              <h3>Việc được giao</h3>
               <table className="sys-lanes">
-                <thead><tr><th scope="col">Tác vụ</th><th scope="col">Trạng thái</th><th scope="col">Đã hoàn tất</th><th scope="col">Thời gian TB</th></tr></thead>
+                <thead><tr><th scope="col">Việc</th><th scope="col">Trạng thái</th><th scope="col">Đã hoàn tất</th><th scope="col">Thời gian TB</th></tr></thead>
                 <tbody>
                   {lanes.map((row) => (
                     <tr key={row.id} className={row.eligible ? "" : "is-off"}>
@@ -354,8 +354,8 @@ function WorkShare({ system, now }: { system: SystemSummary; now: number }) {
   const rows = workShare(balancer.nodes);
   return (
     <section className="sys-card">
-      <h2>Phân bổ tác vụ</h2>
-      <p className="microcopy">Số lượng tác vụ đã xử lý trên từng thiết bị kể từ lần khởi động dịch vụ gần nhất.</p>
+      <h2>Chia việc giữa các máy</h2>
+      <p className="microcopy">Số việc mỗi máy đã làm từ lần khởi động gần nhất.</p>
       <div className="sys-legend">
         {balancer.nodes.map((node, index) => <span key={node.id}><i style={{ background: NODE_COLORS[index % NODE_COLORS.length] }} /> {nodeDisplayName(node.id, node.role)}</span>)}
       </div>
@@ -374,7 +374,7 @@ function WorkShare({ system, now }: { system: SystemSummary; now: number }) {
             </li>
           ))}
         </ul>
-      ) : <p className="microcopy">Chưa có tác vụ hoàn tất kể từ lần khởi động dịch vụ gần nhất.</p>}
+      ) : <p className="microcopy">Chưa có việc nào xong từ lần khởi động gần nhất.</p>}
       <h3>Lịch sử điều phối</h3>
       {balancer.decisions.length ? (
         <ul className="sys-decisions">
@@ -417,7 +417,7 @@ function JobsCard({ jobs }: { jobs: SystemJob[] }) {
   };
   return (
     <section className="sys-card">
-      <h2>Tác vụ gần đây</h2>
+      <h2>Việc gần đây</h2>
       {jobs.length ? (
         <ul className="sys-jobs">
           {jobs.map((job) => (
@@ -431,7 +431,7 @@ function JobsCard({ jobs }: { jobs: SystemJob[] }) {
             </li>
           ))}
         </ul>
-      ) : <p className="microcopy">Chưa có video nào.</p>}
+      ) : <p className="microcopy">Chưa có video nào. Video bạn tạo sẽ hiện ở đây cùng tiến độ.</p>}
     </section>
   );
 }

@@ -119,7 +119,41 @@ Nhãn bọc control, nên bấm vào nhãn sẽ focus control. `hint` hiện sau
 - **Trên điện thoại** (≤ 760 px), thao tác chính của Studio nằm trong thanh dính ở đáy; thao tác phụ vào menu ⋯.
   Vùng chạm tối thiểu 44 px; nút icon nhỏ được mở rộng vùng chạm bằng `::before`.
 
-## 6. Nên / Không nên
+## 6. Câu chữ (UX copy)
+
+### Thuật ngữ — một khái niệm, một từ
+
+| Dùng | Không dùng trên giao diện |
+|---|---|
+| **máy**, **máy chính**, **máy phụ** | thiết bị, máy chủ, máy xử lý, worker, backend, node |
+| **việc** ("3 việc đang chờ", "Dừng") | tác vụ, job |
+| **ảnh và giọng** | media (trừ tên mục "Thư viện media"), audio |
+| **video**, hành động **Xuất video** | render, bản xuất; "MP4" chỉ ở nút tải file |
+| **kịch bản**, **cảnh** | storyboard, prompt |
+| **Bộ tạo giọng** | engine |
+
+Tên máy luôn qua `nodeDisplayName()`. Ollama, OpenAI, LTX chỉ hiện ở Cài đặt, Hệ thống và phần Tùy chọn nâng cao.
+
+### Thông báo lỗi
+Khung: **chuyện gì xảy ra + làm gì tiếp**. Mở đầu bằng "Chưa … được" (gợi ý làm lại được), không dùng "Không thể".
+Xưng hô dùng "Hãy …", không dùng "Vui lòng". Ví dụ: "Chưa tải ảnh lên được. Hãy dùng ảnh JPG hoặc PNG rồi thử lại."
+Câu dùng ở nhiều nơi (chế độ mẫu…) đặt trong `lib/copy.ts`.
+
+### Hộp xác nhận
+Dùng `askConfirm()` (`components/ConfirmDialog.tsx`), không dùng `window.confirm`.
+- Tiêu đề là câu hỏi về đúng hành động: "Xóa cảnh 3?", không phải "Bạn có chắc?".
+- Dòng dưới nói hậu quả: "Lời đọc, ảnh và giọng của cảnh này sẽ mất."
+- Hai nút ghi hành động: **Xóa cảnh** / **Giữ lại**; hành động xóa/dừng dùng `tone: "danger"`, focus mặc định ở nút an toàn.
+
+### Trạng thái trống
+Khung: **đây là gì + vì sao trống + cách bắt đầu** (kèm nút). Ví dụ: "Chưa có video nào được xuất · Video làm xong
+sẽ hiện ở đây, kèm thời lượng và nút tải MP4 · [Tạo video mới]".
+
+### Số và đơn vị
+Viết theo kiểu Việt Nam: `0,48 USD`, `1,00×` (dùng `formatUsd`, `formatSpeed`); cảnh báo hệ thống nói vấn đề bằng lời
+trước ("Mac Mini thiếu RAM…"), con số kỹ thuật để ở dòng chi tiết.
+
+## 7. Nên / Không nên
 
 | ✅ Nên | ❌ Không nên |
 |---|---|

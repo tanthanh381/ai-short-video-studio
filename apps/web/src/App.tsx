@@ -96,6 +96,8 @@ import { resetPasswordView } from "./lib/auth";
 import { withLayoutTemplate, withVisualPreset } from "./lib/visual-preset";
 import { ProjectSaver, type SaveState } from "./lib/project-saver";
 import { Button, Field, Notice } from "./components/ui";
+import { askConfirm, ConfirmHost } from "./components/ConfirmDialog";
+import { DEMO_ONLY, DEMO_VOICE } from "./lib/copy";
 import { withScriptFromScenes } from "./lib/script-sync";
 import { OPENAI_VOICES, hookTitleAllowed, withMediaProvider } from "./lib/options";
 import { CHANNEL_PRESETS, estimatedNarrationSeconds } from "./lib/channel-presets";
@@ -265,8 +267,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         {isDemo && (
           <div className="demo-bar">
-            <strong>Đang xem chế độ mẫu.</strong> Bạn có thể tạo và sửa
-            storyboard trên máy này; tạo video cần kết nối máy xử lý thật.
+            <strong>Đang xem chế độ mẫu.</strong> Bạn có thể tạo và sửa kịch bản;
+            tạo video cần máy chính đang bật.
           </div>
         )}
         {children}
@@ -425,8 +427,8 @@ function LoginPage() {
               {sent && (
                 <Notice tone="success">
                   {resetMode
-                    ? "Đã gửi email đặt lại mật khẩu. Vui lòng mở email và bấm liên kết."
-                    : "Đã gửi liên kết đăng nhập. Vui lòng kiểm tra email và bấm liên kết để mở Studio."}
+                    ? "Đã gửi email đặt lại mật khẩu. Hãy mở email và bấm vào liên kết."
+                    : "Đã gửi liên kết đăng nhập. Hãy mở email và bấm vào liên kết để vào Studio."}
                 </Notice>
               )}
               <Button type="submit" busy={busy} disabled={cooldown > 0}>
@@ -593,7 +595,7 @@ function DashboardPage() {
     try {
       setProjects(await api.listProjects());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải danh sách dự án.");
+      setError(e instanceof Error ? e.message : "Chưa tải được danh sách dự án. Kiểm tra kết nối mạng rồi tải lại trang.");
     } finally {
       setLoading(false);
     }
@@ -603,19 +605,20 @@ function DashboardPage() {
     `${p.title} ${p.hook} ${p.sourceText}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
   async function remove(id: string) {
-    if (
-      !window.confirm(
-        "Xóa dự án này? Media không còn dùng sẽ được dọn theo chính sách lưu trữ.",
-      )
-    )
-      return;
+    const title = projects.find((item) => item.id === id)?.title;
+    if (!(await askConfirm({
+      title: title ? `Xóa dự án “${title}”?` : "Xóa dự án này?",
+      detail: "Kịch bản, cảnh, ảnh và giọng của dự án sẽ mất. Không hoàn tác được.",
+      confirmLabel: "Xóa dự án",
+      tone: "danger",
+    }))) return;
     setBusyProject(id);
     setError(null);
     try {
       await api.deleteProject(id);
       setProjects((p) => p.filter((x) => x.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể xóa dự án. Hãy thử lại.");
+      setError(e instanceof Error ? e.message : "Chưa xóa được dự án. Hãy thử lại sau ít phút.");
     } finally {
       setBusyProject(null);
     }
@@ -627,7 +630,7 @@ function DashboardPage() {
       const project = await api.duplicateProject(id);
       setProjects((p) => [project, ...p]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể nhân bản dự án. Hãy thử lại.");
+      setError(e instanceof Error ? e.message : "Chưa nhân bản được dự án. Hãy thử lại.");
     } finally {
       setBusyProject(null);
     }
@@ -681,7 +684,7 @@ function DashboardPage() {
         <div className="empty">
           <FolderOpen size={42} />
           <h2>{projects.length ? "Không tìm thấy dự án" : "Bắt đầu với video đầu tiên"}</h2>
-          <p>{projects.length ? "Thử tên video, chủ đề hoặc từ khóa khác." : "Dán kịch bản của bạn và để Studio tạo storyboard, hình ảnh, giọng đọc và MP4."}</p>
+          <p>{projects.length ? "Thử tên video, chủ đề hoặc từ khóa khác." : "Bắt đầu từ một ý tưởng hoặc kịch bản có sẵn — Studio lo phần chia cảnh, vẽ ảnh, đọc giọng và ghép video."}</p>
           <Button onClick={() => navigate("/new")}><Plus size={17} /> Tạo video mới</Button>
         </div>
       ) : (
@@ -757,6 +760,15 @@ function DashboardPage() {
   );
 }
 
+/** Money as Vietnamese readers write it: 0,48 USD. */
+function formatUsd(value: number) {
+  return `${value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+}
+
+function formatSpeed(value: number) {
+  return `${value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×`;
+}
+
 /** Every main button stays clickable and says what is missing, instead of being greyed out without a reason. */
 const SOURCE_TOO_SHORT = "Hãy nhập ý tưởng hoặc kịch bản, ít nhất 10 ký tự.";
 
@@ -818,13 +830,13 @@ function EngineSelect({ catalog, engine, onChange, isDemo }: { catalog: LocalMod
   const models = catalog?.tts.models ?? [];
   return (
     <div className="engine-select">
-      <select aria-label="Engine local" value={engine ?? ""} onChange={(event) => onChange(event.target.value || null)} disabled={!models.length}>
+      <select aria-label="Bộ tạo giọng" value={engine ?? ""} onChange={(event) => onChange(event.target.value || null)} disabled={!models.length}>
         {!models.length && <option value="">Chưa kết nối</option>}
         {models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
       </select>
       {!models.length && (
         <small className="field-hint">
-          {isDemo ? "Chế độ mẫu không kết nối máy tạo giọng." : "Máy tạo giọng chưa sẵn sàng."} <Link to="/system">Xem trang Hệ thống</Link>
+          {isDemo ? "Chế độ mẫu không tạo giọng đọc." : "Bộ tạo giọng chưa sẵn sàng."} <Link to="/system">Xem trang Hệ thống</Link>
         </small>
       )}
     </div>
@@ -849,7 +861,7 @@ function TextToSpeechPage() {
   useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
 
   async function createSpeech() {
-    if (isDemo) { setError("Chế độ mẫu không kết nối máy tạo giọng đọc."); return; }
+    if (isDemo) { setError(DEMO_VOICE); return; }
     if (!text.trim()) { setError("Hãy nhập văn bản cần đọc."); return; }
     setBusy(true); setError(null);
     try {
@@ -861,7 +873,7 @@ function TextToSpeechPage() {
   }
   const selectedVoice = VOICE_PRESETS.find((item) => item.id === voice)!;
   return (
-    <SimplePage title="Đọc văn bản thành giọng nói" subtitle="Dán văn bản, chọn giọng đọc và tải MP3 từ máy AI local.">
+    <SimplePage title="Đọc văn bản thành giọng nói" subtitle="Dán văn bản, chọn giọng đọc rồi tải file MP3. Giọng được tạo trên máy của bạn, không tốn phí.">
       <div className="tts-page-grid">
         <section className="tts-editor-card">
           <div className="section-heading-row">
@@ -877,7 +889,7 @@ function TextToSpeechPage() {
             placeholder="Nhập hoặc dán văn bản tiếng Việt cần đọc…"
           />
           <div className="tts-editor-footer">
-            <span>{selectedVoice.label} · {speed.toFixed(2)}x</span>
+            <span>{selectedVoice.label} · {formatSpeed(speed)}</span>
             <Button busy={busy} onClick={() => void createSpeech()}>
               <Play size={17} /> Chuyển thành giọng nói
             </Button>
@@ -893,7 +905,7 @@ function TextToSpeechPage() {
         </section>
         <section className="tts-options-card">
           <h2>Tùy chọn giọng</h2>
-          <div className="field"><span className="field-label">Engine local</span>
+          <div className="field"><span className="field-label">Bộ tạo giọng</span>
             <EngineSelect catalog={catalog} engine={engine} onChange={setEngine} isDemo={isDemo} />
           </div>
           <div className="tts-voice-grid">
@@ -904,7 +916,7 @@ function TextToSpeechPage() {
               </button>
             ))}
           </div>
-          <label className="field tts-speed-field"><span>Tốc độ đọc <b>{speed.toFixed(2)}x</b></span>
+          <label className="field tts-speed-field"><span>Tốc độ đọc <b>{formatSpeed(speed)}</b></span>
             <input type="range" min="0.75" max="1.25" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
           </label>
           <VoicePreview voice={voice} engine={engine} disabled={isDemo} />
@@ -969,7 +981,7 @@ function DubSubtitlePage() {
   async function createDub() {
     if (!file) { setError("Hãy tải video cần lồng tiếng lên trước."); return; }
     if (!script.trim()) { setError("Hãy nhập lời thoại để tạo giọng đọc và phụ đề."); return; }
-    if (isDemo) { setError("Chế độ mẫu chưa kết nối máy tạo giọng đọc. Hãy bật API để tạo bản lồng tiếng."); return; }
+    if (isDemo) { setError(DEMO_VOICE); return; }
     setBusy(true); setError(null);
     try {
       const settings = {
@@ -998,7 +1010,7 @@ function DubSubtitlePage() {
       await api.queue(project.id, "dub_video", { sourceVideoPath, script, voice, engine, subtitle: settings.subtitle });
       navigate(`/studio/${project.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Chưa xếp hàng được bản lồng tiếng.");
+      setError(e instanceof Error ? e.message : "Chưa bắt đầu lồng tiếng được. Kiểm tra máy chính đang bật rồi bấm lại.");
     } finally { setBusy(false); }
   }
 
@@ -1027,7 +1039,7 @@ function DubSubtitlePage() {
       return;
     }
     if (isDemo) {
-      setVoicePreviewError("Chế độ mẫu chưa kết nối máy tạo giọng đọc.");
+      setVoicePreviewError(DEMO_VOICE);
       return;
     }
     setVoicePreviewError(null);
@@ -1117,7 +1129,7 @@ function DubSubtitlePage() {
               {voicePreviewError && <small className="field-error">{voicePreviewError}</small>}
               <audio ref={voicePreviewAudioRef} hidden />
             </Field>
-            <div className="field"><span className="field-label">Engine local</span>
+            <div className="field"><span className="field-label">Bộ tạo giọng</span>
               <EngineSelect catalog={catalog} engine={engine} onChange={setEngine} isDemo={isDemo} />
             </div>
           </div>
@@ -1166,10 +1178,10 @@ function DubSubtitlePage() {
 }
 
 const LOCAL_MODEL_TASKS: Array<{ key: keyof LocalModels; label: string }> = [
-  { key: "storyboard", label: "Chia cảnh & prompt ảnh (Ollama)" },
+  { key: "storyboard", label: "Viết kịch bản và mô tả ảnh (Ollama)" },
   { key: "image", label: "Tạo ảnh" },
   { key: "video", label: "Chuyển động video (LTX)" },
-  { key: "tts", label: "Giọng đọc (engine)" },
+  { key: "tts", label: "Giọng đọc" },
   { key: "transcribe", label: "Đồng bộ phụ đề (Whisper)" },
 ];
 
@@ -1317,7 +1329,7 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
         )}
         <Field label="Tốc độ đọc">
           <input type="range" min="0.8" max="1.3" step="0.05" value={settings.voiceSpeed} onChange={(e) => set({ voiceSpeed: Number(e.target.value) })} />
-          <small>{settings.voiceSpeed.toFixed(2)}× · 1.00× là nhịp chuẩn video ngắn (~3,7 từ/giây)</small>
+          <small>{formatSpeed(settings.voiceSpeed)} · 1,00× là nhịp chuẩn video ngắn (~3,7 từ/giây)</small>
         </Field>
         <label className="check">
           <input type="checkbox" checked={settings.trimSilence} onChange={(e) => set({ trimSilence: e.target.checked })} />
@@ -1474,7 +1486,7 @@ function NewProjectPage() {
       }
       navigate(`/studio/${project.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể chia cảnh.");
+      setError(e instanceof Error ? e.message : "Chưa chia được cảnh. Hãy thử lại; kịch bản của bạn vẫn còn nguyên.");
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -1496,7 +1508,7 @@ function NewProjectPage() {
       });
       navigate(`/studio/${project.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể lưu bản nháp.");
+      setError(e instanceof Error ? e.message : "Chưa lưu được bản nháp. Hãy thử lại; nội dung bạn nhập vẫn còn trên trang.");
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -1658,7 +1670,7 @@ function NewProjectPage() {
             <span><Subtitles size={15} /> Phụ đề rõ nét</span>
           </div>
           {error && <Notice tone="bad">{error}</Notice>}
-          {isDemo && <Notice tone="warn">Chế độ mẫu chỉ lưu và chỉnh kịch bản. Tạo MP4 cần kết nối máy xử lý.</Notice>}
+          {isDemo && <Notice tone="warn">{DEMO_ONLY}</Notice>}
         </section>
         <section>
           <button className="advanced-toggle" type="button" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>
@@ -1902,7 +1914,12 @@ function SceneMoreMenu({
           {item("Đưa lên", () => onMove(-1), scene.order === 0)}
           {item("Đưa xuống", () => onMove(1), isLast)}
           {item("Xóa cảnh", () => {
-            if (window.confirm(`Xóa cảnh ${number}? Lời đọc và media của cảnh này sẽ mất.`)) onDelete();
+            void askConfirm({
+              title: `Xóa cảnh ${number}?`,
+              detail: "Lời đọc, ảnh và giọng của cảnh này sẽ mất.",
+              confirmLabel: "Xóa cảnh",
+              tone: "danger",
+            }).then((yes) => { if (yes) onDelete(); });
           }, false, true)}
         </div>
       )}
@@ -1983,7 +2000,7 @@ function StudioPage() {
         if (account) setCapabilities(account.capabilities);
       })
       .catch((e) =>
-        setError(e instanceof Error ? e.message : "Không thể mở dự án"),
+        setError(e instanceof Error ? e.message : "Chưa mở được dự án. Có thể dự án đã bị xóa; quay lại danh sách để kiểm tra."),
       );
   }, [id, isDemo]);
   useEffect(() => {
@@ -2002,7 +2019,7 @@ function StudioPage() {
           setSourceDraft(nextProject.sourceText);
           setError(null);
         })
-        .catch(() => active && setError("Mất kết nối tạm thời. Tác vụ vẫn được lưu; studio sẽ tiếp tục cập nhật khi kết nối trở lại."))
+        .catch(() => active && setError("Tạm mất kết nối. Việc đang chạy vẫn tiếp tục trên máy; trang sẽ tự cập nhật khi có mạng lại."))
         .finally(() => { refreshing = false; });
     };
     // Refresh immediately after a job starts or the page is reopened; every 4 s is enough for a job that takes
@@ -2099,7 +2116,7 @@ function StudioPage() {
   }
   async function createVideo() {
     if (locked.current) return;
-    if (isDemo) { setError("Chế độ mẫu chỉ lưu bản nháp. Tạo MP4 cần kết nối máy xử lý thật."); return; }
+    if (isDemo) { setError(DEMO_ONLY); return; }
     if (sourceDraft.trim().length < 10) { setError("Kịch bản cần ít nhất 10 ký tự trước khi tạo video."); return; }
     if (project && sourceDraft !== project.sourceText) {
       setError("Bạn đã sửa “Lời đọc gốc” nhưng chưa bấm “Áp dụng”. Hãy áp dụng (chia lại cảnh) hoặc hủy thay đổi trước khi tạo video.");
@@ -2113,14 +2130,20 @@ function StudioPage() {
       const job = await api.continueVideo(id);
       setJobs((current) => [job, ...current.filter((item) => item.id !== job.id)]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể bắt đầu tạo video.");
+      setError(e instanceof Error ? e.message : "Chưa bắt đầu tạo video được. Kiểm tra máy chính đang bật rồi bấm lại.");
     } finally { setBusyAction(null); }
   }
   /** Stops the running job at its next step; the scenes already made are kept and the project goes back to a draft. */
   async function cancelActiveJob() {
     const job = jobs.find((item) => item.status === "queued" || item.status === "running");
     if (!job || busyAction) return;
-    if (!window.confirm("Hủy tác vụ đang chạy? Các cảnh đã tạo xong vẫn được giữ lại, bạn có thể bấm Tạo video để tiếp tục sau.")) return;
+    if (!(await askConfirm({
+      title: "Dừng tạo video?",
+      detail: "Cảnh đã làm xong vẫn được giữ. Bấm Tạo video để làm tiếp phần còn lại.",
+      confirmLabel: "Dừng",
+      cancelLabel: "Tiếp tục chạy",
+      tone: "danger",
+    }))) return;
     setBusyAction("cancel");
     setError(null);
     try {
@@ -2131,15 +2154,21 @@ function StudioPage() {
       saver.current?.confirm(nextProject);
       setProject(nextProject);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không hủy được tác vụ. Hãy thử lại.");
+      setError(e instanceof Error ? e.message : "Chưa dừng được. Hãy bấm Dừng lần nữa.");
     } finally {
       setBusyAction(null);
     }
   }
-  function applySourceDraft() {
+  async function applySourceDraft() {
     if (!project || sourceDraft === project.sourceText) return;
     if (sourceDraft.trim().length < 10) { setError("Kịch bản cần ít nhất 10 ký tự. Nội dung cũ vẫn được giữ."); return; }
-    if (project.scenes.length && !window.confirm("Chia lại cảnh sẽ thay toàn bộ cảnh hiện có, kể cả phần bạn đã sửa và ảnh, giọng đã tạo. Tiếp tục?")) return;
+    if (project.scenes.length && !(await askConfirm({
+      title: "Chia lại toàn bộ cảnh?",
+      detail: "Các cảnh hiện có, kể cả phần bạn đã sửa và ảnh, giọng đã tạo, sẽ được thay bằng cảnh mới.",
+      confirmLabel: "Chia lại",
+      cancelLabel: "Giữ cảnh cũ",
+      tone: "danger",
+    }))) return;
     setError(null);
     setSelected(0);
     setResult(null);
@@ -2162,7 +2191,7 @@ function StudioPage() {
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải video.");
+      setError(e instanceof Error ? e.message : "Chưa tải được video. Hãy thử lại.");
     } finally { setBusyAction(null); }
   }
   function updateScene(index: number, scene: Scene) {
@@ -2228,7 +2257,7 @@ function StudioPage() {
       setError(
         type === "storyboard"
           ? "Chế độ mẫu chưa gọi AI. Anh vẫn có thể thêm, xóa và sửa từng cảnh thủ công."
-          : "Tính năng này cần kết nối backend và API key thật; ứng dụng không giả lập kết quả.",
+          : DEMO_ONLY,
       );
       return;
     }
@@ -2266,7 +2295,7 @@ function StudioPage() {
       return;
     }
     if (type === "render_video" && !capabilities?.render) {
-      setError("Worker render chưa được cấu hình trên máy chủ.");
+      setError("Máy ghép video chưa sẵn sàng. Xem trạng thái ở trang Hệ thống.");
       return;
     }
     setBusyAction(type);
@@ -2276,15 +2305,18 @@ function StudioPage() {
       await flushEdits();
       if (type === "generate_media") {
         const estimate = await api.estimate(id);
-        const accepted = estimate.estimatedUsd === 0 || window.confirm(
-          `Ước tính chi phí tạo media: ${estimate.estimatedUsd.toFixed(2)} USD cho ${estimate.imageCount} ảnh. Đây là ước tính, chi phí thực tế do nhà cung cấp tính. Tiếp tục?`,
-        );
+        const accepted = estimate.estimatedUsd === 0 || await askConfirm({
+          title: `Tạo ${estimate.imageCount} ảnh tốn khoảng ${formatUsd(estimate.estimatedUsd)}?`,
+          detail: "Đây là ước tính; số tiền thật do nhà cung cấp tính trên tài khoản của bạn.",
+          confirmLabel: "Tạo ảnh và giọng",
+          cancelLabel: "Để sau",
+        });
         if (!accepted) return;
       }
       const job = await api.queue(id, type);
       setJobs((j) => [job, ...j]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tạo tác vụ");
+      setError(e instanceof Error ? e.message : "Chưa bắt đầu được. Kiểm tra máy chính đang bật rồi bấm lại.");
     } finally {
       setBusyAction(null);
     }
@@ -2298,7 +2330,7 @@ function StudioPage() {
     if (locked.current) return;
     if (isDemo) {
       setError(
-        "Tải media để render cần kết nối kho lưu trữ. Chế độ mẫu không giữ file cá nhân.",
+        "Chế độ mẫu không lưu file bạn tải lên. Tải ảnh và giọng cần máy chính đang bật.",
       );
       return;
     }
@@ -2321,7 +2353,7 @@ function StudioPage() {
       saver.current?.edit(next);
       await flushEdits();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải file");
+      setError(e instanceof Error ? e.message : "Chưa tải file lên được. Hãy thử lại hoặc chọn file khác.");
     } finally {
       setBusyAction(null);
     }
@@ -2329,7 +2361,7 @@ function StudioPage() {
   async function uploadSceneAnnotation(sceneId: string, file: File) {
     if (!project) return;
     if (isDemo) {
-      setError("Chức năng này cần kết nối máy chủ. Chế độ mẫu không hỗ trợ.");
+      setError(DEMO_ONLY);
       return;
     }
     setError(null);
@@ -2347,7 +2379,7 @@ function StudioPage() {
         };
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải annotation JSON");
+      setError(e instanceof Error ? e.message : "Chưa tải được file vùng vẽ. File cần là JSON xuất từ công cụ Chia vùng vẽ.");
     }
   }
   async function clearSceneAnnotation(sceneId: string) {
@@ -2365,7 +2397,7 @@ function StudioPage() {
         };
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể xóa annotation");
+      setError(e instanceof Error ? e.message : "Chưa bỏ được vùng vẽ riêng. Hãy thử lại.");
     }
   }
   async function downloadSceneImage(scene: Scene) {
@@ -2381,12 +2413,12 @@ function StudioPage() {
       a.click();
       a.remove();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải ảnh");
+      setError(e instanceof Error ? e.message : "Chưa tải ảnh lên được. Hãy dùng ảnh JPG hoặc PNG rồi thử lại.");
     }
   }
   async function regenerate(sceneId: string, component: RegenerationComponent = "all") {
     if (isDemo) {
-      setError("Tạo lại cảnh cần kết nối OpenAI và worker thật.");
+      setError("Tạo lại cảnh cần máy tạo ảnh đang bật hoặc khóa OpenAI trong Cài đặt.");
       return;
     }
     if (locked.current) return;
@@ -2400,36 +2432,39 @@ function StudioPage() {
       await flushEdits();
       const estimate = await api.estimate(id);
       if (estimate.estimatedUsd > 0 &&
-        !window.confirm(
-          `Tạo lại riêng cảnh này có thể phát sinh khoảng ${(estimate.estimatedUsd / Math.max(1, estimate.imageCount)).toFixed(2)} USD. Tiếp tục?`,
-        )
+        !(await askConfirm({
+          title: `Tạo lại cảnh này tốn khoảng ${formatUsd(estimate.estimatedUsd / Math.max(1, estimate.imageCount))}?`,
+          detail: "Đây là ước tính; số tiền thật do nhà cung cấp tính trên tài khoản của bạn.",
+          confirmLabel: "Tạo lại cảnh",
+          cancelLabel: "Để sau",
+        }))
       )
         return;
       const job = await api.regenerateScene(id, sceneId, component);
       setJobs((current) => [job, ...current]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tạo lại cảnh");
+      setError(e instanceof Error ? e.message : "Chưa tạo lại được cảnh. Hãy thử lại.");
     } finally {
       setBusyAction(null);
     }
   }
   async function playNarration() {
     if (!activeScene?.audioPath) {
-      setError("Cảnh đang chọn chưa có audio để nghe thử.");
+      setError("Cảnh này chưa có giọng đọc. Bấm Tạo lại để tạo giọng.");
       return;
     }
     try {
       const { url } = await api.mediaUrl(id, activeScene.audioPath);
       await new Audio(url).play();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể phát audio");
+      setError(e instanceof Error ? e.message : "Chưa phát được giọng đọc của cảnh này. Bấm Tạo lại để làm lại giọng.");
     }
   }
   async function uploadMusic(file: File) {
     if (!project) return;
     if (locked.current) return;
     if (isDemo) {
-      setError("Tải nhạc cần kết nối kho lưu trữ.");
+      setError(DEMO_ONLY);
       return;
     }
     setBusyAction("music");
@@ -2444,7 +2479,7 @@ function StudioPage() {
       saver.current?.edit(next);
       await flushEdits();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải nhạc");
+      setError(e instanceof Error ? e.message : "Chưa tải nhạc lên được. Hãy thử lại hoặc chọn file khác.");
     } finally {
       setBusyAction(null);
     }
@@ -2453,7 +2488,7 @@ function StudioPage() {
     if (!project) return;
     if (locked.current) return;
     if (isDemo) {
-      setError("Tải logo cần kết nối kho lưu trữ.");
+      setError(DEMO_ONLY);
       return;
     }
     setBusyAction("logo");
@@ -2465,7 +2500,7 @@ function StudioPage() {
       saver.current?.edit(next);
       await flushEdits();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải logo");
+      setError(e instanceof Error ? e.message : "Chưa tải logo lên được. Hãy thử lại hoặc chọn ảnh khác.");
     } finally {
       setBusyAction(null);
     }
@@ -2489,7 +2524,7 @@ function StudioPage() {
       setError(
         retryError instanceof Error
           ? retryError.message
-          : "Không thể thử lại tác vụ",
+          : "Chưa chạy lại được. Hãy thử lại sau ít phút.",
       );
     } finally {
       setBusyAction(null);
@@ -2691,7 +2726,7 @@ function StudioPage() {
           <p className="processing-hint">
             Có thể đóng hoặc tải lại trang. Studio sẽ tiếp tục theo dõi tác vụ đã lưu.{" "}
             <button type="button" className="link-button" onClick={() => void cancelActiveJob()} disabled={busyAction === "cancel"}>
-              {busyAction === "cancel" ? "Đang hủy…" : "Hủy tác vụ"}
+              {busyAction === "cancel" ? "Đang dừng…" : "Dừng"}
             </button>
           </p>
         </div>
@@ -2702,7 +2737,7 @@ function StudioPage() {
             <strong>{failedJob.stage}</strong>
             <span>
               {failedJob.errorMessage ??
-                "Tác vụ chưa hoàn tất. Dữ liệu các cảnh thành công vẫn được giữ."}
+                "Video chưa làm xong. Các cảnh đã xong vẫn được giữ."}
             </span>
           </div>
           <Button
@@ -2751,7 +2786,7 @@ function StudioPage() {
               {project && sourceDraft !== project.sourceText && (
                 <Notice tone="warn">
                   <span>Sửa ở đây sẽ <b>chia lại toàn bộ cảnh</b> từ kịch bản mới; các cảnh, ảnh và giọng đã có sẽ bị thay.</span>
-                  <Button type="button" variant="secondary" onClick={() => applySourceDraft()}>Áp dụng và chia lại cảnh</Button>
+                  <Button type="button" variant="secondary" onClick={() => void applySourceDraft()}>Áp dụng và chia lại cảnh</Button>
                   <Button type="button" variant="ghost" onClick={() => setSourceDraft(project.sourceText)}>Hủy thay đổi</Button>
                 </Notice>
               )}
@@ -3188,7 +3223,7 @@ function MediaPage() {
     try {
       setItems(await api.listMedia());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải thư viện media.");
+      setError(e instanceof Error ? e.message : "Chưa tải được thư viện media. Hãy tải lại trang.");
     } finally {
       setLoading(false);
     }
@@ -3251,11 +3286,9 @@ function MediaPage() {
       ) : (
         <div className="empty">
           <Image size={42} />
-          <h2>Chưa có media thật</h2>
-          <p>
-            Media đã tạo hoặc tải lên sẽ xuất hiện ở đây và được bảo vệ bằng
-            liên kết có thời hạn.
-          </p>
+          <h2>Chưa có media</h2>
+          <p>Ảnh và giọng đọc bạn tạo hoặc tải lên sẽ nằm ở đây. Tạo video đầu tiên để bắt đầu.</p>
+          <Link className="button button-primary" to="/new"><Plus size={17} /> Tạo video mới</Link>
         </div>
       )}
     </SimplePage>
@@ -3285,7 +3318,7 @@ function ExportsPage() {
     try {
       setItems(await api.listExports());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải lịch sử xuất video.");
+      setError(e instanceof Error ? e.message : "Chưa tải được lịch sử xuất video. Hãy tải lại trang.");
     } finally {
       setLoading(false);
     }
@@ -3298,7 +3331,7 @@ function ExportsPage() {
       const { url } = await api.exportDownload(exportId);
       window.location.assign(url);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải MP4. Hãy thử lại.");
+      setError(e instanceof Error ? e.message : "Chưa tải được file MP4. Hãy thử lại.");
     } finally {
       setBusyExport(null);
     }
@@ -3306,7 +3339,7 @@ function ExportsPage() {
   return (
     <SimplePage
       title="Lịch sử xuất video"
-      subtitle="Theo dõi các bản MP4 đã render và tải lại khi cần."
+      subtitle="Các video đã xuất xong. Tải lại file MP4 bất cứ lúc nào."
     >
       {error && <div className="dashboard-feedback"><Notice tone="bad"><span>{error}</span><Button variant="ghost" onClick={() => void loadExports()}>Thử lại</Button></Notice></div>}
       {loading ? (
@@ -3338,11 +3371,9 @@ function ExportsPage() {
       ) : (
         <div className="empty">
           <Film size={42} />
-          <h2>Chưa có bản xuất</h2>
-          <p>
-            Khi render thành công, thumbnail, thời lượng và nút tải MP4 sẽ xuất
-            hiện tại đây.
-          </p>
+          <h2>Chưa có video nào được xuất</h2>
+          <p>Video làm xong sẽ hiện ở đây, kèm thời lượng và nút tải MP4.</p>
+          <Link className="button button-primary" to="/new"><Plus size={17} /> Tạo video mới</Link>
         </div>
       )}
     </SimplePage>
@@ -3395,7 +3426,12 @@ function ApiKeyCard({
   }
 
   async function remove() {
-    if (!window.confirm(`Xóa khóa ${info.name} đã lưu? Dự án đang chọn dịch vụ này sẽ cần khóa mới hoặc chuyển sang Ollama và media trên máy.`)) return;
+    if (!(await askConfirm({
+      title: `Xóa khóa ${info.name} đã lưu?`,
+      detail: "Dự án đang dùng dịch vụ này sẽ cần khóa mới, hoặc chuyển sang tạo trên máy của bạn.",
+      confirmLabel: "Xóa khóa",
+      tone: "danger",
+    }))) return;
     setBusy(true);
     setProblem(null);
     setNote(null);
@@ -3511,7 +3547,7 @@ function SettingsPage() {
       const next = await api.getSettings();
       setSettings({ ...next, usageStats: next.usageStats ?? defaultUsageStats });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Không thể đọc cài đặt từ máy chủ");
+      setMessage(error instanceof Error ? error.message : "Chưa đọc được cài đặt. Kiểm tra máy chính đang bật rồi tải lại trang.");
     }
   }
 
@@ -3546,7 +3582,7 @@ function SettingsPage() {
       setSettings((value) => ({ ...value, balancer: result.balancer ?? value.balancer }));
       setMachineNotice(result.applied
         ? { tone: "ok", text: "Đã lưu. Áp dụng cho các việc mới ngay bây giờ; việc đang chạy vẫn xong như cũ." }
-        : { tone: "warn", text: "Đã lưu nhưng worker chưa phản hồi ngay; nó sẽ áp dụng trong vài giây." });
+        : { tone: "warn", text: "Đã lưu. Máy chính sẽ áp dụng trong vài giây." });
       if (!result.applied) window.setTimeout(() => void refreshSettings(), 4000);
     } catch (error) {
       setMachineNotice({ tone: "warn", text: error instanceof Error ? error.message : "Không lưu được lựa chọn máy" });
@@ -3571,7 +3607,7 @@ function SettingsPage() {
 
   async function saveSettings() {
     if (isDemo) {
-      setMessage("Chế độ mẫu không thay đổi hạn mức trên máy chủ.");
+      setMessage("Chế độ mẫu không lưu hạn mức.");
       return;
     }
     setBusy(true);
@@ -3589,10 +3625,10 @@ function SettingsPage() {
           remainingUsd: Math.max(0, settings.dailyBudgetUsd - settings.usageStats.today.usedUsd),
         },
       });
-      setMessage("Đã lưu hạn mức. Backend sẽ áp dụng cho các tác vụ mới.");
+      setMessage("Đã lưu hạn mức. Áp dụng cho các video tạo từ bây giờ.");
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Không thể lưu cài đặt",
+        error instanceof Error ? error.message : "Chưa lưu được cài đặt. Hãy thử lại.",
       );
     } finally {
       setBusy(false);
@@ -3639,8 +3675,8 @@ function SettingsPage() {
         <section>
           <div className="section-heading-row">
             <div>
-              <h2>Thiết bị xử lý</h2>
-              <p className="microcopy">Chọn thiết bị nhận các tác vụ mới. Tác vụ đang chạy vẫn tiếp tục.</p>
+              <h2>Máy tạo video</h2>
+              <p className="microcopy">Chọn máy nhận việc mới. Việc đang chạy vẫn tiếp tục.</p>
             </div>
           </div>
           {settings.balancer && settings.balancer.nodes.length ? (
@@ -3684,7 +3720,7 @@ function SettingsPage() {
           </details>
         </section>
         <section>
-          <div className="section-heading-row"><div><h2>Hiệu suất và chi phí</h2><p className="microcopy">Giới hạn số video chạy cùng lúc và ngân sách dịch vụ trả phí. AI local không tính phí API.</p></div></div>
+          <div className="section-heading-row"><div><h2>Hiệu suất và chi phí</h2><p className="microcopy">Giới hạn số video chạy cùng lúc và ngân sách dịch vụ trả phí. Tạo trên máy của bạn không tốn phí.</p></div></div>
           <Field
             label="Số video tạo cùng lúc"
             hint="Mac Mini xử lý nhanh nhất khi tạo một video một lúc; video sau tự xếp hàng."
@@ -3705,18 +3741,18 @@ function SettingsPage() {
           <details className="settings-more">
             <summary>
               Ngân sách cho dịch vụ trả phí
-              <small>Hôm nay đã dùng ${settings.usageStats.today.usedUsd.toFixed(2)} / ${settings.usageStats.budgetUsd.toFixed(2)}</small>
+              <small>Hôm nay đã dùng {formatUsd(settings.usageStats.today.usedUsd)} / {formatUsd(settings.usageStats.budgetUsd)}</small>
             </summary>
             <div className="budget-meter" aria-label={`Đã dùng ${settings.usageStats.budgetPercent}% ngân sách`}>
               <span style={{ width: `${settings.usageStats.budgetPercent}%` }} />
             </div>
             <div className="usage-metrics">
-              <div><span>Đã dùng</span><strong>${settings.usageStats.today.usedUsd.toFixed(2)}</strong></div>
-              <div><span>Còn lại</span><strong>${settings.usageStats.remainingUsd.toFixed(2)}</strong></div>
+              <div><span>Đã dùng</span><strong>{formatUsd(settings.usageStats.today.usedUsd)}</strong></div>
+              <div><span>Còn lại</span><strong>{formatUsd(settings.usageStats.remainingUsd)}</strong></div>
               <div><span>Token ước tính</span><strong>{settings.usageStats.today.totalTokens.toLocaleString("vi-VN")}</strong></div>
-              <div><span>Tác vụ</span><strong>{settings.usageStats.today.eventCount}</strong></div>
+              <div><span>Lượt dùng</span><strong>{settings.usageStats.today.eventCount}</strong></div>
             </div>
-            <Field label="Ngân sách mỗi ngày (USD)" hint={`30 ngày qua: $${settings.usageStats.last30Days.usedUsd.toFixed(2)}. AI local không tính phí.`}>
+            <Field label="Ngân sách mỗi ngày (USD)" hint={`30 ngày qua: ${formatUsd(settings.usageStats.last30Days.usedUsd)}. Tạo trên máy của bạn không tính phí.`}>
               <input
                 type="number"
                 min="0"
@@ -3871,6 +3907,7 @@ export function App() {
       />
         </Routes>
       </Suspense>
+      <ConfirmHost />
     </AppErrorBoundary>
   );
 }

@@ -1,4 +1,5 @@
 import { DEFAULT_PROJECT_SETTINGS, type AirSetupSummary, type ApiKeySummary, type BalancerSummary, type Estimate, type Job, type KeyProvider, type LocalModelCatalog, type Project, type RegenerationComponent, type SystemSummary } from "@studio/shared";
+import { DEMO_ONLY } from "./copy";
 import { appConfig } from "./config";
 import { demoApi } from "./demo";
 import { demoSystem } from "./demo-system";
@@ -89,7 +90,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       },
     });
   } catch {
-    throw new Error("Không thể kết nối máy chủ. Hãy kiểm tra máy xử lý đang bật rồi thử lại.");
+    throw new Error("Chưa kết nối được máy chính. Kiểm tra máy đang bật và có mạng rồi thử lại.");
   }
   const body = (await response.json().catch(() => ({}))) as {
     error?: string;
@@ -101,7 +102,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       .filter(Boolean)
       .join("; ");
     throw Object.assign(new Error(
-      detail ? `${body.error ?? "Dữ liệu không hợp lệ"}: ${detail}` : body.error ?? "Không thể kết nối máy chủ",
+      detail ? `${body.error ?? "Dữ liệu không hợp lệ"}: ${detail}` : body.error ?? "Chưa kết nối được máy chính",
     ), { status: response.status });
   }
   return body as T;
@@ -117,7 +118,7 @@ async function voicePreviewBlob(voice: string, engine: string | null): Promise<B
       body: JSON.stringify({ voice, engine }),
     });
   } catch {
-    throw new Error("Không thể kết nối dịch vụ giọng đọc. Hãy kiểm tra máy xử lý đang bật rồi thử lại.");
+    throw new Error("Chưa kết nối được bộ tạo giọng. Kiểm tra máy chính đang bật rồi thử lại.");
   }
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { error?: string };
@@ -136,7 +137,7 @@ async function textToSpeechBlob(text: string, voice: string, engine: string | nu
       body: JSON.stringify({ text, voice, engine, speed }),
     });
   } catch {
-    throw new Error("Không thể kết nối dịch vụ giọng đọc. Hãy kiểm tra máy xử lý đang bật rồi thử lại.");
+    throw new Error("Chưa kết nối được bộ tạo giọng. Kiểm tra máy chính đang bật rồi thử lại.");
   }
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { error?: string };
@@ -149,7 +150,7 @@ export const api = {
   voicePreview: voicePreviewBlob,
   textToSpeech: textToSpeechBlob,
   async createVideo(input: VideoInput) {
-    if (appConfig.demoMode) throw new Error("Chế độ mẫu chỉ lưu bản nháp. Tạo video cần kết nối máy xử lý thật.");
+    if (appConfig.demoMode) throw new Error(DEMO_ONLY);
     const submission = await videoSubmission(input);
     const { project } = await request<{ project: Project; job: Job }>("/v1/videos", {
       method: "POST",

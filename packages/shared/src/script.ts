@@ -130,7 +130,7 @@ function lengthCost(words: number): number {
  * About 17 words per scene is what it aims for; a scene is rarely under 9 or over 28.
  */
 export function splitScript(sourceText: string): string[] {
-  if (!sourceText.trim()) throw new Error("Vui lòng nhập kịch bản");
+  if (!sourceText.trim()) throw new Error("Hãy nhập kịch bản");
   const tokens = sourceText.match(/\S+\s*|\s+/gu) ?? [];
   const units: string[] = [];
   let lead = "";
@@ -138,7 +138,7 @@ export function splitScript(sourceText: string): string[] {
     if (token.trim()) units.push(lead + token), (lead = "");
     else lead += token;
   }
-  if (!units.length) throw new Error("Vui lòng nhập kịch bản");
+  if (!units.length) throw new Error("Hãy nhập kịch bản");
   const cores = units.map((unit) => unit.trim());
   const trailing = units.map((unit) => unit.slice(unit.trimEnd().length));
   const count = units.length;
