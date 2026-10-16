@@ -110,7 +110,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         command = [str(item) for item in process.call_args.args[0]]
         vf = command[command.index("-vf") + 1]
         self.assertIn("zoompan", vf)
-        self.assertIn("s=576x1024", vf)
+        self.assertIn("s=720x1280", vf)
         self.assertIn("fps=24", vf)
 
     def test_ltx_timeout_returns_to_still_fallback(self):
