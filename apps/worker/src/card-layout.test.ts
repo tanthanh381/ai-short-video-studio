@@ -105,6 +105,10 @@ describe("recurring cast for story cards", () => {
     expect(castForScript("Bố đưa con trai đi học mỗi sáng.")).toMatch(/father.*little boy/);
   });
 
+  it("does not turn a deceased parent into a recurring on-screen character", () => {
+    expect(castForScript("Sau ngày bố mất, Minh mang chiếc áo cũ đến tiệm sửa.")).not.toMatch(/father/u);
+  });
+
   it("does not mistake 'con đường' or 'con người' for a child", () => {
     expect(castForScript("Mẹ chọn con đường khó, vì con người cần nghị lực.")).not.toMatch(/little/);
   });

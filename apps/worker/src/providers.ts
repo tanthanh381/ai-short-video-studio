@@ -718,14 +718,33 @@ export function visualPromptFlaws(narration: string, prompt: string): number {
   if (/\bghost\b/u.test(text) && !/(ma|quỷ|hồn|linh hồn|bóng ma|ghost)/iu.test(said)) flaws++;
   if (/\b(?:heart|hearts?)\b/u.test(text) && !/(tim|trái tim|yêu|tình yêu)/iu.test(said)) flaws++;
   if (/\b(?:old )?photo(?:graph)?\b/u.test(text) && !/(ảnh|hình|photo|photograph)/iu.test(said)) flaws++;
+  // A coherent cast is useful only when that role is present in this beat. A
+  // small model often copies the whole cast into every scene (for example a
+  // dead father or a child into a scene that only mentions a shopkeeper).
+  const roleRules: Array<[RegExp, RegExp]> = [
+    [/\b(?:mother|mom|mum|female parent)\b/u, /(?:mẹ|má|mạ|mother|mom|mum)/iu],
+    [/\b(?:father|dad|daddy|male parent)\b/u, /(?:cha|bố|ba|tía|father|dad|daddy)/iu],
+    [/\b(?:grandmother|grandma|grandmother's)\b/u, /(?:bà|grandmother|grandma)/iu],
+    [/\b(?:grandfather|grandpa|grandfather's)\b/u, /(?:ông|grandfather|grandpa)/iu],
+    [/\b(?:son|daughter|child(?:ren)?|kid|kids|baby|little boy|little girl)\b/u, /(?:con|cháu|bé|đứa trẻ|em bé|son|daughter|child|kid|baby)/iu],
+    [/\b(?:brother|sister|siblings?)\b/u, /(?:anh|chị|em|brother|sister|sibling)/iu],
+    [/\b(?:wife|husband|couple)\b/u, /(?:vợ|chồng|vợ chồng|wife|husband|couple)/iu],
+  ];
+  for (const [role, mention] of roleRules) if (role.test(text) && !mention.test(said)) flaws++;
   return flaws;
 }
 
 /** A non-symbolic last resort for an abstract sentence after the model retries. */
 export function concreteVisualFallback(narration: string): string {
   const said = narration.toLocaleLowerCase("vi");
-  if (/(viết|ghi chép|trang giấy|bút)/u.test(said))
+  if (/(mảnh giấy|danh sách|tờ giấy|tiệm sửa)/u.test(said))
+    return "Close-up of one pair of hands unfolding a small paper list beside a wooden repair counter, realistic paper texture, natural indoor light";
+  if (/(sách|đọc|học|viết|ghi chép|trang giấy|bút)/u.test(said))
     return "Visible hands write one line in an open notebook on a wooden desk, close-up shot, natural window light, realistic paper and pen details";
+  if (/(điện thoại|tin nhắn|gọi|màn hình|xác minh|điện thoại)/u.test(said))
+    return "Close-up of one pair of hands checking a smartphone beside a quiet desk, realistic screen glow, natural practical light, no readable text";
+  if (/(đèn|ngọn đèn|căn nhà|cửa sổ|ổ điện|hẹn giờ)/u.test(said))
+    return "An empty room with one warm lamp and a visible wall timer beside a window, wide shot, realistic evening light, no people";
   if (/(thở|hơi thở|bình tĩnh|thiền)/u.test(said))
     return "A person sits upright beside a window with one hand on the chest, taking one slow breath, medium shot, soft natural light, quiet room in focus";
   if (/(ký ức|quên|nghĩ|cảm xúc|suy nghĩ)/u.test(said))
@@ -1077,11 +1096,31 @@ export function youthfulSiblings(prompt: string): string {
 /** Put the shared character description first so every scene prompt names the same person. */
 export function withCast(cast: string, prompt: string, narration = "", force = false): string {
   const base = prompt.trim();
-  const description = cast.trim().replace(/[.\s]+$/u, "");
+  const description = (force ? cast : castForNarration(cast, narration)).trim().replace(/[.\s]+$/u, "");
   const hasPersonInNarration = /(?:người|anh|chị|cô|chú|bác|ông|bà|em|bé|cậu|nàng|chàng|mẹ|cha|bố|con|nhân vật|đứa trẻ|person|man|woman|boy|girl|child|people|human)/iu.test(narration);
   const hasPersonInPrompt = /(?:person|man|woman|boy|girl|child|people|human|character|hands?|face|mother|father|mom|dad|parent|son|daughter|grand\w*|lady|kid|baby|adult|elder\w*|family|wife|husband)/iu.test(base);
   // Story cards follow one recurring family, so the cast leads every prompt there.
   const applies = force || (hasPersonInNarration && hasPersonInPrompt);
   if (!description || !applies || base.toLowerCase().includes(description.toLowerCase().slice(0, 40))) return base.slice(0, 2000);
   return `${description}. ${base}`.slice(0, 2000);
+}
+
+/** Keep only recurring roles that the current narration actually names. This
+ * prevents a family inferred from the whole script from appearing in an
+ * unrelated beat (for example a child in a shopkeeper-only scene). */
+function castForNarration(cast: string, narration: string): string {
+  const said = narration.toLocaleLowerCase("vi");
+  const parts = cast.split(/,\s+and\s+/iu);
+  const roleMentioned = (part: string) => {
+    const text = part.toLocaleLowerCase("en");
+    if (/\b(?:mother|mom|mum)\b/u.test(text)) return /(?:mẹ|má|mạ|mother|mom|mum)/iu.test(said);
+    if (/\b(?:father|dad|daddy)\b/u.test(text)) return /(?:cha|bố|ba|tía|father|dad|daddy)/iu.test(said);
+    if (/\bgrandmother\b/u.test(text)) return /(?:bà|grandmother|grandma)/iu.test(said);
+    if (/\bgrandfather\b/u.test(text)) return /(?:ông|grandfather|grandpa)/iu.test(said);
+    if (/\b(?:little boy|little girl|child|kid|baby|son|daughter)\b/u.test(text)) return /(?:con|cháu|bé|đứa trẻ|em bé|son|daughter|child|kid|baby)/iu.test(said);
+    if (/\b(?:brother|sister|siblings?)\b/u.test(text)) return /(?:anh|chị|em|brother|sister|sibling)/iu.test(said);
+    if (/\b(?:wife|husband|couple)\b/u.test(text)) return /(?:vợ|chồng|vợ chồng|wife|husband|couple)/iu.test(said);
+    return true;
+  };
+  return parts.filter(roleMentioned).join(", and ");
 }

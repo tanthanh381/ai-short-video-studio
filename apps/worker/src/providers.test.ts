@@ -190,7 +190,10 @@ describe("diffusion prompt quality", () => {
     expect(visualPromptFlaws("Bạn cố xua đuổi một suy nghĩ.", "A person with floating blurred scribbles representing racing thoughts")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Một bóng ma xuất hiện trong căn phòng.", "A frightened person faces a ghost in a dark room")).toBe(0);
     expect(visualPromptFlaws("Bạn viết lại điều mình đang nghĩ.", "Hands writing in an open notebook at a sunlit desk")).toBe(0);
+    expect(visualPromptFlaws("Người thợ tìm thấy một mảnh giấy gấp tư.", "A Vietnamese father and his little girl inspect a paper")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Có những câu chuyện trở nên đáng sợ chỉ vì ta chưa nghe đến đoạn cuối.", "A grandmother points at a timer beside a lamp")).toBeGreaterThan(0);
     expect(concreteVisualFallback("Hãy gọi tên cảm xúc và viết lại điều đang nghĩ.")).toContain("open notebook");
+    expect(concreteVisualFallback("Người thợ tìm thấy một mảnh giấy gấp tư.")).toContain("paper list");
     expect(concreteVisualFallback("Một hơi thở chậm đưa bạn về hiện tại.")).toContain("one slow breath");
   });
 });
@@ -722,6 +725,12 @@ describe("withCast keeps the recurring family in every story-card scene", () => 
     const prompt = "A steaming bowl of rice on a wooden table, soft morning light";
     expect(withCast(cast, prompt, "Một bát cơm nóng.")).toBe(prompt);
     expect(withCast(cast, prompt, "Một bát cơm nóng.", true)).toBe(`${cast}. ${prompt}`);
+  });
+  it("does not copy unmentioned family roles into a different scene", () => {
+    const family = "a Vietnamese mother with a black bun, red blouse and brown skirt, and her little girl with two pigtails";
+    const prompt = "Wide room view showing a small table with a folded note lying on wood";
+    expect(withCast(family, prompt, "Người thợ tìm thấy một mảnh giấy gấp tư.")).toBe(prompt);
+    expect(withCast(family, "A woman reads a note beside a table", "Minh gọi cho mẹ.")).toMatch(/mother/iu);
   });
   it("does not repeat a description the prompt already contains", () => {
     const prompt = `${cast}. She smiles at her son`;

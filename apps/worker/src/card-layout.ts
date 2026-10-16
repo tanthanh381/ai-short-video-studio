@@ -461,12 +461,15 @@ function roleCast(text: string): string {
     const match = pattern.exec(source);
     if (match) found.push([match.index, role]);
   };
-  // Parents who "died early" are backstory, not the characters on screen.
+  // A deceased parent is backstory, not a character to redraw in every scene.
+  // Handle both plural forms ("cha mẹ mất") and the common single-parent
+  // forms ("sau ngày bố mất", "mẹ đã qua đời").
+  const parentDied = (role: "mother" | "father") => role === "mother"
+    ? /(?:mẹ|má|mạ)\s+(?:đã\s+)?(?:mất|qua đời|đã khuất)|(?:mất|qua đời|đã khuất)\s+(?:mẹ|má|mạ)/u.test(source)
+    : /(?:cha|bố|ba|tía)\s+(?:đã\s+)?(?:mất|qua đời|đã khuất)|(?:mất|qua đời|đã khuất)\s+(?:cha|bố|ba|tía)/u.test(source);
   const orphaned = /(?:cha mẹ|bố mẹ|ba mẹ)\s+(?:đều\s+)?(?:mất|qua đời|đã khuất|mất sớm)|mồ côi/u.test(source);
-  if (!orphaned) {
-    at("mother", word("mẹ|má|mạ"));
-    at("father", word("cha|bố|tía"));
-  }
+  if (!orphaned && !parentDied("mother")) at("mother", word("mẹ|má|mạ"));
+  if (!orphaned && !parentDied("father")) at("father", word("cha|bố|ba|tía"));
   at("grandmother", word("bà nội|bà ngoại|bà"));
   at("grandfather", word("ông nội|ông ngoại|ông"));
   const parentOrGrand = found.length > 0;
