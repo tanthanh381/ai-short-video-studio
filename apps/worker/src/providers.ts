@@ -105,6 +105,8 @@ export interface MediaProvider {
   createImage(prompt: string, aspectRatio: string, models?: MediaModelOptions): Promise<Uint8Array>;
   /** Optional image-to-video motion pass. Providers without it keep the still-image path. */
   createVideo?(input: { image: Uint8Array; prompt: string; aspectRatio: string }, models?: MediaModelOptions): Promise<Uint8Array>;
+  /** A cheap capability snapshot so an unavailable motion lane is skipped instead of timing out per scene. */
+  videoAvailable?(): boolean;
   createSpeech(text: string, voice: string, models?: MediaModelOptions): Promise<Uint8Array>;
   createSpeechAligned?(text: string, voice: string, models?: MediaModelOptions): Promise<{
     audio: Uint8Array;

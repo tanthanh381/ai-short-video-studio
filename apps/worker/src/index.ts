@@ -733,7 +733,8 @@ async function generateMedia(job: JobRow, project: Project) {
         await upload(imagePath, image, "image/png");
         await updateScene(scene.id, { image_path: imagePath });
       }
-      if (!videoPath && project.settings.localModels.video && media.createVideo) {
+      const motionAvailable = media.videoAvailable ? media.videoAvailable() : true;
+      if (!videoPath && project.settings.localModels.video && media.createVideo && motionAvailable) {
         await progress(
           job,
           mediaProgress(finished) + 2,
@@ -762,6 +763,8 @@ async function generateMedia(job: JobRow, project: Project) {
           log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "motion_unavailable_using_camera_move");
           await progress(job, mediaProgress(finished) + 3, `Dùng camera motion cho cảnh ${scene.order + 1}`);
         }
+      } else if (!videoPath && project.settings.localModels.video && !motionAvailable) {
+        await progress(job, mediaProgress(finished) + 3, `Dùng camera motion cho cảnh ${scene.order + 1}`);
       }
       if (!audioPath) {
         await progress(

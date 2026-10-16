@@ -39,6 +39,10 @@ export class PooledMediaAdapter implements MediaProvider {
     return this.pool.runOne("video", (node) => this.on(node.id).createVideo(input, models));
   }
 
+  videoAvailable(): boolean {
+    return this.pool.laneAvailable("video");
+  }
+
   createSpeech(text: string, voice: string, models: MediaModelOptions = {}): Promise<Uint8Array> {
     return this.pool.runOne("tts", (node) => this.on(node.id).createSpeech(text, voice, models), { ttsEngine: models.tts ?? null });
   }
