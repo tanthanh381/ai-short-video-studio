@@ -637,7 +637,7 @@ function DashboardPage() {
       <div className="page-heading">
         <div>
           <h1>Hôm nay mình kể câu chuyện gì?</h1>
-          <InfoPopover title="Tạo video">Dán kịch bản, bấm Tạo video và nhận bản MP4 hoàn chỉnh.</InfoPopover>
+          <p>Dán kịch bản, bấm Tạo video và nhận bản MP4 hoàn chỉnh.</p>
         </div>
         <Button onClick={() => navigate("/new")}>
           <Plus size={18} /> Tạo video mới
@@ -757,6 +757,9 @@ function DashboardPage() {
   );
 }
 
+/** Every main button stays clickable and says what is missing, instead of being greyed out without a reason. */
+const SOURCE_TOO_SHORT = "Hãy nhập ý tưởng hoặc kịch bản, ít nhất 10 ký tự.";
+
 const previewUrls = new Map<string, string>();
 
 function VoicePreview({ voice, engine, disabled }: { voice: string; engine: string | null; disabled?: boolean }) {
@@ -810,6 +813,24 @@ function useLocalModels(disabled: boolean) {
   return catalog;
 }
 
+/** The voice engine picker of the TTS and dubbing pages. With no engine to offer it says why and where to fix it. */
+function EngineSelect({ catalog, engine, onChange, isDemo }: { catalog: LocalModelCatalog | null; engine: string | null; onChange(next: string | null): void; isDemo: boolean }) {
+  const models = catalog?.tts.models ?? [];
+  return (
+    <div className="engine-select">
+      <select aria-label="Engine local" value={engine ?? ""} onChange={(event) => onChange(event.target.value || null)} disabled={!models.length}>
+        {!models.length && <option value="">Chưa kết nối</option>}
+        {models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+      </select>
+      {!models.length && (
+        <small className="field-hint">
+          {isDemo ? "Chế độ mẫu không kết nối máy tạo giọng." : "Máy tạo giọng chưa sẵn sàng."} <Link to="/system">Xem trang Hệ thống</Link>
+        </small>
+      )}
+    </div>
+  );
+}
+
 function TextToSpeechPage() {
   const { isDemo } = useAuth();
   const catalog = useLocalModels(isDemo);
@@ -844,7 +865,7 @@ function TextToSpeechPage() {
       <div className="tts-page-grid">
         <section className="tts-editor-card">
           <div className="section-heading-row">
-            <div className="section-title-with-info"><h2>Văn bản cần đọc</h2><InfoPopover title="Văn bản cần đọc">Tối đa 10.000 ký tự. Giọng đọc tự nhấn nhá cảm xúc theo từng câu trên máy self-host.</InfoPopover></div>
+            <h2>Văn bản cần đọc</h2>
             <span className="tts-counter">{text.length.toLocaleString("vi-VN")} / 10.000</span>
           </div>
           <textarea
@@ -871,13 +892,10 @@ function TextToSpeechPage() {
           )}
         </section>
         <section className="tts-options-card">
-          <div className="section-heading-row"><div className="section-title-with-info"><h2>Tùy chọn giọng</h2><InfoPopover title="Tùy chọn giọng">Chọn chất giọng, engine local và tốc độ đọc phù hợp với nội dung.</InfoPopover></div></div>
-          <label className="field"><span>Engine local</span>
-            <select value={engine ?? ""} onChange={(event) => setEngine(event.target.value || null)} disabled={!catalog?.tts.models.length}>
-              {!catalog?.tts.models.length && <option value="">Chưa kết nối</option>}
-              {catalog?.tts.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-            </select>
-          </label>
+          <h2>Tùy chọn giọng</h2>
+          <div className="field"><span className="field-label">Engine local</span>
+            <EngineSelect catalog={catalog} engine={engine} onChange={setEngine} isDemo={isDemo} />
+          </div>
           <div className="tts-voice-grid">
             {VOICE_PRESETS.map((preset) => (
               <button key={preset.id} type="button" className={`tts-voice-option ${voice === preset.id ? "selected" : ""}`} onClick={() => setVoice(preset.id)}>
@@ -1040,7 +1058,7 @@ function DubSubtitlePage() {
       <div className="dub-page-grid">
         <section className="dub-preview-card">
           <div className="section-heading-row">
-            <div><h2>Bản xem trước</h2><p>{file ? file.name : "Video của bạn sẽ xuất hiện ở đây"}</p></div>
+            <div><h2>Bản xem trước</h2><p>{file ? file.name : "Tải video lên, rồi nhập lời thoại ở cột bên cạnh"}</p></div>
             {audioUrl && <span className="ready-chip"><Check size={14} /> Đã có giọng đọc</span>}
           </div>
           <div className="video-preview-frame">
@@ -1051,7 +1069,14 @@ function DubSubtitlePage() {
                 style={{ color: subtitleColor, backgroundColor: subtitleBackgroundColor, fontSize: `${subtitleFontSize}px`, textShadow: subtitleShadow }}
               >{script.trim()}</div>}
               <audio ref={audioRef} src={audioUrl ?? undefined} onEnded={() => setPlaying(false)} />
-            </> : <div className="video-empty"><Video size={34} /><span>Tải video để bắt đầu</span></div>}
+            </> : (
+              <label className="video-empty video-empty-upload">
+                <Upload size={30} />
+                <strong>Bước 1 · Tải video lên</strong>
+                <span>MP4, WebM hoặc MOV · tối đa 50 MB</span>
+                <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => selectVideo(event.target.files?.[0])} />
+              </label>
+            )}
           </div>
           <div className="dub-preview-actions">
             <Button variant="secondary" disabled={!audioUrl || !videoUrl} onClick={() => void togglePreview()}>
@@ -1061,32 +1086,40 @@ function DubSubtitlePage() {
           </div>
         </section>
         <section className="dub-form-card">
-          <label className="upload-dropzone">
-            <Upload size={23} />
-            <strong>{file ? "Đổi video" : "Tải video lên"}</strong>
-            <span>MP4, WebM hoặc MOV · tối đa 50 MB</span>
-            <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => selectVideo(event.target.files?.[0])} />
-          </label>
+          {file && (
+            <label className="upload-dropzone upload-dropzone-compact">
+              <Upload size={18} />
+              <strong>Đổi video</strong>
+              <span>{file.name}</span>
+              <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => selectVideo(event.target.files?.[0])} />
+            </label>
+          )}
           <Field label="Lời thoại lồng tiếng và nội dung phụ đề" hint="Nội dung này sẽ được dùng cho cả giọng đọc và dòng phụ đề xem trước.">
             <textarea value={script} onChange={(event) => setScript(event.target.value)} rows={7} maxLength={10000} placeholder="Nhập lời thoại tiếng Việt…" />
           </Field>
           <div className="dub-form-row">
             <Field label="Giọng đọc">
-              <select value={voice} onChange={(event) => setVoice(event.target.value as typeof voice)}>
-                {VOICE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label} — {preset.hint}</option>)}
-              </select>
-              <Button variant="ghost" disabled={voicePreviewState === "loading"} onClick={() => void toggleVoicePreview()}>
-                {voicePreviewState === "playing" ? <><Pause size={15} /> Dừng nghe thử</> : <><Play size={15} /> {voicePreviewState === "loading" ? "Đang tạo bản nghe thử…" : "Nghe thử lời thoại"}</>}
-              </Button>
+              <span className="select-with-action">
+                <select value={voice} onChange={(event) => setVoice(event.target.value as typeof voice)}>
+                  {VOICE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label} — {preset.hint}</option>)}
+                </select>
+                <button
+                  type="button"
+                  className="icon-action"
+                  disabled={voicePreviewState === "loading"}
+                  onClick={(event) => { event.preventDefault(); void toggleVoicePreview(); }}
+                  aria-label={voicePreviewState === "playing" ? "Dừng nghe thử" : "Nghe thử lời thoại"}
+                  title={voicePreviewState === "playing" ? "Dừng nghe thử" : "Nghe thử lời thoại"}
+                >
+                  {voicePreviewState === "loading" ? <LoaderCircle className="spin" size={16} /> : voicePreviewState === "playing" ? <Pause size={16} /> : <Play size={16} />}
+                </button>
+              </span>
               {voicePreviewError && <small className="field-error">{voicePreviewError}</small>}
               <audio ref={voicePreviewAudioRef} hidden />
             </Field>
-            <Field label="Engine local">
-              <select value={engine ?? ""} onChange={(event) => setEngine(event.target.value || null)} disabled={!catalog?.tts.models.length}>
-                {!catalog?.tts.models.length && <option value="">Chưa kết nối</option>}
-                {catalog?.tts.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-              </select>
-            </Field>
+            <div className="field"><span className="field-label">Engine local</span>
+              <EngineSelect catalog={catalog} engine={engine} onChange={setEngine} isDemo={isDemo} />
+            </div>
           </div>
           <label className="check dub-check">
             <input type="checkbox" checked={subtitleEnabled} onChange={(event) => setSubtitleEnabled(event.target.checked)} />
@@ -1408,6 +1441,7 @@ function NewProjectPage() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (submitting.current) return;
+    if (sourceText.trim().length < 10) { setError(SOURCE_TOO_SHORT); return; }
     submitting.current = true;
     setBusy(true);
     setError(null);
@@ -1423,7 +1457,8 @@ function NewProjectPage() {
   }
   /** Makes the project, cuts the script into scenes and stops there, so the scenes can be read and edited before any picture or voice is made. */
   async function splitFirst() {
-    if (submitting.current || sourceText.trim().length < 10) return;
+    if (submitting.current) return;
+    if (sourceText.trim().length < 10) { setError(SOURCE_TOO_SHORT); return; }
     submitting.current = true;
     setBusy(true);
     setError(null);
@@ -1446,7 +1481,8 @@ function NewProjectPage() {
     }
   }
   async function saveDraft() {
-    if (submitting.current || sourceText.trim().length < 10) return;
+    if (submitting.current) return;
+    if (sourceText.trim().length < 10) { setError(SOURCE_TOO_SHORT); return; }
     submitting.current = true;
     setBusy(true);
     setError(null);
@@ -1472,9 +1508,9 @@ function NewProjectPage() {
         <ArrowLeft size={17} /> Quay lại
       </button>
       <div className="page-heading">
-        <div className="page-title-with-info">
+        <div>
           <h1>Kịch bản của bạn, video hoàn chỉnh.</h1>
-          <InfoPopover title="Quy trình tạo video">Studio tự chia cảnh, tạo ảnh, đọc tiếng Việt, đồng bộ phụ đề và ghép video.</InfoPopover>
+          <p>Studio tự chia cảnh, tạo ảnh, đọc tiếng Việt, đồng bộ phụ đề và ghép video.</p>
         </div>
       </div>
       <form className="creation-form" onSubmit={submit}>
@@ -1529,6 +1565,7 @@ function NewProjectPage() {
                 value={sourceText}
                 onChange={(e) => {
                   setSourceText(e.target.value);
+                  if (error === SOURCE_TOO_SHORT) setError(null);
                   // Subtitles are someone's finished lines: read them as written, never rewrite them as an idea.
                   if (looksLikeSubtitles(e.target.value)) setInputMode("full-script");
                   else if (!modeChosen && inputMode === "idea" && looksLikeFinishedScript(e.target.value)) {
@@ -1539,8 +1576,6 @@ function NewProjectPage() {
                     setAutoScript(false);
                   }
                 }}
-                required
-                minLength={10}
                 maxLength={30000}
                 rows={10}
                 disabled={busy}
@@ -1644,10 +1679,10 @@ function NewProjectPage() {
           </div>
         </section>
         <div className="form-actions">
-          <Button type="button" variant="ghost" disabled={busy || sourceText.trim().length < 10} onClick={() => void saveDraft()}>
+          <Button type="button" variant="ghost" disabled={busy} onClick={() => void saveDraft()}>
             <Save size={17} /> Lưu bản nháp
           </Button>
-          <Button type="button" variant="secondary" disabled={busy || isDemo || sourceText.trim().length < 10} onClick={() => void splitFirst()} title="Chia kịch bản thành cảnh để đọc và sửa từng cảnh, chưa tạo ảnh hay giọng">
+          <Button type="button" variant="secondary" disabled={busy || isDemo} onClick={() => void splitFirst()} title="Chia kịch bản thành cảnh để đọc và sửa từng cảnh, chưa tạo ảnh hay giọng">
             <WandSparkles size={17} /> Chia cảnh để sửa trước
           </Button>
           <Button type="submit" busy={busy} disabled={isDemo}>
@@ -2065,6 +2100,7 @@ function StudioPage() {
   async function createVideo() {
     if (locked.current) return;
     if (isDemo) { setError("Chế độ mẫu chỉ lưu bản nháp. Tạo MP4 cần kết nối máy xử lý thật."); return; }
+    if (sourceDraft.trim().length < 10) { setError("Kịch bản cần ít nhất 10 ký tự trước khi tạo video."); return; }
     if (project && sourceDraft !== project.sourceText) {
       setError("Bạn đã sửa “Lời đọc gốc” nhưng chưa bấm “Áp dụng”. Hãy áp dụng (chia lại cảnh) hoặc hủy thay đổi trước khi tạo video.");
       return;
@@ -2499,9 +2535,9 @@ function StudioPage() {
     <div className="studio">
       <div className="studio-top">
         <h1 className="sr-only">Studio: {project.title}</h1>
-        <div>
-          <button className="back-link" onClick={() => navigate("/")}>
-            <ArrowLeft size={16} /> Dự án
+        <div className="studio-head">
+          <button className="back-link" onClick={() => navigate("/")} aria-label="Về danh sách dự án">
+            <ArrowLeft size={16} /> <span>Dự án</span>
           </button>
           <input
             className="studio-title"
@@ -2510,6 +2546,7 @@ function StudioPage() {
             disabled={processing || Boolean(busyAction)}
             onChange={(e) => change({ ...project, title: e.target.value })}
           />
+          {/* One line says where the edits are; saving by hand only shows up when it is needed. */}
           <span className={`save-state ${saveState.status === "error" ? "save-failed" : ""}`} role="status" aria-live="polite">
             {saveState.status === "saved" ? (
               <>
@@ -2528,30 +2565,24 @@ function StudioPage() {
                 <CircleAlert size={14} /> Chưa lưu được
               </>
             )}
+            {(saveState.status === "error" || (!autoSave && saveState.status === "unsaved")) && (
+              <button type="button" className="link-button" onClick={() => void flushEdits().catch(() => {})} title="Lưu ngay mọi chỉnh sửa (Ctrl/⌘ + S)">
+                {saveState.status === "error" ? "Thử lại" : "Lưu ngay"}
+              </button>
+            )}
           </span>
-          <Button
-            variant="secondary"
-            onClick={() => void flushEdits().catch(() => {})}
-            disabled={saveState.status === "saved" || saveState.status === "saving"}
-            title="Lưu ngay mọi chỉnh sửa (Ctrl/⌘ + S)"
-          >
-            <Save size={15} /> Lưu
-          </Button>
-          <label className="check auto-save" title="Bật: tự lưu sau mỗi chỉnh sửa. Tắt: chỉ lưu khi bạn bấm Lưu (hoặc khi bấm Tạo video).">
-            <input type="checkbox" checked={autoSave} onChange={(e) => chooseAutoSave(e.target.checked)} />
-            <span>Tự động lưu</span>
-          </label>
         </div>
         <div className="studio-actions">
-          <Button onClick={() => void createVideo()} busy={busyAction === "create_video"} disabled={processing || Boolean(busyAction) || sourceDraft.trim().length < 10}>
+          <Button onClick={() => void createVideo()} busy={busyAction === "create_video"} disabled={processing || Boolean(busyAction)}>
             <Video size={17} /> {failedJob ? "Tiếp tục tạo video" : "Tạo video"}
           </Button>
           <Button variant="secondary" aria-expanded={optionsOpen} onClick={() => setOptionsOpen(!optionsOpen)}>
             <Settings size={17} /> Tùy chọn
           </Button>
           <details className="manual-actions">
-            <summary>Chỉnh từng bước <ChevronDown size={15} /></summary>
+            <summary aria-label="Thêm thao tác" title="Thêm thao tác"><MoreHorizontal size={18} /></summary>
             <div>
+              <p className="menu-label">Chỉnh từng bước</p>
           <Button
             variant="secondary"
             onClick={() => void runAction("storyboard")}
@@ -2589,6 +2620,7 @@ function StudioPage() {
             Tạo media
           </Button>
           <Button
+            variant="secondary"
             onClick={() => void runAction("render_video")}
             busy={busyAction === "render_video"}
             disabled={processing || Boolean(busyAction) || (!isDemo && (!project.scenes.length || !capabilities?.render))}
@@ -2596,6 +2628,19 @@ function StudioPage() {
           >
             <Video size={17} /> Xuất video
           </Button>
+              <p className="menu-label">Lưu</p>
+              <Button
+                variant="secondary"
+                onClick={() => void flushEdits().catch(() => {})}
+                disabled={saveState.status === "saved" || saveState.status === "saving"}
+                title="Lưu ngay mọi chỉnh sửa (Ctrl/⌘ + S)"
+              >
+                <Save size={15} /> Lưu ngay
+              </Button>
+              <label className="check auto-save" title="Bật: tự lưu sau mỗi chỉnh sửa. Tắt: chỉ lưu khi bạn bấm Lưu (hoặc khi bấm Tạo video).">
+                <input type="checkbox" checked={autoSave} onChange={(e) => chooseAutoSave(e.target.checked)} />
+                <span>Tự động lưu</span>
+              </label>
             </div>
           </details>
         </div>
@@ -3593,9 +3638,9 @@ function SettingsPage() {
       <div className="settings-page-grid">
         <section>
           <div className="section-heading-row">
-            <div className="section-title-with-info">
+            <div>
               <h2>Thiết bị xử lý</h2>
-              <InfoPopover title="Thiết bị xử lý">Chọn thiết bị nhận các tác vụ mới. Tác vụ đang chạy vẫn tiếp tục.</InfoPopover>
+              <p className="microcopy">Chọn thiết bị nhận các tác vụ mới. Tác vụ đang chạy vẫn tiếp tục.</p>
             </div>
           </div>
           {settings.balancer && settings.balancer.nodes.length ? (
@@ -3639,7 +3684,7 @@ function SettingsPage() {
           </details>
         </section>
         <section>
-          <div className="section-title-with-info"><h2>Hiệu suất và chi phí</h2><InfoPopover title="Hiệu suất và chi phí">Giới hạn số video chạy cùng lúc và theo dõi ngân sách cho các dịch vụ trả phí. AI local không tính phí API.</InfoPopover></div>
+          <div className="section-heading-row"><div><h2>Hiệu suất và chi phí</h2><p className="microcopy">Giới hạn số video chạy cùng lúc và ngân sách dịch vụ trả phí. AI local không tính phí API.</p></div></div>
           <Field
             label="Số video tạo cùng lúc"
             hint="Mac Mini xử lý nhanh nhất khi tạo một video một lúc; video sau tự xếp hàng."
@@ -3717,9 +3762,9 @@ function SimplePage({
   return (
     <div className="page">
       <div className="page-heading">
-        <div className="page-title-with-info">
+        <div>
           <h1>{title}</h1>
-          <InfoPopover title={title}>{subtitle}</InfoPopover>
+          <p>{subtitle}</p>
         </div>
       </div>
       {children}

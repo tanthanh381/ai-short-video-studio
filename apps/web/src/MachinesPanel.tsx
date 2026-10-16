@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { BalancerSummary } from "@studio/shared";
 import { MODE_CHOICES, disabledAfter, machineChoices, machineWarning, serviceSummary } from "./lib/machines";
+import { nodeDisplayName } from "./lib/system";
 
 /**
  * Cài đặt → thiết bị xử lý: chọn thiết bị nhận tác vụ mới và cách phân bổ tác vụ.
@@ -24,10 +25,11 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
       <ul className="machine-list" aria-label="Thiết bị tham gia xử lý">
         {choices.map((choice) => {
           const locked = busy || (choice.enabled && !choice.canSwitchOff);
+          const name = nodeDisplayName(choice.id);
           return (
             <li key={choice.id} className={choice.enabled ? "" : "is-off"}>
               <div className="machine-text">
-                <strong>{choice.id}{choice.primary ? " (chính)" : ""}</strong>
+                <strong>{nodeDisplayName(choice.id, choice.primary ? "primary" : undefined)}</strong>
                 <span>{choice.facts || (choice.enabled ? "Chưa nhận được số liệu (máy đang khởi động lại hoặc mất kết nối)" : "Đang tắt · không nhận tác vụ mới")}</span>
                 {choice.sync ? (
                   <span className={`machine-sync tone-${choice.sync.tone}`}>
@@ -45,10 +47,10 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
                 type="button"
                 role="switch"
                 aria-checked={choice.enabled}
-                aria-label={`${choice.enabled ? "Tắt" : "Bật"} thiết bị ${choice.id}`}
+                aria-label={`${choice.enabled ? "Tắt" : "Bật"} thiết bị ${name}`}
                 className="switch"
                 disabled={locked}
-                title={choice.enabled && !choice.canSwitchOff ? "Cần duy trì ít nhất một thiết bị đang bật" : choice.enabled ? `Tắt ${choice.id}: không nhận tác vụ mới` : `Bật ${choice.id}`}
+                title={choice.enabled && !choice.canSwitchOff ? "Cần duy trì ít nhất một thiết bị đang bật" : choice.enabled ? `Tắt ${name}: không nhận tác vụ mới` : `Bật ${name}`}
                 onClick={() => onChange({ disabled: disabledAfter(balancer, choice.id, !choice.enabled) })}
               >
                 <span className="switch-knob" aria-hidden="true" />

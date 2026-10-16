@@ -206,7 +206,7 @@ describe("systemAlerts and summaryTiles", () => {
     expect(systemAlerts(healthy)).toEqual([]);
     const tiles = Object.fromEntries(summaryTiles(healthy).map((tile) => [tile.id, tile]));
     expect(tiles.machines).toMatchObject({ value: "2/2 hoạt động", tone: "ok" });
-    expect(tiles.alerts).toMatchObject({ value: "Không có", tone: "ok" });
+    expect(tiles.alerts).toBeUndefined(); // the "Cần chú ý" list below the tiles says it, with the details
     expect(tiles.jobs).toMatchObject({ value: "0 chạy · 0 chờ", tone: "idle" });
   });
 
@@ -243,9 +243,9 @@ describe("systemAlerts and summaryTiles", () => {
       { jobs: { running: 1, queued: 2, completed24h: 5, failed24h: 0, avgVideoSeconds24h: 380, recent: [{ id: "j", type: "create_video", title: "A", status: "running", stage: "Đang tạo ảnh cảnh 3 · máy air", progress: 30, startedAt: null, finishedAt: null, durationSeconds: 60 }] } },
     );
     const tiles = Object.fromEntries(summaryTiles(busy).map((tile) => [tile.id, tile]));
-    expect(tiles.jobs).toMatchObject({ value: "1 chạy · 2 chờ", detail: "Đang tạo ảnh cảnh 3 · máy air", tone: "ok" });
+    expect(tiles.jobs).toMatchObject({ value: "1 chạy · 2 chờ", detail: "Đang tạo ảnh cảnh 3 · MacBook Air", tone: "ok" });
     expect(tiles.throughput).toMatchObject({ value: "5 video xong", detail: "trung bình 6 phút 20 giây mỗi video" });
-    expect(tiles.share).toMatchObject({ value: "mini 4 · air 11" });
+    expect(tiles.share).toMatchObject({ value: "15 ảnh", detail: "Mac Mini 4 · MacBook Air 11 · từ lúc worker khởi động" });
   });
 
   it("still works with one machine and no balancer", () => {
@@ -269,7 +269,7 @@ describe("the demo data", () => {
     }
     expect(systemAlerts(demo).map((alert) => alert.id)).toContain("mini-swap");
     expect(workShare(nodes)[0]).toMatchObject({ lane: "image", total: 15 });
-    expect(summaryTiles(demo).map((tile) => tile.id)).toEqual(["machines", "jobs", "throughput", "share", "sync", "alerts"]);
+    expect(summaryTiles(demo).map((tile) => tile.id)).toEqual(["machines", "jobs", "throughput", "share", "sync", ]);
   });
 });
 
@@ -372,8 +372,9 @@ describe("sync in the alerts and the tiles", () => {
 
   it("puts the worst sync state of the second machines in a tile, and none when there is only one machine", () => {
     const tile = (nodes: NodeSummary[]) => summaryTiles(system(nodes)).find((item) => item.id === "sync");
-    expect(tile([node("mini"), node("air")])).toMatchObject({ value: "MacBook Air: giống mac mini", tone: "ok" });
-    expect(tile([node("mini"), node("air", { sync: inSync({ state: "behind", behind: { code: 3, toolkit: 0, models: 0, ollama: 0 } }) })])).toMatchObject({ value: "MacBook Air: lệch 3 mục", tone: "warn" });
+    expect(tile([node("mini"), node("air")])).toMatchObject({ value: "Giống Mac Mini", detail: "MacBook Air tự giữ giống Mac Mini mỗi phút", tone: "ok" });
+    expect(tile([node("mini"), node("air", { sync: inSync({ state: "behind", behind: { code: 3, toolkit: 0, models: 0, ollama: 0 } }) })])).toMatchObject({ value: "Lệch 3 mục", tone: "warn" });
+    expect(tile([node("mini"), node("air", { sync: inSync({ state: "behind", behind: { code: 3, toolkit: 0, models: 0, ollama: 0 } }) })])!.detail).toMatch(/^MacBook Air: /);
     expect(tile([node("mini")])).toBeUndefined();
   });
 });
