@@ -32,6 +32,7 @@ import {
   balancerModeSchema,
   nodeIdSchema,
   type BalancerSettings,
+  type LocalModelCatalog,
   type SystemJobsSummary,
   type SystemSummary,
 } from "@studio/shared";
@@ -684,7 +685,33 @@ export function createApp(config: AppConfig, db: AdminClient) {
         signal: AbortSignal.timeout(8_000),
       });
       if (!response.ok) return res.json(unavailable);
-      res.json(await response.json());
+      const catalog = await response.json() as LocalModelCatalog;
+      // The media bridge is local to the primary Mac, while the worker may have a
+      // secondary Mac that can wake LTX on demand. Keep the picker honest about
+      // the whole pool so a publish-ready one-click job does not silently fall
+      // back just because Mini's 16 GB runtime reports no ready LTX process.
+      if (!catalog.video?.models?.length) {
+        try {
+          const worker = await fetch(`${config.WORKER_HEALTH_URL.replace(/\/$/, "")}/health`, {
+            signal: AbortSignal.timeout(2_500),
+          });
+          if (worker.ok) {
+            const health = await worker.json() as WorkerHealthPayload;
+            const hasVideoLane = health.balancer?.nodes.some((node) =>
+              node.state === "healthy" && node.enabled !== false && node.lanes?.video?.eligible,
+            );
+            if (hasVideoLane) {
+              catalog.video = {
+                models: [{ id: "ltxv-2b-0.9.8-distilled", label: "LTX-Video 2B Distilled (I2V)" }],
+                default: "ltxv-2b-0.9.8-distilled",
+              };
+            }
+          }
+        } catch {
+          // The primary catalog remains authoritative when the worker health endpoint is unavailable.
+        }
+      }
+      res.json(catalog);
     } catch {
       res.json(unavailable); // máy tạo video chưa sẵn sàng; giao diện dùng mặc định
     }

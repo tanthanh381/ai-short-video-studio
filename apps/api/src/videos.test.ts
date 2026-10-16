@@ -192,6 +192,25 @@ describe("local model selection API", () => {
     } finally { vi.unstubAllGlobals(); }
   });
 
+  it("offers LTX when a healthy worker node can wake the video lane", async () => {
+    const f = fixture();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...catalog, video: { models: [], default: null } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        balancer: { nodes: [{ state: "healthy", enabled: true, lanes: { video: { eligible: true } } }] },
+      })));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const response = await request(f.app).get("/v1/local-models").set("Authorization", "Bearer test");
+      expect(response.status).toBe(200);
+      expect(response.body.video).toEqual({
+        models: [{ id: "ltxv-2b-0.9.8-distilled", label: "LTX-Video 2B Distilled (I2V)" }],
+        default: "ltxv-2b-0.9.8-distilled",
+      });
+      expect(fetchMock.mock.calls[1]![0]).toBe("http://worker.test:8790/health");
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it("previews voices with a fixed sample, rejects unknown voices and caches the audio", async () => {
     const f = fixture();
     const fetchMock = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "audio/mpeg" } }));
