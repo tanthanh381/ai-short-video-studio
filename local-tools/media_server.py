@@ -65,6 +65,7 @@ VIDEO_FALLBACK_ENABLED = os.getenv("VIDEO_FALLBACK_ENABLED", "1").lower() not in
 # covers the usual scene length while remaining cheap enough for a CPU-only
 # availability path; the final renderer still trims to the measured voice.
 VIDEO_FALLBACK_SECONDS = max(1.0, min(float(os.getenv("VIDEO_FALLBACK_SECONDS", "6.0")), 8.0))
+VIDEO_ENGINE = threading.local()
 
 
 def still_video_fallback(image_base64, aspect_ratio="9:16"):
@@ -189,10 +190,12 @@ def json_response(handler, status, value):
         pass
 
 
-def binary_response(handler, content_type, data):
+def binary_response(handler, content_type, data, headers=None):
     handler.send_response(200)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Content-Length", str(len(data)))
+    for name, value in (headers or {}).items():
+        handler.send_header(name, str(value))
     handler.end_headers()
     try:
         handler.wfile.write(data)
@@ -1139,6 +1142,7 @@ def ltx_state():
 
 def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None, preset=None):
     """Proxy I2V to LTX and preserve export availability with a bounded last resort."""
+    VIDEO_ENGINE.value = "fallback"
     check_choice("video", model, {"ltxv-2b-0.9.8-distilled": "LTX-Video 2B Distilled"})
     state, detail = ltx_state()
     if state != "ready":
@@ -1157,6 +1161,7 @@ def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None
             data = response.read()
         if not data.startswith(b"\x00\x00\x00") and not data.startswith(b"RIFF"):
             raise RuntimeError("LTX runtime trả về dữ liệu video không hợp lệ")
+        VIDEO_ENGINE.value = "ltx"
         return data
     except Exception as error:
         if not VIDEO_FALLBACK_ENABLED:
@@ -1409,10 +1414,11 @@ class Handler(BaseHTTPRequestHandler):
                                                               payload.get("referenceImage")))
             elif self.path == "/video":
                 payload = json.loads(body)
-                binary_response(self, "video/mp4", local_video(
+                result = local_video(
                     str(payload.get("imageBase64", "")), str(payload.get("prompt", "")),
                     payload.get("aspectRatio", "9:16"), payload.get("model"),
-                    payload.get("seed"), payload.get("preset")))
+                    payload.get("seed"), payload.get("preset"))
+                binary_response(self, "video/mp4", result, {"X-Studio-Video-Engine": getattr(VIDEO_ENGINE, "value", "fallback")})
             elif self.path == "/tts":
                 payload = json.loads(body)
                 binary_response(self, "audio/mpeg", tts(str(payload.get("text", "")), str(payload.get("voice", "doc-truyen")), payload.get("engine"), payload.get("speed", 1.0)))
