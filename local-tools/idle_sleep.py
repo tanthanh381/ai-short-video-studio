@@ -206,6 +206,32 @@ class Sleeper:
                 self.locks[name].release()
         return slept
 
+    def park(self, names, keep=()):
+        """Unload named idle services immediately, without interrupting active work."""
+        parked = []
+        for name in names:
+            if name in keep or name not in self.services:
+                continue
+            service = self.services[name]
+            with self.lock:
+                if self.busy[name]:
+                    continue
+                self.last_used[name] = self.clock()
+            control = self.control(service)
+            if not control.installed(service.label) or not control.loaded(service.label):
+                continue
+            if not self.locks[name].acquire(blocking=False):
+                continue
+            try:
+                with self.lock:
+                    if self.busy[name]:
+                        continue
+                control.unload(service.label)
+                parked.append(name)
+            finally:
+                self.locks[name].release()
+        return parked
+
     def ensure_awake(self, name):
         """Starts a sleeping service and waits until it answers; returns True when it had to be woken. Concurrent callers wait together."""
         service = self.services.get(name)

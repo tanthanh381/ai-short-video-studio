@@ -1152,6 +1152,14 @@ def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None
         raise RuntimeError(detail)
     if not image_base64 or len(image_base64) > 8 * 1024 * 1024:
         raise ValueError("Ảnh tham chiếu LTX trống hoặc vượt giới hạn 8 MB")
+    # LTX peaks after the still image and voice have already been produced. Park
+    # idle competitors before inference so a 24 GB Mac does not page the video
+    # model out of memory. Active requests are never interrupted by park().
+    release_turbo_model()
+    release_comfy_model()
+    parked = SLEEPER.park(("image", "vieneu", "comfyui"), keep=("ltx",))
+    if parked:
+        print(f"[video] parked competing model services: {', '.join(parked)}", flush=True)
     payload = json.dumps({"model": model, "prompt": prompt[:3000], "aspectRatio": aspect_ratio,
                           "seed": seed, "preset": preset, "imageBase64": image_base64}).encode()
     request = urllib.request.Request(f"{LTX_VIDEO_URL.rstrip('/')}/video", data=payload,

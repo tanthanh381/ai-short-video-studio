@@ -106,6 +106,15 @@ class SleepTests(unittest.TestCase):
         self.assertFalse(bare.asleep("image"))
         self.assertEqual(launchd2.calls, [])
 
+    def test_park_releases_only_idle_services_and_keeps_requested_service(self):
+        sleeper, launchd, _ = make()
+        sleeper.touch("image", +1)
+        self.assertEqual(sleeper.park(("image", "tts"), keep=("tts",)), [])
+        self.assertEqual(launchd.calls, [])
+        sleeper.touch("image", -1)
+        self.assertEqual(sleeper.park(("image", "tts"), keep=("tts",)), ["image"])
+        self.assertEqual(launchd.calls, [("unload", "img")])
+
 
 class WakeTests(unittest.TestCase):
     def test_wakes_a_sleeping_service_and_waits_for_its_health(self):

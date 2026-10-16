@@ -121,6 +121,18 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(result, b"fallback")
         fallback.assert_called_once()
 
+    def test_ltx_parks_idle_competing_model_services_before_inference(self):
+        with patch.object(self.media, "ltx_state", return_value=("ready", "ok")), \
+             patch.object(self.media, "release_turbo_model") as turbo, \
+             patch.object(self.media, "release_comfy_model") as comfy, \
+             patch.object(self.media.SLEEPER, "park", return_value=["image", "vieneu"]) as park, \
+             patch.object(self.media.urllib.request, "urlopen", return_value=io.BytesIO(b"\x00\x00\x00\x18ftypmp42")):
+            result = self.media.local_video(base64.b64encode(b"PNG").decode(), "gentle movement", model="ltxv-2b-0.9.8-distilled")
+        self.assertTrue(result.startswith(b"\x00\x00\x00"))
+        turbo.assert_called_once()
+        comfy.assert_called_once()
+        park.assert_called_once_with(("image", "vieneu", "comfyui"), keep=("ltx",))
+
     def test_degraded_ltx_does_not_wait_for_wake_timeout(self):
         with patch.object(self.media, "ltx_state", return_value=("offline", "LTX needs more RAM")), \
              patch.object(self.media.SLEEPER, "asleep", return_value=False):
