@@ -945,7 +945,7 @@ export async function createFaithfulStoryboard(
   }));
   const scenes: StoryboardResult["scenes"] = batches.flat();
   if (scenes.map((scene) => scene.narration).join("") !== input.sourceText)
-    throw new Error("Không thể bảo toàn kịch bản; tác vụ đã dừng trước khi tạo media");
+    throw new Error("Kịch bản bị thay đổi khi chia cảnh nên việc đã dừng trước khi tạo ảnh và giọng. Hãy bấm Tạo video lại.");
   return {
     hook: input.sourceText.trim().slice(0, 500),
     narration: input.sourceText,

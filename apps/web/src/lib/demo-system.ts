@@ -93,7 +93,7 @@ export function demoSystem(now = Date.now()): SystemSummary {
     services: {
       api: { state: "healthy", detail: "API đã phản hồi yêu cầu này", checkedAt: iso(0) },
       supabase: { state: "healthy", detail: "Đã xác thực tài khoản và truy cập được dữ liệu", checkedAt: iso(0) },
-      worker: { state: "healthy", detail: "Worker đang chạy và sẵn sàng nhận job", checkedAt: iso(0) },
+      worker: { state: "healthy", detail: "Đang chạy, sẵn sàng nhận việc", checkedAt: iso(0) },
       render: { state: "healthy", detail: "FFmpeg và bộ lọc phụ đề đã sẵn sàng", checkedAt: iso(0) },
       ollama: { state: "healthy", detail: "Ollama đang phản hồi", checkedAt: iso(0) },
       localMedia: { state: "healthy", detail: "Media server và LTX đang phản hồi", checkedAt: iso(0) },

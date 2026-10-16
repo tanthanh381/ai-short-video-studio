@@ -12,7 +12,7 @@ export function authErrorMessage(message: string | undefined | null) {
   if (/email not confirmed/i.test(normalized))
     return "Email chưa được xác nhận. Hãy mở email xác nhận trước khi đăng nhập.";
   if (/rate limit|too many requests/i.test(normalized))
-    return "Có quá nhiều lần thử. Vui lòng chờ một lát rồi thử lại.";
+    return "Có quá nhiều lần thử. Hãy chờ một lát rồi thử lại.";
   if (/provider.*(not enabled|disabled)|not enabled.*provider|unsupported provider/i.test(normalized))
     return "Đăng nhập Google chưa được bật trên Supabase. Hãy bật Google trong Authentication → Providers.";
   if (/redirect.*(not allowed|invalid)|invalid redirect|redirect_uri_not_allowed/i.test(normalized))

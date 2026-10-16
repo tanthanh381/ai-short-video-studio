@@ -216,6 +216,9 @@ describe("systemAlerts and summaryTiles", () => {
     const alerts = systemAlerts(system([squeezed, off], { jobs: { running: 0, queued: 0, completed24h: 2, failed24h: 1, avgVideoSeconds24h: 300, recent: [] }, services: { ollama: { state: "offline", detail: "Không kết nối được Ollama", checkedAt: "x" }, supabase: { state: "healthy", detail: "ok", checkedAt: "x" } } }));
     expect(alerts.map((alert) => alert.id)).toEqual(["mini-swap", "air-offline", "service-ollama", "jobs-failed"]); // red ones first, in the order found
     expect(alerts[1]).toMatchObject({ tone: "bad", title: "MacBook Air mất kết nối" });
+    // the title says the problem in words; the swap numbers move to the detail
+    expect(alerts[0]!.title).toBe("Mac Mini thiếu RAM, đang dùng ổ đĩa thay RAM nên ảnh và giọng chậm hơn");
+    expect(alerts[0]!.detail).toMatch(/^RAM ảo \(swap\): /);
     expect(alerts.find((alert) => alert.id === "mini-ram")).toBeUndefined(); // a warning from the system alone, swap tells the story
   });
 
@@ -245,7 +248,7 @@ describe("systemAlerts and summaryTiles", () => {
     const tiles = Object.fromEntries(summaryTiles(busy).map((tile) => [tile.id, tile]));
     expect(tiles.jobs).toMatchObject({ value: "1 chạy · 2 chờ", detail: "Đang tạo ảnh cảnh 3 · MacBook Air", tone: "ok" });
     expect(tiles.throughput).toMatchObject({ value: "5 video xong", detail: "trung bình 6 phút 20 giây mỗi video" });
-    expect(tiles.share).toMatchObject({ value: "15 ảnh", detail: "Mac Mini 4 · MacBook Air 11 · từ lúc worker khởi động" });
+    expect(tiles.share).toMatchObject({ value: "15 ảnh", detail: "Mac Mini 4 · MacBook Air 11 · từ lần khởi động gần nhất" });
   });
 
   it("still works with one machine and no balancer", () => {
@@ -287,7 +290,7 @@ describe("machines switched off in Cài đặt", () => {
     const squeezed = { ...off, resources: { ...off.resources!, memUsedGb: 23.5, memPressure: "critical" as const, swapUsedGb: 7, swapTotalGb: 7 } };
     const alerts = systemAlerts(system([node("mini"), squeezed]));
     expect(alerts.map((alert) => [alert.id, alert.tone])).toEqual([["air-disabled", "info"]]);
-    expect(alerts[0]!.detail).toMatch(/Cài đặt → Máy xử lý video/);
+    expect(alerts[0]!.detail).toMatch(/Cài đặt → Máy tạo video/);
   });
 
   it("counts only the machines that are on, and says how many are off", () => {

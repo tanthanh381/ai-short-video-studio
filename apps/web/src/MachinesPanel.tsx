@@ -22,7 +22,7 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
   const summary = serviceSummary(services);
   return (
     <div className="machines-panel">
-      <ul className="machine-list" aria-label="Thiết bị tham gia xử lý">
+      <ul className="machine-list" aria-label="Các máy tạo video">
         {choices.map((choice) => {
           const locked = busy || (choice.enabled && !choice.canSwitchOff);
           const name = nodeDisplayName(choice.id);
@@ -30,10 +30,10 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
             <li key={choice.id} className={choice.enabled ? "" : "is-off"}>
               <div className="machine-text">
                 <strong>{nodeDisplayName(choice.id, choice.primary ? "primary" : undefined)}</strong>
-                <span>{choice.facts || (choice.enabled ? "Chưa nhận được số liệu (máy đang khởi động lại hoặc mất kết nối)" : "Đang tắt · không nhận tác vụ mới")}</span>
+                <span>{choice.facts || (choice.enabled ? "Chưa nhận được số liệu (máy đang khởi động lại hoặc mất kết nối)" : "Đang tắt · không nhận việc mới")}</span>
                 {choice.sync ? (
                   <span className={`machine-sync tone-${choice.sync.tone}`}>
-                    Đồng bộ thiết bị: <b>{choice.sync.label}</b>{choice.sync.detail ? ` · ${choice.sync.detail}` : ""}
+                    Đồng bộ máy: <b>{choice.sync.label}</b>{choice.sync.detail ? ` · ${choice.sync.detail}` : ""}
                     {choice.sync.canRequest ? (
                       <button type="button" className="link-button" disabled={syncing !== null} onClick={() => onSyncNow(choice.id)}>
                         {syncing === choice.id ? "Đang gửi…" : "Đồng bộ ngay"}
@@ -47,10 +47,10 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
                 type="button"
                 role="switch"
                 aria-checked={choice.enabled}
-                aria-label={`${choice.enabled ? "Tắt" : "Bật"} thiết bị ${name}`}
+                aria-label={`${choice.enabled ? "Tắt" : "Bật"} máy ${name}`}
                 className="switch"
                 disabled={locked}
-                title={choice.enabled && !choice.canSwitchOff ? "Cần duy trì ít nhất một thiết bị đang bật" : choice.enabled ? `Tắt ${name}: không nhận tác vụ mới` : `Bật ${name}`}
+                title={choice.enabled && !choice.canSwitchOff ? "Cần giữ ít nhất một máy đang bật" : choice.enabled ? `Tắt ${name}: không nhận việc mới` : `Bật ${name}`}
                 onClick={() => onChange({ disabled: disabledAfter(balancer, choice.id, !choice.enabled) })}
               >
                 <span className="switch-knob" aria-hidden="true" />
@@ -63,7 +63,7 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
       {warning ? <p className="machine-warning" role="note">{warning}</p> : null}
 
       <fieldset className="mode-choice" disabled={busy}>
-        <legend>Phân bổ tác vụ</legend>
+        <legend>Cách chia việc</legend>
         {MODE_CHOICES.map((choice) => (
           <label key={choice.id} className={balancer.mode === choice.id ? "is-chosen" : ""}>
             <input type="radio" name="balance-mode" checked={balancer.mode === choice.id} onChange={() => onChange({ mode: choice.id })} />
@@ -74,8 +74,8 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
       {notice ? <p className={`microcopy machine-notice tone-${notice.tone}`} role="status">{notice.text}</p> : null}
 
       <p className="machine-links">
-        {summary.total ? `${summary.ok}/${summary.total} dịch vụ đang hoạt động. ` : ""}
-        Xem hiệu năng và tác vụ đang chạy tại <Link to="/system">Hệ thống</Link>.
+        {summary.total ? `${summary.ok}/${summary.total} dịch vụ đang chạy. ` : ""}
+        Xem hiệu năng và việc đang chạy tại <Link to="/system">Hệ thống</Link>.
       </p>
       {summary.problems.length ? (
         <ul className="machine-problems">

@@ -22,7 +22,7 @@ describe("machineChoices", () => {
   it("does not let the last machine that is on be switched off", () => {
     const choices = machineChoices(balancer([node("mini", { state: "disabled", enabled: false }), node("air")]));
     expect(choices.map((choice) => [choice.id, choice.enabled, choice.canSwitchOff])).toEqual([["mini", false, true], ["air", true, false]]);
-    expect(choices[0]!.facts).toMatch(/không nhận tác vụ mới/);
+    expect(choices[0]!.facts).toMatch(/không nhận việc mới/);
     expect(choices[0]!.state).toEqual({ label: "Đã tắt", tone: "idle" });
   });
 
@@ -50,12 +50,12 @@ describe("machineWarning", () => {
 
   it("explains what switching the main machine off means", () => {
     const text = machineWarning(balancer([node("mini", { enabled: false, state: "disabled" }), node("air")]))!;
-    expect(text).toMatch(/Thiết bị chính đang tắt.*air/);
-    expect(text).toMatch(/Render vẫn được thực hiện trên thiết bị chính/);
+    expect(text).toMatch(/Máy chính đang tắt.*MacBook Air/);
+    expect(text).toMatch(/Bước ghép video vẫn chạy trên máy chính/);
   });
 
   it("says the work is no longer shared when the other machines are off", () => {
-    expect(machineWarning(balancer([node("mini"), node("air", { enabled: false, state: "disabled" })]))).toMatch(/Tất cả tác vụ hiện được xử lý trên thiết bị chính/);
+    expect(machineWarning(balancer([node("mini"), node("air", { enabled: false, state: "disabled" })]))).toMatch(/Mọi việc đang chạy trên máy chính/);
   });
 });
 

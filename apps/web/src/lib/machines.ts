@@ -1,4 +1,5 @@
 import type { BalancerSummary, NodeSummary } from "@studio/shared";
+import { nodeDisplayName } from "./system";
 import { nodeActivity } from "./air-setup";
 import { SWAP_HURTS_MBPS, formatGb, syncView, type SyncView } from "./system";
 
@@ -7,9 +8,9 @@ import { SWAP_HURTS_MBPS, formatGb, syncView, type SyncView } from "./system";
 export type Mode = BalancerSummary["mode"];
 
 export const MODE_CHOICES: Array<{ id: Mode; label: string; hint: string }> = [
-  { id: "auto", label: "Tự động", hint: "Tự chọn xử lý đơn lẻ hoặc song song dựa trên tải hiện tại." },
-  { id: "single", label: "Một thiết bị", hint: "Mỗi đợt tác vụ chỉ dùng một thiết bị; thiết bị còn lại ở chế độ dự phòng." },
-  { id: "parallel", label: "Song song", hint: "Sử dụng tất cả thiết bị đang sẵn sàng để rút ngắn thời gian xử lý." },
+  { id: "auto", label: "Tự động", hint: "Tự chọn một máy hay nhiều máy tùy lúc bận hay rảnh." },
+  { id: "single", label: "Một máy", hint: "Mỗi lần chỉ dùng một máy; máy còn lại để dự phòng." },
+  { id: "parallel", label: "Song song", hint: "Dùng mọi máy đang sẵn sàng để video xong nhanh hơn." },
 ];
 
 export type MachineChoice = {
@@ -56,7 +57,7 @@ export function machineChoices(balancer: BalancerSummary): MachineChoice[] {
       primary: node.role === "primary",
       enabled: on,
       state: STATE[node.state],
-      facts: on ? machineFacts(node) : "Đang tắt · không nhận tác vụ mới",
+      facts: on ? machineFacts(node) : "Đang tắt · không nhận việc mới",
       canSwitchOff: !on || enabled.length > 1,
       sync: on && node.state !== "offline" ? syncView(node) : null,
     };
@@ -76,10 +77,10 @@ export function machineWarning(balancer: BalancerSummary): string | null {
   const primary = balancer.nodes.find((node) => node.role === "primary");
   const others = balancer.nodes.filter((node) => node.role !== "primary" && node.enabled !== false);
   if (primary && primary.enabled === false) {
-    const names = others.map((node) => node.id).join(", ");
-    return `Thiết bị chính đang tắt. Tác vụ được chuyển sang ${names || "thiết bị còn lại"}; nếu thiết bị này mất kết nối, video mới sẽ tạm dừng. Render vẫn được thực hiện trên thiết bị chính.`;
+    const names = others.map((node) => nodeDisplayName(node.id)).join(", ");
+    return `Máy chính đang tắt. Việc mới chuyển sang ${names || "máy còn lại"}; nếu máy đó mất kết nối, video mới sẽ tạm dừng. Bước ghép video vẫn chạy trên máy chính.`;
   }
-  if (others.length === 0 && balancer.nodes.length > 1) return "Thiết bị phụ đang tắt. Tất cả tác vụ hiện được xử lý trên thiết bị chính.";
+  if (others.length === 0 && balancer.nodes.length > 1) return "Máy phụ đang tắt. Mọi việc đang chạy trên máy chính.";
   return null;
 }
 

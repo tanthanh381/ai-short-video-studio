@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           authErrorMessage(
             error instanceof Error
               ? error.message
-              : "Không thể kiểm tra phiên đăng nhập.",
+              : "Chưa kiểm tra được phiên đăng nhập. Hãy tải lại trang.",
           ),
         );
       } finally {
@@ -125,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const message = authErrorMessage(
             error instanceof Error
               ? error.message
-              : "Không thể bắt đầu đăng nhập Google.",
+              : "Chưa mở được đăng nhập Google. Hãy thử lại hoặc đăng nhập bằng email.",
           );
           setAuthError(message);
           return message;

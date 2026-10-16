@@ -265,11 +265,11 @@ export function createApp(config: AppConfig, db: AdminClient) {
       api: status("healthy", "API đã phản hồi yêu cầu này"),
       supabase: status("healthy", "Đã xác thực tài khoản và truy cập được dữ liệu"),
       worker: workerUnavailable
-        ? status(config.RENDER_WORKER_ENABLED ? "offline" : "disabled", config.RENDER_WORKER_ENABLED ? "Không kết nối được worker" : "Worker render đang tắt")
+        ? status(config.RENDER_WORKER_ENABLED ? "offline" : "disabled", config.RENDER_WORKER_ENABLED ? "Không kết nối được bộ dựng video" : "Bộ dựng video đang tắt")
         : status(workerService.state, workerService.detail),
       render: renderService
         ? status(renderService.state, renderService.detail)
-        : status(config.RENDER_WORKER_ENABLED ? "offline" : "disabled", config.RENDER_WORKER_ENABLED ? "Chưa nhận được tín hiệu từ worker" : "Tính năng render đang tắt"),
+        : status(config.RENDER_WORKER_ENABLED ? "offline" : "disabled", config.RENDER_WORKER_ENABLED ? "Chưa nhận được tín hiệu từ bộ dựng video" : "Bước ghép video đang tắt"),
       ollama: status(
         config.OLLAMA_FEATURES_ENABLED ? (ollamaReady ? "healthy" : "offline") : "disabled",
         config.OLLAMA_FEATURES_ENABLED ? (ollamaReady ? "Ollama đang phản hồi /api/tags" : "Không kết nối được Ollama") : "Tính năng Ollama đang tắt",
@@ -279,23 +279,23 @@ export function createApp(config: AppConfig, db: AdminClient) {
         config.LOCAL_MEDIA_FEATURES_ENABLED
           ? mediaReady
             ? mediaHealth?.videoState && mediaHealth.videoState !== "ready"
-              ? `Media server hoạt động; LTX: ${mediaHealth.videoDetail ?? "chưa sẵn sàng"}`
-              : "Media server và LTX đang phản hồi"
-            : "Không kết nối được media server"
-          : "Tính năng media local đang tắt",
+              ? `Bộ tạo ảnh và giọng đang chạy; chuyển động (LTX): ${mediaHealth.videoDetail ?? "chưa sẵn sàng"}`
+              : "Bộ tạo ảnh, giọng và chuyển động đang chạy"
+            : "Không kết nối được bộ tạo ảnh và giọng"
+          : "Tạo ảnh và giọng trên máy đang tắt",
       ),
       // Faces of generated pictures are redrawn by the media bridge; shown so a silently disabled pass gets noticed.
       faceDetail: status(
         // switched off on purpose (FACE_DETAIL=false) is not an outage: it must not raise a red alert
         config.LOCAL_MEDIA_FEATURES_ENABLED ? (mediaHealth ? (mediaHealth.faceDetail ? "healthy" : mediaHealth.faceDetailState === "disabled" ? "disabled" : "offline") : "offline") : "disabled",
         config.LOCAL_MEDIA_FEATURES_ENABLED
-          ? mediaHealth?.faceDetailDetail ?? (mediaHealth ? "Media server chưa hỗ trợ sửa khuôn mặt" : "Không kết nối được media server")
-          : "Tính năng media local đang tắt",
+          ? mediaHealth?.faceDetailDetail ?? (mediaHealth ? "Bộ tạo ảnh chưa hỗ trợ sửa khuôn mặt" : "Không kết nối được bộ tạo ảnh và giọng")
+          : "Tạo ảnh và giọng trên máy đang tắt",
       ),
       // The worker reaches the hand-drawing server; the API container does not need to.
-      whiteboard: fromWorker("whiteboard", status(config.RENDER_WORKER_ENABLED ? "unknown" : "disabled", config.RENDER_WORKER_ENABLED ? "Chưa kiểm tra được worker" : "Worker render đang tắt")),
-      openai: fromWorker("openai", status(config.OPENAI_FEATURES_ENABLED ? "unknown" : "disabled", config.OPENAI_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng OpenAI đang tắt")),
-      anthropic: fromWorker("anthropic", status(config.ANTHROPIC_FEATURES_ENABLED ? "unknown" : "disabled", config.ANTHROPIC_FEATURES_ENABLED ? "Chưa kiểm tra được worker" : "Tính năng Claude đang tắt")),
+      whiteboard: fromWorker("whiteboard", status(config.RENDER_WORKER_ENABLED ? "unknown" : "disabled", config.RENDER_WORKER_ENABLED ? "Chưa kiểm tra được bộ dựng video" : "Bộ dựng video đang tắt")),
+      openai: fromWorker("openai", status(config.OPENAI_FEATURES_ENABLED ? "unknown" : "disabled", config.OPENAI_FEATURES_ENABLED ? "Chưa kiểm tra được bộ dựng video" : "Tính năng OpenAI đang tắt")),
+      anthropic: fromWorker("anthropic", status(config.ANTHROPIC_FEATURES_ENABLED ? "unknown" : "disabled", config.ANTHROPIC_FEATURES_ENABLED ? "Chưa kiểm tra được bộ dựng video" : "Tính năng Claude đang tắt")),
     };
     balancerSnapshot = workerResponse?.balancer && workerResponse.balancer.nodes.length > 1 ? workerResponse.balancer : null;
     airSetupSnapshot = workerResponse?.airSetup ?? null;
@@ -350,7 +350,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
 
   app.use("/v1", async (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
-    if (!token) return res.status(401).json({ error: "Vui lòng đăng nhập" });
+    if (!token) return res.status(401).json({ error: "Hãy đăng nhập để tiếp tục" });
     const { data, error } = await db.auth.getUser(token);
     if (error || !data.user?.email)
       return res
@@ -409,7 +409,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (settings.mediaProvider === "local" && !config.LOCAL_MEDIA_FEATURES_ENABLED)
       return "Chưa kết nối dịch vụ tạo ảnh và giọng đọc trên máy.";
     if (!config.RENDER_WORKER_ENABLED)
-      return "Chưa kết nối máy xử lý video. Hãy bật worker trên máy.";
+      return "Máy tạo video chưa kết nối. Kiểm tra máy chính đang bật rồi thử lại.";
     return null;
   }
 
@@ -437,7 +437,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
 
   function queueError(error: { message: string }, res: Response) {
     if (error.message.includes("VIDEO_CONCURRENCY_LIMIT")) {
-      res.status(429).json({ error: "Đã có video đang xử lý. Vui lòng chờ hoặc mở dự án hiện tại để theo dõi." });
+      res.status(429).json({ error: "Đang có một video được tạo. Hãy chờ video đó xong, hoặc mở dự án để theo dõi." });
       return true;
     }
     if (error.message.includes("VIDEO_PROJECT_NOT_FOUND")) {
@@ -449,7 +449,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       return true;
     }
     if (error.message.includes("VIDEO_ACTIVE_PROJECT_JOB")) {
-      res.status(409).json({ error: "Dự án đang xử lý một tác vụ khác. Vui lòng chờ tác vụ đó hoàn tất." });
+      res.status(409).json({ error: "Dự án đang làm một việc khác. Hãy chờ việc đó xong rồi thử lại." });
       return true;
     }
     return false;
@@ -628,7 +628,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       const reply = await fetch(`${config.WORKER_HEALTH_URL.replace(/\/$/, "")}/sync/now?node=${encodeURIComponent(node.data)}`, { method: "POST", signal: AbortSignal.timeout(6_000) });
       if (!reply.ok) return res.status(502).json({ error: `Máy ${node.data} chưa nhận được yêu cầu (chưa cài tiến trình đồng bộ, hoặc máy đang offline).` });
     } catch {
-      return res.status(502).json({ error: "Không liên lạc được worker để gửi yêu cầu đồng bộ." });
+      return res.status(502).json({ error: "Chưa gửi được yêu cầu đồng bộ. Kiểm tra máy chính đang bật rồi thử lại." });
     }
     req.log.info({ node: node.data }, "sync_requested");
     res.json({ ok: true });
@@ -848,7 +848,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       throw error;
     }
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row) throw new Error("Không thể tạo tác vụ video");
+    if (!row) throw new Error("Chưa bắt đầu tạo video được. Hãy thử lại.");
     res.status(202).json({ project: await loadProject(row.project_id, req.userId!), job: mapJob(row) });
   });
 
@@ -867,7 +867,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       throw error;
     }
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row) throw new Error("Không thể khôi phục tác vụ video");
+    if (!row) throw new Error("Chưa khôi phục được video đang làm. Hãy thử lại.");
     res.status(202).json({ project: await loadProject(project.id, req.userId!), job: mapJob(row) });
   });
 
@@ -912,7 +912,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (await activeProjectJob(input.id, req.userId!))
       return res.status(409).json({ error: "Video đang xử lý. Các chỉnh sửa tạm khóa để giữ đúng kịch bản và media; hãy chờ hoàn tất." });
     if (input.updatedAt !== existing.updatedAt)
-      return res.status(409).json({ error: "Dự án đã được cập nhật. Vui lòng tải lại trước khi chỉnh sửa." });
+      return res.status(409).json({ error: "Dự án đã được cập nhật ở nơi khác. Hãy tải lại trang trước khi sửa tiếp." });
     const prefix = `${req.userId}/${input.id}/`;
     const paths = [input.settings.backgroundMusicPath, input.settings.logoPath, ...input.scenes.flatMap((scene) => [scene.imagePath, scene.videoPath, scene.audioPath])];
     if (paths.some((path) => path !== null && (!path.startsWith(prefix) || path.includes(".."))))
@@ -939,7 +939,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (error) {
       if (queueError(error, res)) return;
       if (error.message.includes("VIDEO_STALE_PROJECT"))
-        return res.status(409).json({ error: "Dự án đã được cập nhật. Vui lòng tải lại trước khi chỉnh sửa." });
+        return res.status(409).json({ error: "Dự án đã được cập nhật ở nơi khác. Hãy tải lại trang trước khi sửa tiếp." });
       if (error.message.includes("VIDEO_FOREIGN_SCENE") || error.message.includes("VIDEO_FOREIGN_MEDIA"))
         return res.status(403).json({ error: "Cảnh hoặc media không thuộc dự án này" });
       throw error;
@@ -1083,7 +1083,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if ((count ?? 0) >= req.maxConcurrentJobs!)
       return res.status(429).json({
         error:
-          "Đã đạt số tác vụ đồng thời. Vui lòng chờ tác vụ hiện tại hoàn tất.",
+          "Đang chạy đủ số video cùng lúc. Hãy chờ một video xong rồi thử lại.",
       });
     const estimate = estimateCost(
       project,
@@ -1182,14 +1182,14 @@ export function createApp(config: AppConfig, db: AdminClient) {
         throw resumeError;
       }
       const row = Array.isArray(resumed) ? resumed[0] : resumed;
-      if (!row) throw new Error("Không thể tiếp tục tạo video");
+      if (!row) throw new Error("Chưa tiếp tục tạo video được. Hãy thử lại.");
       return res.json(mapJob(row));
     }
     const { count: active, error: activeError } = await db.from("jobs").select("id", { count: "exact", head: true })
       .eq("user_id", req.userId!).in("status", ["queued", "running"]);
     if (activeError) throw activeError;
     if ((active ?? 0) >= req.maxConcurrentJobs!)
-      return res.status(429).json({ error: "Đã đạt số tác vụ đồng thời. Vui lòng chờ tác vụ hiện tại hoàn tất." });
+      return res.status(429).json({ error: "Đang chạy đủ số video cùng lúc. Hãy chờ một video xong rồi thử lại." });
     const { data, error } = await db
       .from("jobs")
       .update({
@@ -1422,7 +1422,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       (req.log ?? console).error({ err: error }, "request_failed");
       res.status(500).json({
         error:
-          "Máy chủ gặp lỗi. Vui lòng thử lại; dữ liệu dự án vẫn được giữ nguyên.",
+          "Có lỗi bất ngờ. Hãy thử lại; dữ liệu dự án vẫn được giữ nguyên.",
       });
     },
   );

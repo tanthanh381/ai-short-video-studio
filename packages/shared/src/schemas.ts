@@ -238,7 +238,7 @@ export const projectSchema = z.object({
 });
 
 export const createProjectSchema = z.object({
-  title: z.string().trim().min(1, "Vui lòng nhập tên video").max(160),
+  title: z.string().trim().min(1, "Hãy nhập tên video").max(160),
   sourceText: z
     .string()
     .trim()

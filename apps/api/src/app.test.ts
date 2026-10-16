@@ -237,7 +237,7 @@ describe("API", () => {
         expect((await post("air")).body.error).toMatch(/chưa cài tiến trình đồng bộ/);
         vi.unstubAllGlobals();
         stub("throws");
-        expect((await post("air")).body.error).toMatch(/Không liên lạc được worker/);
+        expect((await post("air")).body.error).toMatch(/Chưa gửi được yêu cầu đồng bộ/);
         expect((await post("mini")).status).toBe(400);
         expect((await post("ghost")).status).toBe(404);
         expect((await post("BAD NAME")).status).toBe(400);

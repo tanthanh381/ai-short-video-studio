@@ -134,7 +134,7 @@ describe("one-click video API", () => {
     const f = fixture({ rpcError: "VIDEO_CONCURRENCY_LIMIT" });
     const response = await request(f.app).post("/v1/videos").set("Authorization", "Bearer test").send({ sourceText: script });
     expect(response.status).toBe(429);
-    expect(response.body.error).toContain("đang xử lý");
+    expect(response.body.error).toContain("Đang có một video được tạo");
   });
 
   it("prevents stale autosave from overwriting generated scenes during a job", async () => {
