@@ -23,6 +23,7 @@ import {
   Menu,
   Mic2,
   MoreHorizontal,
+  Move,
   Music2,
   Pause,
   PenLine,
@@ -98,7 +99,8 @@ import { ProjectSaver, type SaveState } from "./lib/project-saver";
 import { Button, Field, Notice } from "./components/ui";
 import { askConfirm, ConfirmHost } from "./components/ConfirmDialog";
 import { DEMO_ONLY, DEMO_VOICE } from "./lib/copy";
-import { LOGO_MAX_BYTES, checkLogoFile, logoPreviewStyle } from "./lib/logo";
+import { LOGO_MAX_BYTES, checkLogoFile } from "./lib/logo";
+import { StageGuides, StageLogo } from "./components/StageLogo";
 import { withScriptFromScenes } from "./lib/script-sync";
 import { OPENAI_VOICES, hookTitleAllowed, withMediaProvider } from "./lib/options";
 import { CHANNEL_PRESETS, estimatedNarrationSeconds } from "./lib/channel-presets";
@@ -2020,6 +2022,9 @@ function StudioPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [logoNote, setLogoNote] = useState<string | null>(null);
+  const demoLogoUrl = useRef<string | null>(null);
+  // Layout mode: the preview shows the scene picture (not the finished MP4) with the logo ready to drag.
+  const [layoutEditing, setLayoutEditing] = useState(false);
   const [result, setResult] = useState<VideoResult | null>(null);
   const [resultLoading, setResultLoading] = useState(false);
   const [capabilities, setCapabilities] = useState<{
@@ -2132,7 +2137,8 @@ function StudioPage() {
   useEffect(() => {
     const path = project?.settings.logoPath;
     if (!path || isDemo) {
-      setLogoPreviewUrl(null);
+      // the demo keeps a chosen logo in the browser only (see uploadLogo)
+      setLogoPreviewUrl(isDemo && path ? demoLogoUrl.current : null);
       return;
     }
     let active = true;
@@ -2553,12 +2559,18 @@ function StudioPage() {
   async function uploadLogo(file: File) {
     if (!project) return;
     if (locked.current) return;
-    if (isDemo) {
-      setError(DEMO_ONLY);
-      return;
-    }
     if (file.size > LOGO_MAX_BYTES) {
       setError("Logo lớn hơn 5 MB. Hãy dùng ảnh nhỏ hơn (logo chỉ chiếm một góc nhỏ của video).");
+      return;
+    }
+    if (isDemo) {
+      // Demo: try the logo on the preview without uploading it anywhere.
+      const round = await checkLogoFile(file);
+      if (demoLogoUrl.current) URL.revokeObjectURL(demoLogoUrl.current);
+      demoLogoUrl.current = URL.createObjectURL(file);
+      setLogoPreviewUrl(demoLogoUrl.current);
+      change({ ...project, settings: { ...project.settings, logoPath: "demo:logo", logoShape: round ? "circle" : "original" } });
+      setLogoNote("Chế độ mẫu: logo chỉ hiện trên trang này để thử bố cục, không được tải lên.");
       return;
     }
     setBusyAction("logo");
@@ -2928,7 +2940,7 @@ function StudioPage() {
             <div
               className={`video-preview ratio-${project.settings.aspectRatio.replace(":", "-")}`}
             >
-              {result ? (
+              {result && !layoutEditing ? (
                 <video
                   ref={videoElement}
                   key={result.id}
@@ -2986,13 +2998,19 @@ function StudioPage() {
                   </span>
                 </div>
               )}
+              {layoutEditing && <StageGuides settings={project.settings} />}
+              {layoutEditing && (
+                <button type="button" className="stage-done" onClick={() => setLayoutEditing(false)}>
+                  <Check size={14} /> Xong
+                </button>
+              )}
               {logoPreviewUrl && (
                 // Same place, size and look as in the MP4 (lib/logo.ts uses the export's own rule).
-                <img
-                  className={`stage-logo ${project.settings.logoShape === "circle" ? "is-circle" : ""}`}
+                <StageLogo
                   src={logoPreviewUrl}
-                  alt=""
-                  style={logoPreviewStyle(project.settings)}
+                  settings={project.settings}
+                  editing={layoutEditing}
+                  onChange={(patch) => change({ ...project, settings: { ...project.settings, ...patch } })}
                 />
               )}
               {project.settings.subtitle.enabled && activeScene && (
@@ -3091,9 +3109,23 @@ function StudioPage() {
                       <option value="top-right">Trên phải</option>
                       <option value="bottom-left">Dưới trái</option>
                       <option value="bottom-right">Dưới phải</option>
+                      <option value="custom">Tự do (kéo thả trên khung xem trước)</option>
                     </select>
-                    {project.settings.layoutTemplate === "story-card" && <small>Với khung Thẻ truyện, logo nằm ở góc của khung tranh, không đè lên tiêu đề và phụ đề.</small>}
+                    {project.settings.layoutTemplate === "story-card" && project.settings.logoPosition !== "custom" && <small>Với khung Thẻ truyện, logo nằm ở góc của khung tranh, không đè lên tiêu đề và phụ đề.</small>}
                   </Field>
+                  <Button
+                    variant={layoutEditing ? "primary" : "secondary"}
+                    aria-pressed={layoutEditing}
+                    disabled={!logoPreviewUrl}
+                    onClick={() => {
+                      // on a phone the preview is a tab of its own: show it, the logo is dragged there
+                      if (!layoutEditing) setPhoneTab("preview");
+                      setLayoutEditing(!layoutEditing);
+                    }}
+                  >
+                    <Move size={16} /> {layoutEditing ? "Xong, lưu vị trí" : "Kéo thả logo trên khung"}
+                  </Button>
+                  {layoutEditing && <small className="microcopy">Kéo logo tới chỗ muốn đặt, kéo góc dưới phải để đổi cỡ. Vùng sọc là nơi TikTok, Reels và Shorts che mất.</small>}
                   <Field label="Hình dạng logo" hint="Cắt tròn: dành cho logo hình tròn được lưu trên nền vuông (JPG nền trắng), để video không hiện ô vuông trắng.">
                     <select
                       value={project.settings.logoShape}

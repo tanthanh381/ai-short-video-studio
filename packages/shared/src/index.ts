@@ -59,6 +59,8 @@ export const DEFAULT_PROJECT_SETTINGS = {
   logoScale: 0.14,
   logoOpacity: 0.9,
   logoShape: "original" as const,
+  logoX: 0.06,
+  logoY: 0.12,
   rewriteFullScript: false,
   layoutTemplate: "full-bleed" as const,
   cardTheme: "blue" as const,

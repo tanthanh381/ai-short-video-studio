@@ -43,3 +43,17 @@ describe("logoOverlayXY", () => {
     expect(logoOverlayXY({ width: 100, x: { from: "center" }, y: { from: "top", px: 649 } })).toEqual({ x: "(W-w)/2", y: "649" });
   });
 });
+
+describe("hand-placed logo", () => {
+  it("goes exactly where it was dropped, as a share of the frame", () => {
+    const anchor = logoAnchor({ logoScale: 0.14, aspectRatio: "9:16", logoPosition: "custom", logoX: 0.5, logoY: 0.25, layoutTemplate: "story-card" }, { width: 1080, height: 1920 });
+    expect(anchor).toEqual({ width: 151, custom: true, x: { from: "left", px: 540 }, y: { from: "top", px: 480 } });
+    expect(logoOverlayXY(anchor)).toEqual({ x: "'min(W-w,540)'", y: "'min(H-h,480)'" });
+  });
+
+  it("never leaves the frame", () => {
+    const anchor = logoAnchor({ logoScale: 0.2, aspectRatio: "9:16", logoPosition: "custom", logoX: 1, logoY: 1 }, { width: 1080, height: 1920 });
+    expect(anchor.x).toEqual({ from: "left", px: 1080 - 216 });
+    expect(logoOverlayXY(anchor).y).toBe("'min(H-h,1920)'");
+  });
+});

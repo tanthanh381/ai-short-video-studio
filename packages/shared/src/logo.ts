@@ -17,13 +17,15 @@ const BAND_INSET = { y: 24, side: 56 };
 export type LogoAnchor = {
   /** Logo width in pixels of the frame. */
   width: number;
+  /** Dragged by hand: the export keeps the whole logo inside the frame whatever its height. */
+  custom?: true;
   /** "center": centred; otherwise the distance of the logo's edge from that side of the frame. */
   x: { from: "left" | "right"; px: number } | { from: "center" };
   y: { from: "top" | "bottom"; px: number };
 };
 
 type LogoSettings = Pick<ProjectSettings, "logoPosition" | "logoScale" | "aspectRatio"> &
-  Partial<Pick<ProjectSettings, "layoutTemplate" | "subtitle">>;
+  Partial<Pick<ProjectSettings, "layoutTemplate" | "subtitle" | "logoX" | "logoY">>;
 
 export function logoAnchor(settings: LogoSettings, frame: { width: number; height: number }): LogoAnchor {
   const { width, height } = frame;
@@ -32,6 +34,13 @@ export function logoAnchor(settings: LogoSettings, frame: { width: number; heigh
   const portrait = height > width;
   const storyCard = settings.layoutTemplate === "story-card" && settings.aspectRatio === "9:16";
   const paperStage = settings.layoutTemplate === "paper-stage" && settings.aspectRatio === "9:16";
+
+  // Placed by hand: exactly where it was dropped, kept inside the frame.
+  if (position === "custom") {
+    const left = Math.round(Math.min(Math.max(settings.logoX ?? 0, 0), 1) * width);
+    const top = Math.round(Math.min(Math.max(settings.logoY ?? 0, 0), 1) * height);
+    return { width: logoWidth, custom: true, x: { from: "left", px: Math.min(left, width - logoWidth) }, y: { from: "top", px: top } };
+  }
 
   // Story cards: in a corner of the picture band, clear of the title above it and the captions below it.
   if (storyCard) {
@@ -55,6 +64,8 @@ export function logoAnchor(settings: LogoSettings, frame: { width: number; heigh
 
 /** The anchor as FFmpeg overlay expressions (W/H: the video, w/h: the logo). */
 export function logoOverlayXY(anchor: LogoAnchor): { x: string; y: string } {
+  // a hand-placed logo's height is only known to FFmpeg: it is kept inside the frame there
+  if (anchor.custom && anchor.x.from === "left" && anchor.y.from === "top") return { x: `'min(W-w,${anchor.x.px})'`, y: `'min(H-h,${anchor.y.px})'` };
   const x = anchor.x.from === "center" ? "(W-w)/2" : anchor.x.from === "right" ? `W-w-${anchor.x.px}` : `${anchor.x.px}`;
   const y = anchor.y.from === "bottom" ? `H-h-${anchor.y.px}` : `${anchor.y.px}`;
   return { x, y };

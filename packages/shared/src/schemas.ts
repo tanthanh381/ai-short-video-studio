@@ -56,7 +56,8 @@ export const subtitleStyleSchema = z.object({
   backgroundOpacity: z.number().min(0).max(1).default(0.35),
 });
 
-export const logoPositionSchema = z.enum(["top-left", "top-center", "top-right", "bottom-left", "bottom-right"]);
+/** A preset corner, or "custom": wherever the logo was dragged on the studio preview (logoX, logoY). */
+export const logoPositionSchema = z.enum(["top-left", "top-center", "top-right", "bottom-left", "bottom-right", "custom"]);
 /** original: the picture as uploaded; circle: cut to a circle (a round logo saved on a white or coloured square). */
 export const logoShapeSchema = z.enum(["original", "circle"]);
 
@@ -191,6 +192,9 @@ export const projectSettingsSchema = z.object({
   logoScale: z.number().min(0.05).max(0.35).default(0.14),
   logoOpacity: z.number().min(0.1).max(1).default(0.9),
   logoShape: logoShapeSchema.default("original"),
+  /** With logoPosition "custom": the logo's left and top edge as a share of the frame's width and height (0 to 1). */
+  logoX: z.number().min(0).max(1).default(0.06),
+  logoY: z.number().min(0).max(1).default(0.12),
   rewriteFullScript: z.boolean().default(false),
   layoutTemplate: layoutTemplateSchema.default("full-bleed"),
   cardTheme: cardThemeSchema.default("blue"),
