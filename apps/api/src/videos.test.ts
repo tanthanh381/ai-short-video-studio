@@ -86,7 +86,10 @@ describe("one-click video API", () => {
     expect(args.p_source_text).toBe(script);
     expect(args.p_input_mode).toBe("full-script");
     expect(args.p_title).toBe("Hãy dành một phút để lắng nghe chính mình.");
-    expect(args.p_settings).toMatchObject({ textProvider: "ollama", mediaProvider: "local", rewriteFullScript: false, aspectRatio: "9:16" });
+    expect(args.p_settings).toMatchObject({
+      textProvider: "ollama", mediaProvider: "local", rewriteFullScript: false, aspectRatio: "9:16",
+      autoMusic: true, captionHighlight: true, hookTitle: true,
+    });
     expect(args.p_idempotency_key).toBe("create-video:unique-click-123");
     expect(response.body.job.type).toBe("create_video");
     expect(response.body.project.sourceText).toBe(script);
