@@ -1162,14 +1162,21 @@ SLEEPER = idle_sleep.Sleeper([
 
 
 def services_for(path, body):
-    """The sleeping-capable services a request needs (the ComfyUI one only when the picture asks for that model)."""
+    """The sleeping-capable services a request needs.
+
+    Quality with no explicit model is intentionally routed to SDXL Base when
+    ComfyUI is healthy, so wake it before local_image performs that selection.
+    """
     route = path.split("?")[0]
     if route == "/image":
         try:
-            model = json.loads(body).get("model")
+            payload = json.loads(body)
+            model = payload.get("model")
+            preset = payload.get("preset")
         except (ValueError, AttributeError):
-            model = None
-        return ["image", "comfyui"] if model == COMFYUI_IMAGE_MODEL else ["image"]
+            model, preset = None, None
+        wants_base = model == COMFYUI_IMAGE_MODEL or (model in (None, "") and preset == "quality")
+        return ["image", "comfyui"] if wants_base else ["image"]
     if route in ("/tts", "/tts-aligned"):
         return ["vieneu"]
     if route == "/transcribe":
