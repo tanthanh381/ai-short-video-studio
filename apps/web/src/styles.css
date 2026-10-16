@@ -1532,6 +1532,10 @@ a:focus-visible {
   border-radius: var(--radius-md);
   background: repeating-conic-gradient(var(--surface-3) 0 25%, var(--surface) 0 50%) 50% / 12px 12px;
 }
+.logo-preview.is-circle { width: 72px; height: 72px; padding: 0; border-style: solid; object-fit: cover; clip-path: circle(49.25% at 50% 50%); }
+/* The logo on the studio preview: placed by lib/logo.ts in % of the frame, as the MP4 draws it. */
+.stage-logo { position: absolute; z-index: 2; height: auto; pointer-events: none; }
+.stage-logo.is-circle { aspect-ratio: 1; object-fit: cover; clip-path: circle(49.25% at 50% 50%); }
 .cue-editor {
   margin-top: 14px;
   border-top: 1px solid var(--line);

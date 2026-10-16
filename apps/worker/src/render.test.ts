@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { assTime, createAss, hookOverlayFilters, karaokeText, mapWithConcurrency, renderProject, sceneMotion, validateRenderedOutput, videoEncoderPreset, videoSize } from "./render";
-import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
+import { assTime, createAss, hookOverlayFilters, karaokeText, logoInputFilter, mapWithConcurrency, renderProject, sceneMotion, validateRenderedOutput, videoEncoderPreset, videoSize } from "./render";
+import { DEFAULT_PROJECT_SETTINGS, PAPER_CAPTION_TOP, PLATFORM_SAFE, STORY_BAND, type Project } from "@studio/shared";
+import { CARD, PAPER, SAFE } from "./card-layout";
 
 describe("render helpers", () => {
   it("chon dung kich thuoc preset", () => {
@@ -272,5 +273,21 @@ describe("hook title overlay", () => {
     const size = Number(filters[0]!.match(/fontsize=(\d+)/u)![1]);
     expect(size).toBeLessThanOrEqual(92);
     expect(size * 0.62 * 17).toBeLessThanOrEqual(1080 * 0.88 + size); // the longest line fits the width
+  });
+});
+
+describe("logo", () => {
+  it("cuts a round logo saved on a square to a circle, and keeps an ordinary one as uploaded", () => {
+    expect(logoInputFilter(151, false, 0.9)).toBe("scale=151:-1,format=rgba,colorchannelmixer=aa=0.9");
+    const circle = logoInputFilter(151, true, 0.8);
+    expect(circle).toMatch(/^crop='min\(iw,ih\)':'min\(iw,ih\)',scale=151:151,format=rgba,geq=/);
+    expect(circle).toContain("clip(74.37-hypot(X+0.5-75.5,Y+0.5-75.5)+0.5,0,1)");
+    expect(circle.endsWith("colorchannelmixer=aa=0.8")).toBe(true);
+  });
+
+  it("uses the same layout numbers as the shared logo placement", () => {
+    expect(SAFE).toEqual(PLATFORM_SAFE);
+    expect({ top: CARD.bandY, bottom: CARD.bandY + CARD.bandH }).toEqual(STORY_BAND);
+    expect(PAPER.captionTop).toBe(PAPER_CAPTION_TOP);
   });
 });

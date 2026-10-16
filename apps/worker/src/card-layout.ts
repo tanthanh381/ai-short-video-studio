@@ -1,3 +1,4 @@
+import { PLATFORM_SAFE } from "@studio/shared";
 /**
  * Story-card layout (9:16 only): coloured canvas with a title banner, a picture band, subtitles under the band
  * and a channel footer — the format of narrated illustrated-story shorts. Pure helpers so they are unit-testable.
@@ -63,7 +64,7 @@ export const SEPIA = {
  * (about 170 px), the caption, sound and buttons along the bottom (about 480 px) and the like/comment/share column down
  * the right edge. A logo or title inside these bands is hidden or crowded on the phone; text and logos stay out of them.
  */
-export const SAFE = { top: 230, bottom: 500, side: 64 } as const;
+export const SAFE = PLATFORM_SAFE;
 
 /**
  * Top edge of the progress bar. It must not cross the captions: the story card keeps it under the picture band, the paper
