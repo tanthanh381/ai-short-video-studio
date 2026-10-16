@@ -153,7 +153,20 @@ sẽ hiện ở đây, kèm thời lượng và nút tải MP4 · [Tạo video m
 Viết theo kiểu Việt Nam: `0,48 USD`, `1,00×` (dùng `formatUsd`, `formatSpeed`); cảnh báo hệ thống nói vấn đề bằng lời
 trước ("Mac Mini thiếu RAM…"), con số kỹ thuật để ở dòng chi tiết.
 
-## 7. Nên / Không nên
+## 7. Khả năng tiếp cận (WCAG 2.1 AA)
+
+- **Focus:** mọi control dùng `--focus-outline` / `--focus-ring`; không bao giờ `outline: none` mà không thay bằng vòng
+  khác. `lib/tokens.test.ts` chặn token tự tham chiếu hoặc chưa định nghĩa (lỗi từng làm mất viền focus toàn site).
+- **Viền control** (ô nhập, ô chọn, thẻ lựa chọn) dùng `--line-input`, đạt ≥ 3:1 so với nền ở cả sáng và tối.
+- **Mỗi trang:** có `<h1>`; `AppShell` tự đặt tiêu đề tab và chuyển focus vào `<h1>` khi đổi trang; link
+  "Bỏ qua tới nội dung" là phần tử đầu tiên.
+- **Không lồng control:** một khối bấm được không chứa nút khác (dòng dự án dùng link ở tiêu đề), `<summary>` không
+  chứa nút.
+- **Lựa chọn một trong nhiều:** `role="radiogroup"` + `role="radio"` + `aria-checked`, phím mũi tên để chuyển.
+- **Menu / popover / hộp thoại:** Esc đóng và trả focus về nút mở.
+- **Lỗi của một ô:** `aria-invalid` + `aria-describedby` trỏ tới `Notice` có `id`.
+
+## 8. Nên / Không nên
 
 | ✅ Nên | ❌ Không nên |
 |---|---|
