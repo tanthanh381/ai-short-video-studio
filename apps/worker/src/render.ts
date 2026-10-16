@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { promisify } from "node:util";
 import { drawsByHand, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
@@ -158,7 +159,7 @@ export function createAss(project: Project) {
     }
     offset += scene.actualDurationMs ?? scene.estimatedDurationMs;
   }
-  return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Noto Sans,${fontSize},${primary},${assColor(unspoken)},${assColor(edge)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
+  return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,${ASS_FONT},${fontSize},${primary},${assColor(unspoken)},${assColor(edge)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
 }
 
 /** Camera moves cycled across scenes so consecutive stills never move the same way. */
@@ -213,7 +214,7 @@ export function hookOverlayFilters(lineFiles: string[], lines: string[], width: 
   // High enough to clear most faces (portraits put eyes at 15-30%), with a translucent box so it reads on any picture.
   const top = Math.round(height * (height > width ? 0.12 : 0.09)); // portrait: below the phone apps' top bar (see SAFE)
   return lineFiles.map((file, index) =>
-    `drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${size}:fontcolor=0xFFE14D:borderw=5:bordercolor=0x101010`
+    `drawtext=fontfile=${FONT_BOLD_FILTER}:textfile=${file}:fontsize=${size}:fontcolor=0xFFE14D:borderw=5:bordercolor=0x101010`
     + `:box=1:boxcolor=0x000000@0.38:boxborderw=14`
     + `:x=(w-text_w)/2:y=${top + index * Math.round(size * 1.3)}`
     + `:enable='lt(t,3)':alpha='if(lt(t,2.4),1,max(0,(3-t)/0.6))'`);
@@ -238,8 +239,35 @@ export async function durationMs(config: WorkerConfig, path: string) {
     throw new Error("File audio/video không có thời lượng hợp lệ");
   return Math.round(duration * 1000);
 }
-const FONT_BOLD = process.env.CARD_FONT_BOLD ?? "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf";
-const FONT_ITALIC = process.env.CARD_FONT_ITALIC ?? "/usr/share/fonts/truetype/noto/NotoSans-Italic.ttf";
+function firstFont(paths: string[]) {
+  return paths.find((path) => existsSync(path)) ?? paths[0]!;
+}
+
+// The worker runs in both the Linux production container and on the Mac local
+// media host. Keep the font configurable, but do not make story-card rendering
+// depend on a Linux-only path.
+const FONT_BOLD = process.env.CARD_FONT_BOLD || firstFont([
+  "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+  "/System/Library/Fonts/Supplemental/Arial.ttf",
+  "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+  "/Library/Fonts/Arial Bold.ttf",
+]);
+const FONT_ITALIC = process.env.CARD_FONT_ITALIC || firstFont([
+  "/usr/share/fonts/truetype/noto/NotoSans-Italic.ttf",
+  "/System/Library/Fonts/Supplemental/Arial.ttf",
+  "/System/Library/Fonts/Supplemental/Arial Italic.ttf",
+  "/Library/Fonts/Arial Italic.ttf",
+]);
+const FONT_DIR = dirname(FONT_BOLD);
+// Keep the logical family stable in ASS; fontconfig resolves it on both Linux
+// and macOS, while drawtext uses the concrete cross-platform path above.
+const ASS_FONT = "Noto Sans";
+// ffmpeg filter arguments treat spaces and colons as syntax, unlike ordinary
+// filesystem arguments. Escape only the characters needed by drawtext/fontsdir.
+const filterFontPath = (path: string) => path.replace(/([\\:,' ])/gu, "\\$1");
+const FONT_BOLD_FILTER = filterFontPath(FONT_BOLD);
+const FONT_ITALIC_FILTER = filterFontPath(FONT_ITALIC);
+const FONT_DIR_FILTER = filterFontPath(FONT_DIR);
 
 /** Static story-card background: gradient + vignette + title banner + channel footer, rendered once per video. */
 export async function buildCardFrame(config: WorkerConfig, workdir: string, project: Project): Promise<string> {
@@ -251,11 +279,11 @@ export async function buildCardFrame(config: WorkerConfig, workdir: string, proj
   const draw: string[] = [];
   for (const [index, line] of lines.entries()) {
     const file = await textFile(`card-title-${index}.txt`, line);
-    draw.push(`drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${titleSize}:fontcolor=${CARD.titleColor}:borderw=3:bordercolor=0x14202a:shadowcolor=0x000000@0.45:shadowx=3:shadowy=4:x=(w-text_w)/2:y=${CARD.titleTop + index * CARD.titleLineGap}`);
+    draw.push(`drawtext=fontfile=${FONT_BOLD_FILTER}:textfile=${file}:fontsize=${titleSize}:fontcolor=${CARD.titleColor}:borderw=3:bordercolor=0x14202a:shadowcolor=0x000000@0.45:shadowx=3:shadowy=4:x=(w-text_w)/2:y=${CARD.titleTop + index * CARD.titleLineGap}`);
   }
   for (const [index, line] of cardFooterLines(project.settings.brandName).entries()) {
     const file = await textFile(`card-footer-${index}.txt`, line);
-    draw.push(`drawtext=fontfile=${FONT_ITALIC}:textfile=${file}:fontsize=${CARD.footerSize}:fontcolor=${CARD.footerColor}:borderw=1:bordercolor=0x14202a:x=(w-text_w)/2:y=${CARD.footerTop + index * 44}`);
+    draw.push(`drawtext=fontfile=${FONT_ITALIC_FILTER}:textfile=${file}:fontsize=${CARD.footerSize}:fontcolor=${CARD.footerColor}:borderw=1:bordercolor=0x14202a:x=(w-text_w)/2:y=${CARD.footerTop + index * 44}`);
   }
   const background = `[0:v]vignette=angle=PI/6,format=rgb24${draw.length ? "," + draw.join(",") : ""}[bg]`;
   const frame = join(workdir, "card-frame.png");
@@ -273,7 +301,7 @@ export async function buildCardFrame(config: WorkerConfig, workdir: string, proj
   const initialsFile = await textFile("card-badge.txt", initials);
   const inside = `lte(hypot(X-${centre},Y-${centre}),${centre - 9})`;
   const badge = `[1:v]format=rgba,geq=r='if(${inside},27,255)':g='if(${inside},53,210)':b='if(${inside},80,31)':a='if(lte(hypot(X-${centre},Y-${centre}),${centre - 2}),255,0)',`
-    + `drawtext=fontfile=${FONT_BOLD}:textfile=${initialsFile}:fontsize=${Math.round(size * 0.4)}:fontcolor=${CARD.titleColor}:x=(w-text_w)/2:y=(h-text_h)/2-4[badge]`;
+    + `drawtext=fontfile=${FONT_BOLD_FILTER}:textfile=${initialsFile}:fontsize=${Math.round(size * 0.4)}:fontcolor=${CARD.titleColor}:x=(w-text_w)/2:y=(h-text_h)/2-4[badge]`;
   await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", gradient, "-f", "lavfi", "-i", `color=c=black:s=${size}x${size}:d=1:r=1`,
     "-filter_complex", `${background};${badge};[bg][badge]overlay=(W-w)/2:${CARD.badgeY}:format=auto[out]`, "-map", "[out]", "-frames:v", "1", "-update", "1", frame],
     { timeout: 60_000 });
@@ -289,11 +317,11 @@ async function buildSepiaFrame(config: WorkerConfig, workdir: string, project: P
     const file = await textFile(`card-title-${index}.txt`, line);
     const kicker = lines.length > 1 && index === 0;
     const size = sepiaLineSize(line, kicker ? SEPIA.kickerSize : SEPIA.titleSize);
-    draw.push(`drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${size}:fontcolor=${kicker ? SEPIA.kickerColor : SEPIA.titleColor}:borderw=${kicker ? 4 : 5}:bordercolor=${kicker ? SEPIA.kickerBorder : SEPIA.titleBorder}:x=(w-text_w)/2:y=${kicker ? SEPIA.kickerTop : lines.length > 1 ? SEPIA.titleTop : SEPIA.kickerTop + 60}`);
+    draw.push(`drawtext=fontfile=${FONT_BOLD_FILTER}:textfile=${file}:fontsize=${size}:fontcolor=${kicker ? SEPIA.kickerColor : SEPIA.titleColor}:borderw=${kicker ? 4 : 5}:bordercolor=${kicker ? SEPIA.kickerBorder : SEPIA.titleBorder}:x=(w-text_w)/2:y=${kicker ? SEPIA.kickerTop : lines.length > 1 ? SEPIA.titleTop : SEPIA.kickerTop + 60}`);
   }
   for (const [index, line] of cardFooterLines(project.settings.brandName).entries()) {
     const file = await textFile(`card-footer-${index}.txt`, line);
-    draw.push(`drawtext=fontfile=${FONT_ITALIC}:textfile=${file}:fontsize=${CARD.footerSize}:fontcolor=${SEPIA.footerColor}:x=(w-text_w)/2:y=${CARD.footerTop + index * 44}`);
+    draw.push(`drawtext=fontfile=${FONT_ITALIC_FILTER}:textfile=${file}:fontsize=${CARD.footerSize}:fontcolor=${SEPIA.footerColor}:x=(w-text_w)/2:y=${CARD.footerTop + index * 44}`);
   }
   const canvas = `color=c=${SEPIA.background}:s=${CARD.width}x${CARD.height}:d=1:r=1`;
   const background = `[0:v]format=rgb24${draw.length ? "," + draw.join(",") : ""}[bg]`;
@@ -310,7 +338,7 @@ async function buildSepiaBadge(config: WorkerConfig, workdir: string, initials: 
   await writeFile(initialsFile, initials, "utf8");
   const inside = `lte(hypot(X-${centre},Y-${centre}),${centre - 10})`;
   const filter = `format=rgba,geq=r='if(${inside},60,248)':g='if(${inside},48,240)':b='if(${inside},30,222)':a='if(lte(hypot(X-${centre},Y-${centre}),${centre - 2}),255,0)',`
-    + `drawtext=fontfile=${FONT_BOLD}:textfile=${initialsFile}:fontsize=${Math.round(size * 0.4)}:fontcolor=0xF3E3B0:x=(w-text_w)/2:y=(h-text_h)/2-4`;
+    + `drawtext=fontfile=${FONT_BOLD_FILTER}:textfile=${initialsFile}:fontsize=${Math.round(size * 0.4)}:fontcolor=0xF3E3B0:x=(w-text_w)/2:y=(h-text_h)/2-4`;
   const badge = join(workdir, "badge.png");
   await exec(config.FFMPEG_PATH, ["-y", "-f", "lavfi", "-i", `color=c=black:s=${size}x${size}:d=1:r=1`, "-vf", filter, "-frames:v", "1", "-update", "1", badge], { timeout: 60_000 });
   return badge;
@@ -525,9 +553,9 @@ export async function renderProject(
       await writeFile(file, outro, "utf8");
       const from = Math.max(0, total / 1000 - 2.8).toFixed(3);
       const outroSize = Math.max(34, Math.min(58, Math.floor((width * 0.88) / (Math.max(1, [...outro].length) * 0.6))));
-      outroFilter = `drawtext=fontfile=${FONT_BOLD}:textfile=${file}:fontsize=${outroSize}:fontcolor=${cardLook.fill}:borderw=4:bordercolor=${cardLook.edge}:x=(w-text_w)/2:y=${usesStoryCard(project.settings) ? 1585 : Math.round(height * 0.68)}:alpha='min(1,(t-${from})/0.4)':enable='gte(t,${from})',`;
+      outroFilter = `drawtext=fontfile=${FONT_BOLD_FILTER}:textfile=${file}:fontsize=${outroSize}:fontcolor=${cardLook.fill}:borderw=4:bordercolor=${cardLook.edge}:x=(w-text_w)/2:y=${usesStoryCard(project.settings) ? 1585 : Math.round(height * 0.68)}:alpha='min(1,(t-${from})/0.4)':enable='gte(t,${from})',`;
     }
-    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=/usr/share/fonts/truetype/noto,` : ""}${hook}${outroFilter}format=yuv420p[base]`;
+    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=${FONT_DIR_FILTER},` : ""}${hook}${outroFilter}format=yuv420p[base]`;
     let baseLabel = "base";
     if (project.settings.progressBar) {
       const seconds = (total / 1000).toFixed(3);
@@ -635,6 +663,13 @@ export async function renderProject(
     };
   } catch (error) {
     await rm(workdir, { recursive: true, force: true });
+    if (error && typeof error === "object" && "stderr" in error) {
+      const stderr = String(error.stderr ?? "").trim();
+      if (stderr) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`${message}: ${stderr.split("\\n").slice(-3).join(" | ")}`);
+      }
+    }
     throw error;
   }
 }
