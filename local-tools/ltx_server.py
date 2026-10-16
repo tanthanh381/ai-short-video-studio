@@ -149,6 +149,22 @@ def clear_accelerator_cache():
         pass
 
 
+def assert_video_has_visual_content(video_path):
+    """Reject a technically valid but visually blank decode (often MPS failure)."""
+    try:
+        import imageio.v3 as imageio
+        import numpy as np
+        frame = np.asarray(imageio.imread(video_path, index=0))
+        if frame.size and float(frame.std()) < 3.0:
+            raise RuntimeError("LTX tạo video rỗng hoặc một màu; bỏ qua artifact")
+    except RuntimeError:
+        raise
+    except Exception as error:
+        # A missing optional decoder must not turn a valid LTX export into a
+        # failure; ffmpeg/render quality gates still inspect the final MP4.
+        print(f"[ltx] visual-content check skipped: {type(error).__name__}", flush=True)
+
+
 def generate(payload):
     state, detail = runtime_status()
     if state != "ready":
@@ -253,6 +269,10 @@ def generate(payload):
                 try:
                     print(f"[ltx] generation attempt={label} size={render_width}x{render_height} frames={render_frames} device={'cpu' if force_cpu else DEVICE}", flush=True)
                     run_inference(render_width, render_height, render_frames, force_cpu)
+                    files = sorted(output.glob("*.mp4"), key=lambda item: item.stat().st_mtime, reverse=True)
+                    if not files:
+                        raise RuntimeError("LTX không tạo được file MP4")
+                    assert_video_has_visual_content(files[0])
                     break
                 except Exception as error:
                     last_error = error
