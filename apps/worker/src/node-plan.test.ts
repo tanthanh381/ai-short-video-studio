@@ -67,7 +67,7 @@ describe("assessNode", () => {
     expect(reason).toMatch(/đang chạy bản cũ của chương trình media \(chưa báo: tệp model\); cần cập nhật/);
     expect(reason).not.toMatch(/MODELS_DIGEST/);
     const tuned = node("air", { status: status({ fingerprint: "other", settings: { ...base, "image_server.steps": 6 } }) });
-    expect(assessNode(tuned, "image", context([primary, tuned])).reasons[0]).toMatch(/máy vẽ ảnh \(steps\)/);
+    expect(assessNode(tuned, "image", context([primary, tuned])).reasons[0]).toMatch(/số bước vẽ ảnh/);
   });
 
   it("cannot vouch for a machine whose bridge does not report a fingerprint", () => {

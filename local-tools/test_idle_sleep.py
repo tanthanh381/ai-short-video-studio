@@ -243,6 +243,20 @@ class BridgeWiringTests(unittest.TestCase):
             seen = {"steps": 4, "preset": "fast"}
             self.assertEqual(self.media.remembered_image_config(seen), seen)
             self.assertEqual(self.media.remembered_image_config({}), seen)  # asleep: the last ones stand in
+            # after an update of image_server.py the copy is stale: the server is woken once to report the new settings
+            woken = []
+            with unittest.mock.patch.object(self.media, "_image_server_source", lambda: "new-code"), \
+                 unittest.mock.patch.object(self.media, "_refresh_image_config_soon", lambda: woken.append(1)), \
+                 unittest.mock.patch.object(self.media.SLEEPER, "asleep", lambda name: True):
+                self.assertEqual(self.media.remembered_image_config({}), seen)  # still the best guess meanwhile
+            self.assertEqual(woken, [1])
+            # a copy written by the old format (plain settings, no code hash) is read but counts as stale too
+            (Path(directory) / "image-config.json").write_text('{"steps": 4}')
+            woken.clear()
+            with unittest.mock.patch.object(self.media, "_refresh_image_config_soon", lambda: woken.append(1)), \
+                 unittest.mock.patch.object(self.media.SLEEPER, "asleep", lambda name: True):
+                self.assertEqual(self.media.remembered_image_config({}), {"steps": 4})
+            self.assertEqual(woken, [1])
         with tempfile.TemporaryDirectory() as directory, unittest.mock.patch.object(self.media, "SERVICE_LOG_DIR", Path(directory)):
             self.assertEqual(self.media.remembered_image_config({}), {})  # never seen: nothing invented
 
