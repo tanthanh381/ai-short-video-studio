@@ -421,7 +421,9 @@ def comfyui_image(prompt, negative_prompt, width, height, seed, preset):
 
 # Faces are redrawn larger after generation (local-tools/face_detail.py, YuNet + image-to-image): SDXL-Turbo smeared
 # eyes and bent glasses on faces of ~100 px. Runs in the whiteboard venv, which has OpenCV; any failure keeps the image.
-FACE_DETAIL = os.getenv("FACE_DETAIL", "true").lower() not in {"0", "false", "no"}
+# Keep the generated SDXL face by default. The image-to-image redraw is opt-in:
+# it can change the subject or introduce seams even when generation succeeded.
+FACE_DETAIL = os.getenv("FACE_DETAIL", "false").lower() not in {"0", "false", "no"}
 FACE_PYTHON = os.getenv("FACE_DETAIL_PYTHON", str(Path.home() / "Developer/local-ai/wb-venv/bin/python"))
 FACE_SCRIPT = Path(__file__).resolve().parent / "face_detail.py"
 # Who may have a face worth redrawing. Wider than HUMAN_PROMPT_RE ("two elderly friends", "a mother"), and still a gate:

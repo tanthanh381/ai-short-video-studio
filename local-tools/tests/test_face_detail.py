@@ -41,6 +41,15 @@ class Geometry(unittest.TestCase):
 
 
 class WhenItRuns(unittest.TestCase):
+    def test_face_detail_is_opt_in_to_preserve_a_good_generated_picture(self):
+        original = media_server.FACE_DETAIL
+        try:
+            media_server.FACE_DETAIL = False
+            picture = b"original generated picture"
+            self.assertEqual(media_server.detail_faces(picture, "style", "a Vietnamese woman", 2401), picture)
+        finally:
+            media_server.FACE_DETAIL = original
+
     def test_people_prompts_qualify_and_objects_or_animals_do_not(self):
         people = ["Two elderly Vietnamese friends on a bench", "a Vietnamese mother with a black bun", "An old farmer waters a tree"]
         others = ["Close-up of chopsticks on a plate with fish", "A vibrant Japanese bento box", "a cat sleeping on a sofa"]
