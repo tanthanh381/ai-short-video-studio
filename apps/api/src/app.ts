@@ -160,6 +160,10 @@ export function clientFault(error: unknown): { status: number; message: string; 
 
 export function createApp(config: AppConfig, db: AdminClient) {
   const app = express();
+  // The public API is served behind one trusted Tailscale/reverse-proxy hop.
+  // Without this, express-rate-limit rejects X-Forwarded-For and every browser
+  // request emits a validation warning instead of using the real client IP.
+  app.set("trust proxy", 1);
   const allowedOrigins = config.ALLOWED_ORIGINS.split(",")
     .map((x) => x.trim())
     .filter(Boolean);

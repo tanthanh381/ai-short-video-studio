@@ -113,6 +113,18 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertIn("s=720x1280", vf)
         self.assertIn("fps=24", vf)
 
+    def test_quality_without_explicit_model_prefers_comfyui_base_only_when_ready(self):
+        self.assertEqual(
+            self.media.choose_image_model(None, "quality", comfy_ready=True),
+            self.media.COMFYUI_IMAGE_MODEL,
+        )
+        self.assertIsNone(self.media.choose_image_model(None, "quality", comfy_ready=False))
+        self.assertIsNone(self.media.choose_image_model(None, "balanced", comfy_ready=True))
+        self.assertEqual(
+            self.media.choose_image_model("sdxl-turbo", "quality", comfy_ready=True),
+            "sdxl-turbo",
+        )
+
     def test_ltx_timeout_returns_to_still_fallback(self):
         with patch.object(self.media, "ltx_state", return_value=("ready", "ok")), \
              patch.object(self.media.urllib.request, "urlopen", side_effect=TimeoutError), \

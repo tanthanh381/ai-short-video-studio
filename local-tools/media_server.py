@@ -277,6 +277,21 @@ def image_size(aspect_ratio, model=None):
     return (BASE_IMAGE_SIZES if model == COMFYUI_IMAGE_MODEL else TURBO_IMAGE_SIZES)[aspect_ratio]
 
 
+def choose_image_model(model=None, preset=None, comfy_ready=False):
+    """Use the higher-fidelity Base checkpoint for an explicit Quality export.
+
+    The UI intentionally leaves the model unset for normal projects so the local
+    node can choose its fast default. Quality is the exception: when ComfyUI is
+    genuinely healthy, use SDXL Base at its native resolution to reduce the
+    duplicated people and malformed faces seen with Turbo in tall frames. An
+    unavailable ComfyUI must never make a video job fail just because the user
+    chose Quality, so it falls back to the persistent Turbo server.
+    """
+    if model in (None, "") and preset == "quality" and comfy_ready:
+        return COMFYUI_IMAGE_MODEL
+    return model
+
+
 IMAGE_PRESET = os.getenv("IMAGE_PRESET", "balanced")
 IMAGE_PRESETS = {
     "fast": {"steps": 2, "cfg": 1.1},
@@ -538,17 +553,18 @@ def detail_faces(image, style_words, prompt, seed):
 
 
 def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo", preset=None, reference_image_base64=None):
-    """SDXL-Turbo (MLX, Apple GPU) from the local AI toolkit, generated at the video's native aspect."""
+    """Generate at the video's native aspect, selecting SDXL Base for healthy Quality exports."""
     if aspect_ratio not in IMAGE_SIZES:
         raise ValueError("Tỷ lệ ảnh không hợp lệ")
     image_models = available_image_models()
-    check_choice("ảnh", model, image_models)
+    selected_preset = preset if preset in IMAGE_PRESETS else IMAGE_PRESET
+    selected_model = choose_image_model(model, selected_preset, COMFYUI_IMAGE_MODEL in image_models)
+    check_choice("ảnh", selected_model, image_models)
     if style not in IMAGE_STYLES:
         raise ValueError("Phong cách ảnh không hợp lệ")
     if seed is not None:
         seed = int(seed) % (2**31)
-    width, height = image_size(aspect_ratio, model)
-    selected_preset = preset if preset in IMAGE_PRESETS else IMAGE_PRESET
+    width, height = image_size(aspect_ratio, selected_model)
     preset_options = IMAGE_PRESETS.get(selected_preset, IMAGE_PRESETS["balanced"])
     # Style words first: if the text encoder's 77-token limit forces trimming, the scene detail goes, not the style.
     clean = clean_image_prompt(prompt)
@@ -567,7 +583,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     nonhuman_focus = "" if (is_human or stylized) else ", the described object or environment is the main subject, no people, no human figures, no face"
     flat_guard = ", only the described characters, no crowd" if is_flat and is_human else ""
     styled = f"{IMAGE_STYLES[style]}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, {clean}, no text, no logo, no watermark"
-    if model == COMFYUI_IMAGE_MODEL:
+    if selected_model == COMFYUI_IMAGE_MODEL:
         if reference_image_base64:
             raise ValueError("SDXL Base qua ComfyUI hiện hỗ trợ text-to-image; hãy bỏ ảnh tham chiếu hoặc chọn SDXL-Turbo")
         negative = IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else "text, logo, watermark"
@@ -601,7 +617,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         time.sleep(5)
     if state == "ready":  # model kept loaded in memory: seconds per image
         recycle_if_bloated("image", IMAGE_SERVER_URL)  # a restart reloads the model (~1 min) but frees GBs of cache
-        payload = {"prompt": styled, "model": model, "seed": seed, "steps": int(IMAGE_STEPS_OVERRIDE or steps), "preset": selected_preset,
+        payload = {"prompt": styled, "model": selected_model, "seed": seed, "steps": int(IMAGE_STEPS_OVERRIDE or steps), "preset": selected_preset,
                    "width": width, "height": height, "negativePrompt": turbo_negative}
         if reference_image_base64 and is_human:
             payload["referenceImage"] = reference_image_base64
