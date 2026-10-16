@@ -9,6 +9,8 @@ import pino from "pino";
 import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
 import { sceneMotionPrompt } from "./motion-prompts";
 import { getConfig } from "./config";
+import { imageLooksBlank } from "./image-check";
+import { JobCancelled, ensureNotCancelled, isCancelled } from "./job-cancel";
 import { fetchAirSetup } from "./air-setup";
 import { AnthropicStoryboardAdapter } from "./anthropic";
 import { readBalancerSettings } from "@studio/shared/balancer-store";
@@ -263,6 +265,7 @@ function checkDeadline(job: JobRow) {
 
 async function progress(job: JobRow, value: number, stage: string) {
   checkDeadline(job);
+  await ensureNotCancelled(db as never, job.id);
   const mapped = job.job_type === "create_video"
     ? Math.min(74, Math.round(20 + value * 0.54))
     : value;
@@ -533,6 +536,24 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
   catch { log.warn({ projectId: project.id, jobId: job.id }, "unused_media_cleanup_failed"); }
 }
 
+/**
+ * One scene's picture. A frame that came back flat (all black or all one colour) is drawn once more with another seed, so a
+ * bad draw never reaches the video; if the second is flat too it is kept (the person can still redraw that scene).
+ */
+async function drawScenePicture(provider: MediaProvider, scene: Scene, project: Project, job: JobRow): Promise<Uint8Array> {
+  const prompt = buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project), visualPresetPrompt(project.settings.visualPreset));
+  const options = {
+    ...project.settings.localModels,
+    seed: sceneSeed(project, scene),
+    style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
+    preset: project.settings.generationPreset,
+  };
+  const first = await provider.createImage(prompt, imageAspectFor(project.settings), options);
+  if (!(await imageLooksBlank(first, config.FFMPEG_PATH))) return first;
+  log.warn({ jobId: job.id, sceneId: scene.id }, "blank_picture_redrawn");
+  return provider.createImage(prompt, imageAspectFor(project.settings), { ...options, seed: (options.seed ?? 0) + 7919 });
+}
+
 async function generateMedia(job: JobRow, project: Project) {
   const media: MediaProvider | null = project.settings.mediaProvider === "openai" ? await openaiFor(project.userId) : localMedia;
   if (!media)
@@ -658,16 +679,7 @@ async function generateMedia(job: JobRow, project: Project) {
       await updateScene(scene.id, { media_status: "processing", error_message: null });
       await progress(job, Math.round((imagesDone / pendingImages.length) * 42), `Đang tạo ảnh cảnh ${scene.order + 1}${onMachine(machine)}`);
     });
-    const image = await provider.createImage(
-      buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project), visualPresetPrompt(project.settings.visualPreset)),
-      imageAspectFor(project.settings),
-      {
-        ...project.settings.localModels,
-        seed: sceneSeed(project, scene),
-        style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
-        preset: project.settings.generationPreset,
-      },
-    );
+    const image = await drawScenePicture(provider, scene, project, job);
     await local(async () => {
       const imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
       await upload(imagePath, image, "image/png");
@@ -716,19 +728,7 @@ async function generateMedia(job: JobRow, project: Project) {
           mediaProgress(finished),
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
-        const image = await media.createImage(
-          buildProductionImagePrompt(
-            scenePicturePrompt(scene.imagePrompt, project),
-            visualPresetPrompt(project.settings.visualPreset),
-          ),
-          imageAspectFor(project.settings),
-          {
-            ...project.settings.localModels,
-            seed: sceneSeed(project, scene),
-            style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
-            preset: project.settings.generationPreset,
-          },
-        );
+        const image = await drawScenePicture(media, scene, project, job);
         imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
         await upload(imagePath, image, "image/png");
         await updateScene(scene.id, { image_path: imagePath });
@@ -994,7 +994,7 @@ async function run(job: JobRow) {
       storyboard: (current) => storyboard(job, current),
       media: (current) => generateMedia(job, current),
       render: (current) => render(job, current),
-      progress: (value, stage) => { checkDeadline(job); return setProgress(job.id, value, stage); },
+      progress: async (value, stage) => { checkDeadline(job); await ensureNotCancelled(db as never, job.id); await setProgress(job.id, value, stage); },
       checkpoint: async (value) => {
         job.payload = { ...job.payload, pipeline: value };
         const { error } = await db.from("jobs").update({ payload: job.payload, heartbeat_at: new Date().toISOString() }).eq("id", job.id);
@@ -1025,8 +1025,15 @@ async function finish(job: JobRow, error?: unknown) {
         locked_by: null,
         locked_at: null,
       })
-      .eq("id", job.id);
+      .eq("id", job.id)
+      .eq("status", "running"); // a job cancelled in the last moment stays cancelled
     if (updateError) throw updateError;
+    return;
+  }
+  if (error instanceof JobCancelled) {
+    // The API already marked the job cancelled; give the project back to the person for editing.
+    await updateProject(job.project_id, { status: "draft" });
+    log.info({ jobId: job.id }, "job_cancelled");
     return;
   }
   const message = error instanceof Error ? error.message : "Tác vụ gặp lỗi";
@@ -1043,7 +1050,8 @@ async function finish(job: JobRow, error?: unknown) {
       locked_at: null,
       finished_at: retry ? null : new Date().toISOString(),
     })
-    .eq("id", job.id);
+    .eq("id", job.id)
+    .eq("status", "running");
   if (updateError) throw updateError;
   if (!retry)
     await updateProject(job.project_id, { status: "failed" });
@@ -1073,10 +1081,12 @@ async function poll() {
   }, 30_000);
   try {
     await run(job);
+    await ensureNotCancelled(db as never, job.id); // a cancellation swallowed as one failed scene still ends the job as cancelled
     await finish(job);
     log.info({ jobId: job.id }, "job_completed");
   } catch (error) {
-    await finish(job, error);
+    // Whatever the error was, a job the person cancelled ends as cancelled, not as failed and not retried.
+    await finish(job, error instanceof JobCancelled || !(await isCancelled(db as never, job.id)) ? error : new JobCancelled());
   } finally { clearInterval(heartbeat); }
 }
 

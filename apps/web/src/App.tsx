@@ -2139,6 +2139,26 @@ function StudioPage() {
       setError(e instanceof Error ? e.message : "Không thể bắt đầu tạo video.");
     } finally { setBusyAction(null); }
   }
+  /** Stops the running job at its next step; the scenes already made are kept and the project goes back to a draft. */
+  async function cancelActiveJob() {
+    const job = jobs.find((item) => item.status === "queued" || item.status === "running");
+    if (!job || busyAction) return;
+    if (!window.confirm("Hủy tác vụ đang chạy? Các cảnh đã tạo xong vẫn được giữ lại, bạn có thể bấm Tạo video để tiếp tục sau.")) return;
+    setBusyAction("cancel");
+    setError(null);
+    try {
+      const cancelled = await api.cancelJob(job.id);
+      setJobs((current) => current.map((item) => (item.id === cancelled.id ? cancelled : item)));
+      const [nextJobs, nextProject] = await Promise.all([api.getJobs(id), api.getProject(id)]);
+      setJobs(nextJobs);
+      saver.current?.confirm(nextProject);
+      setProject(nextProject);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không hủy được tác vụ. Hãy thử lại.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
   function applySourceDraft() {
     if (!project || sourceDraft === project.sourceText) return;
     if (sourceDraft.trim().length < 10) { setError("Kịch bản cần ít nhất 10 ký tự. Nội dung cũ vẫn được giữ."); return; }
@@ -2682,7 +2702,12 @@ function StudioPage() {
           <div className="progress-track">
             <i style={{ width: `${activeJob.progress}%` }} />
           </div>
-          <p className="processing-hint">Có thể đóng hoặc tải lại trang. Studio sẽ tiếp tục theo dõi tác vụ đã lưu.</p>
+          <p className="processing-hint">
+            Có thể đóng hoặc tải lại trang. Studio sẽ tiếp tục theo dõi tác vụ đã lưu.{" "}
+            <button type="button" className="link-button" onClick={() => void cancelActiveJob()} disabled={busyAction === "cancel"}>
+              {busyAction === "cancel" ? "Đang hủy…" : "Hủy tác vụ"}
+            </button>
+          </p>
         </div>
       )}
       {failedJob && !activeJob && (

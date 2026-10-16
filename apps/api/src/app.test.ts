@@ -346,4 +346,46 @@ describe("API", () => {
     expect(scene.status).toBe(404);
     expect(scene.body.error).toMatch(/Không tìm thấy/);
   });
+
+  describe("huy tac vu", () => {
+    const jobId = "11111111-1111-4111-8111-111111111111";
+    const row = (status: string) => ({ id: jobId, project_id: "22222222-2222-4222-8222-222222222222", user_id: "user-1", job_type: "create_video", status, progress: 40, stage: "Đang tạo ảnh", attempts: 1, max_attempts: 3, payload: {}, created_at: "2026-10-16T00:00:00Z", updated_at: "2026-10-16T00:00:00Z", error_message: null, finished_at: null });
+    const make = (job: ReturnType<typeof row> | null) => {
+      const updates: Array<{ table: string; values: Record<string, unknown> }> = [];
+      const db = {
+        auth: { getUser: vi.fn(async () => ({ data: { user: { id: "user-1", email: "o@example.com" } }, error: null })) },
+        from: (table: string) => {
+          let values: Record<string, unknown> | null = null;
+          const query: Record<string, unknown> = {
+            select: () => query, eq: () => query, in: () => query, gte: () => query,
+            update: (v: Record<string, unknown>) => { values = v; updates.push({ table, values: v }); return query; },
+            maybeSingle: async () => table === "allowed_users"
+              ? { data: { user_id: "user-1", is_active: true, daily_budget_usd: 3, max_concurrent_jobs: 1 }, error: null }
+              : { data: values && job ? { ...job, ...values } : job, error: null },
+            then: (resolve: (value: { error: null }) => void) => resolve({ error: null }),
+          };
+          return query;
+        },
+      };
+      return { app: createApp(config, db as never), updates };
+    };
+
+    it("huy duoc tac vu dang chay va tra du an ve ban nhap", async () => {
+      const { app, updates } = make(row("running"));
+      const response = await request(app).post(`/v1/jobs/${jobId}/cancel`).set("Authorization", "Bearer t");
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe("cancelled");
+      expect(updates.find((item) => item.table === "jobs")?.values).toMatchObject({ status: "cancelled" });
+      expect(updates.find((item) => item.table === "projects")?.values).toEqual({ status: "draft" });
+    });
+
+    it("khong huy tac vu da ket thuc va khong ton tai", async () => {
+      const done = await request(make(row("completed")).app).post(`/v1/jobs/${jobId}/cancel`).set("Authorization", "Bearer t");
+      expect(done.status).toBe(409);
+      const none = await request(make(null).app).post(`/v1/jobs/${jobId}/cancel`).set("Authorization", "Bearer t");
+      expect(none.status).toBe(404);
+      const anonymous = await request(make(row("running")).app).post(`/v1/jobs/${jobId}/cancel`);
+      expect(anonymous.status).toBe(401);
+    });
+  });
 });

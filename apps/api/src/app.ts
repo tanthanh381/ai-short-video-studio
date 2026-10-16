@@ -1106,6 +1106,25 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.status(202).json(mapJob(data));
   });
 
+  app.post("/v1/jobs/:id/cancel", async (req, res) => {
+    const { data: job, error: readError } = await db.from("jobs").select("*")
+      .eq("id", req.params.id).eq("user_id", req.userId!).maybeSingle();
+    if (readError) throw readError;
+    if (!job) return res.status(404).json({ error: "Không tìm thấy tác vụ" });
+    if (job.status !== "queued" && job.status !== "running")
+      return res.status(409).json({ error: "Tác vụ này đã kết thúc nên không còn gì để hủy" });
+    // Only a job that is still queued or running can be cancelled; the worker notices at its next step and keeps finished scenes.
+    const { data: cancelled, error } = await db.from("jobs")
+      .update({ status: "cancelled", stage: "Đã hủy theo yêu cầu", finished_at: new Date().toISOString(), error_message: null })
+      .eq("id", job.id).in("status", ["queued", "running"]).select("*").maybeSingle();
+    if (error) throw error;
+    if (!cancelled) return res.status(409).json({ error: "Tác vụ vừa kết thúc nên không hủy được" });
+    const { error: projectError } = await db.from("projects").update({ status: "draft" })
+      .eq("id", job.project_id).eq("user_id", req.userId!);
+    if (projectError) throw projectError;
+    res.json(mapJob(cancelled));
+  });
+
   app.post("/v1/jobs/:id/retry", async (req, res) => {
     const { data: previous, error: previousError } = await db.from("jobs").select("*")
       .eq("id", req.params.id).eq("user_id", req.userId!).maybeSingle();
