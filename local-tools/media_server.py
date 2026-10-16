@@ -459,7 +459,7 @@ FACE_STATS = {"images": 0, "faces": 0, "skipped": 0, "lastError": None}
 def face_detail_state():
     """(ready, detail) for /health."""
     if not FACE_DETAIL:
-        return False, "Đã tắt bằng FACE_DETAIL=false"
+        return False, "Đang tắt theo cài đặt của máy; ảnh vẫn được vẽ bình thường, chỉ bỏ bước vẽ lại khuôn mặt"
     missing = [name for name, path in (("Python có OpenCV", Path(FACE_PYTHON)), ("mô hình dò mặt", FACE_MODEL),
                                        ("face_detail.py", FACE_SCRIPT)) if not path.exists()]
     if missing:
@@ -1431,6 +1431,7 @@ class Handler(BaseHTTPRequestHandler):
             face_ready, face_detail = face_detail_state()
             json_response(self, 200, {"ok": image_ready and tts_ready, "image": image_ready,
                                     "faceDetail": face_ready, "faceDetailDetail": face_detail,
+                                    "faceDetailState": "disabled" if not FACE_DETAIL else ("ready" if face_ready else "offline"),
                                     "tts": tts_ready, "alignedTts": tts_ready, "ttsEngines": engines, "ffmpeg": ffmpeg_ready,
                                     "transcribe": transcribe_ready, "ollama": ollama_ready,
                                     "comfyui": comfy_ready == "ready", "comfyuiState": comfy_ready,
