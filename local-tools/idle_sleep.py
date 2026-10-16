@@ -242,7 +242,9 @@ class Sleeper:
             if not control.installed(service.label):
                 return False
             woke = False
-            if not control.loaded(service.label):
+            # A script-started service can be neither explicitly asleep nor
+            # listening after a crash. A request must restart it.
+            if not control.loaded(service.label) or not service.up():
                 control.load(service.label)
                 woke = True
             if woke or not service.up():

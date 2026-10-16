@@ -136,7 +136,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
     def test_degraded_ltx_does_not_wait_for_wake_timeout(self):
         with patch.object(self.media, "ltx_state", return_value=("offline", "LTX needs more RAM")), \
              patch.object(self.media.SLEEPER, "asleep", return_value=False):
-            self.assertEqual(self.media.services_for("/video", b"{}"), [])
+            self.assertEqual(self.media.services_for("/video", b"{}"), ["ltx"])
 
     def test_long_sentence_stays_inside_subtitle_schema_limit(self):
         script = " ".join(["giữ nguyên từng dấu tiếng Việt và thứ tự lời đọc"] * 14) + "."

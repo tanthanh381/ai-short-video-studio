@@ -1116,11 +1116,10 @@ def services_for(path, body):
     if route == "/transcribe":
         return ["whisper"]
     if route == "/video":
-        # Do not wait for the 5-minute wake timeout when LTX is known to be incompatible with this host's RAM.
-        # An actually sleeping service is still woken on demand; an installed-but-degraded service goes straight to
-        # the bounded still-motion fallback.
-        state, _detail = ltx_state()
-        return ["ltx"] if state == "ready" or SLEEPER.asleep("ltx") else []
+        # Always give the sleeper a chance to restart LTX. This is cheap on a
+        # machine without the optional service (ensure_awake returns False), and
+        # recovers a crashed Air process instead of silently falling back.
+        return ["ltx"]
     return []
 
 

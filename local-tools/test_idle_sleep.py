@@ -199,6 +199,20 @@ class ProcessControlTests(unittest.TestCase):
             control = idle_sleep.ProcessControl("demo", 1, ["/bin/sh"], Path(directory) / "asleep.json")
             self.assertTrue(control.loaded())  # port closed but nobody asked it to sleep: the supervisor's business
 
+    def test_request_restarts_a_crashed_script_service(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as directory:
+            control = idle_sleep.ProcessControl("demo", 1, ["/bin/sh"], Path(directory) / "asleep.json")
+            state = {"up": False}
+            service = idle_sleep.Service("demo", "no.such.label", lambda: state["up"], process=control)
+            sleeper = idle_sleep.Sleeper([service], 60, FakeLaunchd(installed=(), loaded=()), Clock(), sleep=lambda _: None)
+            def load(label):
+                state["up"] = True
+            with unittest.mock.patch.object(control, "load", side_effect=load) as load_mock:
+                sleeper.ensure_awake("demo")
+            load_mock.assert_called_once_with("no.such.label")
+
 
 class BridgeWiringTests(unittest.TestCase):
     """Which sleeping services each bridge request needs, and that a sleeping Mac still looks capable and identical."""
@@ -218,7 +232,7 @@ class BridgeWiringTests(unittest.TestCase):
         self.assertEqual(m.services_for("/image", b"not json"), ["image"])
         self.assertEqual(m.services_for("/tts-aligned", b"{}"), ["vieneu"])
         self.assertEqual(m.services_for("/transcribe?model=x", b""), ["whisper"])
-        with unittest.mock.patch.object(m, "ltx_state", return_value=("ready", "ok")):
+        with unittest.mock.patch.object(m, "ltx_state", return_value=("offline", "crashed")):
             self.assertEqual(m.services_for("/video", b"{}"), ["ltx"])
         self.assertEqual(m.services_for("/sync-now", b""), [])
 
