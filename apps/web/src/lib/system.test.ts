@@ -296,6 +296,13 @@ describe("syncView: how closely a second machine follows the main one", () => {
     expect(syncView(node("mini"), NOW)).toBeNull();
   });
 
+  it("does not ask for a reinstall while the machine is simply not answering (restarting after an update)", () => {
+    const silent = syncView(node("air", { sync: null, state: "offline", resources: null }), NOW)!;
+    expect(silent).toMatchObject({ tone: "warn", label: "Tạm mất kết nối", canRequest: false });
+    expect(silent.detail).not.toMatch(/Dán lại dòng lệnh cài/);
+    expect(syncView(node("air", { sync: null, resources: null }), NOW)!.label).toBe("Tạm mất kết nối");
+  });
+
   it("tells a machine without the agent how to get it", () => {
     const view = syncView(air(null), NOW)!;
     expect(view).toMatchObject({ tone: "idle", label: "Chưa bật tự động", canRequest: false });
