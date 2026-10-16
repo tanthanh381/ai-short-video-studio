@@ -61,7 +61,10 @@ def require_ffmpeg():
 
 
 VIDEO_FALLBACK_ENABLED = os.getenv("VIDEO_FALLBACK_ENABLED", "1").lower() not in {"0", "false", "no"}
-VIDEO_FALLBACK_SECONDS = max(1.0, min(float(os.getenv("VIDEO_FALLBACK_SECONDS", "2.0")), 8.0))
+# A two-second fallback visibly loops inside most narration scenes. Six seconds
+# covers the usual scene length while remaining cheap enough for a CPU-only
+# availability path; the final renderer still trims to the measured voice.
+VIDEO_FALLBACK_SECONDS = max(1.0, min(float(os.getenv("VIDEO_FALLBACK_SECONDS", "6.0")), 8.0))
 
 
 def still_video_fallback(image_base64, aspect_ratio="9:16"):
@@ -77,7 +80,7 @@ def still_video_fallback(image_base64, aspect_ratio="9:16"):
     raw = base64.b64decode(encoded, validate=True)
     if not raw or len(raw) > 8 * 1024 * 1024:
         raise ValueError("Ảnh fallback trống hoặc vượt giới hạn 8 MB")
-    width, height = {"9:16": (576, 1024), "1:1": (720, 720), "16:9": (1024, 576)}.get(
+    width, height = {"9:16": (720, 1280), "1:1": (720, 720), "16:9": (1024, 576)}.get(
         aspect_ratio, (576, 1024)
     )
     ffmpeg = require_ffmpeg()
