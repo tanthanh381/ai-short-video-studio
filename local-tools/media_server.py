@@ -1157,7 +1157,7 @@ def video_resources_available():
     # swapUsedGb is historical allocation; it can remain high after pressure is
     # gone. Only treat it as unsafe when the kernel is still actively paging (or
     # when the activity sample is unavailable).
-    if swap_used is not None and swap_total and swap_total > 0 and swap_used / swap_total >= VIDEO_MAX_SWAP_RATIO and (swap_out is None or swap_out >= VIDEO_MAX_SWAP_OUT_MBPS):
+    if swap_used is not None and swap_total and swap_total > 0 and swap_used / swap_total >= VIDEO_MAX_SWAP_RATIO and (resources.get("memPressure") != "normal" or swap_out is None or swap_out >= VIDEO_MAX_SWAP_OUT_MBPS):
         return False, "swap gần đầy; chờ giải phóng bộ nhớ"
     return True, ""
 
