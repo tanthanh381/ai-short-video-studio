@@ -28,7 +28,7 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
             <li key={choice.id} className={choice.enabled ? "" : "is-off"}>
               <div className="machine-text">
                 <strong>{choice.id}{choice.primary ? " (chính)" : ""}</strong>
-                <span>{choice.facts || (choice.enabled ? "Chưa có số liệu" : "Đang tắt · không nhận tác vụ mới")}</span>
+                <span>{choice.facts || (choice.enabled ? "Chưa nhận được số liệu (máy đang khởi động lại hoặc mất kết nối)" : "Đang tắt · không nhận tác vụ mới")}</span>
                 {choice.sync ? (
                   <span className={`machine-sync tone-${choice.sync.tone}`}>
                     Đồng bộ thiết bị: <b>{choice.sync.label}</b>{choice.sync.detail ? ` · ${choice.sync.detail}` : ""}

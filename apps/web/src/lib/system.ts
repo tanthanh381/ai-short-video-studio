@@ -348,6 +348,11 @@ const behindCount = (sync: NonNullable<NodeSummary["sync"]>) => sync.behind.code
 export function syncView(node: NodeSummary, now = Date.now()): SyncView | null {
   if (node.role === "primary") return null;
   const sync = node.sync;
+  // No answer from the machine at all (it is restarting its programs after an update, or is off the network): that is not a
+  // missing sync agent, and telling the owner to reinstall would send them the wrong way.
+  if (!sync && (node.state === "offline" || !node.resources)) {
+    return { tone: "warn", label: "Tạm mất kết nối", detail: "Chưa nhận được số liệu từ máy này. Thường do máy đang khởi động lại dịch vụ sau khi cập nhật và sẽ tự trở lại sau ít phút. Nếu kéo dài, kiểm tra máy còn bật, không ngủ và cùng mạng Tailscale.", percent: null, differences: [], canRequest: false, recovery: null };
+  }
   if (!sync) {
     return { tone: "idle", label: "Chưa bật tự động", detail: "Máy này chưa chạy tiến trình đồng bộ (hoặc còn bản cũ). Dán lại dòng lệnh cài trên máy để bật.", percent: null, differences: [], canRequest: false, recovery: null };
   }
