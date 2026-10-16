@@ -129,6 +129,8 @@ LTX_VIDEO_URL = os.getenv("LTX_VIDEO_URL", "http://127.0.0.1:8770")
 # Silicon machine, especially after an MPS->CPU recovery. Do not turn a still
 # running LTX job into a misleading zoompan success at the old 180 s cutoff.
 LTX_REQUEST_TIMEOUT_S = max(30, min(int(os.getenv("LTX_REQUEST_TIMEOUT_S", "900")), 1800))
+VIDEO_MAX_SWAP_OUT_MBPS = 15.0
+VIDEO_MAX_SWAP_RATIO = 0.70
 NODE_START_SCRIPT = os.getenv("NODE_START_SCRIPT", "")
 COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
 COMFYUI_CHECKPOINT = os.getenv("COMFYUI_CHECKPOINT", "sd_xl_base_1.0_0.9vae.safetensors")
@@ -1143,6 +1145,20 @@ def ltx_state():
         return "offline", "Chưa kết nối LTX runtime"
 
 
+def video_resources_available():
+    """Prevent a known memory-starved Mac from entering a long LTX/OOM cycle."""
+    resources = node_status.read_resources()
+    if resources.get("memPressure") == "critical":
+        return False, "RAM đang quá tải"
+    swap_out = resources.get("swapOutMBps")
+    if swap_out is not None and swap_out >= VIDEO_MAX_SWAP_OUT_MBPS:
+        return False, "máy đang swap; chờ giải phóng bộ nhớ"
+    swap_used, swap_total = resources.get("swapUsedGb"), resources.get("swapTotalGb")
+    if swap_used is not None and swap_total and swap_total > 0 and swap_used / swap_total >= VIDEO_MAX_SWAP_RATIO:
+        return False, "swap gần đầy; chờ giải phóng bộ nhớ"
+    return True, ""
+
+
 def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None, preset=None):
     """Proxy I2V to LTX and preserve export availability with a bounded last resort."""
     VIDEO_ENGINE.value = "fallback"
@@ -1153,6 +1169,12 @@ def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None
             print(f"[video] LTX state={state}; using FFmpeg still fallback: {detail}", flush=True)
             return still_video_fallback(image_base64, aspect_ratio)
         raise RuntimeError(detail)
+    resource_ok, resource_detail = video_resources_available()
+    if not resource_ok:
+        if VIDEO_FALLBACK_ENABLED:
+            print(f"[video] LTX skipped: {resource_detail}; using FFmpeg still fallback", flush=True)
+            return still_video_fallback(image_base64, aspect_ratio)
+        raise RuntimeError(resource_detail)
     if not image_base64 or len(image_base64) > 8 * 1024 * 1024:
         raise ValueError("Ảnh tham chiếu LTX trống hoặc vượt giới hạn 8 MB")
     # LTX peaks after the still image and voice have already been produced. Park
@@ -1341,7 +1363,8 @@ def node_status_payload(max_age_s=3.0):
         engines = tts_engines_up()
         ffmpeg_ready = find_binary("ffmpeg", "FFMPEG_PATH") is not None
         ltx_ready, _ = ltx_state()
-        ltx_ok = ltx_ready == "ready" or SLEEPER.asleep("ltx")
+        resource_ok, _resource_detail = video_resources_available()
+        ltx_ok = (ltx_ready == "ready" and resource_ok) or SLEEPER.asleep("ltx")
         settings = {
             "IMAGE_PRESET": IMAGE_PRESET, "IMAGE_STEPS": IMAGE_STEPS_OVERRIDE or "", "IMAGE_PERSON_STEPS": IMAGE_PERSON_STEPS,
             "VIENEU_STEPS": VIENEU_STEPS, "TTS_BREAK_WORDS": TTS_BREAK_WORDS, "TTS_ENGINES": ",".join(TTS_ENGINES),

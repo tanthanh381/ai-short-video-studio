@@ -123,6 +123,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
 
     def test_ltx_parks_idle_competing_model_services_before_inference(self):
         with patch.object(self.media, "ltx_state", return_value=("ready", "ok")), \
+             patch.object(self.media, "video_resources_available", return_value=(True, "")), \
              patch.object(self.media, "release_turbo_model") as turbo, \
              patch.object(self.media, "release_comfy_model") as comfy, \
              patch.object(self.media.SLEEPER, "park", return_value=["image", "vieneu"]) as park, \
