@@ -25,6 +25,8 @@ import {
   splitScript,
   validateCreativeStoryboard,
   visualActionPrompt,
+  visualPromptFlaws,
+  concreteVisualFallback,
   type StoryboardInput,
   type StoryboardResult,
   type WordTimestamp,
@@ -181,6 +183,15 @@ describe("diffusion prompt quality", () => {
     expect(prompt).toContain("concrete story beat");
     expect(prompt).not.toContain("Không chữ");
     expect(prompt).not.toContain("lời đọc");
+  });
+
+  it("flags symbolic placeholders that do not show the spoken beat", () => {
+    expect(visualPromptFlaws("Bạn cố quên một ký ức cũ.", "A person at a desk with an abstract ghost and a question mark")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Bạn cố xua đuổi một suy nghĩ.", "A person with floating blurred scribbles representing racing thoughts")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Một bóng ma xuất hiện trong căn phòng.", "A frightened person faces a ghost in a dark room")).toBe(0);
+    expect(visualPromptFlaws("Bạn viết lại điều mình đang nghĩ.", "Hands writing in an open notebook at a sunlit desk")).toBe(0);
+    expect(concreteVisualFallback("Hãy gọi tên cảm xúc và viết lại điều đang nghĩ.")).toContain("open notebook");
+    expect(concreteVisualFallback("Một hơi thở chậm đưa bạn về hiện tại.")).toContain("one slow breath");
   });
 });
 
