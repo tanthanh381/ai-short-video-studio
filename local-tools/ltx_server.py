@@ -32,11 +32,37 @@ GENERATION_LOCK = threading.Lock()
 CPU_FALLBACK = os.getenv("LTX_VIDEO_CPU_FALLBACK", "0").lower() not in {"0", "false", "no"}
 TRY_NATIVE_FIRST = os.getenv("LTX_VIDEO_TRY_NATIVE_FIRST", "0").lower() in {"1", "true", "yes"}
 ALLOW_LOW_MEMORY = os.getenv("LTX_VIDEO_ALLOW_LOW_MEMORY", "0").lower() in {"1", "true", "yes"}
+AUTO_DOWNLOAD_UPSCALER = os.getenv("LTX_VIDEO_AUTO_DOWNLOAD_UPSCALER", "1").lower() not in {"0", "false", "no"}
 MIN_MPS_MEMORY_BYTES = int(os.getenv("LTX_VIDEO_MIN_MPS_MEMORY_GB", "24")) * 1024**3
 # Runtime is sync-managed so a changed LTX configuration is applied on the secondary Mac after its next sync.
 # 0.15 is the upstream default. A small increase makes image-to-video motion visible on short-form shots,
 # while the clamp prevents a machine-level environment override from turning into face/anatomy drift.
 IMAGE_COND_NOISE_SCALE = max(0.12, min(float(os.getenv("LTX_VIDEO_IMAGE_COND_NOISE_SCALE", "0.18")), 0.24))
+
+
+def ensure_spatial_upscaler():
+    """Fetch only the public 0.9.8 upscaler required by the official pipeline.
+
+    The main checkpoint and text encoder remain explicit installation steps: they
+    are large, may be gated, and must never be downloaded as a side effect of a
+    health probe. The small companion asset is safe to repair automatically.
+    """
+    if SPATIAL_UPSCALER.is_file() or not AUTO_DOWNLOAD_UPSCALER:
+        return
+    try:
+        from huggingface_hub import hf_hub_download
+        SPATIAL_UPSCALER.parent.mkdir(parents=True, exist_ok=True)
+        downloaded = hf_hub_download(
+            repo_id="Lightricks/LTX-Video",
+            filename="ltxv-spatial-upscaler-0.9.8.safetensors",
+            local_dir=str(SPATIAL_UPSCALER.parent),
+        )
+        downloaded_path = Path(downloaded)
+        if downloaded_path != SPATIAL_UPSCALER and downloaded_path.is_file() and not SPATIAL_UPSCALER.exists():
+            downloaded_path.replace(SPATIAL_UPSCALER)
+        print(f"[ltx] spatial upscaler ready: {SPATIAL_UPSCALER}", flush=True)
+    except Exception as error:
+        print(f"[ltx] spatial upscaler download failed: {type(error).__name__}: {error}", flush=True)
 
 
 def host_memory_bytes():
@@ -271,6 +297,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    ensure_spatial_upscaler()
     state, detail = runtime_status()
     print(f"LTX server listening on {HOST}:{PORT} ({state}: {detail})", flush=True)
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
