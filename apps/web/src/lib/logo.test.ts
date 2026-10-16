@@ -10,6 +10,9 @@ describe("logoPreviewStyle", () => {
       .toEqual({ width: "13.981%", opacity: "0.9", left: "5.185%", top: "33.802%" });
     expect(logoPreviewStyle({ ...settings, layoutTemplate: "full-bleed", logoPosition: "top-center" }))
       .toMatchObject({ left: "50%", transform: "translateX(-50%)", top: "11.979%" });
+    // dragged by hand: the very shares the drag stored
+    expect(logoPreviewStyle({ ...settings, logoPosition: "custom", logoX: 0.25, logoY: 0.6 }))
+      .toEqual({ width: "13.981%", opacity: "0.9", left: "25.000%", top: "60.000%" });
   });
 });
 
