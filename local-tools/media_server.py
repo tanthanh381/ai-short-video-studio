@@ -4,6 +4,7 @@ It deliberately binds to the local machine and exposes no cloud credentials. The
 Docker worker calls this bridge through host.docker.internal.
 """
 
+import hashlib
 import json
 import array
 import base64
@@ -1235,22 +1236,65 @@ def image_server_info():
         return "down", {}
 
 
+def _image_server_source():
+    """Hash of image_server.py: its settings can change with the code, so a remembered copy is only valid for the same code."""
+    try:
+        return hashlib.sha256(Path(__file__).with_name("image_server.py").read_bytes()).hexdigest()[:12]
+    except OSError:
+        return ""
+
+
+_IMAGE_CONFIG_REFRESH = {"at": -1e9}
+_IMAGE_CONFIG_LOCK = threading.Lock()
+
+
+def _refresh_image_config_soon():
+    """Wakes the sleeping image server once (at most every 10 minutes) so it reports the settings of the current code; it falls
+    asleep again by itself when idle."""
+    with _IMAGE_CONFIG_LOCK:
+        if time.monotonic() - _IMAGE_CONFIG_REFRESH["at"] < 600:
+            return
+        _IMAGE_CONFIG_REFRESH["at"] = time.monotonic()
+
+    def wake():
+        try:
+            SLEEPER.ensure_awake("image")
+            remembered_image_config(image_server_info()[1])
+            _NODE_STATUS_CACHE.update(at=0.0, value=None)
+        except Exception as error:  # never let a refresh hurt the bridge
+            print(f"[idle-sleep] could not refresh image settings: {error}", flush=True)
+
+    threading.Thread(target=wake, daemon=True).start()
+
+
 def remembered_image_config(config):
     """The image server's settings are part of this Mac's fingerprint. While it sleeps they cannot be read, so the last ones seen
-    (kept in a file, to survive a bridge restart) stand in; otherwise a sleeping Mac would look different from the main one."""
+    (kept in a file, to survive a bridge restart) stand in; otherwise a sleeping Mac would look different from the main one.
+    The copy is tied to the code of image_server.py: after an update it is stale (it made the second Mac look out of sync while
+    both ran the same code), so the server is woken once to report the settings of the new code."""
     cache = SERVICE_LOG_DIR / "image-config.json"
+    source = _image_server_source()
     if config:
         try:
             cache.parent.mkdir(parents=True, exist_ok=True)
-            if not cache.exists() or json.loads(cache.read_text()) != config:
-                cache.write_text(json.dumps(config))
+            entry = {"source": source, "config": config}
+            if not cache.exists() or json.loads(cache.read_text()) != entry:
+                cache.write_text(json.dumps(entry))
         except (OSError, ValueError):
             pass
         return config
     try:
-        return json.loads(cache.read_text())
+        entry = json.loads(cache.read_text())
     except (OSError, ValueError):
-        return {}
+        entry = None
+    if isinstance(entry, dict) and entry.get("source") == source and isinstance(entry.get("config"), dict):
+        return entry["config"]
+    if SLEEPER.enabled and SLEEPER.asleep("image"):
+        _refresh_image_config_soon()
+    # an old copy is still the best guess until the refresh lands
+    if isinstance(entry, dict):
+        return entry.get("config") if isinstance(entry.get("config"), dict) else {k: v for k, v in entry.items() if k not in ("source",)}
+    return {}
 
 
 def tts_engines_up():

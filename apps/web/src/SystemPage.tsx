@@ -249,7 +249,7 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
 
       {node.role === "primary" ? (
         <div className="sys-source-note sys-machine-context">
-          <span>Source device · Synced</span>
+          <span>Máy nguồn: các máy phụ tự sao chép chương trình và model từ máy này</span>
           <InfoPopover title="Mac Mini là thiết bị chính">Cung cấp mã nguồn, công cụ và model cho các thiết bị phụ. Đồng bộ tự động mỗi phút.</InfoPopover>
         </div>
       ) : null}

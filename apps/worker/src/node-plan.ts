@@ -80,6 +80,8 @@ const SETTING_LABELS: Record<string, string> = {
   TTS_BREAK_WORDS: "độ dài đoạn đọc", TTS_ENGINES: "các giọng đọc", PACE_TARGET_WPS: "tốc độ đọc", VIENEU_VOICE: "giọng mặc định",
   FACE_DETAIL: "sửa khuôn mặt", FACE_DETAIL_READY: "mô hình sửa khuôn mặt", IMAGE_ANATOMY_GUARD: "chống méo người", IMAGE_NEGATIVE_PROMPT: "lời cấm khi vẽ",
   MODELS_DIGEST: "tệp model",
+  "image_server.steps": "số bước vẽ ảnh", "image_server.preset": "mức chất lượng ảnh", "image_server.cfgWeight": "độ bám theo mô tả ảnh",
+  "image_server.negativePrompt": "danh sách lỗi cần tránh khi vẽ",
 };
 const settingLabel = (key: string) => SETTING_LABELS[key] ?? (key.startsWith("image_server.") ? `máy vẽ ảnh (${key.slice("image_server.".length)})` : key);
 

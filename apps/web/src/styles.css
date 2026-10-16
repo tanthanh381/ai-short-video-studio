@@ -240,7 +240,7 @@ a:focus-visible {
 .metric-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
 .metric-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); }
 .metric-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 7px; color: var(--blue-dark); background: #edf4ff; }
-.metric-top > strong { color: var(--ink); font-size: 13px; text-align: right; white-space: nowrap; }
+.metric-top > strong { color: var(--ink); font-size: 13px; text-align: right; min-width: 0; overflow-wrap: anywhere; } /* a long reading ("27,9 GB / 29 GB · ghi 366 MB/s") wraps instead of running out of the card */
 .metric .info-popover { margin-left: auto; }
 .metric-bar { height: 7px; margin-top: 6px; border-radius: 999px; background: #e8eef2; overflow: hidden; }
 .metric-bar i { display: block; height: 100%; border-radius: inherit; background: var(--bar-ok); transition: width 0.5s ease; }
