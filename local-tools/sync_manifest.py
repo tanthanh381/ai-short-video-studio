@@ -190,6 +190,7 @@ def describe_key(key):
 # Which program has to be restarted for a changed file to take effect. "agent" is the sync agent itself (it exits and launchd starts it again).
 SERVICE_PATTERNS = {
     "media": "local-tools/media_server.py",
+    "ltx": "local-tools/ltx_server.py",
     "image": "local-tools/image_server.py",
     "whiteboard": "local-tools/whiteboard_server.py",
     "vieneu": "vieneu_api:app",
@@ -211,6 +212,8 @@ def services_for(keys):
                 services.add("whiteboard")
             elif name in ("media_server.py", "node_status.py", "face_detail.py"):
                 services.add("media")
+            elif name == "ltx_server.py":
+                services.add("ltx")
         elif key.startswith("toolkit/"):
             if name in ("vieneu_api.py", "vieneu_tts.py", "start-vieneu.sh"):
                 services.add("vieneu")

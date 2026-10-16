@@ -224,6 +224,7 @@ class SyncSet(unittest.TestCase):
     def test_changed_files_say_which_programs_to_restart(self):
         services = sync_manifest.services_for
         self.assertEqual(services(["code/local-tools/media_server.py"]), {"media"})
+        self.assertEqual(services(["code/local-tools/ltx_server.py"]), {"ltx"})
         self.assertEqual(services(["code/local-tools/image_server.py", "models/image/hf-cache/x"]), {"image"})
         self.assertEqual(services(["code/local-tools/whiteboard/draw.py"]), {"whiteboard"})
         self.assertEqual(services(["code/local-tools/node_sync_agent.py"]), {"agent"})
