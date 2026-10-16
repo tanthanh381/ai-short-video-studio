@@ -1162,18 +1162,22 @@ def video_resources_available():
     return True, ""
 
 
-def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None, preset=None):
+def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None, preset=None, strict=False):
     """Proxy I2V to LTX and preserve export availability with a bounded last resort."""
     VIDEO_ENGINE.value = "fallback"
     check_choice("video", model, {"ltxv-2b-0.9.8-distilled": "LTX-Video 2B Distilled"})
     state, detail = ltx_state()
     if state != "ready":
+        if strict:
+            raise RuntimeError(detail)
         if VIDEO_FALLBACK_ENABLED:
             print(f"[video] LTX state={state}; using FFmpeg still fallback: {detail}", flush=True)
             return still_video_fallback(image_base64, aspect_ratio)
         raise RuntimeError(detail)
     resource_ok, resource_detail = video_resources_available()
     if not resource_ok:
+        if strict:
+            raise RuntimeError(resource_detail)
         if VIDEO_FALLBACK_ENABLED:
             print(f"[video] LTX skipped: {resource_detail}; using FFmpeg still fallback", flush=True)
             return still_video_fallback(image_base64, aspect_ratio)
@@ -1200,6 +1204,9 @@ def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None
         VIDEO_ENGINE.value = "ltx"
         return data
     except Exception as error:
+        if strict:
+            detail = str(error).strip().replace("\n", " ")[:240]
+            raise RuntimeError(f"LTX inference failed: {type(error).__name__}: {detail}") from error
         if not VIDEO_FALLBACK_ENABLED:
             raise
         print(f"[video] LTX request failed ({type(error).__name__}); using FFmpeg still fallback", flush=True)
@@ -1493,12 +1500,13 @@ class Handler(BaseHTTPRequestHandler):
                 binary_response(self, "image/png", local_image(prompt, payload.get("aspectRatio", "9:16"), payload.get("model"),
                                                               payload.get("seed"), payload.get("style") or "photo", payload.get("preset"),
                                                               payload.get("referenceImage")))
-            elif self.path == "/video":
+            elif self.path.split("?")[0] == "/video":
                 payload = json.loads(body)
+                strict = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("strict", ["0"])[0] == "1"
                 result = local_video(
                     str(payload.get("imageBase64", "")), str(payload.get("prompt", "")),
                     payload.get("aspectRatio", "9:16"), payload.get("model"),
-                    payload.get("seed"), payload.get("preset"))
+                    payload.get("seed"), payload.get("preset"), strict=strict)
                 binary_response(self, "video/mp4", result, {"X-Studio-Video-Engine": getattr(VIDEO_ENGINE, "value", "fallback")})
             elif self.path == "/tts":
                 payload = json.loads(body)
@@ -1513,10 +1521,14 @@ class Handler(BaseHTTPRequestHandler):
             served = True
         except ValueError as error:
             json_response(self, 400, {"error": str(error)[:200]})
-        except Exception:
+        except Exception as error:
             traceback.print_exc()  # the real cause goes to the service log, never to the client
             # Never include a subprocess command (which contains the private script).
-            json_response(self, 500, {"error": "Không hoàn thành xử lý media local; kiểm tra máy và thử lại"})
+            if self.path.startswith("/video") and urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("strict", ["0"])[0] == "1":
+                detail = str(error).strip().replace("\n", " ")[:240]
+                json_response(self, 502, {"error": "LTX inference failed", "detail": detail})
+            else:
+                json_response(self, 500, {"error": "Không hoàn thành xử lý media local; kiểm tra máy và thử lại"})
         finally:
             for name in needed:
                 SLEEPER.touch(name, -1)
