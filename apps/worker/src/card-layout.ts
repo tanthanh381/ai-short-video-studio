@@ -65,6 +65,17 @@ export const SEPIA = {
  */
 export const SAFE = { top: 230, bottom: 500, side: 64 } as const;
 
+/**
+ * Top edge of the progress bar. It must not cross the captions: the story card keeps it under the picture band, the paper
+ * stage above its captions, and a full-frame portrait video just under the captions (which end 24% of the height above the
+ * bottom edge, clear of the phone app's own row). Other shapes use the bottom edge, where no app draws anything.
+ */
+export function progressBarY(settings: { layoutTemplate?: string; aspectRatio: string }, width: number, height: number): number {
+  if (usesStoryCard(settings)) return CARD.bandY + CARD.bandH + 6;
+  if (usesPaperStage(settings)) return PAPER.captionTop - 24;
+  return height > width ? height - Math.round(height * 0.24) + 12 : height - 12;
+}
+
 export type CardTheme = "blue" | "sepia";
 
 export function cardThemeOf(settings: { cardTheme?: string }): CardTheme {

@@ -3314,3 +3314,15 @@ input[type="radio"] {
 .video-options .microcopy { padding: 0 15px 12px; }
 
 .auto-save { margin-top: 0; white-space: nowrap; }
+
+/* Touch targets: a finger needs about 44 px. Small icon buttons keep their look and grow an invisible hit area; text
+   buttons and chips are made tall enough. Phones and any touch screen. */
+@media (max-width: 760px), (pointer: coarse) {
+  .info-trigger { position: relative; }
+  .info-trigger::before { content: ""; position: absolute; inset: -10px; }
+  .mobile-close, .logout, .link-button, .advanced-toggle,
+  .channel-presets button, .duration-options button, .mode-switch-options button, .switch,
+  .button, button.button-ghost { min-height: 44px; }
+  .mobile-close, .menu-button, button[aria-label="Mở menu"] { min-width: 44px; min-height: 44px; }
+  .link-button { display: inline-flex; align-items: center; padding-top: 6px; padding-bottom: 6px; }
+}

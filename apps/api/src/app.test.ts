@@ -312,4 +312,19 @@ describe("API", () => {
       vi.unstubAllGlobals();
     });
   });
+
+  it("answers a refused origin, unreadable JSON and an oversized body with JSON 4xx, never a bare 500", async () => {
+    const app = createApp(config, {} as never);
+    const refused = await request(app).options("/v1/projects").set("Origin", "https://evil.example").set("Access-Control-Request-Method", "GET");
+    expect(refused.status).toBe(403);
+    expect(refused.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(refused.body.error).toMatch(/không được phép/);
+    const broken = await request(app).post("/v1/videos").set("Authorization", "Bearer x").set("Content-Type", "application/json").send("{bad");
+    expect(broken.status).toBe(400);
+    expect(broken.body.error).toMatch(/không đọc được/);
+    const huge = await request(app).post("/v1/videos").set("Content-Type", "application/json").send(JSON.stringify({ sourceText: "a".repeat(1_200_000) }));
+    expect(huge.status).toBe(413);
+    expect(huge.body.error).toMatch(/quá lớn/);
+    expect(JSON.stringify([refused.body, broken.body, huge.body])).not.toMatch(/stack|at .*\.ts|node_modules/);
+  });
 });
