@@ -739,21 +739,29 @@ async function generateMedia(job: JobRow, project: Project) {
           mediaProgress(finished) + 2,
           `Đang tạo chuyển động LTX cảnh ${scene.order + 1}`,
         );
-        const motion = await media.createVideo(
-          {
-            image: await download(imagePath),
-            prompt: `${scene.imagePrompt}. ${sceneMotionPrompt(project.settings.visualPreset, scene.order, scene.narration)}`,
-            aspectRatio: project.settings.aspectRatio,
-          },
-          {
-            ...project.settings.localModels,
-            seed: imageSeedFor(project.id),
-            preset: project.settings.generationPreset,
-          },
-        );
-        videoPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.mp4`;
-        await upload(videoPath, motion, "video/mp4");
-        await updateScene(scene.id, { video_path: videoPath });
+        try {
+          const motion = await media.createVideo(
+            {
+              image: await download(imagePath),
+              prompt: `${scene.imagePrompt}. ${sceneMotionPrompt(project.settings.visualPreset, scene.order, scene.narration)}`,
+              aspectRatio: project.settings.aspectRatio,
+            },
+            {
+              ...project.settings.localModels,
+              seed: imageSeedFor(project.id),
+              preset: project.settings.generationPreset,
+            },
+          );
+          videoPath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.mp4`;
+          await upload(videoPath, motion, "video/mp4");
+          await updateScene(scene.id, { video_path: videoPath });
+        } catch (error) {
+          // Motion is an enhancement, not a reason to lose a complete export.
+          // render.ts still applies a measured camera move to the source image,
+          // while the scene's narration, subtitle and audio continue normally.
+          log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "motion_unavailable_using_camera_move");
+          await progress(job, mediaProgress(finished) + 3, `Dùng camera motion cho cảnh ${scene.order + 1}`);
+        }
       }
       if (!audioPath) {
         await progress(
