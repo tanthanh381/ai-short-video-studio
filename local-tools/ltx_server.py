@@ -29,7 +29,8 @@ DEVICE = os.getenv("LTX_VIDEO_DEVICE", "mps")
 MODEL_ID = "ltxv-2b-0.9.8-distilled"
 MAX_BODY = 12 * 1024 * 1024
 GENERATION_LOCK = threading.Lock()
-CPU_FALLBACK = os.getenv("LTX_VIDEO_CPU_FALLBACK", "0").lower() not in {"0", "false", "no"}
+CPU_FALLBACK = os.getenv("LTX_VIDEO_CPU_FALLBACK", "1").lower() not in {"0", "false", "no"}
+OFFLOAD_TO_CPU = os.getenv("LTX_VIDEO_OFFLOAD_CPU", "1").lower() not in {"0", "false", "no"}
 TRY_NATIVE_FIRST = os.getenv("LTX_VIDEO_TRY_NATIVE_FIRST", "0").lower() in {"1", "true", "yes"}
 ALLOW_LOW_MEMORY = os.getenv("LTX_VIDEO_ALLOW_LOW_MEMORY", "0").lower() in {"1", "true", "yes"}
 AUTO_DOWNLOAD_UPSCALER = os.getenv("LTX_VIDEO_AUTO_DOWNLOAD_UPSCALER", "1").lower() not in {"0", "false", "no"}
@@ -231,7 +232,7 @@ def generate(payload):
                         conditioning_media_paths=[str(image)],
                         conditioning_start_frames=[0],
                         image_cond_noise_scale=IMAGE_COND_NOISE_SCALE,
-                        offload_to_cpu=False,
+                        offload_to_cpu=OFFLOAD_TO_CPU or force_cpu,
                     ))
                 finally:
                     os.chdir(old)
@@ -255,9 +256,14 @@ def generate(payload):
                     break
                 except Exception as error:
                     last_error = error
-                    if not is_memory_error(error) or label == attempts[-1][4]:
+                    # MPS can fail with backend errors that do not contain a
+                    # consistent "out of memory" message. A compact CPU retry
+                    # is the only useful recovery before conceding to still
+                    # fallback; configuration errors still fail on both tries.
+                    can_retry_cpu = DEVICE == "mps" and CPU_FALLBACK and not force_cpu and label != attempts[-1][4]
+                    if (not is_memory_error(error) and not can_retry_cpu) or label == attempts[-1][4]:
                         raise
-                    print(f"[ltx] memory pressure on attempt={label}; retrying with a safer profile", flush=True)
+                    print(f"[ltx] attempt={label} failed ({type(error).__name__}); retrying with a safer profile", flush=True)
                     clear_accelerator_cache()
             else:
                 raise last_error
