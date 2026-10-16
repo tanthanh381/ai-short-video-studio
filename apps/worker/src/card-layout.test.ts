@@ -279,6 +279,21 @@ describe("sepia story card", () => {
   });
 });
 
+describe("title line break", () => {
+  it("does not split a common word across the two lines", () => {
+    expect(splitCardTitle("Đừng đợi hoàn hảo mới bắt đầu")).toEqual(["ĐỪNG ĐỢI HOÀN HẢO", "MỚI BẮT ĐẦU"]);
+    expect(splitCardTitle("Quy tắc cổ nhân ẩn sau lời dặn")).toEqual(["QUY TẮC CỔ NHÂN", "ẨN SAU LỜI DẶN"]);
+  });
+  it("does not end the first line on a connector, and prefers the author's own punctuation", () => {
+    expect(splitCardTitle("Sống chậm và nhìn thấy nhiều điều hơn")[0]).not.toMatch(/ VÀ$/u);
+    expect(splitCardTitle("Bình yên, là khi bạn thôi so sánh mình")[0]).toBe("BÌNH YÊN,");
+  });
+  it("keeps a short title on one line and never makes three lines", () => {
+    expect(splitCardTitle("Sống chậm")).toEqual(["SỐNG CHẬM"]);
+    expect(splitCardTitle("Một tiêu đề khá dài nhưng vẫn chỉ được phép có hai dòng mà thôi").length).toBe(2);
+  });
+});
+
 describe("progress bar position", () => {
   it("never crosses the captions: under the picture band, above the paper-stage captions, under full-frame captions", () => {
     expect(progressBarY({ layoutTemplate: "story-card", aspectRatio: "9:16" }, 1080, 1920)).toBe(CARD.bandY + CARD.bandH + 6);

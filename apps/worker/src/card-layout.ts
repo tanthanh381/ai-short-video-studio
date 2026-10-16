@@ -252,7 +252,32 @@ export function usesStoryCard(settings: { layoutTemplate?: string; aspectRatio: 
   return settings.layoutTemplate === "story-card" && settings.aspectRatio === "9:16";
 }
 
-/** Upper-case Vietnamese title split into at most two balanced lines. */
+/**
+ * Two-syllable Vietnamese words that must stay on one line ("HOÀN / HẢO" reads as two words), and small words that must
+ * not end a line ("… CỦA / ĐỜI"). Not a dictionary: the handful of words titles use most.
+ */
+const KEEP_TOGETHER = new Set([
+  "HOÀN HẢO", "BẮT ĐẦU", "KẾT THÚC", "CUỘC SỐNG", "CUỘC ĐỜI", "THÀNH CÔNG", "THẤT BẠI", "HẠNH PHÚC", "TÌNH YÊU", "GIA ĐÌNH", "CỔ NHÂN",
+  "QUY TẮC", "BÍ MẬT", "BÍ QUYẾT", "CON NGƯỜI", "NGƯỜI XƯA", "THỜI GIAN", "TIỀN BẠC", "TÀI CHÍNH", "SỨC KHỎE", "TINH THẦN", "CẢM XÚC",
+  "ĐỘNG LỰC", "MỤC TIÊU", "CÔNG VIỆC", "HIỆU QUẢ", "BÌNH YÊN", "BÌNH AN", "TỰ DO", "TRÍ TUỆ", "TRI THỨC", "KIẾN THỨC", "BÀI HỌC", "LỜI DẶN",
+  "LỜI KHUYÊN", "NHÂN QUẢ", "SỐ PHẬN", "ĐẠO LÝ", "CÔNG NGHỆ", "MẠNG XÃ HỘI", "LỪA ĐẢO", "AN TOÀN", "BẢO MẬT", "TÀI KHOẢN", "TIN NHẮN",
+]);
+const NOT_AT_LINE_END = new Set(["VÀ", "CỦA", "CHO", "ĐỂ", "LÀ", "VỚI", "NHƯ", "MÀ", "THÌ", "NHƯNG", "HAY", "CŨNG", "ĐÃ", "SẼ", "ĐANG", "NẾU", "KHI", "NHỮNG", "CÁC", "MỘT", "SAU", "TRONG"]);
+
+/** Cost of breaking the words before and after `cut`: a split word or a line ending on a small connector is much worse than an uneven line. */
+function awkwardCut(words: string[], cut: number): number {
+  let cost = 0;
+  if (KEEP_TOGETHER.has(`${words[cut - 1]} ${words[cut]}`)) cost += 40;
+  // three-syllable compounds ("MẠNG XÃ HỘI") are held together by their first pair
+  if (cut >= 2 && KEEP_TOGETHER.has(`${words[cut - 2]} ${words[cut - 1]} ${words[cut]}`)) cost += 40;
+  if (cut + 1 < words.length && KEEP_TOGETHER.has(`${words[cut - 1]} ${words[cut]} ${words[cut + 1]}`)) cost += 40;
+  if (NOT_AT_LINE_END.has(words[cut - 1]!)) cost += 25;
+  // a comma, colon or dash is the author's own break: prefer it
+  if (/[,:;—–-]$/u.test(words[cut - 1]!)) cost -= 12;
+  return cost;
+}
+
+/** Upper-case Vietnamese title split into at most two balanced lines, never inside a common word and preferably at punctuation. */
 export function splitCardTitle(title: string, maxCharsPerLine = 19): string[] {
   const words = title.normalize("NFC").trim().replace(/\s+/gu, " ").toLocaleUpperCase("vi").split(" ").filter(Boolean);
   if (!words.length) return [];
@@ -263,7 +288,7 @@ export function splitCardTitle(title: string, maxCharsPerLine = 19): string[] {
   for (let cut = 1; cut < words.length; cut++) {
     const a = words.slice(0, cut).join(" ");
     const b = words.slice(cut).join(" ");
-    const score = Math.max(a.length, b.length);
+    const score = Math.max(a.length, b.length) + awkwardCut(words, cut);
     if (score < bestScore) { best = [a, b]; bestScore = score; }
   }
   // A line that is still too long is shrunk by the renderer; never produce a third line.

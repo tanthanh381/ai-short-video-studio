@@ -254,6 +254,8 @@ export const api = {
   estimate: (id: string) => request<Estimate>(`/v1/projects/${id}/estimate`),
   retryJob: (id: string) =>
     request<Job>(`/v1/jobs/${id}/retry`, { method: "POST" }),
+  cancelJob: (id: string) =>
+    request<Job>(`/v1/jobs/${id}/cancel`, { method: "POST" }),
   signedUpload: (
     projectId: string,
     file: File,
