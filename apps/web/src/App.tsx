@@ -95,6 +95,7 @@ import { appConfig } from "./lib/config";
 import { resetPasswordView } from "./lib/auth";
 import { withLayoutTemplate, withVisualPreset } from "./lib/visual-preset";
 import { ProjectSaver, type SaveState } from "./lib/project-saver";
+import { Button, Field, Notice } from "./components/ui";
 import { withScriptFromScenes } from "./lib/script-sync";
 import { OPENAI_VOICES, hookTitleAllowed, withMediaProvider } from "./lib/options";
 import { CHANNEL_PRESETS, estimatedNarrationSeconds } from "./lib/channel-presets";
@@ -144,48 +145,6 @@ function PostCaptionCard({ project }: { project: Project }) {
       {project.suggestedTitle.trim() && <p className="post-caption-title">{project.suggestedTitle}</p>}
       <p className="post-caption-body">{description}</p>
     </details>
-  );
-}
-
-function Notice({
-  children,
-  tone = "info",
-}: {
-  children: React.ReactNode;
-  tone?: "info" | "warn" | "success";
-}) {
-  return (
-    <div
-      className={`notice notice-${tone}`}
-      role={tone === "warn" ? "alert" : "status"}
-      aria-live={tone === "warn" ? "assertive" : "polite"}
-    >
-      <CircleAlert size={18} /> <span>{children}</span>
-    </div>
-  );
-}
-
-function Button({
-  children,
-  variant = "primary",
-  busy,
-  type = "button",
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
-  busy?: boolean;
-}) {
-  return (
-    <button
-      type={type}
-      className={`button button-${variant}`}
-      {...props}
-      disabled={props.disabled || busy}
-      aria-busy={busy || undefined}
-    >
-      {busy ? <LoaderCircle className="spin" size={17} /> : null}
-      {children}
-    </button>
   );
 }
 
@@ -462,7 +421,7 @@ function LoginPage() {
                   />
                 </label>
               )}
-              {error && <Notice tone="warn">{error}</Notice>}
+              {error && <Notice tone="bad">{error}</Notice>}
               {sent && (
                 <Notice tone="success">
                   {resetMode
@@ -611,7 +570,7 @@ function ResetPasswordPage() {
                 Nhập lại mật khẩu
                 <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} minLength={8} required autoComplete="new-password" />
               </label>
-              {error && <Notice tone="warn">{error}</Notice>}
+              {error && <Notice tone="bad">{error}</Notice>}
               <Button type="submit" busy={busy}>Lưu mật khẩu</Button>
             </form>
           )}
@@ -798,24 +757,6 @@ function DashboardPage() {
   );
 }
 
-function Field({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <label className="field">
-      <span className="field-label">{label}{hint ? <InfoPopover title={label}>{hint}</InfoPopover> : null}</span>
-      {children}
-    </label>
-  );
-}
-
-
 const previewUrls = new Map<string, string>();
 
 function VoicePreview({ voice, engine, disabled }: { voice: string; engine: string | null; disabled?: boolean }) {
@@ -920,7 +861,7 @@ function TextToSpeechPage() {
               <Play size={17} /> Chuyển thành giọng nói
             </Button>
           </div>
-          {error && <Notice tone="warn">{error}</Notice>}
+          {error && <Notice tone="bad">{error}</Notice>}
           {audioUrl && (
             <div className="tts-result">
               <div><strong>Bản đọc đã sẵn sàng</strong><span>Nghe lại hoặc tải file MP3</span></div>
@@ -1183,7 +1124,7 @@ function DubSubtitlePage() {
               <label className="check"><input type="checkbox" checked={subtitleOutline} onChange={(event) => setSubtitleOutline(event.target.checked)} /><span>Viền chữ</span></label>
             </div>
           </fieldset>
-          {error && <Notice tone="warn">{error}</Notice>}
+          {error && <Notice tone="bad">{error}</Notice>}
           <Button busy={busy} onClick={() => void createDub()}><WandSparkles size={17} /> Tạo giọng đọc & phụ đề</Button>
         </section>
       </div>
@@ -1681,7 +1622,7 @@ function NewProjectPage() {
             <span><Mic2 size={15} /> Giọng tiếng Việt</span>
             <span><Subtitles size={15} /> Phụ đề rõ nét</span>
           </div>
-          {error && <Notice tone="warn">{error}</Notice>}
+          {error && <Notice tone="bad">{error}</Notice>}
           {isDemo && <Notice tone="warn">Chế độ mẫu chỉ lưu và chỉnh kịch bản. Tạo MP4 cần kết nối máy xử lý.</Notice>}
         </section>
         <section>
@@ -2521,7 +2462,7 @@ function StudioPage() {
   if (error && !project)
     return (
       <div className="page">
-        <Notice tone="warn">{error}</Notice>
+        <Notice tone="bad">{error}</Notice>
       </div>
     );
   if (!project)
@@ -2661,7 +2602,7 @@ function StudioPage() {
       </div>
       {error && (
         <div className="studio-notice">
-          <Notice tone="warn">{error}</Notice>
+          <Notice tone="bad">{error}</Notice>
         </div>
       )}
       {!isDemo && capabilities && zeroCostMode && (
@@ -3240,7 +3181,7 @@ function MediaPage() {
           Video
         </button>
       </div>
-      {error && <div className="dashboard-feedback"><Notice tone="warn"><span>{error}</span><Button variant="ghost" onClick={() => void loadMedia()}>Thử lại</Button></Notice></div>}
+      {error && <div className="dashboard-feedback"><Notice tone="bad"><span>{error}</span><Button variant="ghost" onClick={() => void loadMedia()}>Thử lại</Button></Notice></div>}
       {loading ? (
         <div className="empty"><LoaderCircle className="spin" /><h2>Đang tải thư viện</h2><p>Đang lấy các ảnh và audio đã lưu của bạn.</p></div>
       ) : shown.length ? (
@@ -3322,7 +3263,7 @@ function ExportsPage() {
       title="Lịch sử xuất video"
       subtitle="Theo dõi các bản MP4 đã render và tải lại khi cần."
     >
-      {error && <div className="dashboard-feedback"><Notice tone="warn"><span>{error}</span><Button variant="ghost" onClick={() => void loadExports()}>Thử lại</Button></Notice></div>}
+      {error && <div className="dashboard-feedback"><Notice tone="bad"><span>{error}</span><Button variant="ghost" onClick={() => void loadExports()}>Thử lại</Button></Notice></div>}
       {loading ? (
         <div className="empty">
           <LoaderCircle className="spin" /> Đang tải lịch sử…
@@ -3462,7 +3403,7 @@ function ApiKeyCard({
           <button className="button button-ghost" type="button" disabled={busy} onClick={() => void remove()}>Xóa khóa</button>
         </div>
       )}
-      {problem && <Notice tone="warn">{problem}</Notice>}
+      {problem && <Notice tone="bad">{problem}</Notice>}
       {note && !problem && <Notice tone="success">{note}</Notice>}
       <small className="api-key-help">
         Khóa được mã hóa trên máy chủ, chỉ dùng cho tài khoản của bạn và không bao giờ hiện lại. Lấy khóa tại{" "}

@@ -348,7 +348,8 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
 }
 
 // Keep the coral lane dark enough for the white percentage label to meet WCAG AA.
-const NODE_COLORS = ["#176bff", "#b64030", "#087a5b", "#6d3fc2"];
+// The chart series are tokens (styles.css --chart-1..4), so they follow dark mode with the rest of the page.
+const NODE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)"];
 
 function WorkShare({ system, now }: { system: SystemSummary; now: number }) {
   const balancer = system.balancer!;
