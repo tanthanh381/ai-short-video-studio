@@ -23,6 +23,7 @@ HOST = os.getenv("LTX_VIDEO_HOST", "127.0.0.1")
 PORT = int(os.getenv("LTX_VIDEO_PORT", "8770"))
 LTX_ROOT = Path(os.getenv("LTX_VIDEO_ROOT", str(Path.home() / "Developer" / "local-ai" / "LTX-Video")))
 CHECKPOINT = Path(os.getenv("LTX_VIDEO_CHECKPOINT", str(Path.home() / "Developer" / "local-ai" / "models" / "ltx-video" / "ltxv-2b-0.9.8-distilled.safetensors")))
+SPATIAL_UPSCALER = Path(os.getenv("LTX_VIDEO_SPATIAL_UPSCALER", str(Path.home() / "Developer" / "local-ai" / "models" / "ltx-video" / "ltxv-spatial-upscaler-0.9.8.safetensors")))
 TEXT_ENCODER = os.getenv("LTX_VIDEO_TEXT_ENCODER", "")
 DEVICE = os.getenv("LTX_VIDEO_DEVICE", "mps")
 MODEL_ID = "ltxv-2b-0.9.8-distilled"
@@ -78,6 +79,8 @@ def runtime_status():
         return "offline", f"LTX cần ít nhất {MIN_MPS_MEMORY_BYTES // 1024**3} GB RAM khi chạy MPS; máy hiện có {memory // 1024**3} GB"
     if not CHECKPOINT.is_file():
         return "offline", f"Thiếu checkpoint LTX: {CHECKPOINT}"
+    if not SPATIAL_UPSCALER.is_file():
+        return "offline", f"Thiếu spatial upscaler LTX: {SPATIAL_UPSCALER}"
     if not TEXT_ENCODER:
         return "offline", "Thiếu LTX text encoder local; không tự tải để tránh đầy ổ đĩa"
     encoder = Path(TEXT_ENCODER)
@@ -144,13 +147,16 @@ def generate(payload):
         image.write_bytes(raw)
         output = root / "output"
         output.mkdir()
-        # The official inference entry point keeps model behavior and checkpoint
-        # compatibility in one place. A single-flight lock avoids MPS OOMs.
-        config_path = root / "ltx-single-scale.yaml"
+        # 0.9.8 distilled is published as a two-pass multi-scale pipeline.
+        # Keep the official schedule instead of downgrading the checkpoint to a
+        # hand-written single-scale config.
+        config_path = root / "ltx-official-0.9.8-distilled.yaml"
         config_path.write_text(
             "\n".join([
-                "pipeline_type: single-scale",
+                "pipeline_type: multi-scale",
                 f"checkpoint_path: {CHECKPOINT}",
+                "downscale_factor: 0.6666666",
+                f"spatial_upscaler_model_path: {SPATIAL_UPSCALER}",
                 f"text_encoder_model_name_or_path: {TEXT_ENCODER}",
                 "precision: bfloat16",
                 "sampler: from_checkpoint",
@@ -161,6 +167,18 @@ def generate(payload):
                 "prompt_enhancer_image_caption_model_name_or_path: null",
                 "prompt_enhancer_llm_model_name_or_path: null",
                 "stochastic_sampling: false",
+                "first_pass:",
+                "  timesteps: [1.0000, 0.9937, 0.9875, 0.9812, 0.9750, 0.9094, 0.7250]",
+                "  guidance_scale: 1",
+                "  stg_scale: 0",
+                "  rescaling_scale: 1",
+                "  skip_block_list: [42]",
+                "second_pass:",
+                "  timesteps: [0.9094, 0.7250, 0.4219]",
+                "  guidance_scale: 1",
+                "  stg_scale: 0",
+                "  rescaling_scale: 1",
+                "  skip_block_list: [42]",
             ]) + "\n",
             encoding="utf-8",
         )

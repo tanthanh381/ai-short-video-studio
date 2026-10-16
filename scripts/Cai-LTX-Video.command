@@ -12,6 +12,7 @@ LTX_ROOT=${LTX_VIDEO_ROOT:-"$LOCAL_AI_ROOT/LTX-Video"}
 LTX_ENV=${LTX_ENV:-"$LOCAL_AI_ROOT/ltx-venv"}
 MODEL_DIR=${LTX_MODEL_DIR:-"$LOCAL_AI_ROOT/models/ltx-video"}
 CHECKPOINT=${LTX_VIDEO_CHECKPOINT:-"$MODEL_DIR/ltxv-2b-0.9.8-distilled.safetensors"}
+SPATIAL_UPSCALER=${LTX_VIDEO_SPATIAL_UPSCALER:-"$MODEL_DIR/ltxv-spatial-upscaler-0.9.8.safetensors"}
 TEXT_ENCODER=${LTX_VIDEO_TEXT_ENCODER:-"$HOME/.cache/huggingface/hub/models--PixArt-alpha--PixArt-XL-2-1024-MS/snapshots/current"}
 
 command -v python3.12 >/dev/null || { print 'Thiếu python3.12.'; exit 1; }
@@ -39,6 +40,9 @@ fi
 if [[ ! -f "$CHECKPOINT" ]]; then
   "$HF" download Lightricks/LTX-Video ltxv-2b-0.9.8-distilled.safetensors --local-dir "$MODEL_DIR"
 fi
+if [[ ! -f "$SPATIAL_UPSCALER" ]]; then
+  "$HF" download Lightricks/LTX-Video ltxv-spatial-upscaler-0.9.8.safetensors --local-dir "$MODEL_DIR"
+fi
 
 if [[ ! -d "$TEXT_ENCODER/text_encoder" || ! -d "$TEXT_ENCODER/tokenizer" ]]; then
   mkdir -p "$TEXT_ENCODER"
@@ -50,6 +54,7 @@ if ! curl -fsS --max-time 3 http://127.0.0.1:8770/health >/dev/null 2>&1; then
   nohup env \
     LTX_VIDEO_ROOT="$LTX_ROOT" \
     LTX_VIDEO_CHECKPOINT="$CHECKPOINT" \
+    LTX_VIDEO_SPATIAL_UPSCALER="$SPATIAL_UPSCALER" \
     LTX_VIDEO_TEXT_ENCODER="$TEXT_ENCODER" \
     LTX_VIDEO_DEVICE="${LTX_VIDEO_DEVICE:-mps}" \
     "$LTX_ENV/bin/python" "$studio_root/local-tools/ltx_server.py" \
