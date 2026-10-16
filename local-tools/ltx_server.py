@@ -34,6 +34,7 @@ OFFLOAD_TO_CPU = os.getenv("LTX_VIDEO_OFFLOAD_CPU", "1").lower() not in {"0", "f
 TRY_NATIVE_FIRST = os.getenv("LTX_VIDEO_TRY_NATIVE_FIRST", "0").lower() in {"1", "true", "yes"}
 ALLOW_LOW_MEMORY = os.getenv("LTX_VIDEO_ALLOW_LOW_MEMORY", "0").lower() in {"1", "true", "yes"}
 AUTO_DOWNLOAD_UPSCALER = os.getenv("LTX_VIDEO_AUTO_DOWNLOAD_UPSCALER", "1").lower() not in {"0", "false", "no"}
+MPS_FP16 = os.getenv("LTX_VIDEO_MPS_FP16", "1").lower() not in {"0", "false", "no"}
 MIN_MPS_MEMORY_BYTES = int(os.getenv("LTX_VIDEO_MIN_MPS_MEMORY_GB", "24")) * 1024**3
 # Runtime is sync-managed so a changed LTX configuration is applied on the secondary Mac after its next sync.
 # 0.15 is the upstream default. A small increase makes image-to-video motion visible on short-form shots,
@@ -229,8 +230,31 @@ def generate(payload):
 
         def run_inference(render_width, render_height, render_frames, force_cpu=False):
             original_get_device = ltx_inference.get_device
+            original_create_pipeline = ltx_inference.create_ltx_video_pipeline
+            original_create_upsampler = ltx_inference.create_latent_upsampler
             if force_cpu:
                 ltx_inference.get_device = lambda: "cpu"
+            if DEVICE == "mps" and MPS_FP16 and not force_cpu:
+                # Some Apple Silicon/PyTorch combinations complete BF16
+                # inference but decode a flat grey tensor. Keep the official
+                # checkpoint and schedule, but run MPS modules in FP16.
+                import torch
+
+                def create_pipeline_fp16(*args, **kwargs):
+                    pipeline = original_create_pipeline(*args, **kwargs)
+                    for name in ("transformer", "vae", "text_encoder"):
+                        module = getattr(pipeline, name, None)
+                        if module is not None:
+                            module.to(dtype=torch.float16)
+                    return pipeline
+
+                def create_upsampler_fp16(*args, **kwargs):
+                    upsampler = original_create_upsampler(*args, **kwargs)
+                    upsampler.to(dtype=torch.float16)
+                    return upsampler
+
+                ltx_inference.create_ltx_video_pipeline = create_pipeline_fp16
+                ltx_inference.create_latent_upsampler = create_upsampler_fp16
             try:
                 old = os.getcwd()
                 try:
@@ -254,6 +278,8 @@ def generate(payload):
                     os.chdir(old)
             finally:
                 ltx_inference.get_device = original_get_device
+                ltx_inference.create_ltx_video_pipeline = original_create_pipeline
+                ltx_inference.create_latent_upsampler = original_create_upsampler
 
         if DEVICE == "mps":
             attempts = [(safe_width, safe_height, safe_frames, False, "compact-mps")]
