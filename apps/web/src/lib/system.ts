@@ -99,7 +99,7 @@ export function machineGauges(node: NodeSummary): Gauge[] {
   const ramPercent = percentOf(resources.memUsedGb, resources.memTotalGb);
   gauges.push({
     id: "ram",
-    label: "Memory",
+    label: "RAM",
     percent: ramPercent,
     value: resources.memUsedGb != null && resources.memTotalGb ? `${formatGb(resources.memUsedGb)} / ${formatGb(resources.memTotalGb)}` : formatGb(resources.memTotalGb),
     detail: resources.memUsedGb == null ? "máy này chưa báo mức đang dùng (cần cập nhật mã)" : PRESSURE_TEXT[resources.memPressure],
@@ -130,7 +130,7 @@ export function machineGauges(node: NodeSummary): Gauge[] {
     }
     gauges.push({
       id: "swap",
-      label: "Swap",
+      label: "RAM ảo (swap)",
       percent: swapPercent,
       value: resources.swapTotalGb > 0 ? `${formatGb(resources.swapUsedGb)} / ${formatGb(resources.swapTotalGb)}${hurts || light ? ` · ghi ${decimal(writing!)} MB/s` : ""}` : "chưa dùng",
       detail,
@@ -154,10 +154,11 @@ export function machineGauges(node: NodeSummary): Gauge[] {
     const used = percentOf(resources.diskTotalGb - resources.diskFreeGb, resources.diskTotalGb);
     gauges.push({
       id: "disk",
-      label: "Storage",
+      label: "Ổ đĩa",
       percent: used,
       value: `còn ${formatGb(resources.diskFreeGb)} / ${formatGb(resources.diskTotalGb)}`,
-      detail: resources.diskFreeGb < 10 ? "sắp hết chỗ: model và video có thể không ghi được" : "đủ chỗ",
+      detail: resources.diskFreeGb < 10 ? "sắp hết chỗ: model và video có thể không ghi được; hãy dọn ngay"
+        : resources.diskFreeGb < 25 ? "còn ít chỗ: nên xóa video cũ, bản tải về hoặc model không dùng để tránh lỗi khi tạo video dài" : "đủ chỗ",
       tone: resources.diskFreeGb < 10 ? "bad" : resources.diskFreeGb < 25 ? "warn" : "ok",
     });
   }
@@ -167,7 +168,7 @@ export function machineGauges(node: NodeSummary): Gauge[] {
     const onBattery = resources.power === "battery";
     gauges.push({
       id: "power",
-      label: onBattery ? "Battery" : "Power",
+      label: onBattery ? "Pin" : "Nguồn điện",
       percent: battery,
       value: battery === null ? "Cắm điện" : `${onBattery ? "đang dùng pin" : "cắm điện"} ${battery}%`,
       detail: onBattery ? "máy chạy bằng pin: bộ cân bằng tải tránh giao việc nặng khi pin thấp" : "chạy bằng điện",
@@ -178,7 +179,7 @@ export function machineGauges(node: NodeSummary): Gauge[] {
   if (resources.thermal !== "unknown") {
     gauges.push({
       id: "thermal",
-      label: "Thermal",
+      label: "Nhiệt độ",
       percent: null,
       value: resources.thermal === "throttled" ? "Đang nóng" : "Bình thường",
       detail: resources.thermal === "throttled" ? "hệ điều hành đang giảm xung CPU để hạ nhiệt" : "không bị giảm xung",
@@ -242,7 +243,7 @@ export function modelRows(node: NodeSummary, now = Date.now()): ModelRow[] {
     chips: [],
   });
   if (models.faceDetail !== null) {
-    rows.push({ id: "face", label: "Sửa khuôn mặt", state: models.faceDetail ? "ready" : "down", detail: models.faceDetail ? "Sẵn sàng" : "Thiếu mô hình dò mặt hoặc đang tắt", chips: [] });
+    rows.push({ id: "face", label: "Sửa khuôn mặt", state: models.faceDetail ? "ready" : "down", detail: models.faceDetail ? "Sẵn sàng" : "Đang tắt hoặc thiếu mô hình dò mặt (video vẫn tạo bình thường)", chips: [] });
   }
   rows.push({ id: "whiteboard", label: "Máy vẽ tay", state: models.whiteboard ? "ready" : "down", detail: models.whiteboard ? "Sẵn sàng" : "Không phản hồi", chips: [] });
   return rows;

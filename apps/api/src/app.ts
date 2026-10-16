@@ -84,7 +84,7 @@ type WorkerHealthPayload = {
   airSetup?: AirSetupSummary | null;
   services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia" | "whiteboard", { state: ServiceState; detail: string }>>;
 };
-type LocalMediaHealthPayload = { video?: boolean; videoState?: string; videoDetail?: string; faceDetail?: boolean; faceDetailDetail?: string };
+type LocalMediaHealthPayload = { video?: boolean; videoState?: string; videoDetail?: string; faceDetail?: boolean; faceDetailDetail?: string; faceDetailState?: string };
 
 type UsageStats = {
   today: { usedUsd: number; eventCount: number; inputTokens: number; outputTokens: number; totalTokens: number };
@@ -282,7 +282,8 @@ export function createApp(config: AppConfig, db: AdminClient) {
       ),
       // Faces of generated pictures are redrawn by the media bridge; shown so a silently disabled pass gets noticed.
       faceDetail: status(
-        config.LOCAL_MEDIA_FEATURES_ENABLED ? (mediaHealth ? (mediaHealth.faceDetail ? "healthy" : "offline") : "offline") : "disabled",
+        // switched off on purpose (FACE_DETAIL=false) is not an outage: it must not raise a red alert
+        config.LOCAL_MEDIA_FEATURES_ENABLED ? (mediaHealth ? (mediaHealth.faceDetail ? "healthy" : mediaHealth.faceDetailState === "disabled" ? "disabled" : "offline") : "offline") : "disabled",
         config.LOCAL_MEDIA_FEATURES_ENABLED
           ? mediaHealth?.faceDetailDetail ?? (mediaHealth ? "Media server chưa hỗ trợ sửa khuôn mặt" : "Không kết nối được media server")
           : "Tính năng media local đang tắt",

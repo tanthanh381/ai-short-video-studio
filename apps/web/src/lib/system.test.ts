@@ -91,6 +91,14 @@ describe("machineGauges", () => {
     expect(byId(node("air", { resources: { ...full, memPressure: "critical" } })).swap!.tone).toBe("bad");
   });
 
+  it("names the gauges in Vietnamese and says what to do when the disk is getting full", () => {
+    const tight = byId(node("mini", { resources: { ...node("mini").resources!, diskFreeGb: 15, diskTotalGb: 228 } }));
+    expect(tight.disk).toMatchObject({ label: "Ổ đĩa", tone: "warn" });
+    expect(tight.disk!.detail).toMatch(/còn ít chỗ: nên xóa/u);
+    expect(tight.disk!.detail).not.toBe("đủ chỗ"); // an amber warning that said "enough room" contradicted itself
+    expect([tight.ram?.label, tight.swap?.label, tight.thermal?.label]).toEqual(["RAM", "RAM ảo (swap)", "Nhiệt độ"]);
+  });
+
   it("flags a laptop on low battery, a hot machine and a nearly full disk", () => {
     const sick = node("air", { resources: { ...node("air").resources!, power: "battery", batteryPercent: 20, thermal: "throttled", diskFreeGb: 6 } });
     const gauges = byId(sick);
