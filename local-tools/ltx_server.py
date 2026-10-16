@@ -34,7 +34,10 @@ OFFLOAD_TO_CPU = os.getenv("LTX_VIDEO_OFFLOAD_CPU", "1").lower() not in {"0", "f
 TRY_NATIVE_FIRST = os.getenv("LTX_VIDEO_TRY_NATIVE_FIRST", "0").lower() in {"1", "true", "yes"}
 ALLOW_LOW_MEMORY = os.getenv("LTX_VIDEO_ALLOW_LOW_MEMORY", "0").lower() in {"1", "true", "yes"}
 AUTO_DOWNLOAD_UPSCALER = os.getenv("LTX_VIDEO_AUTO_DOWNLOAD_UPSCALER", "1").lower() not in {"0", "false", "no"}
-MPS_FP16 = os.getenv("LTX_VIDEO_MPS_FP16", "1").lower() not in {"0", "false", "no"}
+# Opt-in only: some MPS/PyTorch builds crash when the full pipeline is cast to
+# FP16. The default stays on the conservative BF16 path plus the blank-frame
+# quality gate; operators can enable this experimentally per node.
+MPS_FP16 = os.getenv("LTX_VIDEO_MPS_FP16", "0").lower() not in {"0", "false", "no"}
 MIN_MPS_MEMORY_BYTES = int(os.getenv("LTX_VIDEO_MIN_MPS_MEMORY_GB", "24")) * 1024**3
 # Runtime is sync-managed so a changed LTX configuration is applied on the secondary Mac after its next sync.
 # 0.15 is the upstream default. A small increase makes image-to-video motion visible on short-form shots,
