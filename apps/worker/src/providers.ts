@@ -1096,7 +1096,10 @@ export function youthfulSiblings(prompt: string): string {
 /** Put the shared character description first so every scene prompt names the same person. */
 export function withCast(cast: string, prompt: string, narration = "", force = false): string {
   const base = prompt.trim();
-  const description = (force ? cast : castForNarration(cast, narration)).trim().replace(/[.\s]+$/u, "");
+  // `force` keeps the cast eligible for layouts that need continuity, but it
+  // must not override the role-level narration guard: a story-card scene about
+  // a note or a shopkeeper still must not add an unmentioned child.
+  const description = castForNarration(cast, narration).trim().replace(/[.\s]+$/u, "");
   const hasPersonInNarration = /(?:người|anh|chị|cô|chú|bác|ông|bà|em|bé|cậu|nàng|chàng|mẹ|cha|bố|con|nhân vật|đứa trẻ|person|man|woman|boy|girl|child|people|human)/iu.test(narration);
   const hasPersonInPrompt = /(?:person|man|woman|boy|girl|child|people|human|character|hands?|face|mother|father|mom|dad|parent|son|daughter|grand\w*|lady|kid|baby|adult|elder\w*|family|wife|husband)/iu.test(base);
   // Story cards follow one recurring family, so the cast leads every prompt there.

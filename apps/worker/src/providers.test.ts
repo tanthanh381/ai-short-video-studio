@@ -724,7 +724,7 @@ describe("withCast keeps the recurring family in every story-card scene", () => 
   it("leaves a scene without people alone unless the layout forces the cast", () => {
     const prompt = "A steaming bowl of rice on a wooden table, soft morning light";
     expect(withCast(cast, prompt, "Một bát cơm nóng.")).toBe(prompt);
-    expect(withCast(cast, prompt, "Một bát cơm nóng.", true)).toBe(`${cast}. ${prompt}`);
+    expect(withCast(cast, prompt, "Một bát cơm nóng.", true)).toBe(prompt);
   });
   it("does not copy unmentioned family roles into a different scene", () => {
     const family = "a Vietnamese mother with a black bun, red blouse and brown skirt, and her little girl with two pigtails";
