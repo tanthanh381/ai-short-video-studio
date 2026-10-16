@@ -742,7 +742,7 @@ async function generateMedia(job: JobRow, project: Project) {
         const motion = await media.createVideo(
           {
             image: await download(imagePath),
-            prompt: `${scene.imagePrompt}. ${sceneMotionPrompt(project.settings.visualPreset, scene.order)}`,
+            prompt: `${scene.imagePrompt}. ${sceneMotionPrompt(project.settings.visualPreset, scene.order, scene.narration)}`,
             aspectRatio: project.settings.aspectRatio,
           },
           {

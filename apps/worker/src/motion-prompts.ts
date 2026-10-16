@@ -23,13 +23,31 @@ const STYLE_MOTION: Partial<Record<VisualPreset, string>> = {
   "chibi-dong-vat-co-phong": "ears or tail make one small expressive movement while the character remains recognisable",
 };
 
-export function sceneMotionPrompt(preset: VisualPreset, sceneIndex: number): string {
+/** Keep generated motion tied to what the narrator actually says instead of inventing a generic gesture. */
+function narrativeMotion(narration: string): string | null {
+  const text = narration.toLocaleLowerCase("vi-VN");
+  if (/(mở|đóng|cửa|cổng|khóa|chìa)/u.test(text))
+    return "show one clear, slow interaction with the mentioned door, gate or key; the hand stays attached and the object stays in place";
+  if (/(bước|đi bộ|đi qua|chạy|quay về|rời khỏi|tiến lại)/u.test(text))
+    return "show the referenced person taking one small natural step or turning into the scene while the camera follows gently";
+  if (/(cầm|nâng|đặt|chạm|đưa|viết|đọc|sách|điện thoại|đèn|ngọn lửa)/u.test(text))
+    return "show the mentioned object receiving one deliberate, slow movement from the existing hand; keep the hand count and object shape stable";
+  if (/(hỏi|nói|kể|mỉm cười|nhìn|nghe|gật|suy nghĩ)/u.test(text))
+    return "show one readable facial or gaze change matching the line, such as a gentle glance or small nod, without changing identity";
+  if (/(mưa|gió|khói|sương|lá|hoa|ánh sáng|sáng lên|tối)/u.test(text))
+    return "animate the mentioned atmosphere or light as the primary visible motion while the subject remains grounded and recognisable";
+  return null;
+}
+
+export function sceneMotionPrompt(preset: VisualPreset, sceneIndex: number, narration = ""): string {
   const cue = STYLE_MOTION[preset] ?? MOTION_CUES[sceneIndex % MOTION_CUES.length];
+  const storyCue = narrativeMotion(narration) ?? "make one visible but restrained action over the shot, then settle naturally";
   return [
     "Create a short image-to-video shot from this exact reference image.",
+    storyCue + ".",
     cue + ".",
-    "Add a very slow 9:16 camera push-in or gentle side drift.",
+    "Add a visible but slow 9:16 camera push-in or gentle side drift with foreground/background parallax.",
     "Preserve the same face, costume, pose, proportions, text-free artwork and background layout.",
-    "No morphing, no new limbs, no lip-sync, no scene change, no flicker, no fast movement.",
+    "No morphing, no new limbs, no extra fingers, no lip-sync, no scene change, no flicker, no fast movement.",
   ].join(" ");
 }

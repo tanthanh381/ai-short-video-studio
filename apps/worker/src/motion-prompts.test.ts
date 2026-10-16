@@ -17,4 +17,10 @@ describe("scene motion prompts", () => {
     expect(sceneMotionPrompt("chibi-dong-vat-co-phong", 0)).toContain("ears or tail");
     expect(sceneMotionPrompt("thuy-mac-co-phong", 0)).toContain("ink-wash mist");
   });
+
+  it("grounds motion in the narrated action instead of inventing a generic gesture", () => {
+    expect(sceneMotionPrompt("cinematic-color", 0, "Cô mở cánh cổng cũ.")).toContain("mentioned door, gate or key");
+    expect(sceneMotionPrompt("cinematic-color", 1, "Anh nâng chiếc điện thoại lên.")).toContain("mentioned object");
+    expect(sceneMotionPrompt("cinematic-color", 2, "Ngoài trời mưa rất lớn.")).toContain("mentioned atmosphere or light");
+  });
 });
