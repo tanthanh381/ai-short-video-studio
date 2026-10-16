@@ -301,8 +301,11 @@ IMAGE_PRESETS = {
 COMFYUI_IMAGE_PRESETS = {
     "fast": {"steps": 8, "cfg": 5.5},
     "balanced": {"steps": 25, "cfg": 6.5},
-    "quality": {"steps": 35, "cfg": 7.0},
+    # 24 steps keeps SDXL Base materially cleaner than Turbo while avoiding the
+    # long MPS residency that can restart ComfyUI on 16 GB machines during a batch.
+    "quality": {"steps": max(16, min(int(os.getenv("COMFYUI_QUALITY_STEPS", "24")), 35)), "cfg": 7.0},
 }
+COMFYUI_FREE_AFTER_RENDER = os.getenv("COMFYUI_FREE_AFTER_RENDER", "true").lower() not in {"0", "false", "no"}
 IMAGE_PERSON_STEPS = max(2, min(int(os.getenv("IMAGE_PERSON_STEPS", "6")), 8))
 IMAGE_STEPS_OVERRIDE = os.getenv("IMAGE_STEPS")
 VIENEU_STEPS = int(os.getenv("VIENEU_STEPS", "16"))
@@ -592,7 +595,14 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         with COMFYUI_LOCK:
             release_turbo_model()
             IMAGE_ENGINE["comfy_used"] = True
-            return comfyui_image(styled, negative, width, height, seed, preset)
+            try:
+                return comfyui_image(styled, negative, width, height, seed, preset)
+            finally:
+                # ComfyUI can retain the SDXL graph on MPS after a successful
+                # request. Free it between scenes so a long export does not
+                # accumulate pressure and get killed mid-generation.
+                if COMFYUI_FREE_AFTER_RENDER:
+                    release_comfy_model()
     release_comfy_model()
     # SDXL-Turbo is distilled to work without guidance. A negative prompt only takes effect with CFG > 1, which runs
     # the UNet twice per step: 8 steps + negative took 20.9 s per image against 6.9 s for 4 plain steps, with no

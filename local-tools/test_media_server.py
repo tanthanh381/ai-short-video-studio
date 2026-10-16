@@ -347,7 +347,8 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         with patch.object(self.media, "available_image_models", return_value={"sdxl-turbo": "t", self.media.COMFYUI_IMAGE_MODEL: "b"}), \
              patch.object(self.media, "comfyui_image", return_value=b"PNG") as comfy, \
              patch.object(self.media, "image_server_state", return_value="ready"), \
-             patch.object(self.media.urllib.request, "urlopen", side_effect=fake_urlopen):
+             patch.object(self.media.urllib.request, "urlopen", side_effect=fake_urlopen), \
+             patch.object(self.media, "COMFYUI_FREE_AFTER_RENDER", False):
             self.media.local_image("A young woman sits on a bench", "9:16", model=self.media.COMFYUI_IMAGE_MODEL)
             self.assertTrue(any(url.endswith("/unload") for url in calls))  # Turbo released for SDXL Base
             self.assertIn("crowd", comfy.call_args.args[1])  # real CFG: negative prompt keeps the cast small
@@ -357,6 +358,14 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             calls.clear()
             self.media.local_image("A quiet street at dusk", "9:16", model="sdxl-turbo")
             self.assertFalse(any(url.endswith("/free") for url in calls))  # only once after a Base run
+
+    def test_sdxl_base_releases_comfyui_after_each_render(self):
+        with patch.object(self.media, "available_image_models", return_value={self.media.COMFYUI_IMAGE_MODEL: "b"}), \
+             patch.object(self.media, "comfyui_image", return_value=b"PNG"), \
+             patch.object(self.media, "release_turbo_model"), \
+             patch.object(self.media, "release_comfy_model") as release:
+            self.media.local_image("A young woman sits on a bench", "9:16", model=self.media.COMFYUI_IMAGE_MODEL)
+        release.assert_called_once_with()
 
     def test_trims_only_oversized_service_logs_to_their_recent_tail(self):
         import tempfile

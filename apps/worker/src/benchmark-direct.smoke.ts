@@ -28,6 +28,7 @@ if (!corpusPath || !outDir) throw new Error("usage: benchmark-direct.smoke.ts <c
 type Case = { id: string; topic: string; hook: string; sourceText: string };
 const corpus = JSON.parse(await readFile(corpusPath, "utf8")) as { cases?: Case[] } & Record<string, unknown>;
 const cases: Case[] = (corpus.cases ?? (Object.values(corpus).find(Array.isArray) as Case[])).filter((item) => !only.length || only.includes(item.id));
+const benchmarkPreset: ProjectSettings["generationPreset"] = process.env.BENCHMARK_PRESET === "quality" ? "quality" : "balanced";
 
 // One look per topic, chosen the way a channel owner would: the same retention aids everywhere.
 const LOOK: Record<string, Partial<ProjectSettings>> = {
@@ -67,7 +68,7 @@ for (const item of cases) {
   const outcome: Record<string, unknown> = { id: item.id, topic: item.topic };
   try {
     const settings: ProjectSettings = {
-      ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", captionHighlight: true, progressBar: true, sceneSfx: true,
+      ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", generationPreset: benchmarkPreset, captionHighlight: true, progressBar: true, sceneSfx: true,
       outroText: "Theo dõi để xem thêm", autoMusic: true, brandName: "Studio QA", ...LOOK[item.topic],
     } as ProjectSettings;
     const sourceText = cleanScriptForNarration(item.sourceText);
@@ -81,6 +82,10 @@ for (const item of cases) {
       visualStyle: `${settings.visualStyle}; ${visualPresetPrompt(settings.visualPreset)}`, model: null, cast,
     } as never));
     const title = cardMode ? (await ollama.writeCardTitle?.({ sourceText })?.catch(() => "")) || item.hook : "";
+    // Mirror the production worker: Qwen is only needed for storyboard authoring.
+    // Keeping its 4B weights resident while SDXL Base runs on a 16 GB MPS host
+    // causes ComfyUI to be killed by memory pressure halfway through a batch.
+    await ollama.unload(config.OLLAMA_MODEL);
     const projectId = crypto.randomUUID();
     const scenes: Scene[] = storyboard.scenes.map((scene, order) => ({
       id: crypto.randomUUID(), order, narration: scene.narration,
