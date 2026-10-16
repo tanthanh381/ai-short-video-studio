@@ -127,31 +127,47 @@ function PostCaptionCard({ project }: { project: Project }) {
   if (!description || project.sourceText.trim().startsWith(description.slice(0, 120))) return null;
   const text = `${project.suggestedTitle.trim()}\n\n${description}`.trim();
   return (
-    <details className="post-caption">
-      <summary>
-        <span>Nội dung đăng bài</span>
-        <button
-          type="button"
-          className="post-caption-copy"
-          onClick={(event) => {
-            event.preventDefault(); // copy without toggling the panel
-            void navigator.clipboard?.writeText(text).then(() => {
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 1800);
-            });
-          }}
-        >
-          <Copy size={14} /> {copied ? "Đã sao chép" : "Sao chép"}
-        </button>
-      </summary>
-      {project.suggestedTitle.trim() && <p className="post-caption-title">{project.suggestedTitle}</p>}
-      <p className="post-caption-body">{description}</p>
-    </details>
+    // The copy button sits next to the summary, not inside it: a button inside a <summary> is a control nested in a
+    // control, which screen readers announce badly (WCAG 4.1.2).
+    <div className="post-caption-wrap">
+      <details className="post-caption">
+        <summary>
+          <span>Nội dung đăng bài</span>
+        </summary>
+        {project.suggestedTitle.trim() && <p className="post-caption-title">{project.suggestedTitle}</p>}
+        <p className="post-caption-body">{description}</p>
+      </details>
+      <button
+        type="button"
+        className="post-caption-copy"
+        aria-label={copied ? "Đã sao chép nội dung đăng bài" : "Sao chép nội dung đăng bài"}
+        onClick={() => {
+          void navigator.clipboard?.writeText(text).then(() => {
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1800);
+          });
+        }}
+      >
+        <Copy size={14} /> {copied ? "Đã sao chép" : "Sao chép"}
+      </button>
+    </div>
   );
+}
+
+const APP_NAME = "AI Short Video Studio";
+
+/** The browser tab says which page this is (WCAG 2.4.2): the menu name, else the page's own heading. */
+function pageTitle(pathname: string, heading: string | null): string {
+  const item = navItems.find((nav) => (nav.to === "/" ? pathname === "/" : pathname.startsWith(nav.to)));
+  const name = item?.label ?? heading?.trim();
+  return name ? `${name} · ${APP_NAME}` : APP_NAME;
 }
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { isDemo, signOut, user } = useAuth();
+  const location = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
+  const lastPath = useRef<string | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -181,6 +197,33 @@ function AppShell({ children }: { children: React.ReactNode }) {
     else sidebar.removeAttribute("inert");
     if (isMobileLayout && mobileNav) mobileCloseRef.current?.focus();
   }, [isMobileLayout, mobileNav]);
+  // While the phone menu is open, the page behind it is out of reach (focus stays in the menu).
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    if (isMobileLayout && mobileNav) main.setAttribute("inert", "");
+    else main.removeAttribute("inert");
+  }, [isMobileLayout, mobileNav]);
+  // A new page: name the tab after it and, after a link was followed, move focus to its heading so a screen reader
+  // says where the person is (pages load lazily, so the heading is waited for a few frames).
+  useEffect(() => {
+    // only when the path really changed: not on the first load, and not when React runs the effect twice in dev
+    const announce = lastPath.current !== null && lastPath.current !== location.pathname;
+    lastPath.current = location.pathname;
+    let frames = 0;
+    let handle = 0;
+    const settle = () => {
+      const heading = mainRef.current?.querySelector<HTMLElement>("h1") ?? null;
+      if (!heading && frames++ < 30) { handle = requestAnimationFrame(settle); return; }
+      document.title = pageTitle(location.pathname, heading?.textContent ?? null);
+      if (announce && heading) {
+        if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
+        heading.focus({ preventScroll: true });
+      }
+    };
+    settle();
+    return () => cancelAnimationFrame(handle);
+  }, [location.pathname]);
   useEffect(() => {
     if (!mobileNav) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -195,9 +238,17 @@ function AppShell({ children }: { children: React.ReactNode }) {
   }
   return (
     <div className="app-shell">
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(event) => { event.preventDefault(); mainRef.current?.focus(); }}
+      >
+        Bỏ qua tới nội dung
+      </a>
       <aside
         ref={sidebarRef}
         id="app-navigation"
+        aria-label="Điều hướng chính"
         className={`sidebar ${mobileNav ? "is-open" : ""}`}
         aria-hidden={isMobileLayout && !mobileNav ? true : undefined}
       >
@@ -218,7 +269,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         >
           <X />
         </button>
-        <nav>
+        <nav aria-label="Các trang">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
@@ -252,7 +303,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           onClick={closeMobileNav}
         />
       )}
-      <main className="main">
+      <main className="main" id="main-content" ref={mainRef} tabIndex={-1}>
         <header className="mobile-header">
           <button
             ref={mobileMenuRef}
@@ -296,6 +347,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 function LoginPage() {
   const { signIn, signInWithGoogle, sendMagicLink, sendPasswordReset, user, authError, isDemo } = useAuth();
   const navigate = useNavigate();
+  useEffect(() => { document.title = `Đăng nhập · ${APP_NAME}`; }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [useMagicLink, setUseMagicLink] = useState(false);
@@ -493,6 +545,7 @@ function LoginPage() {
 }
 
 function ResetPasswordPage() {
+  useEffect(() => { document.title = `Đặt mật khẩu mới · ${APP_NAME}`; }, []);
   const { updatePassword, signOut, user, isDemo, loading } = useAuth();
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
@@ -693,16 +746,9 @@ function DashboardPage() {
             <article
               className="project-row"
               key={project.id}
+              // The whole row opens the project for a mouse; the keyboard and screen readers use the title link, so
+              // the row is not a button that holds other buttons (WCAG 4.1.2).
               onClick={() => navigate(`/studio/${project.id}`)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  navigate(`/studio/${project.id}`);
-                }
-              }}
-              role="button"
-              aria-label={`Mở dự án ${project.title}`}
-              tabIndex={0}
             >
               <div className={`project-thumb thumb-${index % 3}`}>
                 <span>{project.settings.aspectRatio}</span>
@@ -711,7 +757,11 @@ function DashboardPage() {
               </div>
               <div className="project-info">
                 <div className="project-title-line">
-                  <h2>{project.title}</h2>
+                  <h2>
+                    <Link className="project-link" to={`/studio/${project.id}`} onClick={(event) => event.stopPropagation()}>
+                      {project.title}
+                    </Link>
+                  </h2>
                   <span className={`status status-${project.status}`}>
                     {humanStatus(project.status)}
                   </span>
@@ -744,13 +794,9 @@ function DashboardPage() {
                 <button title="Xóa" aria-label={`Xóa ${project.title}`} disabled={busyProject === project.id} onClick={() => void remove(project.id)}>
                   <Trash2 size={18} />
                 </button>
-                <button
-                  title="Mở dự án"
-                  aria-label={`Mở ${project.title}`}
-                  onClick={() => navigate(`/studio/${project.id}`)}
-                >
+                <span className="row-open" aria-hidden="true">
                   <ChevronRight size={19} />
-                </button>
+                </span>
               </div>
             </article>
           ))}
@@ -883,6 +929,8 @@ function TextToSpeechPage() {
           <textarea
             className="tts-textarea"
             aria-label="Văn bản cần đọc"
+            aria-invalid={error === "Hãy nhập văn bản cần đọc." || undefined}
+            aria-describedby={error ? "tts-error" : undefined}
             maxLength={10000}
             value={text}
             onChange={(event) => { setText(event.target.value); setError(null); }}
@@ -894,7 +942,7 @@ function TextToSpeechPage() {
               <Play size={17} /> Chuyển thành giọng nói
             </Button>
           </div>
-          {error && <Notice tone="bad">{error}</Notice>}
+          {error && <Notice tone="bad" id="tts-error">{error}</Notice>}
           {audioUrl && (
             <div className="tts-result">
               <div><strong>Bản đọc đã sẵn sàng</strong><span>Nghe lại hoặc tải file MP3</span></div>
@@ -908,9 +956,23 @@ function TextToSpeechPage() {
           <div className="field"><span className="field-label">Bộ tạo giọng</span>
             <EngineSelect catalog={catalog} engine={engine} onChange={setEngine} isDemo={isDemo} />
           </div>
-          <div className="tts-voice-grid">
+          <div
+            className="tts-voice-grid"
+            role="radiogroup"
+            aria-label="Chất giọng"
+            onKeyDown={(event) => {
+              // arrow keys move between the voices, as in any radio group
+              const step = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1 : 0;
+              if (!step) return;
+              event.preventDefault();
+              const at = VOICE_PRESETS.findIndex((item) => item.id === voice);
+              const next = VOICE_PRESETS[(at + step + VOICE_PRESETS.length) % VOICE_PRESETS.length]!;
+              setVoice(next.id);
+              event.currentTarget.querySelector<HTMLButtonElement>(`[data-voice="${next.id}"]`)?.focus();
+            }}
+          >
             {VOICE_PRESETS.map((preset) => (
-              <button key={preset.id} type="button" className={`tts-voice-option ${voice === preset.id ? "selected" : ""}`} onClick={() => setVoice(preset.id)}>
+              <button key={preset.id} type="button" role="radio" aria-checked={voice === preset.id} data-voice={preset.id} className={`tts-voice-option ${voice === preset.id ? "selected" : ""}`} onClick={() => setVoice(preset.id)}>
                 <span><strong>{preset.label}</strong><small>{preset.hint}</small></span>
                 <span className="tts-radio" aria-hidden="true">{voice === preset.id ? "✓" : ""}</span>
               </button>
@@ -1573,7 +1635,9 @@ function NewProjectPage() {
           >
             <>
               <textarea
-                aria-label="Nội dung kịch bản"
+                aria-label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : "Kịch bản hoàn chỉnh"}
+                aria-invalid={error === SOURCE_TOO_SHORT || undefined}
+                aria-describedby={error === SOURCE_TOO_SHORT ? "create-error" : undefined}
                 value={sourceText}
                 onChange={(e) => {
                   setSourceText(e.target.value);
@@ -1669,7 +1733,7 @@ function NewProjectPage() {
             <span><Mic2 size={15} /> Giọng tiếng Việt</span>
             <span><Subtitles size={15} /> Phụ đề rõ nét</span>
           </div>
-          {error && <Notice tone="bad">{error}</Notice>}
+          {error && <Notice tone="bad" id="create-error">{error}</Notice>}
           {isDemo && <Notice tone="warn">{DEMO_ONLY}</Notice>}
         </section>
         <section>
@@ -2614,7 +2678,15 @@ function StudioPage() {
           <Button variant="secondary" aria-expanded={optionsOpen} onClick={() => setOptionsOpen(!optionsOpen)}>
             <Settings size={17} /> Tùy chọn
           </Button>
-          <details className="manual-actions">
+          <details
+            className="manual-actions"
+            onKeyDown={(event) => {
+              // Esc closes the menu and gives focus back to its button, like every other menu here
+              if (event.key !== "Escape" || !event.currentTarget.open) return;
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector("summary")?.focus();
+            }}
+          >
             <summary aria-label="Thêm thao tác" title="Thêm thao tác"><MoreHorizontal size={18} /></summary>
             <div>
               <p className="menu-label">Chỉnh từng bước</p>
@@ -2932,11 +3004,13 @@ function StudioPage() {
                 Thời lượng cập nhật theo audio thật sau khi tạo giọng đọc
               </small>
             </div>
-            <div className="timeline-track">
+            <div className="timeline-track" role="group" aria-label="Chọn cảnh trên timeline">
               {project.scenes.map((s, i) => (
                 <button
                   key={s.id}
                   className={i === selected ? "active" : ""}
+                  aria-label={`Cảnh ${i + 1}, ${formatDuration(s.actualDurationMs ?? s.estimatedDurationMs)}`}
+                  aria-current={i === selected ? "true" : undefined}
                   style={{
                     flex: Math.max(
                       1,
@@ -2952,7 +3026,7 @@ function StudioPage() {
             </div>
           </div>
         </section>
-        <aside className="settings-panel" hidden={!optionsOpen}>
+        <aside className="settings-panel" hidden={!optionsOpen} aria-label="Tùy chọn video">
           <div className="panel-heading">
             <h2>Thiết lập</h2>
           </div>

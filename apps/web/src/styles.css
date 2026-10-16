@@ -72,8 +72,11 @@
   --chart-4: #6d3fc2;
 
   /* focus: one ring for every control */
-  --focus-ring: 0 0 0 3px rgba(23, 107, 255, 0.35);
-  --focus-outline: var(--focus-outline);
+  --focus-color: #176bff;
+  --focus-ring: 0 0 0 3px rgba(23, 107, 255, 0.55);
+  --focus-outline: 3px solid var(--focus-color); /* must never refer to itself: lib/tokens.test.ts */
+  /* borders that mark where a control is (inputs, choice cards): >= 3:1 against the surface (WCAG 1.4.11) */
+  --line-input: #7d8d9c;
 
   /* type scale */
   --text-xs: 11px;
@@ -132,6 +135,9 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
+    --focus-color: #6aa2ff;
+    --focus-ring: 0 0 0 3px rgba(106, 162, 255, 0.6);
+    --line-input: #6b8396;
     --text: #e3ebf1;
     --text-strong: #f4f8fb;
     --text-2: #d3dee7;
@@ -725,11 +731,19 @@ a:focus-visible {
 .empty .button {
   margin-top: 18px;
 }
-.project-row:focus-visible {
-  outline: var(--focus-outline);
-  outline-offset: -3px;
-  background: var(--surface-2);
+/* The title link is the row's keyboard target. Where :has() works its focus ring is drawn around the whole row;
+   elsewhere the link keeps its own ring. */
+.project-link { color: inherit; text-decoration: none; border-radius: var(--radius-sm); }
+.project-link:hover { text-decoration: underline; }
+@supports selector(:has(*)) {
+  .project-row:has(.project-link:focus-visible) {
+    outline: var(--focus-outline);
+    outline-offset: -3px;
+    background: var(--surface-2);
+  }
+  .project-link:focus-visible { outline: none; }
 }
+.row-open { width: 34px; height: 34px; display: grid; place-items: center; color: var(--text-muted); }
 .back-link {
   border: 0;
   background: none;
@@ -768,7 +782,7 @@ a:focus-visible {
 .field textarea,
 .field select {
   width: 100%;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line-input);
   border-radius: var(--radius-md);
   background: var(--surface-2);
   color: var(--text-strong);
@@ -1548,7 +1562,7 @@ a:focus-visible {
 }
 .cue-row input {
   min-width: 0;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line-input);
   border-radius: var(--radius-sm);
   padding: 6px;
   font-size: var(--text-sm);
@@ -1638,7 +1652,7 @@ a:focus-visible {
   width: 100%;
   min-height: 390px;
   resize: vertical;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-input);
   border-radius: var(--radius-lg);
   padding: 18px;
   color: var(--text-strong);
@@ -1673,7 +1687,7 @@ a:focus-visible {
   gap: 8px;
   min-height: 56px;
   padding: 10px 12px;
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--line-input);
   border-radius: var(--radius-md);
   background: var(--surface);
   text-align: left;
@@ -1696,7 +1710,7 @@ a:focus-visible {
   place-items: center;
   width: 20px;
   height: 20px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line-input);
   border-radius: 50%;
   color: var(--text-on-accent);
   background: var(--surface);
@@ -2466,7 +2480,7 @@ a:focus-visible {
 }
 .login-box form input {
   height: 43px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line-input);
   border-radius: var(--radius-md);
   padding: 0 12px;
 }
@@ -2654,6 +2668,9 @@ a:focus-visible {
 .annotation-badge { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; border-radius: 50%; background: #16a34a; color: var(--text-on-accent); font-size: var(--text-sm); display: grid; place-items: center; line-height: 1; font-weight: 700; border: 1.5px solid var(--line-soft); }
 
 /* Ready-to-post caption under the preview: folded, in the dark panel's colours */
+.post-caption-wrap { position: relative; flex: none; }
+.post-caption-wrap > .post-caption-copy { position: absolute; top: 6px; right: 16px; }
+.post-caption summary { padding-right: 120px; }
 .post-caption {
   flex: none;
   background: var(--nav);
@@ -2699,7 +2716,7 @@ a:focus-visible {
 .channel-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0 6px; }
 .channel-presets-label { font-weight: 700; font-size: var(--text-base); color: var(--text-strong); margin-right: 4px; }
 .channel-presets button {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-input);
   background: var(--surface);
   color: var(--text-strong);
   border-radius: var(--radius-full);
@@ -2773,7 +2790,7 @@ input[type="radio"] {
   gap: 4px;
   text-align: left;
   padding: 12px 14px;
-  border: 1.5px solid var(--line);
+  border: 1.5px solid var(--line-input);
   border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--text-strong);
@@ -2930,7 +2947,7 @@ input[type="radio"] {
 .duration-options button {
   min-height: 36px;
   padding: 6px 12px;
-  border: 1.5px solid var(--line);
+  border: 1.5px solid var(--line-input);
   border-radius: var(--radius-full);
   background: var(--surface);
   color: var(--text-strong);
@@ -2961,7 +2978,7 @@ input[type="radio"] {
 .api-key-form { display: grid; gap: 6px; }
 .api-key-form label { font-size: var(--text-sm); font-weight: 700; color: var(--text-strong); }
 .api-key-form > div { display: flex; flex-wrap: wrap; gap: 8px; }
-.api-key-form input { flex: 1 1 240px; min-width: 0; min-height: 40px; padding: 8px 12px; border: 1.5px solid var(--line); border-radius: var(--radius-md); font: inherit; font-size: var(--text-base); background: var(--surface); }
+.api-key-form input { flex: 1 1 240px; min-width: 0; min-height: 40px; padding: 8px 12px; border: 1.5px solid var(--line-input); border-radius: var(--radius-md); font: inherit; font-size: var(--text-base); background: var(--surface); }
 .api-key-form input:focus-visible { outline: var(--focus-outline); outline-offset: 1px; border-color: var(--accent); }
 .api-key-form .button { min-height: 40px; }
 .api-key-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -3734,3 +3751,22 @@ input[type="radio"] {
 }
 /* A link styled as a button (empty states) reads as a button, not as underlined text. */
 a.button { text-decoration: none; }
+
+/* Skip link: the first thing a keyboard reaches; hidden until focused (WCAG 2.4.1). */
+.skip-link {
+  position: absolute;
+  z-index: 100;
+  top: 8px;
+  left: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-160%);
+}
+.skip-link:focus { transform: none; }
+/* The page and its heading take focus only to tell a screen reader where it is; no ring is drawn around them. */
+.main:focus,
+.main h1[tabindex="-1"]:focus { outline: none; }

@@ -37,10 +37,10 @@ const NOTICE_ICON = { info: Info, success: CircleCheck, warn: TriangleAlert, bad
  * A message inside the page. `bad` is a failure the person must act on: red, and announced at once by screen readers.
  * `warn` is something to know about (amber, announced politely); `info` and `success` are informative.
  */
-export function Notice({ children, tone = "info" }: { children: ReactNode; tone?: "info" | "success" | "warn" | "bad" }) {
+export function Notice({ children, tone = "info", id }: { children: ReactNode; tone?: "info" | "success" | "warn" | "bad"; id?: string }) {
   const Icon = NOTICE_ICON[tone];
   return (
-    <div className={`notice notice-${tone}`} role={tone === "bad" ? "alert" : "status"} aria-live={tone === "bad" ? "assertive" : "polite"}>
+    <div id={id} className={`notice notice-${tone}`} role={tone === "bad" ? "alert" : "status"} aria-live={tone === "bad" ? "assertive" : "polite"}>
       <Icon size={18} aria-hidden="true" /> <span>{children}</span>
     </div>
   );
