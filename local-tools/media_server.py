@@ -131,6 +131,43 @@ LTX_VIDEO_URL = os.getenv("LTX_VIDEO_URL", "http://127.0.0.1:8770")
 LTX_REQUEST_TIMEOUT_S = max(30, min(int(os.getenv("LTX_REQUEST_TIMEOUT_S", "900")), 1800))
 VIDEO_MAX_SWAP_OUT_MBPS = 15.0
 VIDEO_MAX_SWAP_RATIO = 0.70
+# While LTX animates, the Mac can slide into heavy paging that the check before the start could not foresee (the model grows as
+# it runs). Sustained paging this fast for this long stops the clip: the scene gets the still-image clip instead of a machine
+# that writes hundreds of MB/s to its disk for minutes (measured on the 24 GB Air: 340 MB/s, swap 18.7 of 20 GB).
+VIDEO_ABORT_SWAP_OUT_MBPS = float(os.getenv("VIDEO_ABORT_SWAP_OUT_MBPS", "80"))
+VIDEO_ABORT_AFTER_S = float(os.getenv("VIDEO_ABORT_AFTER_S", "30"))
+
+
+def watch_paging(stop, read=None, on_thrash=None, interval_s=5.0, limit_mbps=None, sustain_s=None, clock=time.monotonic):
+    """Calls on_thrash(rate) once when swap-out stays at or above the limit for sustain_s; returns when stop is set or after it fired."""
+    read = read or (lambda: node_status.read_resources())
+    limit = VIDEO_ABORT_SWAP_OUT_MBPS if limit_mbps is None else limit_mbps
+    sustain = VIDEO_ABORT_AFTER_S if sustain_s is None else sustain_s
+    since = None
+    while not stop.wait(interval_s):
+        rate = (read() or {}).get("swapOutMBps")
+        if rate is not None and rate >= limit:
+            since = clock() if since is None else since
+            if clock() - since >= sustain:
+                if on_thrash:
+                    on_thrash(rate)
+                return True
+        else:
+            since = None
+    return False
+
+
+def stop_ltx_runtime(reason):
+    """Ends the LTX process so its pending request fails at once (launchd restarts it on the main Mac; elsewhere it stays down
+    and the next clips use the still image until the machine starts it again)."""
+    try:
+        port = urllib.parse.urlparse(LTX_VIDEO_URL).port or 8770
+        pid = listener_pid(port)
+        if pid and pid != os.getpid():
+            os.kill(pid, signal.SIGTERM)
+            print(f"[video] stopped LTX (pid {pid}): {reason}", flush=True)
+    except Exception as error:
+        print(f"[video] could not stop LTX: {error}", flush=True)
 NODE_START_SCRIPT = os.getenv("NODE_START_SCRIPT", "")
 COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
 COMFYUI_CHECKPOINT = os.getenv("COMFYUI_CHECKPOINT", "sd_xl_base_1.0_0.9vae.safetensors")
@@ -1196,9 +1233,19 @@ def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None
                           "seed": seed, "preset": preset, "imageBase64": image_base64}).encode()
     request = urllib.request.Request(f"{LTX_VIDEO_URL.rstrip('/')}/video", data=payload,
                                      headers={"Content-Type": "application/json"})
+    stop_watch = threading.Event()
+    thrashed = {}
+    watcher = threading.Thread(target=watch_paging, args=(stop_watch,), kwargs={
+        "on_thrash": lambda rate: (thrashed.update(rate=rate), stop_ltx_runtime(f"máy đang ghi swap {rate:.0f} MB/s"))}, daemon=True)
+    watcher.start()
     try:
-        with VIDEO_LOCK, urllib.request.urlopen(request, timeout=LTX_REQUEST_TIMEOUT_S) as response:
-            data = response.read()
+        try:
+            with VIDEO_LOCK, urllib.request.urlopen(request, timeout=LTX_REQUEST_TIMEOUT_S) as response:
+                data = response.read()
+        finally:
+            stop_watch.set()
+        if thrashed:
+            raise RuntimeError(f"LTX dừng vì máy thiếu RAM (ghi swap {thrashed['rate']:.0f} MB/s)")
         if not data.startswith(b"\x00\x00\x00") and not data.startswith(b"RIFF"):
             raise RuntimeError("LTX runtime trả về dữ liệu video không hợp lệ")
         VIDEO_ENGINE.value = "ltx"

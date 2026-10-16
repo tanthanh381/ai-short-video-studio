@@ -203,6 +203,8 @@ SERVICE_PATTERNS = [
     ("ollama", "Ollama (viết kịch bản)", re.compile(r"llama-server|ollama (runner|serve)")),
     ("image", "Vẽ ảnh SDXL-Turbo", re.compile(r"image_server\.py")),
     ("comfy", "ComfyUI (SDXL Base)", re.compile(r"[Cc]omfy[Uu][Ii]")),
+    # LTX holds the 2B video model and the PixArt text encoder: by far the biggest Python on a Mac while it animates a scene.
+    ("ltx", "Chuyển động video LTX", re.compile(r"ltx_server\.py")),
     ("whisper", "Whisper (nhận dạng giọng)", re.compile(r"whisper-(server|cli)")),
     ("vieneu", "Giọng VieNeu", re.compile(r"vieneu_(api|tts)")),
     ("piper", "Giọng Piper", re.compile(r"tts_api|piper")),
