@@ -586,25 +586,31 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
     preset: project.settings.generationPreset,
   };
-  const first = await provider.createImage(prompt, imageAspectFor(project.settings), options);
-  const firstBlank = await imageLooksBlank(first, config.FFMPEG_PATH);
-  const firstAudit = firstBlank ? null : await auditSceneImage(first, scene, project, job);
-  if (!firstBlank && (!firstAudit || (firstAudit.relevant && firstAudit.anatomy !== "bad"))) return first;
-  log.warn({ jobId: job.id, sceneId: scene.id, blank: firstBlank, audit: firstAudit }, "scene_picture_retry");
-  const correction = firstAudit?.anatomy === "bad"
-    ? ", corrected anatomy, exactly five fingers per hand, natural hands and face, no extra fingers, no duplicated limbs"
-    : firstAudit?.relevant === false
-      ? ", follow the described action and important object exactly, make the main subject unmistakable"
-      : "";
-  const retry = await provider.createImage(`${prompt}${correction}`, imageAspectFor(project.settings), { ...options, seed: (options.seed ?? 0) + 7919 });
-  // A flat second result is not a usable visual. Let the scene remain failed so the
-  // user can regenerate only this scene instead of silently exporting a blank frame.
-  if (await imageLooksBlank(retry, config.FFMPEG_PATH))
-    throw new Error(`Ảnh cảnh ${scene.order + 1} vẫn là khung trống sau khi thử lại; hãy tạo lại cảnh này`);
-  const retryAudit = await auditSceneImage(retry, scene, project, job);
-  if (retryAudit && (!retryAudit.relevant || retryAudit.anatomy === "bad"))
-    throw new Error(`Ảnh cảnh ${scene.order + 1} chưa khớp nội dung hoặc anatomy không đạt; hãy tạo lại cảnh này`);
-  return retry;
+  const maxAttempts = 3;
+  let lastAudit: ImageQualityAudit | null = null;
+  let lastBlank = false;
+  let correction = "";
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const image = await provider.createImage(`${prompt}${correction}`, imageAspectFor(project.settings), {
+      ...options,
+      seed: (options.seed ?? 0) + attempt * 7919,
+    });
+    lastBlank = await imageLooksBlank(image, config.FFMPEG_PATH);
+    lastAudit = lastBlank ? null : await auditSceneImage(image, scene, project, job);
+    // A missing Vision response is intentionally fail-open: a temporary QA
+    // outage must not turn a complete production video into a failed job.
+    if (!lastBlank && (!lastAudit || (lastAudit.relevant && lastAudit.anatomy !== "bad"))) return image;
+    if (attempt === maxAttempts - 1) break;
+    correction = lastAudit?.anatomy === "bad"
+      ? ", corrected anatomy, exactly five fingers per hand, natural hands and face, no extra fingers, no duplicated limbs"
+      : lastAudit?.relevant === false
+        ? ", follow the described action and important object exactly, make the main subject unmistakable"
+        : ", clear usable scene, no blank frame, preserve the described subject and action";
+    log.warn({ jobId: job.id, sceneId: scene.id, attempt: attempt + 1, blank: lastBlank, audit: lastAudit }, "scene_picture_retry");
+  }
+  if (lastBlank)
+    throw new Error(`Ảnh cảnh ${scene.order + 1} vẫn là khung trống sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
+  throw new Error(`Ảnh cảnh ${scene.order + 1} chưa khớp nội dung hoặc anatomy không đạt sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
 }
 
 async function generateMedia(job: JobRow, project: Project) {
