@@ -12,5 +12,8 @@ describe("content quality gate", () => {
     const report = evaluateContentQuality("Vì sao tin nhắn càng gấp càng dễ khiến bạn mất tiền? Hãy dừng 30 giây và gọi lại số chính thức. Ví dụ, một đường link lạ có thể dẫn tới trang giả. Hãy nhớ: kiểm tra trước khi chuyển.");
     expect(report.score).toBeGreaterThanOrEqual(70);
     expect(report.feedback).toHaveLength(0);
+    expect(report.dimensions.hook.score).toBeGreaterThanOrEqual(80);
+    expect(report.dimensions.specificity.score).toBeGreaterThanOrEqual(80);
+    expect(report.dimensions.ending.score).toBeGreaterThanOrEqual(80);
   });
 });

@@ -3802,6 +3802,13 @@ input[type="radio"] {
 .content-quality-head span { display: inline-flex; align-items: center; gap: 7px; }
 .content-quality-head strong { font-variant-numeric: tabular-nums; }
 .content-quality-card p { margin: 6px 0 0; color: var(--text-muted); font-size: var(--text-sm); }
+.quality-dimension-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+.quality-dimension { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-width: 0; padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--warning) 10%, var(--surface)); color: var(--text-muted); font-size: 11px; }
+.quality-dimension span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quality-dimension strong { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.quality-dimension.is-good { background: color-mix(in srgb, var(--ok) 12%, var(--surface)); }
+.quality-dimension.is-good strong { color: var(--ok-strong); }
+@media (max-width: 720px) { .quality-dimension-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .content-quality-card details { margin-top: 9px; color: var(--text-muted); font-size: var(--text-sm); }
 .content-quality-card summary { cursor: pointer; color: var(--accent); font-weight: 700; }
 .content-quality-card ul { margin: 8px 0 0; padding-left: 20px; }

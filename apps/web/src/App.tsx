@@ -2061,6 +2061,13 @@ function WizardPage() {
                 <strong>{contentQuality.score}/100</strong>
               </div>
               <p>{contentQuality.score >= 80 ? "Hook và cấu trúc đã đạt ngưỡng khuyến nghị để bắt đầu tạo video." : "Video vẫn tạo được, nhưng nên tinh chỉnh nội dung để tăng khả năng giữ người xem."}</p>
+              <div className="quality-dimension-grid" aria-label="Các tín hiệu nội dung">
+                {Object.values(contentQuality.dimensions).map((dimension) => (
+                  <span key={dimension.label} className={dimension.score >= 80 ? "quality-dimension is-good" : "quality-dimension is-review"}>
+                    <span>{dimension.label}</span><strong>{dimension.score}</strong>
+                  </span>
+                ))}
+              </div>
               {contentQuality.feedback.length > 0 && (
                 <details>
                   <summary>{contentQuality.feedback.length} gợi ý cải thiện</summary>
