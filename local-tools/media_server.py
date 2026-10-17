@@ -391,6 +391,21 @@ HUMAN_PROMPT_RE = re.compile(
     r"nguoi|nhan vat|co gai|cau be|be trai|be gai|phu nu|dan ong|khuon mat|ban tay)\b",
     re.I,
 )
+HUMAN_NEGATION_RE = re.compile(
+    r"\b(?:no|without|never|excluding|exclude|avoid)\s+(?:(?:a|an|one|any|generic|unrelated)\s+)*"
+    r"(?:person|people|human|portrait|face|woman|man|girl|boy|child|kids?|character|hands?)\b",
+    re.I,
+)
+
+
+def has_human_subject(prompt):
+    """Detect a positive human subject without treating safety negatives as a person.
+
+    Production prompts carry negative clauses such as ``no generic portrait`` and
+    ``no person``. Matching those clauses as positive subjects made every object
+    scene receive anatomy constraints and face restoration.
+    """
+    return bool(HUMAN_PROMPT_RE.search(HUMAN_NEGATION_RE.sub("", prompt)))
 
 
 def comfyui_state():
@@ -603,7 +618,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     clean = clean_image_prompt(prompt)
     is_flat = style == "flat"
     stylized = style in STYLIZED_IMAGE_STYLES
-    is_human = bool(HUMAN_PROMPT_RE.search(clean))
+    is_human = has_human_subject(clean)
     anatomy = (
         "one person only, one face, two aligned eyes, symmetrical natural facial features, natural skin texture, "
         "anatomically correct hands, natural body proportions, complete limbs, "
@@ -666,7 +681,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
             image = response.read()
         # Chibi faces are big, simple shapes by design; a "detailed face" redraw would turn them half-realistic.
-        return detail_faces(image, IMAGE_STYLES[style], clean, seed) if style != "chibi" and FACE_SUBJECT_RE.search(clean) else image
+        return detail_faces(image, IMAGE_STYLES[style], clean, seed) if style != "chibi" and has_human_subject(clean) and FACE_SUBJECT_RE.search(clean) else image
     with IMAGE_LOCK, tempfile.TemporaryDirectory(prefix="studio-image-") as workdir:
         target = Path(workdir) / "image.png"
         subprocess.run(["/bin/zsh", str(IMAGE_SCRIPT), styled, str(target)],

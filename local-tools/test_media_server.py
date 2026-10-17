@@ -316,6 +316,19 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             command = [str(item) for item in process.call_args.args[0]]
             self.assertIn("anatomically correct hands", command[2])
 
+    def test_generic_worker_prompt_suffix_does_not_turn_object_scene_into_a_person(self):
+        payload = self._turbo_payload(
+            "Two red running shoes on a blue wooden floor, empty room, no person, no face. "
+            "Keep the same appearance and wardrobe when applicable. "
+            "Do not add unrelated subjects, writing, brand marks or watermarks."
+        )
+        self.assertNotIn("one person only", payload["prompt"])
+        self.assertNotIn("detailed face", payload["prompt"])
+
+    def test_human_subject_detector_ignores_negative_safety_words(self):
+        self.assertFalse(self.media.has_human_subject("two shoes, no person, no face, no generic portrait"))
+        self.assertTrue(self.media.has_human_subject("portrait close-up of a young woman, no text"))
+
     def test_every_visual_preset_has_its_own_leading_style_words(self):
         prompts = {}
         for style in ("photo", "historical", "ink", "watercolor", "paper-cut", "flat"):

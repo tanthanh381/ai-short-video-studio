@@ -1018,7 +1018,12 @@ export function visualActionPrompt(narration: string, prompt: string) {
 
 /** Keep the diffusion request English-only; mixed Vietnamese text degrades local CLIP relevance. */
 export function buildProductionImagePrompt(imagePrompt: string, presetPrompt: string): string {
-  return `${imagePrompt.trim()}. ${presetPrompt.trim()}. Depict one concrete story beat with a clear subject, action, essential object and setting. Preserve recurring character identity and clothing. No generic portrait, unrelated subject, text, letters, logo or watermark.`.slice(0, 3_000);
+  // Keep the guard semantic without injecting human-only words such as
+  // "portrait" or "character" into every request. The local media bridge uses
+  // positive subject words to decide whether anatomy/face restoration is safe;
+  // putting those words in a generic suffix made object-only scenes become
+  // portraits (for example running shoes turned into a close-up face).
+  return `${imagePrompt.trim()}. ${presetPrompt.trim()}. Depict one concrete story beat with a clear subject, action, essential object and setting. Keep the same appearance and wardrobe when applicable. Do not add unrelated subjects, writing, brand marks or watermarks.`.slice(0, 3_000);
 }
 
 export function parseStoryboard(value: unknown): StoryboardResult {
