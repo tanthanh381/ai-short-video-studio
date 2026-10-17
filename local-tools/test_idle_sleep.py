@@ -228,8 +228,11 @@ class BridgeWiringTests(unittest.TestCase):
     def test_each_route_names_the_services_it_needs(self):
         m = self.media
         self.assertEqual(m.services_for("/image", b'{"prompt":"x"}'), ["image"])
-        self.assertEqual(m.services_for("/image", b'{"prompt":"x","preset":"quality"}'), ["image", "comfyui"])
-        self.assertEqual(m.services_for("/image", ('{"model":"%s"}' % m.COMFYUI_IMAGE_MODEL).encode()), ["image", "comfyui"])
+        with unittest.mock.patch.object(m, "comfyui_memory_safe", return_value=True):
+            self.assertEqual(m.services_for("/image", b'{"prompt":"x","preset":"quality"}'), ["image", "comfyui"])
+            self.assertEqual(m.services_for("/image", ('{"model":"%s"}' % m.COMFYUI_IMAGE_MODEL).encode()), ["image", "comfyui"])
+        with unittest.mock.patch.object(m, "comfyui_memory_safe", return_value=False):
+            self.assertEqual(m.services_for("/image", b'{"prompt":"x","preset":"quality"}'), ["image"])
         self.assertEqual(m.services_for("/image", b"not json"), ["image"])
         self.assertEqual(m.services_for("/tts-aligned", b"{}"), ["vieneu"])
         self.assertEqual(m.services_for("/transcribe?model=x", b""), ["whisper"])
