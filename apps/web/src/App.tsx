@@ -119,6 +119,7 @@ import { InfoPopover } from "./components/Disclosure";
 import { useSaveShortcut } from "./hooks/use-save-shortcut";
 import { BATCH_MAX_ITEMS, parseBatchIdeas } from "./lib/batch";
 import { applyChannelKit, readChannelKit, saveChannelKit } from "./lib/channel-kit";
+import { previewImageForSettings } from "./lib/preview";
 
 const CHANNEL_PRESET_VISUALS: Record<string, { tone: string; badge: string }> = {
   "co-tich": { tone: "storybook", badge: "Story" },
@@ -1555,12 +1556,12 @@ function LocalModelPicker({ value, onChange, catalog }: {
 
 /** A representative gradient frame for the brand step's live preview (no scene picture exists yet). */
 function PreviewFrame({ settings }: { settings: ProjectSettings }) {
+  const previewImage = previewImageForSettings(settings);
   return (
     <div className={`video-preview ratio-${settings.aspectRatio.replace(":", "-")}`}>
       <div className="preview-art">
-        <div className="preview-orb" />
-        <div className="preview-ridge" />
-        <span>Khung xem trước</span>
+        <img className="preview-image" src={`${import.meta.env.BASE_URL}preset-previews/${previewImage}`} alt="" />
+        <span>Preview · {settings.layoutTemplate === "paper-stage" ? "Paper stage" : settings.layoutTemplate === "story-card" ? "Story card" : "Full bleed"}</span>
       </div>
       {settings.subtitle.enabled && (
         <div className={`subtitle-preview subtitle-${settings.subtitle.position}`}>Phụ đề mẫu sẽ hiện ở đây</div>
