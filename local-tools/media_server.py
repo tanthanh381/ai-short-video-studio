@@ -62,6 +62,7 @@ def require_ffmpeg():
 
 
 VIDEO_FALLBACK_ENABLED = os.getenv("VIDEO_FALLBACK_ENABLED", "1").lower() not in {"0", "false", "no"}
+VIDEO_MIN_RAM_GB = max(1.0, float(os.getenv("LTX_VIDEO_MIN_RAM_GB", "24")))
 # A two-second fallback visibly loops inside most narration scenes. Six seconds
 # covers the usual scene length while remaining cheap enough for a CPU-only
 # availability path; the final renderer still trims to the measured voice.
@@ -1596,9 +1597,25 @@ class Handler(BaseHTTPRequestHandler):
             needed = services_for(self.path, body)
             for name in needed:  # in use from here, so the timer cannot put it back to sleep while it is waking or working
                 SLEEPER.touch(name, +1)
+            strict_video = self.path.split("?")[0] == "/video" and urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("strict", ["0"])[0] == "1"
             for name in needed:
-                if SLEEPER.ensure_awake(name):
-                    print(f"[idle-sleep] {name} thức dậy cho {self.path}", flush=True)
+                if name == "ltx" and not strict_video and VIDEO_FALLBACK_ENABLED:
+                    mem_total = node_status.read_resources().get("memTotalGb")
+                    if isinstance(mem_total, (int, float)) and mem_total < VIDEO_MIN_RAM_GB:
+                        print(f"[idle-sleep] bỏ qua wake LTX: máy có {mem_total:.1f} GB RAM, cần tối thiểu {VIDEO_MIN_RAM_GB:.0f} GB; dùng fallback video", flush=True)
+                        continue
+                try:
+                    if SLEEPER.ensure_awake(name):
+                        print(f"[idle-sleep] {name} thức dậy cho {self.path}", flush=True)
+                except Exception as error:
+                    # LTX is optional and can take longer than its wake budget on a
+                    # 16 GB Mac. Keep normal exports usable through the bounded
+                    # FFmpeg still fallback; strict requests must expose the real
+                    # runtime failure to QA instead of hiding it.
+                    if name == "ltx" and not strict_video and VIDEO_FALLBACK_ENABLED:
+                        print(f"[idle-sleep] {name} chưa thức dậy ({error}); dùng fallback video", flush=True)
+                        continue
+                    raise
             if self.path == "/image":
                 payload = json.loads(body)
                 prompt = str(payload.get("prompt", ""))
