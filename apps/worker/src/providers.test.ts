@@ -196,6 +196,8 @@ describe("diffusion prompt quality", () => {
     expect(visualPromptFlaws("Tờ giấy trong túi áo làm anh bật khóc. Minh mang chiếc áo cũ đến tiệm sửa.", "One pair of hands unfolds a handwritten paper note beside an old shirt at a repair counter")).toBe(0);
     expect(visualPromptFlaws("Cô ấy đọc tin nhắn trên điện thoại.", "A woman stands beside a window holding a notebook")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Cô ấy đọc tin nhắn trên điện thoại.", "A woman checks a smartphone screen beside a window")).toBe(0);
+    expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother stands beside floating handwritten characters")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother checks a phone beside a desk")).toBeGreaterThan(0);
     expect(concreteVisualFallback("Hãy gọi tên cảm xúc và viết lại điều đang nghĩ.")).toContain("open notebook");
     expect(concreteVisualFallback("Người thợ tìm thấy một mảnh giấy gấp tư.")).toContain("paper list");
     expect(concreteVisualFallback("Một hơi thở chậm đưa bạn về hiện tại.")).toContain("one slow breath");
@@ -751,6 +753,11 @@ describe("withCast keeps the recurring family in every story-card scene", () => 
     const prompt = "Wide room view showing a small table with a folded note lying on wood";
     expect(withCast(family, prompt, "Người thợ tìm thấy một mảnh giấy gấp tư.")).toBe(prompt);
     expect(withCast(family, "A woman reads a note beside a table", "Minh gọi cho mẹ.")).toMatch(/mother/iu);
+  });
+  it("does not treat a substring such as 'máy' as the mother role", () => {
+    const family = "a Vietnamese mother with a black bun, red blouse and brown skirt, and her little girl with two pigtails";
+    const prompt = "Close-up of a Vietnamese boy's hands clutching an old folded paper";
+    expect(withCast(family, prompt, "Anh nhớ ra hôm ấy mình đã tắt máy vì đang bận.", true)).toBe(prompt);
   });
   it("does not repeat a description the prompt already contains", () => {
     const prompt = `${cast}. She smiles at her son`;

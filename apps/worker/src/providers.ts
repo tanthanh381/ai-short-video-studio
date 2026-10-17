@@ -747,6 +747,7 @@ export function visualPromptFlaws(narration: string, prompt: string): number {
   if (/\b(?:thought bubble|label appears|written words?|text appears|text overlay|icon)\b/u.test(text)) flaws++;
   if (/\b(?:racing thoughts?|floating .*scribbles|shadow growing)\b/u.test(text)) flaws++;
   if (/\bfloating (?:pastel )?(?:shapes?|symbols?|icons?)\b/u.test(text)) flaws++;
+  if (/\bfloating .*\b(?:handwritten|letters?|characters?)\b/u.test(text)) flaws++;
   flaws += missingSceneAnchors(narration, prompt);
   if (/\bghost\b/u.test(text) && !/(ma|quỷ|hồn|linh hồn|bóng ma|ghost)/iu.test(said)) flaws++;
   if (/\b(?:heart|hearts?)\b/u.test(text) && !/(tim|trái tim|yêu|tình yêu)/iu.test(said)) flaws++;
@@ -755,13 +756,13 @@ export function visualPromptFlaws(narration: string, prompt: string): number {
   // small model often copies the whole cast into every scene (for example a
   // dead father or a child into a scene that only mentions a shopkeeper).
   const roleRules: Array<[RegExp, RegExp]> = [
-    [/\b(?:mother|mom|mum|female parent)\b/u, /(?:mẹ|má|mạ|mother|mom|mum)/iu],
-    [/\b(?:father|dad|daddy|male parent)\b/u, /(?:cha|bố|ba|tía|father|dad|daddy)/iu],
-    [/\b(?:grandmother|grandma|grandmother's)\b/u, /(?:bà|grandmother|grandma)/iu],
-    [/\b(?:grandfather|grandpa|grandfather's)\b/u, /(?:ông|grandfather|grandpa)/iu],
-    [/\b(?:son|daughter|child(?:ren)?|kid|kids|baby|little boy|little girl)\b/u, /(?:con|cháu|bé|đứa trẻ|em bé|son|daughter|child|kid|baby)/iu],
-    [/\b(?:brother|sister|siblings?)\b/u, /(?:anh|chị|em|brother|sister|sibling)/iu],
-    [/\b(?:wife|husband|couple)\b/u, /(?:vợ|chồng|vợ chồng|wife|husband|couple)/iu],
+    [/\b(?:mother|mom|mum|female parent)\b/u, wholeWord("mẹ|má|mạ|mother|mom|mum")],
+    [/\b(?:father|dad|daddy|male parent)\b/u, wholeWord("cha|bố|ba|tía|father|dad|daddy")],
+    [/\b(?:grandmother|grandma|grandmother's)\b/u, wholeWord("bà|grandmother|grandma")],
+    [/\b(?:grandfather|grandpa|grandfather's)\b/u, wholeWord("ông|grandfather|grandpa")],
+    [/\b(?:son|daughter|child(?:ren)?|kid|kids|baby|little boy|little girl)\b/u, wholeWord("con|cháu|bé|đứa trẻ|em bé|son|daughter|child|kid|baby")],
+    [/\b(?:brother|sister|siblings?)\b/u, wholeWord("anh|chị|em|brother|sister|sibling")],
+    [/\b(?:wife|husband|couple)\b/u, wholeWord("vợ|chồng|vợ chồng|wife|husband|couple")],
   ];
   for (const [role, mention] of roleRules) if (role.test(text) && !mention.test(said)) flaws++;
   return flaws;
@@ -1158,16 +1159,19 @@ export function withCast(cast: string, prompt: string, narration = "", force = f
  * unrelated beat (for example a child in a shopkeeper-only scene). */
 function castForNarration(cast: string, narration: string): string {
   const said = narration.toLocaleLowerCase("vi");
+  // Match role words as words, not substrings: "máy" must not make the
+  // mother appear, and "bản" must not make a father appear through "ba".
+  const roleWord = (pattern: string) => wholeWord(pattern).test(said);
   const parts = cast.split(/,\s+and\s+/iu);
   const roleMentioned = (part: string) => {
     const text = part.toLocaleLowerCase("en");
-    if (/\b(?:mother|mom|mum)\b/u.test(text)) return /(?:mẹ|má|mạ|mother|mom|mum)/iu.test(said);
-    if (/\b(?:father|dad|daddy)\b/u.test(text)) return /(?:cha|bố|ba|tía|father|dad|daddy)/iu.test(said);
-    if (/\bgrandmother\b/u.test(text)) return /(?:bà|grandmother|grandma)/iu.test(said);
-    if (/\bgrandfather\b/u.test(text)) return /(?:ông|grandfather|grandpa)/iu.test(said);
-    if (/\b(?:little boy|little girl|child|kid|baby|son|daughter)\b/u.test(text)) return /(?:con|cháu|bé|đứa trẻ|em bé|son|daughter|child|kid|baby)/iu.test(said);
-    if (/\b(?:brother|sister|siblings?)\b/u.test(text)) return /(?:anh|chị|em|brother|sister|sibling)/iu.test(said);
-    if (/\b(?:wife|husband|couple)\b/u.test(text)) return /(?:vợ|chồng|vợ chồng|wife|husband|couple)/iu.test(said);
+    if (/\b(?:mother|mom|mum)\b/u.test(text)) return roleWord("mẹ|má|mạ|mother|mom|mum");
+    if (/\b(?:father|dad|daddy)\b/u.test(text)) return roleWord("cha|bố|ba|tía|father|dad|daddy");
+    if (/\bgrandmother\b/u.test(text)) return roleWord("bà|grandmother|grandma");
+    if (/\bgrandfather\b/u.test(text)) return roleWord("ông|grandfather|grandpa");
+    if (/\b(?:little boy|little girl|child|kid|baby|son|daughter)\b/u.test(text)) return roleWord("con|cháu|bé|đứa trẻ|em bé|son|daughter|child|kid|baby");
+    if (/\b(?:brother|sister|siblings?)\b/u.test(text)) return roleWord("anh|chị|em|brother|sister|sibling");
+    if (/\b(?:wife|husband|couple)\b/u.test(text)) return roleWord("vợ|chồng|vợ chồng|wife|husband|couple");
     return true;
   };
   return parts.filter(roleMentioned).join(", and ");
