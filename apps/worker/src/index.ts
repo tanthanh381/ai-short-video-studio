@@ -601,12 +601,14 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     // Balanced/fast may continue during a temporary Vision outage. Quality is
     // deliberately fail-closed: it must never export an image that was not
     // semantically and anatomically checked.
-    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad") : !strictQualityGate)) return image;
+    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad") : !strictQualityGate)) return image;
     if (attempt === maxAttempts - 1) break;
     correction = lastAudit?.anatomy === "bad"
       ? ", corrected anatomy, exactly five fingers per hand, natural hands and face, no extra fingers, no duplicated limbs"
       : lastAudit?.relevant === false
         ? ", follow the described action and important object exactly, make the main subject unmistakable"
+        : lastAudit?.textArtifacts === "bad"
+          ? ", remove all unintended letters, words, subtitles, logos and watermarks; clean image with no text"
         : ", clear usable scene, no blank frame, preserve the described subject and action";
     log.warn({ jobId: job.id, sceneId: scene.id, attempt: attempt + 1, blank: lastBlank, audit: lastAudit }, "scene_picture_retry");
   }
@@ -614,7 +616,7 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     throw new Error(`Ảnh cảnh ${scene.order + 1} vẫn là khung trống sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
   if (strictQualityGate && !lastAudit)
     throw new Error(`Cổng kiểm tra chất lượng hình ảnh chưa sẵn sàng ở cảnh ${scene.order + 1}; hãy bật Ollama Vision rồi thử lại`);
-  throw new Error(`Ảnh cảnh ${scene.order + 1} chưa khớp nội dung hoặc anatomy không đạt sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
+  throw new Error(`Ảnh cảnh ${scene.order + 1} chưa đạt kiểm tra nội dung, anatomy hoặc chữ rác sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
 }
 
 async function generateMedia(job: JobRow, project: Project) {

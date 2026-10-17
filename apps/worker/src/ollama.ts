@@ -15,6 +15,7 @@ type OllamaResponse = { response?: string; error?: string };
 export type ImageQualityAudit = {
   relevant: boolean;
   anatomy: "good" | "minor" | "bad";
+  textArtifacts: "none" | "minor" | "bad";
   reason: string;
 };
 
@@ -42,15 +43,16 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
           format: {
             type: "object",
             additionalProperties: false,
-            required: ["relevant", "anatomy", "reason"],
+            required: ["relevant", "anatomy", "textArtifacts", "reason"],
             properties: {
               relevant: { type: "boolean" },
               anatomy: { type: "string", enum: ["good", "minor", "bad"] },
+              textArtifacts: { type: "string", enum: ["none", "minor", "bad"] },
               reason: { type: "string" },
             },
           },
           options: { temperature: 0, num_ctx: Math.min(this.tuning.numCtx ?? 4096, 4096), num_predict: 120 },
-          system: "You are a strict visual QA reviewer. Compare the image with the scene brief. Return JSON only. relevant is true only when the main action and important object match. anatomy is bad for obvious deformed faces, hands, limbs or duplicated body parts; minor for small imperfections; good when usable.",
+          system: "You are a strict visual QA reviewer. Compare the image with the scene brief. Return JSON only. relevant is true only when the main action and important object match. anatomy is bad for obvious deformed faces, hands, limbs or duplicated body parts; minor for small imperfections; good when usable. textArtifacts is bad when the image contains unintended readable words, letters, subtitles, logos or watermarks; minor for tiny ambiguous marks; none when the image is clean.",
           prompt: JSON.stringify({ sceneBrief: input.sceneBrief }),
           images: [Buffer.from(input.image).toString("base64")],
         }),
@@ -58,8 +60,8 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
       if (!response.ok) return null;
       const body = (await response.json().catch(() => ({}))) as OllamaResponse;
       const parsed = JSON.parse(body.response ?? "{}") as Partial<ImageQualityAudit>;
-      if (typeof parsed.relevant !== "boolean" || !["good", "minor", "bad"].includes(parsed.anatomy ?? "") || typeof parsed.reason !== "string") return null;
-      return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], reason: parsed.reason.slice(0, 400) };
+      if (typeof parsed.relevant !== "boolean" || !["good", "minor", "bad"].includes(parsed.anatomy ?? "") || !["none", "minor", "bad"].includes(parsed.textArtifacts ?? "") || typeof parsed.reason !== "string") return null;
+      return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], textArtifacts: parsed.textArtifacts as ImageQualityAudit["textArtifacts"], reason: parsed.reason.slice(0, 400) };
     } catch {
       return null;
     }
