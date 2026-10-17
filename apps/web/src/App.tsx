@@ -16,8 +16,11 @@ import {
   Film,
   FolderOpen,
   Gauge,
+  Heart,
+  Home,
   Image,
   Library,
+  Lightbulb,
   LoaderCircle,
   LogOut,
   Menu,
@@ -27,6 +30,7 @@ import {
   Music2,
   Pause,
   PenLine,
+  PencilLine,
   Play,
   Plus,
   RefreshCw,
@@ -34,12 +38,15 @@ import {
   Search,
   Settings,
   Sparkles,
+  Sword,
   Subtitles,
   Trash2,
   Upload,
   Video,
   WandSparkles,
   X,
+  MessageCircleHeart,
+  type LucideIcon,
 } from "lucide-react";
 import {
   Link,
@@ -108,6 +115,26 @@ import { projectIsProcessing } from "./lib/video-submission";
 import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
 import { InfoPopover } from "./components/Disclosure";
 import { useSaveShortcut } from "./hooks/use-save-shortcut";
+
+const CHANNEL_PRESET_VISUALS: Record<string, { Icon: LucideIcon; tone: string; badge: string }> = {
+  "co-tich": { Icon: BookOpenText, tone: "storybook", badge: "Story" },
+  "video-minh-hoa": { Icon: Image, tone: "illustrated", badge: "Illustrated" },
+  "quy-tac-co-nhan": { Icon: BookOpenText, tone: "sepia", badge: "Wisdom" },
+  "dao-ly-co-phong": { Icon: WandSparkles, tone: "paper", badge: "Paper" },
+  "tien-hiep-chibi": { Icon: Sparkles, tone: "fantasy", badge: "Fantasy" },
+  "dan-gian-viet-chibi": { Icon: Home, tone: "folk", badge: "Folk" },
+  "co-trang-hai-chibi": { Icon: Clapperboard, tone: "comedy", badge: "Comedy" },
+  "huyen-bi-co-phong": { Icon: Sparkles, tone: "mystery", badge: "Mystery" },
+  "chua-lanh": { Icon: Heart, tone: "calm", badge: "Calm" },
+  "co-trang": { Icon: Sword, tone: "historical", badge: "Epic" },
+  "tam-su": { Icon: MessageCircleHeart, tone: "emotion", badge: "Emotion" },
+  "kien-thuc": { Icon: Lightbulb, tone: "knowledge", badge: "Learn" },
+  "ve-tay": { Icon: PencilLine, tone: "whiteboard", badge: "Sketch" },
+};
+
+function channelPresetVisual(id: string) {
+  return CHANNEL_PRESET_VISUALS[id] ?? { Icon: Film, tone: "default", badge: "Video" };
+}
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
@@ -1720,22 +1747,39 @@ function NewProjectPage() {
             </div>
           )}
           <div className="channel-presets" role="radiogroup" aria-label="Mẫu kênh">
-            <span className="channel-presets-label">Mẫu kênh</span>
+            <div className="channel-presets-heading">
+              <span className="channel-presets-label">Chọn phong cách video</span>
+              <small>Preview trước khi tạo</small>
+            </div>
             {CHANNEL_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                role="radio"
-                aria-checked={channelPreset === preset.id}
-                className={channelPreset === preset.id ? "active" : ""}
-                title={preset.hint}
-                disabled={busy}
-                onClick={() => { setChannelPreset(preset.id); setSettings((s) => preset.apply(s)); }}
-              >
-                {preset.label}
-              </button>
+              (() => {
+                const visual = channelPresetVisual(preset.id);
+                const Icon = visual.Icon;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={channelPreset === preset.id}
+                    className={`channel-preset-card ${channelPreset === preset.id ? "active" : ""}`}
+                    title={preset.hint}
+                    disabled={busy}
+                    onClick={() => { setChannelPreset(preset.id); setSettings((s) => preset.apply(s)); }}
+                  >
+                    <span className={`channel-preset-visual ${visual.tone}`} aria-hidden="true">
+                      <Icon size={24} strokeWidth={1.8} />
+                      <span>{visual.badge}</span>
+                    </span>
+                    <span className="channel-preset-copy">
+                      <strong>{preset.label}</strong>
+                      <small>{preset.hint}</small>
+                    </span>
+                    <span className="channel-preset-check" aria-hidden="true">{channelPreset === preset.id ? "✓" : ""}</span>
+                  </button>
+                );
+              })()
             ))}
-            {channelPreset && <small>{CHANNEL_PRESETS.find((preset) => preset.id === channelPreset)?.hint}</small>}
+            {channelPreset && <small className="channel-preset-selection">Đã chọn: {CHANNEL_PRESETS.find((preset) => preset.id === channelPreset)?.label}</small>}
           </div>
           <div className="creation-defaults">
             <span><Video size={15} /> Video dọc 1080 × 1920</span>
