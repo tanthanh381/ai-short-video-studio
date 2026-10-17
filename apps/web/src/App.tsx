@@ -267,6 +267,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <button
           ref={mobileCloseRef}
+          type="button"
           className="mobile-close"
           aria-label="Đóng menu"
           onClick={closeMobileNav}
@@ -295,13 +296,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
               <span>{user?.email}</span>
             </div>
           </div>
-          <button className="logout" onClick={() => void signOut()}>
+          <button type="button" className="logout" onClick={() => void signOut()}>
             <LogOut size={17} /> Đăng xuất
           </button>
         </div>
       </aside>
       {mobileNav && (
         <button
+          type="button"
           className="scrim"
           aria-label="Đóng menu"
           onClick={closeMobileNav}
@@ -311,6 +313,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <header className="mobile-header">
           <button
             ref={mobileMenuRef}
+            type="button"
             aria-expanded={mobileNav}
             aria-controls="app-navigation"
             onClick={() => setMobileNav(true)}
@@ -788,6 +791,7 @@ function DashboardPage() {
               </div>
               <div className="row-actions" onClick={(e) => e.stopPropagation()}>
                 <button
+                  type="button"
                   title="Nhân bản"
                   aria-label={`Nhân bản ${project.title}`}
                   disabled={busyProject === project.id}
@@ -795,7 +799,7 @@ function DashboardPage() {
                 >
                   <Copy size={18} />
                 </button>
-                <button title="Xóa" aria-label={`Xóa ${project.title}`} disabled={busyProject === project.id} onClick={() => void remove(project.id)}>
+                <button type="button" title="Xóa" aria-label={`Xóa ${project.title}`} disabled={busyProject === project.id} onClick={() => void remove(project.id)}>
                   <Trash2 size={18} />
                 </button>
                 <span className="row-open" aria-hidden="true">
@@ -1582,7 +1586,7 @@ function NewProjectPage() {
   }
   return (
     <div className="page narrow">
-      <button className="back-link" onClick={() => navigate(-1)}>
+      <button type="button" className="back-link" onClick={() => navigate(-1)}>
         <ArrowLeft size={17} /> Quay lại
       </button>
       <div className="page-heading">
@@ -2649,7 +2653,7 @@ function StudioPage() {
       <div className="studio-top">
         <h1 className="sr-only">Studio: {project.title}</h1>
         <div className="studio-head">
-          <button className="back-link" onClick={() => navigate("/")} aria-label="Về danh sách dự án">
+          <button type="button" className="back-link" onClick={() => navigate("/")} aria-label="Về danh sách dự án">
             <ArrowLeft size={16} /> <span>Dự án</span>
           </button>
           <input
@@ -2857,7 +2861,7 @@ function StudioPage() {
                 )}
               </span>
             </div>
-            <button onClick={addScene} disabled={processing || Boolean(busyAction)}>
+            <button type="button" onClick={addScene} disabled={processing || Boolean(busyAction)}>
               <Plus size={17} /> Thêm cảnh
             </button>
           </div>
@@ -3012,7 +3016,7 @@ function StudioPage() {
                   {activeScene.narration.slice(0, 70)}
                 </div>
               )}
-              {activeScene?.audioPath && <button className="preview-play" aria-label="Nghe lời đọc cảnh đang chọn" onClick={() => void playNarration()}>
+              {activeScene?.audioPath && <button type="button" className="preview-play" aria-label="Nghe lời đọc cảnh đang chọn" onClick={() => void playNarration()}>
                 <Play fill="currentColor" />
               </button>}
               </>}
@@ -3246,6 +3250,7 @@ function StudioPage() {
                   <div className="cue-heading">
                     <strong>Timestamp cảnh đang chọn</strong>
                     <button
+                      type="button"
                       onClick={() =>
                         updateScene(selected, {
                           ...activeScene,
@@ -3365,24 +3370,28 @@ function MediaPage() {
     >
       <div className="filter-pills">
         <button
+          type="button"
           className={kind === "all" ? "active" : ""}
           onClick={() => setKind("all")}
         >
           Tất cả
         </button>
         <button
+          type="button"
           className={kind === "image" ? "active" : ""}
           onClick={() => setKind("image")}
         >
           Ảnh
         </button>
         <button
+          type="button"
           className={kind === "audio" ? "active" : ""}
           onClick={() => setKind("audio")}
         >
           Giọng đọc
         </button>
         <button
+          type="button"
           className={kind === "video" ? "active" : ""}
           onClick={() => setKind("video")}
         >
@@ -3941,7 +3950,7 @@ function WhiteboardPage() {
   const navigate = useNavigate();
   return (
     <div className="page whiteboard-page">
-      <button className="back-link" onClick={() => navigate(-1)}>
+      <button type="button" className="back-link" onClick={() => navigate(-1)}>
         <ArrowLeft size={16} /> Quay lại
       </button>
       <div className="page-heading">
