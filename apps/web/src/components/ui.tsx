@@ -51,6 +51,11 @@ export function Badge({ tone = "idle", children }: { tone?: Tone; children: Reac
   return <span className={`badge tone-${tone}`}>{children}</span>;
 }
 
+/** Compact status vocabulary shared by device, service and job summaries. */
+export function StatusBadge({ label, tone = "idle" }: { label: string; tone?: Tone }) {
+  return <span className={`status-badge tone-${tone}`}><span className="status-dot" aria-hidden="true" />{label}</span>;
+}
+
 /** A labelled form control. The hint, when given, sits behind an (i) next to the label so the form stays short. */
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (

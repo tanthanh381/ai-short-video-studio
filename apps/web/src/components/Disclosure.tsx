@@ -13,7 +13,9 @@ export function InfoPopover({ title, children, label = "Xem thông tin", classNa
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
+  const titleId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -24,10 +26,25 @@ export function InfoPopover({ title, children, label = "Xem thông tin", classNa
       if (event.key === "Escape") {
         setOpen(false);
         triggerRef.current?.focus();
+        return;
+      }
+      if (event.key !== "Tab" || !rootRef.current) return;
+      const focusable = Array.from(rootRef.current.querySelectorAll<HTMLElement>("button, a, input, select, textarea, [tabindex]:not([tabindex='-1'])"));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener("pointerdown", closeOnPointerDown);
     document.addEventListener("keydown", closeOnKeyDown);
+    closeRef.current?.focus();
     return () => {
       document.removeEventListener("pointerdown", closeOnPointerDown);
       document.removeEventListener("keydown", closeOnKeyDown);
@@ -44,15 +61,16 @@ export function InfoPopover({ title, children, label = "Xem thông tin", classNa
         data-tooltip={label}
         aria-expanded={open}
         aria-controls={panelId}
+        aria-haspopup="dialog"
         onClick={() => setOpen((value) => !value)}
       >
         <Info size={14} strokeWidth={2.25} aria-hidden="true" />
       </button>
       {open ? (
-        <span id={panelId} className="info-popover-panel" role="dialog" aria-label={title}>
+        <span id={panelId} className="info-popover-panel" role="dialog" aria-labelledby={titleId}>
           <span className="info-popover-heading">
-            <strong>{title}</strong>
-            <button type="button" className="info-close" aria-label="Đóng thông tin" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>
+            <strong id={titleId}>{title}</strong>
+            <button ref={closeRef} type="button" className="info-close" aria-label="Đóng thông tin" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>
               <X size={14} aria-hidden="true" />
             </button>
           </span>

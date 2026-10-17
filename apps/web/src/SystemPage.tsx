@@ -4,6 +4,7 @@ import { Activity, ArrowDownToLine, Battery, CircleAlert, CircleCheck, Cpu, Hard
 import type { NodeHistoryPoint, NodeSummary, SystemJob, SystemSummary } from "@studio/shared";
 import { api } from "./lib/api";
 import { InfoPopover, Metric } from "./components/Disclosure";
+import { StatusBadge } from "./components/ui";
 import {
   ago, describeEvent, formatDuration, formatGb, laneRows, machineGauges, modelRows, nodeDisplayName, NODE_STATE_LABEL, processLabel, sparklinePath, summaryTiles, syncView, systemAlerts, workShare,
   type Gauge, type Tone,
@@ -96,7 +97,7 @@ export function SystemPage() {
       <div className="page-heading">
         <div>
           <h1>Hệ thống</h1>
-          <p>Trạng thái máy, tài nguyên và dịch vụ, tự cập nhật mỗi {REFRESH_MS / 1000} giây. Đổi thiết bị và cách chia việc trong <Link to="/settings">Cài đặt</Link>.</p>
+          <p>System health, resources & services · auto-refresh {REFRESH_MS / 1000}s.</p>
         </div>
         <div className="sys-live" role="status" aria-live="polite">
           <span className={`sys-dot tone-${live.tone}`} aria-hidden="true" />
@@ -126,8 +127,8 @@ export function SystemPage() {
             </section>
           ) : (
             <section className="sys-card sys-solo">
-              <h2>Một máy đang hoạt động</h2>
-              <p>Mọi việc đang chạy trên máy chính. Thêm máy phụ để làm nhiều việc cùng lúc.</p>
+              <h2>Single-node setup</h2>
+              <p>All jobs run on the primary device.</p>
             </section>
           )}
           {(Boolean(system.balancer && system.balancer.nodes.length > 1) || Boolean(system.balancer?.recent?.length)) ? (
@@ -146,9 +147,9 @@ export function SystemPage() {
             <JobsCard jobs={system.jobs.recent} />
             <ServicesCard services={system.services} />
           </div>
-          <p className="microcopy sys-foot">
-            Số liệu tác vụ tính từ lần khởi động dịch vụ gần nhất{system.balancer?.since ? ` (${new Date(system.balancer.since).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })})` : ""}.
-            Cấu hình thiết bị, API và giới hạn sử dụng trong <Link to="/settings">Cài đặt</Link>.
+          <p className="microcopy sys-foot sys-foot-note">
+            <InfoPopover title="System data">Số liệu tác vụ tính từ lần khởi động dịch vụ gần nhất{system.balancer?.since ? ` (${new Date(system.balancer.since).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })})` : ""}.</InfoPopover>
+            <Link to="/settings">Settings</Link>
           </p>
         </>
       )}
@@ -173,7 +174,7 @@ function Tiles({ system }: { system: SystemSummary }) {
 function Alerts({ system }: { system: SystemSummary }) {
   const alerts = systemAlerts(system);
   if (!alerts.length) {
-    return <div className="sys-banner tone-ok"><CircleCheck size={16} /> Hệ thống đang hoạt động bình thường.</div>;
+    return <div className="sys-banner tone-ok"><CircleCheck size={16} /> All systems operational.</div>;
   }
   return (
     <section className="sys-alerts" aria-label="Cần chú ý">
@@ -235,27 +236,27 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
           <h2>{nodeDisplayName(node.id, node.role)}</h2>
           <p>{node.detail}</p>
         </div>
-        <span className={`sys-badge tone-${state.tone}`}>{state.label}</span>
+        <StatusBadge label={state.label} tone={state.tone} />
       </header>
       {node.state === "disabled" ? <p className="sys-off-note">Máy đang tắt và không nhận việc mới. <Link to="/settings">Bật lại trong Cài đặt</Link>.</p> : null}
       <div className="sys-chips">
-        {node.rttMs !== null && node.role === "secondary" ? <span>độ trễ mạng {node.rttMs} ms</span> : null}
-        {node.role === "secondary" && node.matchesPrimary === true ? <span className="tone-ok">đã đồng bộ cấu hình</span> : null}
-        {node.role === "secondary" && node.matchesPrimary === false ? <span className="tone-warn">cấu hình chưa đồng bộ</span> : null}
-        {node.role === "secondary" && node.matchesPrimary === null ? <span className="tone-idle">chưa xác định cấu hình</span> : null}
+        {node.rttMs !== null && node.role === "secondary" ? <span>{node.rttMs} ms</span> : null}
+        {node.role === "secondary" && node.matchesPrimary === true ? <span className="tone-ok">Synced</span> : null}
+        {node.role === "secondary" && node.matchesPrimary === false ? <span className="tone-warn">Sync mismatch</span> : null}
+        {node.role === "secondary" && node.matchesPrimary === null ? <span className="tone-idle">Sync unknown</span> : null}
       </div>
 
       {node.role === "primary" ? (
         <div className="sys-source-note sys-machine-context">
-          <span>Máy nguồn: các máy phụ tự sao chép chương trình và model từ máy này</span>
-          <InfoPopover title="Mac Mini là máy chính">Cung cấp mã nguồn, công cụ và model cho các máy phụ. Đồng bộ tự động mỗi phút.</InfoPopover>
+          <span>Source device</span>
+          <InfoPopover title="Mac Mini · Source device">Cung cấp mã nguồn, công cụ và model cho các máy phụ. Đồng bộ tự động mỗi phút.</InfoPopover>
         </div>
       ) : null}
       {sync ? (
         <div className={`sys-sync sys-machine-context tone-${sync.tone}`}>
           <div className="sys-sync-top">
-            <strong>Đồng bộ máy</strong>
-            <span className={`sys-badge tone-${sync.tone}`}>{sync.label}</span>
+            <strong>Sync</strong>
+            <StatusBadge label={sync.label} tone={sync.tone} />
           </div>
           {sync.tone === "ok" ? <InfoPopover title="Chi tiết đồng bộ">{sync.detail}</InfoPopover> : <p>{sync.detail}</p>}
           {sync.percent !== null ? (
