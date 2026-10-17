@@ -107,6 +107,7 @@ import { CHANNEL_PRESETS, estimatedNarrationSeconds } from "./lib/channel-preset
 import { projectIsProcessing } from "./lib/video-submission";
 import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
 import { InfoPopover } from "./components/Disclosure";
+import { useSaveShortcut } from "./hooks/use-save-shortcut";
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
@@ -2171,21 +2172,12 @@ function StudioPage() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [saveState.status]);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        void flushEdits().catch(() => {});
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
   /** Writes every queued edit; throws (and shows the reason beside the title) when it cannot. */
   async function flushEdits() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     await saver.current?.flush();
   }
+  useSaveShortcut(() => flushEdits().catch(() => {}));
   async function createVideo() {
     if (locked.current) return;
     if (isDemo) { setError(DEMO_ONLY); return; }
