@@ -2787,6 +2787,7 @@ a:focus-visible {
 .channel-preset-copy strong { font-size: var(--text-md); line-height: 1.25; }
 .channel-preset-copy small { display: -webkit-box; overflow: hidden; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .channel-preset-check { position: absolute; top: 7px; right: 8px; width: 18px; height: 18px; border-radius: 50%; color: var(--accent); font-size: 13px; font-weight: 800; text-align: center; }
+.channel-kit-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px; }
 
 /* Text for screen readers only (page headings where the visible title is an editable field) */
 .sr-only {

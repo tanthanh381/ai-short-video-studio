@@ -113,6 +113,7 @@ import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } 
 import { InfoPopover } from "./components/Disclosure";
 import { useSaveShortcut } from "./hooks/use-save-shortcut";
 import { BATCH_MAX_ITEMS, parseBatchIdeas } from "./lib/batch";
+import { applyChannelKit, readChannelKit, saveChannelKit } from "./lib/channel-kit";
 
 const CHANNEL_PRESET_VISUALS: Record<string, { tone: string; badge: string }> = {
   "co-tich": { tone: "storybook", badge: "Story" },
@@ -1584,6 +1585,7 @@ function WizardPage() {
   const [error, setError] = useState<string | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [logoNote, setLogoNote] = useState<string | null>(null);
+  const [channelKitSaved, setChannelKitSaved] = useState(() => readChannelKit() !== null);
   const [layoutEditing, setLayoutEditing] = useState(false);
   const demoLogoUrl = useRef<string | null>(null);
   const stepTop = useRef<HTMLDivElement | null>(null);
@@ -1712,6 +1714,19 @@ function WizardPage() {
 
   function editSettings(next: ProjectSettings) {
     setState((s) => ({ ...s, settings: next, customized: s.templateId ? true : s.customized }));
+  }
+
+  function saveKit() {
+    saveChannelKit(settings);
+    setChannelKitSaved(true);
+    setLogoNote("Đã lưu Channel Kit trên trình duyệt này.");
+  }
+
+  function applyKit() {
+    const kit = readChannelKit();
+    if (!kit) { setChannelKitSaved(false); return; }
+    editSettings(applyChannelKit(settings, kit));
+    setLogoNote("Đã áp dụng Channel Kit: nhận diện, giọng, bố cục và âm thanh.");
   }
 
   async function uploadLogo(file: File) {
@@ -1984,6 +1999,10 @@ function WizardPage() {
                 <div className="setting-group">
                   <h3><Image /> Logo</h3>
                   <p className="microcopy">Logo hiện trên mọi cảnh. Nên dùng PNG nền trong suốt, tối đa 5 MB.</p>
+                  <div className="channel-kit-actions" role="group" aria-label="Channel Kit">
+                    {channelKitSaved && <Button type="button" variant="secondary" onClick={applyKit}><RefreshCw size={15} /> Áp dụng Channel Kit</Button>}
+                    <Button type="button" variant="ghost" onClick={saveKit}><Save size={15} /> Lưu cấu hình kênh</Button>
+                  </div>
                   {logoPreviewUrl && <img className={`logo-preview ${settings.logoShape === "circle" ? "is-circle" : ""}`} src={logoPreviewUrl} alt="Logo đang chọn" />}
                   <label className="button button-ghost file-button"><Upload size={16} /> {settings.logoPath ? "Thay logo" : "Tải logo lên"}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); e.target.value = ""; }} /></label>
                   {logoNote && <Notice tone="info">{logoNote}</Notice>}
