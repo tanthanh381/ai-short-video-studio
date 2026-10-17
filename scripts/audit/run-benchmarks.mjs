@@ -1,5 +1,5 @@
 // Default mode is read-only planning. Never accepts a Supabase service-role key.
-import {readFile,writeFile,mkdir,rename,unlink} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename,unlink,open} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFile} from 'node:child_process';
@@ -28,6 +28,29 @@ try{claims=JSON.parse(Buffer.from(token.split('.')[1]??'','base64url').toString(
 if(claims.role!=='authenticated') throw new Error('Only an authenticated user token is accepted; never a service-role key');
 const directory=resolve(root,process.env.STUDIO_BENCHMARK_DIR??'tmp/audit-benchmarks');
 await mkdir(directory,{recursive:true});
+const lockPath=join(directory,'.benchmark.lock');
+async function acquireLock(){
+  try{
+    const handle=await open(lockPath,'wx');
+    await handle.writeFile(JSON.stringify({pid:process.pid,startedAt:new Date().toISOString()}));
+    await handle.close();
+    return;
+  }catch(error){
+    if(error?.code!=='EEXIST')throw error;
+    let owner='unknown';
+    try{owner=await readFile(lockPath,'utf8');}catch{}
+    let alive=false;
+    try{
+      const parsed=JSON.parse(owner); if(Number.isInteger(parsed.pid)){process.kill(parsed.pid,0);alive=true;}
+    }catch{}
+    if(alive)throw new Error(`Benchmark đang chạy (lock ${lockPath}); hãy resume phiên đó, không tạo phiên thứ hai`);
+    await unlink(lockPath,{force:true});
+    const handle=await open(lockPath,'wx');
+    await handle.writeFile(JSON.stringify({pid:process.pid,startedAt:new Date().toISOString(),recoveredStaleLock:true}));
+    await handle.close();
+  }
+}
+await acquireLock();
 const statePath=join(directory,'state.json');
 let state;
 try{state=JSON.parse(await readFile(statePath,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;state={runId:randomUUID(),scope:'Authenticated API benchmark, not browser E2E',cases:{}};}
@@ -51,6 +74,7 @@ async function request(path,method='GET',body,key){
   if(!response.ok){const error=new Error(`HTTP ${response.status} for ${path}`);error.fatal=[401,403,429].includes(response.status);throw error;}
   return response.json();
 }
+try{
 await request('/v1/settings'); // Verify the allowlist before creating any work.
 await save();
 for(const item of corpus.cases){
@@ -97,3 +121,6 @@ for(const item of corpus.cases){
 }
 console.log(`Benchmark journal: ${statePath}. No semantic quality scores were invented.`);
 if(Object.values(state.cases).some(x=>x.status!=='DOWNLOADED'||!x.technicalPass))process.exitCode=1;
+}finally{
+  await unlink(lockPath,{force:true});
+}
