@@ -61,6 +61,7 @@ import {
   type ApiKeySummary,
   type KeyProvider,
   contentPlan,
+  evaluateContentQuality,
   durationLabel,
   formatDuration,
   looksLikeSubtitles,
@@ -1642,6 +1643,7 @@ function WizardPage() {
     try { return splitScript(spokenText).length; } catch { return null; }
   }, [readsAsWritten, spokenText]);
   const plan = contentPlan(settings.targetDurationSec, settings.style, settings.voice, settings.voiceSpeed);
+  const contentQuality = useMemo(() => evaluateContentQuality(spokenText), [spokenText]);
   const groups = modelGroups(settings, statuses, localModels);
   const canContinue = sourceText.trim().length >= 10;
   const draftTitle = () => spokenText.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới";
@@ -2028,6 +2030,19 @@ function WizardPage() {
           <section className="wizard-section">
             <h1 id="wizard-heading">Xem lại &amp; tạo video</h1>
             <p className="wizard-lead">Kiểm tra nhanh rồi bấm Tạo video. Bạn có thể quay lại từng bước để sửa.</p>
+            <div className={`content-quality-card ${contentQuality.score >= 70 ? "is-good" : "is-review"}`} role="status" aria-live="polite">
+              <div className="content-quality-head">
+                <span><Sparkles size={16} /> Content check</span>
+                <strong>{contentQuality.score}/100</strong>
+              </div>
+              <p>{contentQuality.score >= 70 ? "Hook và cấu trúc đã đủ tốt để bắt đầu tạo video." : "Nội dung nên được tinh chỉnh trước khi tạo để tăng khả năng giữ người xem."}</p>
+              {contentQuality.feedback.length > 0 && (
+                <details>
+                  <summary>{contentQuality.feedback.length} gợi ý cải thiện</summary>
+                  <ul>{contentQuality.feedback.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul>
+                </details>
+              )}
+            </div>
             <dl className="wizard-summary">
               {([
                 ["input", "Nội dung", `${inputMode === "idea" ? "Ý tưởng" : "Kịch bản có sẵn"} · ${wordCount.toLocaleString("vi-VN")} từ${inputMode === "idea" ? ` · ${durationLabel(settings.targetDurationSec)}` : ""}`],
