@@ -413,11 +413,20 @@ async function storyboard(job: JobRow, project: Project) {
   // Ollama can run on any machine that has the model: the balancer picks one, and moves the whole stage to another
   // if that machine goes away (nothing is saved before the very end of the stage).
   if (project.settings.textProvider === "ollama")
-    return pool.runOne(
-      "llm",
-      (node) => writeStoryboard(job, project, ollamaOn(node.id)),
-      { llmModel: project.settings.localModels.storyboard || config.OLLAMA_MODEL },
-    );
+    {
+      const selectedModel = project.settings.localModels.storyboard ||
+        (project.settings.generationPreset === "quality" && pool.hasInstalledModel(config.OLLAMA_QUALITY_MODEL)
+          ? config.OLLAMA_QUALITY_MODEL
+          : null);
+      const effectiveProject = selectedModel
+        ? { ...project, settings: { ...project.settings, localModels: { ...project.settings.localModels, storyboard: selectedModel } } }
+        : project;
+      return pool.runOne(
+        "llm",
+        (node) => writeStoryboard(job, effectiveProject, ollamaOn(node.id)),
+        { llmModel: selectedModel || config.OLLAMA_MODEL },
+      );
+    }
   return writeStoryboard(job, project, null);
 }
 

@@ -68,7 +68,7 @@ supabase       Migration database, RLS và storage
 
 ### Ollama cục bộ
 
-Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker kết nối tới Ollama trên máy chủ qua `OLLAMA_BASE_URL` (mặc định `http://host.docker.internal:11434`) và dùng model `qwen3.5:4b`. Cài model bằng `ollama pull qwen3.5:4b`. `OLLAMA_NUM_CTX=8192` và các tham số sampling ổn định giúp JSON storyboard và prompt ảnh ít lặp, ít bị cắt.
+Có thể chọn `Ollama (cục bộ)` ở phần AI chia cảnh. Worker Docker kết nối tới Ollama trên máy chủ qua `OLLAMA_BASE_URL` (mặc định `http://host.docker.internal:11434`) và dùng model `qwen3.5:4b`. Với preset `Quality`, worker chỉ tự chuyển sang `OLLAMA_QUALITY_MODEL` (mặc định `qwen3:8b`) sau khi probe thật xác nhận model đã cài trên một node; nếu chưa có thì vẫn dùng model mặc định, không làm job thất bại. Cài model bằng `ollama pull qwen3:8b`. `OLLAMA_NUM_CTX=8192` và các tham số sampling ổn định giúp JSON storyboard và prompt ảnh ít lặp, ít bị cắt.
 
 ### Media AI cục bộ trên macOS
 

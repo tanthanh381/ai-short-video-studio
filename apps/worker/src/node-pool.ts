@@ -319,6 +319,11 @@ export class NodePool {
     return entry.spec;
   }
 
+  /** True only after a real Ollama probe confirms that at least one eligible node has the requested model. */
+  hasInstalledModel(model: string): boolean {
+    return [...this.entries.values()].some((entry) => entry.snapshot.up && entry.snapshot.llmInstalled.includes(model));
+  }
+
   get mode(): BalanceMode {
     return this.modeOverride ?? this.options.mode;
   }

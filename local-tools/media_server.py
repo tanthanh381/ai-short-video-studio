@@ -214,6 +214,11 @@ IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo — nhanh (~15–25 giây/ảnh)"}
 COMFYUI_IMAGE_MODEL = "sdxl-base-1.0-comfyui"
 COMFYUI_IMAGE_LABEL = "SDXL Base 1.0 — đẹp hơn, ít người thừa, chậm (~1–1,5 phút/ảnh)"
 TTS_ENGINE_LABELS = {"vieneu": "VieNeu-TTS v3 Turbo (ONNX/CPU)", "piper": "Piper (giọng Việt nhẹ)"}
+LLM_LABELS = {
+    "qwen3:8b": "Qwen3 8B — Quality script (chậm hơn)",
+    "qwen3.5:4b": "Qwen3.5 4B — Balanced script",
+    "qwen2.5:3b": "Qwen2.5 3B — Fast fallback",
+}
 SAMPLE_RATE = 22050
 IMAGE_LOCK = threading.Lock()  # one MLX/Metal job at a time on a 16 GB machine
 VIDEO_LOCK = threading.Lock()  # LTX is intentionally single-flight on shared Apple memory
@@ -1311,7 +1316,7 @@ def model_catalog():
     ltx_ready, _ = ltx_state()
     return {
         "available": True,
-        "storyboard": {"models": [{"id": t, "label": t} for t in tags],
+        "storyboard": {"models": [{"id": t, "label": LLM_LABELS.get(t, t)} for t in tags],
                        "default": default_llm if default_llm in tags else (tags[0] if tags else None)},
         "image": {"models": [{"id": i, "label": l} for i, l in available_image_models().items()],
                   "default": next(iter(available_image_models()))},
