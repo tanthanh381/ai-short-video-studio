@@ -1355,7 +1355,7 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
       </div>
       <div className="setting-group">
         <h3><BookOpenText /> Nội dung</h3>
-        <Field label="Phong cách">
+        <Field label="Tone nội dung" hint="Cách kể và mục tiêu của lời thoại; không quyết định phong cách hình ảnh.">
           <select value={settings.style} onChange={(e) => set({ style: e.target.value as ProjectSettings["style"] })}>
             <option value="ke-chuyen">Kể chuyện</option>
             <option value="kien-thuc">Kiến thức</option>
@@ -1375,15 +1375,15 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
       </div>
       <div className="setting-group">
         <h3><Image /> Hình ảnh và khung video</h3>
-        <Field label="Phong cách hình ảnh" hint={VISUAL_PRESET_OPTIONS.find((item) => item.id === settings.visualPreset)?.description ?? "Chọn phong cách hình ảnh cho các cảnh."}>
+        <Field label="Visual style" hint={VISUAL_PRESET_OPTIONS.find((item) => item.id === settings.visualPreset)?.description ?? "Chọn phong cách hình ảnh cho các cảnh."}>
           <select value={settings.visualPreset} onChange={(e) => onChange(withVisualPreset(settings, e.target.value as ProjectSettings["visualPreset"]))}>
             {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </Field>
-        <Field label="Mô tả nét hình" hint="Giữ nhân vật và chất liệu nhất quán giữa các cảnh. AI nhận cả phong cách ở trên và mô tả này.">
+        <Field label="Custom visual direction (optional)" hint="Tuỳ chỉnh thêm nhân vật, chất liệu và ánh sáng. Nếu để trống, Studio dùng mô tả mặc định của Visual style.">
           <input value={settings.visualStyle} onChange={(e) => set({ visualStyle: e.target.value })} />
         </Field>
-        <Field label="Kiểu khung" hint="Thẻ truyện: tiêu đề trên nền màu, tranh minh họa ở giữa, phụ đề bên dưới. Nhân vật trên nền giấy: một nhân vật chibi giữa tờ giấy kraft. Cả hai chỉ cho video dọc 9:16.">
+        <Field label="Layout" hint="Full-bleed là mặc định. Story card và Paper stage là layout dựng sẵn, chỉ dùng cho video dọc 9:16.">
           <select value={settings.layoutTemplate} onChange={(e) => onChange(withLayoutTemplate(settings, e.target.value as ProjectSettings["layoutTemplate"]))}>
             <option value="full-bleed">Toàn khung hình</option>
             <option value="story-card">Thẻ truyện (tranh minh họa)</option>
@@ -1414,7 +1414,7 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
             <option>16:9</option>
           </select>
         </Field>
-        <Field label="Tốc độ tạo ảnh" hint="Fast: 2 bước · Balanced: 4 bước · Quality: 8 bước SDXL-Turbo; Quality giảm lỗi khuôn mặt và tay.">
+        <Field label="Image quality" hint="Fast ưu tiên tốc độ · Balanced cân bằng · Quality dùng nhiều bước hơn để giảm lỗi khuôn mặt và bàn tay.">
           <select value={settings.generationPreset ?? "balanced"} onChange={(e) => set({ generationPreset: e.target.value as ProjectSettings["generationPreset"] })}>
             <option value="fast">Fast — nhanh nhất</option>
             <option value="balanced">Balanced — khuyên dùng</option>
@@ -1767,7 +1767,7 @@ function NewProjectPage() {
           )}
           <div className="channel-presets" role="radiogroup" aria-label="Mẫu kênh">
             <div className="channel-presets-heading">
-              <span className="channel-presets-label">Chọn phong cách video</span>
+              <span className="channel-presets-label">Chọn mẫu video</span>
               <small>Preview trước khi tạo</small>
             </div>
             {CHANNEL_PRESETS.map((preset) => (
@@ -1806,20 +1806,24 @@ function NewProjectPage() {
         </section>
         <section>
           <button className="advanced-toggle" type="button" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>
-            Tùy chọn video {advanced ? <ChevronUp /> : <ChevronDown />}
+            <span>
+              Tùy chọn video
+              <small>{settings.aspectRatio} · {settings.generationPreset === "quality" ? "Quality" : settings.generationPreset === "fast" ? "Fast" : "Balanced"} · Voice {formatSpeed(settings.voiceSpeed)}</small>
+            </span>
+            {advanced ? <ChevronUp /> : <ChevronDown />}
           </button>
         </section>
         <section hidden={!advanced}>
           <div className="video-options">
             <VideoOptions
               settings={settings}
-              onChange={setSettings}
+              onChange={(next) => { setChannelPreset(null); setSettings(next); }}
               scriptMode={inputMode}
               isDemo={isDemo}
               capabilities={null}
               localModels={localModels}
             />
-            <p className="microcopy">Các lựa chọn này giống hệt mục “Tùy chọn” trong Studio sau khi tạo: bạn đổi ở đâu cũng được.</p>
+            <p className="microcopy">Các mục dưới đây là thiết lập chi tiết. Nếu bạn đã chọn một mẫu video, thay đổi thủ công sẽ ghi đè mẫu đó.</p>
           </div>
         </section>
         <div className="form-actions">
