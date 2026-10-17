@@ -16,11 +16,8 @@ import {
   Film,
   FolderOpen,
   Gauge,
-  Heart,
-  Home,
   Image,
   Library,
-  Lightbulb,
   LoaderCircle,
   LogOut,
   Menu,
@@ -30,7 +27,6 @@ import {
   Music2,
   Pause,
   PenLine,
-  PencilLine,
   Play,
   Plus,
   RefreshCw,
@@ -38,15 +34,12 @@ import {
   Search,
   Settings,
   Sparkles,
-  Sword,
   Subtitles,
   Trash2,
   Upload,
   Video,
   WandSparkles,
   X,
-  MessageCircleHeart,
-  type LucideIcon,
 } from "lucide-react";
 import {
   Link,
@@ -116,24 +109,56 @@ import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } 
 import { InfoPopover } from "./components/Disclosure";
 import { useSaveShortcut } from "./hooks/use-save-shortcut";
 
-const CHANNEL_PRESET_VISUALS: Record<string, { Icon: LucideIcon; tone: string; badge: string }> = {
-  "co-tich": { Icon: BookOpenText, tone: "storybook", badge: "Story" },
-  "video-minh-hoa": { Icon: Image, tone: "illustrated", badge: "Illustrated" },
-  "quy-tac-co-nhan": { Icon: BookOpenText, tone: "sepia", badge: "Wisdom" },
-  "dao-ly-co-phong": { Icon: WandSparkles, tone: "paper", badge: "Paper" },
-  "tien-hiep-chibi": { Icon: Sparkles, tone: "fantasy", badge: "Fantasy" },
-  "dan-gian-viet-chibi": { Icon: Home, tone: "folk", badge: "Folk" },
-  "co-trang-hai-chibi": { Icon: Clapperboard, tone: "comedy", badge: "Comedy" },
-  "huyen-bi-co-phong": { Icon: Sparkles, tone: "mystery", badge: "Mystery" },
-  "chua-lanh": { Icon: Heart, tone: "calm", badge: "Calm" },
-  "co-trang": { Icon: Sword, tone: "historical", badge: "Epic" },
-  "tam-su": { Icon: MessageCircleHeart, tone: "emotion", badge: "Emotion" },
-  "kien-thuc": { Icon: Lightbulb, tone: "knowledge", badge: "Learn" },
-  "ve-tay": { Icon: PencilLine, tone: "whiteboard", badge: "Sketch" },
+const CHANNEL_PRESET_VISUALS: Record<string, { tone: string; badge: string }> = {
+  "co-tich": { tone: "storybook", badge: "Story" },
+  "video-minh-hoa": { tone: "illustrated", badge: "Illustrated" },
+  "quy-tac-co-nhan": { tone: "sepia", badge: "Wisdom" },
+  "dao-ly-co-phong": { tone: "paper", badge: "Paper" },
+  "tien-hiep-chibi": { tone: "fantasy", badge: "Fantasy" },
+  "dan-gian-viet-chibi": { tone: "folk", badge: "Folk" },
+  "co-trang-hai-chibi": { tone: "comedy", badge: "Comedy" },
+  "huyen-bi-co-phong": { tone: "mystery", badge: "Mystery" },
+  "chua-lanh": { tone: "calm", badge: "Calm" },
+  "co-trang": { tone: "historical", badge: "Epic" },
+  "tam-su": { tone: "emotion", badge: "Emotion" },
+  "kien-thuc": { tone: "knowledge", badge: "Learn" },
+  "ve-tay": { tone: "whiteboard", badge: "Sketch" },
 };
 
 function channelPresetVisual(id: string) {
-  return CHANNEL_PRESET_VISUALS[id] ?? { Icon: Film, tone: "default", badge: "Video" };
+  return CHANNEL_PRESET_VISUALS[id] ?? { tone: "default", badge: "Video" };
+}
+
+function PresetPreviewArt({ id }: { id: string }) {
+  const visual = channelPresetVisual(id);
+  const portrait = id === "video-minh-hoa" || id === "co-tich" || id === "quy-tac-co-nhan" || id === "dao-ly-co-phong";
+  const paper = id === "dao-ly-co-phong" || id === "ve-tay";
+  const whiteboard = id === "ve-tay";
+  const knowledge = id === "kien-thuc";
+  return (
+    <span className={`channel-preset-art ${visual.tone}`} aria-hidden="true">
+      <svg viewBox="0 0 90 126" focusable="false">
+        <defs>
+          <linearGradient id={`preview-${id}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="var(--preview-a)" />
+            <stop offset="1" stopColor="var(--preview-b)" />
+          </linearGradient>
+          <filter id={`blur-${id}`}><feGaussianBlur stdDeviation="4" /></filter>
+        </defs>
+        <rect width="90" height="126" rx="9" fill={`url(#preview-${id})`} />
+        {portrait && <><rect x="0" y="20" width="90" height="20" fill="var(--preview-b)" opacity=".45" filter={`url(#blur-${id})`} /><rect x="0" y="88" width="90" height="38" fill="var(--preview-a)" opacity=".55" filter={`url(#blur-${id})`} /><rect x="11" y="42" width="68" height="48" rx="5" fill="var(--preview-scene)" /></>}
+        {!portrait && <rect x="7" y="20" width="76" height="72" rx="6" fill="var(--preview-scene)" opacity=".94" />}
+        {paper && <><path d="M15 77 Q32 48 48 74 T76 64" fill="none" stroke="var(--preview-ink)" strokeWidth="2" /><circle cx="44" cy="47" r="8" fill="var(--preview-ink)" /><path d="M44 55 L44 75 M44 60 L32 68 M44 60 L57 66" stroke="var(--preview-ink)" strokeWidth="3" strokeLinecap="round" /></>}
+        {whiteboard && <><path d="M18 73 L35 53 L48 68 L65 42 L75 74" fill="none" stroke="var(--preview-ink)" strokeWidth="2" /><circle cx="61" cy="35" r="7" fill="none" stroke="var(--preview-ink)" strokeWidth="2" /></>}
+        {!paper && !whiteboard && knowledge && <><circle cx="45" cy="46" r="10" fill="var(--preview-accent)" /><path d="M45 58 V77 M34 69 H56" stroke="var(--preview-accent)" strokeWidth="5" strokeLinecap="round" /><path d="M23 27 H67 M28 33 H60" stroke="var(--preview-accent)" strokeWidth="2" opacity=".7" /></>}
+        {!paper && !whiteboard && !knowledge && <><circle cx="45" cy="47" r="9" fill="var(--preview-skin)" /><path d="M31 78 Q45 53 59 78" fill="var(--preview-character)" /><path d="M35 42 Q45 28 56 42" fill="var(--preview-hair)" /><circle cx="41" cy="47" r="1.4" fill="var(--preview-ink)" /><circle cx="49" cy="47" r="1.4" fill="var(--preview-ink)" /></>}
+        <rect x="8" y="8" width="45" height="5" rx="2.5" fill="var(--preview-title)" opacity=".95" />
+        <rect x="12" y="98" width="66" height="5" rx="2.5" fill="var(--preview-caption)" />
+        <rect x="22" y="106" width="46" height="4" rx="2" fill="var(--preview-caption)" opacity=".76" />
+        <rect x="8" y="116" width="28" height="3" rx="1.5" fill="var(--preview-accent)" opacity=".9" />
+      </svg>
+    </span>
+  );
 }
 
 const navItems = [
@@ -1754,7 +1779,6 @@ function NewProjectPage() {
             {CHANNEL_PRESETS.map((preset) => (
               (() => {
                 const visual = channelPresetVisual(preset.id);
-                const Icon = visual.Icon;
                 return (
                   <button
                     key={preset.id}
@@ -1766,10 +1790,7 @@ function NewProjectPage() {
                     disabled={busy}
                     onClick={() => { setChannelPreset(preset.id); setSettings((s) => preset.apply(s)); }}
                   >
-                    <span className={`channel-preset-visual ${visual.tone}`} aria-hidden="true">
-                      <Icon size={24} strokeWidth={1.8} />
-                      <span>{visual.badge}</span>
-                    </span>
+                    <PresetPreviewArt id={preset.id} />
                     <span className="channel-preset-copy">
                       <strong>{preset.label}</strong>
                       <small>{preset.hint}</small>

@@ -2772,18 +2772,19 @@ a:focus-visible {
 .channel-preset-card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 5px 16px rgba(18, 43, 67, .09); }
 .channel-preset-card:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 2px; }
 .channel-preset-card.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), 0 5px 16px rgba(18, 43, 67, .1); }
-.channel-preset-visual { flex: 0 0 62px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; border-radius: 9px; color: #fff; background: linear-gradient(145deg, #3679ce, #183d77); }
-.channel-preset-visual span { font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; opacity: .88; }
-.channel-preset-visual.storybook { background: linear-gradient(145deg, #5d9be6, #274b92); }
-.channel-preset-visual.illustrated { background: linear-gradient(145deg, #efad49, #8d3d26); }
-.channel-preset-visual.sepia, .channel-preset-visual.historical { background: linear-gradient(145deg, #b78355, #553727); }
-.channel-preset-visual.paper, .channel-preset-visual.whiteboard { background: linear-gradient(145deg, #e0bd83, #98704b); }
-.channel-preset-visual.fantasy, .channel-preset-visual.mystery { background: linear-gradient(145deg, #8066dc, #30265f); }
-.channel-preset-visual.folk { background: linear-gradient(145deg, #51b783, #216a62); }
-.channel-preset-visual.comedy { background: linear-gradient(145deg, #f17a58, #a52f52); }
-.channel-preset-visual.calm { background: linear-gradient(145deg, #78c7bd, #397c92); }
-.channel-preset-visual.emotion { background: linear-gradient(145deg, #d885a7, #713d73); }
-.channel-preset-visual.knowledge { background: linear-gradient(145deg, #5795dd, #284b86); }
+.channel-preset-art { flex: 0 0 62px; width: 62px; height: 86px; overflow: hidden; border-radius: 9px; background: #183d77; box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); }
+.channel-preset-art svg { display: block; width: 100%; height: 100%; }
+.channel-preset-art { --preview-a: #3679ce; --preview-b: #183d77; --preview-scene: #a8d5ef; --preview-accent: #ffe14d; --preview-title: #fff; --preview-caption: #fff; --preview-character: #235da0; --preview-hair: #172637; --preview-skin: #f6c7a5; --preview-ink: #17314f; }
+.channel-preset-art.illustrated { --preview-a: #efad49; --preview-b: #8d3d26; --preview-scene: #f5d28e; --preview-accent: #ffe14d; --preview-character: #f7f1e2; --preview-hair: #2c231e; }
+.channel-preset-art.sepia, .channel-preset-art.historical { --preview-a: #b78355; --preview-b: #553727; --preview-scene: #d9bc8b; --preview-accent: #e56b44; --preview-character: #7b3935; --preview-hair: #2c211d; }
+.channel-preset-art.paper, .channel-preset-art.whiteboard { --preview-a: #e0bd83; --preview-b: #98704b; --preview-scene: #f5e8cc; --preview-accent: #a95532; --preview-ink: #4c3829; --preview-character: #d27b4d; }
+.channel-preset-art.whiteboard { --preview-a: #e9f3f4; --preview-b: #b8d4d5; --preview-scene: #fff; --preview-accent: #2a87a3; --preview-ink: #294a54; }
+.channel-preset-art.fantasy, .channel-preset-art.mystery { --preview-a: #8066dc; --preview-b: #30265f; --preview-scene: #554593; --preview-accent: #a8f1e0; --preview-character: #6b54bb; --preview-hair: #171526; }
+.channel-preset-art.folk { --preview-a: #51b783; --preview-b: #216a62; --preview-scene: #aed996; --preview-accent: #ffe184; --preview-character: #c95b4b; }
+.channel-preset-art.comedy { --preview-a: #f17a58; --preview-b: #a52f52; --preview-scene: #ffd182; --preview-accent: #fff06a; --preview-character: #4f8bd1; }
+.channel-preset-art.calm { --preview-a: #78c7bd; --preview-b: #397c92; --preview-scene: #d7f0dc; --preview-accent: #fff0ad; --preview-character: #4e9b9c; }
+.channel-preset-art.emotion { --preview-a: #d885a7; --preview-b: #713d73; --preview-scene: #f2c7ca; --preview-accent: #ffe4a8; --preview-character: #a4527a; }
+.channel-preset-art.knowledge { --preview-a: #5795dd; --preview-b: #284b86; --preview-scene: #e7f0ff; --preview-accent: #ffe14d; --preview-ink: #23436c; }
 .channel-preset-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; gap: 3px; }
 .channel-preset-copy strong { font-size: var(--text-md); line-height: 1.25; }
 .channel-preset-copy small { display: -webkit-box; overflow: hidden; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
