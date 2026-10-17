@@ -172,7 +172,13 @@ function Tiles({ system }: { system: SystemSummary }) {
 }
 
 function Alerts({ system }: { system: SystemSummary }) {
-  const alerts = systemAlerts(system);
+  const alerts = systemAlerts(system).filter((alert, _, all) => {
+    // A degraded secondary machine already explains the parity problem in its
+    // primary alert. Showing both creates two warnings for one action.
+    if (!alert.id.endsWith("-parity")) return true;
+    const degradedId = alert.id.replace(/-parity$/, "-degraded");
+    return !all.some((candidate) => candidate.id === degradedId);
+  });
   if (!alerts.length) {
     return <div className="sys-banner tone-ok"><CircleCheck size={16} /> All systems operational.</div>;
   }
@@ -248,7 +254,11 @@ function MachineCard({ node, now }: { node: NodeSummary; now: number }) {
 
       {node.role === "primary" ? (
         <div className="sys-source-note sys-machine-context">
-          <span>Source device</span>
+          <span className="sys-context-label">
+            <Server size={15} aria-hidden="true" />
+            <strong>Source</strong>
+            <small>Mac Mini</small>
+          </span>
           <InfoPopover title="Mac Mini · Source device">Cung cấp mã nguồn, công cụ và model cho các máy phụ. Đồng bộ tự động mỗi phút.</InfoPopover>
         </div>
       ) : null}
