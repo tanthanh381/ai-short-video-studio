@@ -34,6 +34,7 @@ import {
   Save,
   Search,
   Settings,
+  Scale,
   Sparkles,
   Subtitles,
   Trash2,
@@ -169,6 +170,7 @@ const navItems = [
   { to: "/tts", label: "Đọc văn bản (TTS)", icon: Mic2 },
   { to: "/media", label: "Thư viện media", icon: Library },
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
+  { to: "/rights", label: "Quyền sử dụng", icon: Scale },
   { to: "/system", label: "Hệ thống", icon: Activity },
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
@@ -2135,6 +2137,19 @@ function BatchPage() {
           <div className="batch-section-title"><Clapperboard size={19} /><strong>Kết quả enqueue</strong></div>
           {!items.length ? <div className="batch-empty"><ListVideo size={24} /><strong>Chưa có lượt tạo nào</strong><span>Các project sẽ xuất hiện ở đây sau khi được đưa vào queue.</span></div> : <ol>{items.map((item) => <li key={item.idea}><div><strong>{item.idea}</strong><span>{item.error ?? (item.projectId ? "Đã vào queue" : "Đang gửi…")}</span></div>{item.projectId && <Button type="button" variant="ghost" onClick={() => navigate(`/studio/${item.projectId}`)}>Mở project</Button>}</li>)}</ol>}
         </section>
+      </div>
+    </SimplePage>
+  );
+}
+
+function UsageRightsPage() {
+  return (
+    <SimplePage title="Quyền sử dụng" subtitle="Kiểm tra nhanh nguồn nội dung trước khi đăng lên TikTok, Reels hoặc Shorts.">
+      <div className="rights-grid">
+        <section className="panel rights-card"><div className="rights-icon"><Music2 size={20} /></div><div><h2>Nhạc do Studio tạo</h2><p>Nhạc nền Ambient được tổng hợp bằng FFmpeg, không lấy từ thư viện nhạc bên thứ ba. Đây là lựa chọn ít rủi ro hơn cho video thương mại, nhưng nền tảng đăng tải vẫn có thể áp dụng chính sách riêng.</p><Badge tone="ok">Source: Generated</Badge></div></section>
+        <section className="panel rights-card"><div className="rights-icon"><Upload size={20} /></div><div><h2>File bạn tải lên</h2><p>Bạn chịu trách nhiệm bảo đảm quyền sử dụng với logo, hình ảnh, giọng nói, video và nhạc riêng. Studio chỉ xử lý trong project của bạn và không cấp thêm giấy phép.</p><Badge tone="warn">Source: User upload</Badge></div></section>
+        <section className="panel rights-card"><div className="rights-icon"><Image size={20} /></div><div><h2>Hình ảnh AI local</h2><p>Hình ảnh được tạo trên máy của bạn bằng model local. Hãy kiểm tra điều khoản model và yêu cầu của nền tảng nếu video dùng cho thương mại, thương hiệu hoặc nhân vật có thật.</p><Badge tone="idle">Source: Local model</Badge></div></section>
+        <section className="panel rights-card"><div className="rights-icon"><Scale size={20} /></div><div><h2>Checklist trước khi đăng</h2><ul><li>Đã có quyền dùng mọi file tải lên.</li><li>Không dùng hình ảnh hoặc giọng của người thật khi chưa được đồng ý.</li><li>Đã kiểm tra nhãn AI, quảng cáo và chính sách nền tảng.</li><li>Không xem trang này là tư vấn pháp lý.</li></ul></div></section>
       </div>
     </SimplePage>
   );
@@ -4392,6 +4407,7 @@ export function App() {
               <Route path="tts" element={<TextToSpeechPage />} />
               <Route path="media" element={<MediaPage />} />
               <Route path="exports" element={<ExportsPage />} />
+              <Route path="rights" element={<UsageRightsPage />} />
               <Route path="whiteboard" element={<WhiteboardPage />} />
               <Route path="system" element={<SystemPage />} />
               <Route path="settings" element={<SettingsPage />} />
