@@ -39,6 +39,7 @@ export NODE_NAME=${NODE_NAME:-air}
 # VIENEU_STEPS hay TTS_BREAK_WORDS mà dùng mặc định trong media_server.py, nên máy này cũng KHÔNG đặt: một IMAGE_STEPS=4 ở đây ép mọi
 # ảnh (cả ảnh có người, vốn cần nhiều bước hơn) xuống 4 bước và làm máy chính loại máy này khỏi việc vẽ ảnh và đọc giọng.
 unset IMAGE_STEPS VIENEU_STEPS TTS_BREAK_WORDS
+export FACE_DETAIL=${FACE_DETAIL:-true}
 
 # Chỉ mở ra mạng Tailscale (không phải 0.0.0.0). Các dịch vụ còn lại chỉ nghe trên chính máy này.
 export LOCAL_MEDIA_HOST="$tailscale_ip"
