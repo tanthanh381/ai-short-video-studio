@@ -55,6 +55,8 @@ const schema = z.object({
   WORKER_HEALTH_PORT: z.coerce.number().int().positive().default(8790),
   RENDER_TIMEOUT_MS: z.coerce.number().int().min(30_000).default(900_000),
   TEMP_RETENTION_HOURS: z.coerce.number().positive().default(24),
+  /** Minimum free space before media/render jobs start; prevents partial exports and container I/O failures. */
+  MIN_FREE_DISK_GB: z.coerce.number().positive().default(4),
   FFMPEG_PATH: z.string().default("ffmpeg"),
   FFPROBE_PATH: z.string().default("ffprobe"),
 });

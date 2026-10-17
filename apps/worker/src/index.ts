@@ -24,6 +24,7 @@ import { groupWords, OpenAIAdapter } from "./openai";
 import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE, paperStagePrompt, storyNationality, usesPaperStage, usesStoryCard, withNationality } from "./card-layout";
 import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
 import { alignSpeechToScript, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, imageAspectFor, vietnameseByDefault, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
+import { assertDiskSpace } from "./disk-space";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
@@ -1064,6 +1065,11 @@ function scenePicturePrompt(prompt: string, project: Project): string {
 
 async function run(job: JobRow) {
   const project = await getProject(job.project_id);
+  // Storyboard-only work is lightweight; media and render jobs need enough room for frames,
+  // audio, FFmpeg intermediates and one bounded retry. Refuse early with an actionable message
+  // instead of letting the container fail with a low-level I/O error halfway through a video.
+  if (["create_video", "generate_media", "regenerate_scene", "render_video", "render_whiteboard", "dub_video"].includes(job.job_type))
+    await assertDiskSpace(tmpdir(), config.MIN_FREE_DISK_GB);
   // Fail before minutes of images and voices are spent, not at the render step.
   const draws = job.job_type === "render_whiteboard" || (drawsByHand(project.settings) && ["create_video", "render_video"].includes(job.job_type));
   if (draws && !pool.laneAvailable("whiteboard") && !(await whiteboardReady(config))) throw new Error(WHITEBOARD_DOWN);
