@@ -84,7 +84,7 @@ main() {
   TOOLKIT="$REPO/local-tools/toolkit"
   [ "$DRY" = "1" ] && TOOLKIT="${AIR_NODE_TOOLKIT:-$TOOLKIT}"
   cp "$TOOLKIT"/bin/*.sh "$LOCAL_AI/bin/"
-  cp "$TOOLKIT"/vieneu_api.py "$TOOLKIT"/vieneu_tts.py "$TOOLKIT"/tts_api.py "$LOCAL_AI/"
+  cp "$TOOLKIT"/faster_whisper_server.py "$TOOLKIT"/vieneu_api.py "$TOOLKIT"/vieneu_tts.py "$TOOLKIT"/tts_api.py "$LOCAL_AI/"
   chmod +x "$LOCAL_AI"/bin/*.sh
 
   step python "4/8 Môi trường Python (vài phút)" "Dựng môi trường Python cho giọng đọc và vẽ ảnh"

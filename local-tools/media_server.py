@@ -209,6 +209,8 @@ TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu,piper").split(",") if
 TTS_CONCURRENCY = max(1, min(int(os.getenv("TTS_CONCURRENCY", "2")), 4))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/ggml-base.bin"))
+WHISPER_ENGINE = os.getenv("WHISPER_ENGINE", "faster-whisper")
+WHISPER_MODEL_ID = os.getenv("WHISPER_MODEL_ID", f"faster-whisper-{os.getenv('FASTER_WHISPER_MODEL', 'small')}" if WHISPER_ENGINE == "faster-whisper" else Path(WHISPER_MODEL).stem)
 # Image models the toolkit has installed (id -> label). image_server.py serves them.
 IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo — nhanh (~15–25 giây/ảnh)"}
 COMFYUI_IMAGE_MODEL = "sdxl-base-1.0-comfyui"
@@ -1090,9 +1092,26 @@ def tts(text, voice, engine=None, speed=1.0):
         return target.read_bytes()
 
 
+def whisper_runtime_info():
+    """Read the real Whisper backend so the catalog never claims faster-whisper when fallback is active."""
+    fallback_id = Path(WHISPER_MODEL).stem
+    try:
+        with urllib.request.urlopen(f"{WHISPER_URL}/health", timeout=3) as response:
+            payload = json.load(response)
+        if payload.get("engine") == "faster-whisper":
+            model = str(payload.get("model") or os.getenv("FASTER_WHISPER_MODEL", "small"))
+            return {"ready": True, "id": f"faster-whisper-{model}", "label": f"Whisper faster-whisper {model}"}
+    except Exception:
+        pass
+    if service_up(WHISPER_URL, "/") and Path(WHISPER_MODEL).is_file():
+        return {"ready": True, "id": fallback_id, "label": f"Whisper {fallback_id.replace('ggml-', '')}"}
+    return {"ready": False, "id": WHISPER_MODEL_ID, "label": "Whisper local"}
+
+
 def transcribe(audio, model=None):
-    """whisper.cpp server (word timestamps). Sub-word pieces are merged into whole words."""
-    check_choice("Whisper", model, [Path(WHISPER_MODEL).stem])  # the server has exactly one model loaded
+    """Local Whisper server (faster-whisper preferred, whisper.cpp fallback)."""
+    runtime_id = whisper_runtime_info().get("id", WHISPER_MODEL_ID)
+    check_choice("Whisper", model, [runtime_id, WHISPER_MODEL_ID, Path(WHISPER_MODEL).stem])
     boundary = uuid.uuid4().hex
     fields = {"response_format": "verbose_json", "language": "vi", "temperature": "0"}
     parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode() for k, v in fields.items()]
@@ -1309,8 +1328,9 @@ def model_catalog():
     except Exception:
         pass
     default_llm = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
-    whisper_id = Path(WHISPER_MODEL).stem
-    whisper_ready = service_up(WHISPER_URL, "/") and Path(WHISPER_MODEL).is_file()
+    whisper_runtime = whisper_runtime_info()
+    whisper_id = whisper_runtime["id"]
+    whisper_ready = whisper_runtime["ready"]
     available_engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL),
                          }
     ltx_ready, _ = ltx_state()
@@ -1323,7 +1343,7 @@ def model_catalog():
         "tts": {"models": [{"id": e, "label": TTS_ENGINE_LABELS[e]} for e in TTS_ENGINES
                            if available_engines.get(e)],
                 "default": next((e for e in TTS_ENGINES if available_engines.get(e)), None)},
-        "transcribe": {"models": [{"id": whisper_id, "label": f"Whisper {whisper_id.replace('ggml-', '')}"}]
+        "transcribe": {"models": [{"id": whisper_id, "label": whisper_runtime["label"]}]
                        if whisper_ready else [],
                        "default": whisper_id if whisper_ready else None},
         "video": {"models": [{"id": "ltxv-2b-0.9.8-distilled", "label": "LTX-Video 2B Distilled (I2V)"}]

@@ -20,7 +20,7 @@ CODE_SKIP_DIRS = {"__pycache__", "tests", ".pytest_cache", "node_modules", ".git
 # Programs that only the main machine runs (they serve the others) are not copied to them.
 CODE_SKIP_FILES = {"air_bundle_server.py", "node_sync_server.py", ".DS_Store"}
 CODE_EXTRA_FILES = ["scripts/Mo-May-Phu.command"]
-TOOLKIT_FILES = ["bin/env.sh", "bin/start-tts.sh", "bin/start-vieneu.sh", "bin/start-whisper.sh", "vieneu_api.py", "vieneu_tts.py", "tts_api.py"]
+TOOLKIT_FILES = ["bin/env.sh", "bin/start-tts.sh", "bin/start-vieneu.sh", "bin/start-whisper.sh", "faster_whisper_server.py", "vieneu_api.py", "vieneu_tts.py", "tts_api.py"]
 MODEL_DIRS = ["whisper", "piper", "vieneu-v3-turbo", "moss-audio-tokenizer-onnx", "face"]
 IMAGE_DIR = "image"
 # Runtime leftovers inside the model folders: logs, lock files, markers. Not part of a model.

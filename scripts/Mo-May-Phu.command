@@ -25,6 +25,7 @@ tailscale_ip=$("$tailscale_cmd" ip -4 2>/dev/null | head -n1 || true)
 [[ -n "$tailscale_ip" ]] || { print 'Tailscale chưa đăng nhập hoặc chưa kết nối. Mở Tailscale, đăng nhập cùng tài khoản với Mac mini, rồi chạy lại.'; exit 1; }
 
 LOCAL_AI_ROOT=${LOCAL_AI_ROOT:-"$HOME/Developer/local-ai"}
+COMFYUI_ROOT=${COMFYUI_ROOT:-"$LOCAL_AI_ROOT/ComfyUI"}
 [[ -d "$LOCAL_AI_ROOT" ]] || { print "Thiếu thư mục $LOCAL_AI_ROOT (model và môi trường Python). Xem docs/TU-HOST.md, mục \"Thêm máy phụ\"."; exit 1; }
 
 # Token chung giữa hai máy: sinh một lần, giữ trong tệp chỉ mình bạn đọc được.
@@ -71,6 +72,9 @@ start_if_down http://127.0.0.1:8080/ whisper zsh "$LOCAL_AI_ROOT/bin/start-whisp
 start_if_down http://127.0.0.1:5000/health piper zsh "$LOCAL_AI_ROOT/bin/start-tts.sh"
 start_if_down http://127.0.0.1:5001/health vieneu zsh "$LOCAL_AI_ROOT/bin/start-vieneu.sh"
 start_if_down http://127.0.0.1:5002/health image "$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
+if [[ -x "$LOCAL_AI_ROOT/comfy-venv/bin/python" && -f "$COMFYUI_ROOT/main.py" && -f "$COMFYUI_ROOT/models/checkpoints/${COMFYUI_CHECKPOINT:-sd_xl_base_1.0_0.9vae.safetensors}" ]]; then
+  start_if_down http://127.0.0.1:8188/system_stats comfyui "$LOCAL_AI_ROOT/comfy-venv/bin/python" "$COMFYUI_ROOT/main.py" --listen 127.0.0.1 --port 8188
+fi
 start_if_down "http://$tailscale_ip:8765/health" media env NODE_START_SCRIPT="$studio_root/scripts/Mo-May-Phu.command" /opt/homebrew/bin/python3.12 local-tools/media_server.py
 start_if_down "http://$tailscale_ip:8766/health" whiteboard "$LOCAL_AI_ROOT/wb-venv/bin/python" local-tools/whiteboard_server.py
 if [[ -x "$LOCAL_AI_ROOT/ltx-venv/bin/python" && -f "$LOCAL_AI_ROOT/models/ltx-video/ltxv-2b-0.9.8-distilled.safetensors" ]]; then
