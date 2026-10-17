@@ -72,6 +72,17 @@ describe("render helpers", () => {
     } satisfies Project;
     expect(createAss(project)).toContain("Xin chào Việt Nam");
     expect(createAss(project)).toContain("&H00FFFFFF");
+    // No explainer key points by default: no KeyPoint style or event.
+    expect(createAss(project)).not.toContain("Style: KeyPoint");
+
+    // Explainer theme: the per-scene key point is drawn, uppercased, in its own top-anchored style.
+    const explainer = { ...project, settings: { ...project.settings, showKeyPoints: true, keyPoints: ["ý chính một"] } } satisfies Project;
+    const ass = createAss(explainer);
+    expect(ass).toContain("Style: KeyPoint");
+    expect(ass).toContain(",KeyPoint,,0,0,0,,Ý CHÍNH MỘT");
+    // A story card keeps its own title, so key points are suppressed there.
+    const card = { ...explainer, settings: { ...explainer.settings, layoutTemplate: "story-card" as const, aspectRatio: "9:16" as const } } satisfies Project;
+    expect(createAss(card)).not.toContain("Style: KeyPoint");
   });
 
   it("ho tro preset vuong va escape ASS an toan", () => {

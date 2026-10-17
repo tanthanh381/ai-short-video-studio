@@ -217,6 +217,9 @@ export const projectSettingsSchema = z.object({
   /** A soft tick at every scene change, a pattern interrupt that keeps the ear awake. */
   sceneSfx: z.boolean().default(false),
   trimSilence: z.boolean().default(false),
+  /** Explainer theme: show a short key-point headline over each scene (settings.keyPoints, by scene order). */
+  showKeyPoints: z.boolean().default(false),
+  keyPoints: z.array(z.string().max(80)).default([]),
   subtitle: subtitleStyleSchema.default({
     enabled: true,
     preset: "classic",

@@ -123,6 +123,7 @@ const CHANNEL_PRESET_VISUALS: Record<string, { tone: string; badge: string }> = 
   "co-trang": { tone: "historical", badge: "Epic" },
   "tam-su": { tone: "emotion", badge: "Emotion" },
   "kien-thuc": { tone: "knowledge", badge: "Learn" },
+  "giai-thich": { tone: "knowledge", badge: "Explainer" },
   "ve-tay": { tone: "whiteboard", badge: "Sketch" },
 };
 
@@ -145,6 +146,7 @@ function PresetPreviewArt({ id }: { id: string }) {
     "co-trang": "historical-scholar.jpg",
     "tam-su": "paper-cut.jpg",
     "kien-thuc": "cinematic-reading.jpg",
+    "giai-thich": "cinematic-reading.jpg",
     "ve-tay": "whiteboard-learning.jpg",
   };
   const file = previewFiles[id] ?? "cinematic-reading.jpg";
@@ -1698,7 +1700,7 @@ function WizardPage() {
       const ok = await askConfirm({ title: "Đổi mẫu video?", detail: "Các tùy chỉnh thủ công của bạn sẽ được đặt lại theo mẫu mới.", confirmLabel: "Đổi mẫu", cancelLabel: "Giữ nguyên" });
       if (!ok) return;
     }
-    setState((s) => ({ ...s, templateId: id, customized: false, settings: preset.apply(s.settings) }));
+    setState((s) => ({ ...s, templateId: id, customized: false, settings: preset.apply({ ...s.settings, showKeyPoints: false }) }));
   }
 
   function editSettings(next: ProjectSettings) {

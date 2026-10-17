@@ -541,6 +541,21 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
     p_status: job.job_type === "create_video" ? "queued" : "draft",
   });
   if (saveError) throw saveError;
+  // Explainer theme: Claude writes one on-screen key point per scene, stored in settings (no scene-table change) and
+  // drawn at the top of each scene by the renderer. A failure here must never fail the storyboard.
+  if (project.settings.showKeyPoints && provider.writeKeyPoints) {
+    const keyPoints = await provider
+      .writeKeyPoints({ narrations: result.scenes.map((scene) => scene.narration), title: project.title })
+      .catch(() => null);
+    if (keyPoints && keyPoints.some((point) => point.trim())) {
+      const { error: keyPointError } = await db
+        .from("projects")
+        .update({ settings: { ...project.settings, keyPoints } })
+        .eq("id", project.id)
+        .eq("user_id", project.userId);
+      if (keyPointError) log.warn({ projectId: project.id, jobId: job.id }, "key_points_save_failed");
+    }
+  }
   try { await removePrefix(`${project.userId}/${project.id}/generated`); }
   catch { log.warn({ projectId: project.id, jobId: job.id }, "unused_media_cleanup_failed"); }
 }

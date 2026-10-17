@@ -85,6 +85,12 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "cinematic-color"), style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
   {
+    id: "giai-thich",
+    label: "Video giải thích",
+    hint: "Ảnh thực tế, chữ ý chính hiện to trên màn hình, giọng thuyết minh, nhạc nền",
+    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "cinematic-color"), style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: false, progressBar: true, showKeyPoints: true }),
+  },
+  {
     id: "ve-tay",
     label: "Giải thích vẽ tay",
     hint: "Bàn tay vẽ từng cảnh trên nền trắng, giọng thuyết minh, nhạc nền",
