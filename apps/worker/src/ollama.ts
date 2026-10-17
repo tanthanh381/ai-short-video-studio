@@ -12,6 +12,12 @@ import {
 
 type OllamaResponse = { response?: string; error?: string };
 
+export type ImageQualityAudit = {
+  relevant: boolean;
+  anatomy: "good" | "minor" | "bad";
+  reason: string;
+};
+
 export class OllamaStoryboardAdapter implements StoryboardProvider {
   constructor(
     private readonly baseUrl: string,
@@ -20,6 +26,44 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
     /** How requests are sent; the load balancer passes one that gives up when the machine is declared down. */
     private readonly send: typeof fetch = (input, init) => fetch(input, init),
   ) {}
+
+  /** Optional semantic check for Quality preset; failures are deliberately fail-open. */
+  async auditImage(input: { image: Uint8Array; sceneBrief: string; model?: string | null }): Promise<ImageQualityAudit | null> {
+    try {
+      const response = await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
+        method: "POST",
+        signal: AbortSignal.timeout(90_000),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: input.model || this.model,
+          stream: false,
+          think: false,
+          keep_alive: this.tuning.keepAlive ?? "30s",
+          format: {
+            type: "object",
+            additionalProperties: false,
+            required: ["relevant", "anatomy", "reason"],
+            properties: {
+              relevant: { type: "boolean" },
+              anatomy: { type: "string", enum: ["good", "minor", "bad"] },
+              reason: { type: "string" },
+            },
+          },
+          options: { temperature: 0, num_ctx: Math.min(this.tuning.numCtx ?? 4096, 4096), num_predict: 120 },
+          system: "You are a strict visual QA reviewer. Compare the image with the scene brief. Return JSON only. relevant is true only when the main action and important object match. anatomy is bad for obvious deformed faces, hands, limbs or duplicated body parts; minor for small imperfections; good when usable.",
+          prompt: JSON.stringify({ sceneBrief: input.sceneBrief }),
+          images: [Buffer.from(input.image).toString("base64")],
+        }),
+      });
+      if (!response.ok) return null;
+      const body = (await response.json().catch(() => ({}))) as OllamaResponse;
+      const parsed = JSON.parse(body.response ?? "{}") as Partial<ImageQualityAudit>;
+      if (typeof parsed.relevant !== "boolean" || !["good", "minor", "bad"].includes(parsed.anatomy ?? "") || typeof parsed.reason !== "string") return null;
+      return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], reason: parsed.reason.slice(0, 400) };
+    } catch {
+      return null;
+    }
+  }
 
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {
     const response = await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {

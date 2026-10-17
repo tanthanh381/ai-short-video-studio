@@ -42,6 +42,19 @@ describe("OllamaStoryboardAdapter", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("đánh giá ảnh bằng Qwen Vision khi được yêu cầu", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ response: JSON.stringify({ relevant: true, anatomy: "good", reason: "The action matches the brief." }) }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    ));
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b", {}, request);
+    const result = await adapter.auditImage({ image: new Uint8Array([1, 2, 3]), sceneBrief: "A person holds a phone." });
+    expect(result).toEqual({ relevant: true, anatomy: "good", reason: "The action matches the brief." });
+    const payload = JSON.parse((request.mock.calls[0]![1] as RequestInit).body as string);
+    expect(payload.images).toHaveLength(1);
+    expect(payload.options.temperature).toBe(0);
+  });
 });
 
 const lockedInput: StoryboardInput = {

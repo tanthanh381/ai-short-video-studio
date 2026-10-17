@@ -15,7 +15,7 @@ import { fetchAirSetup } from "./air-setup";
 import { AnthropicStoryboardAdapter } from "./anthropic";
 import { readBalancerSettings } from "@studio/shared/balancer-store";
 import { loadUserKey } from "./user-keys";
-import { OllamaStoryboardAdapter } from "./ollama";
+import { OllamaStoryboardAdapter, type ImageQualityAudit } from "./ollama";
 import { markFatal } from "./node-errors";
 import type { Lane, LaneRequest } from "./node-plan";
 import { createProbe, NodePool, parseNodeSpecs, type Outcome } from "./node-pool";
@@ -561,9 +561,23 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
 }
 
 /**
- * One scene's picture. A frame that came back flat (all black or all one colour) is drawn once more with another seed, so a
- * bad draw never reaches the video; if the second is flat too it is kept (the person can still redraw that scene).
+ * One scene's picture. A flat or semantically unusable frame is drawn once more with another seed; if the retry still
+ * fails the scene is rejected so the user can regenerate only that scene instead of exporting a bad frame.
  */
+async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project, job: JobRow): Promise<ImageQualityAudit | null> {
+  if (project.settings.generationPreset !== "quality" || process.env.VISION_QUALITY_GATE === "false") return null;
+  try {
+    return await pool.runOne("llm", (node) => ollamaOn(node.id).auditImage({
+      image,
+      sceneBrief: `${scene.narration}\nVisual brief: ${scene.imagePrompt}`,
+      model: project.settings.localModels.storyboard || config.OLLAMA_QUALITY_MODEL,
+    }), { llmModel: project.settings.localModels.storyboard || config.OLLAMA_QUALITY_MODEL });
+  } catch (error) {
+    log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "vision_quality_gate_unavailable");
+    return null;
+  }
+}
+
 async function drawScenePicture(provider: MediaProvider, scene: Scene, project: Project, job: JobRow): Promise<Uint8Array> {
   const prompt = buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project), visualPresetPrompt(project.settings.visualPreset));
   const options = {
@@ -573,13 +587,18 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     preset: project.settings.generationPreset,
   };
   const first = await provider.createImage(prompt, imageAspectFor(project.settings), options);
-  if (!(await imageLooksBlank(first, config.FFMPEG_PATH))) return first;
-  log.warn({ jobId: job.id, sceneId: scene.id }, "blank_picture_redrawn");
+  const firstBlank = await imageLooksBlank(first, config.FFMPEG_PATH);
+  const firstAudit = firstBlank ? null : await auditSceneImage(first, scene, project, job);
+  if (!firstBlank && (!firstAudit || (firstAudit.relevant && firstAudit.anatomy !== "bad"))) return first;
+  log.warn({ jobId: job.id, sceneId: scene.id, blank: firstBlank, audit: firstAudit }, "scene_picture_retry");
   const retry = await provider.createImage(prompt, imageAspectFor(project.settings), { ...options, seed: (options.seed ?? 0) + 7919 });
   // A flat second result is not a usable visual. Let the scene remain failed so the
   // user can regenerate only this scene instead of silently exporting a blank frame.
   if (await imageLooksBlank(retry, config.FFMPEG_PATH))
     throw new Error(`Ảnh cảnh ${scene.order + 1} vẫn là khung trống sau khi thử lại; hãy tạo lại cảnh này`);
+  const retryAudit = await auditSceneImage(retry, scene, project, job);
+  if (retryAudit && (!retryAudit.relevant || retryAudit.anatomy === "bad"))
+    throw new Error(`Ảnh cảnh ${scene.order + 1} chưa khớp nội dung hoặc anatomy không đạt; hãy tạo lại cảnh này`);
   return retry;
 }
 
