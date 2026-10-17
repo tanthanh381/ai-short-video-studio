@@ -591,7 +591,12 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
   const firstAudit = firstBlank ? null : await auditSceneImage(first, scene, project, job);
   if (!firstBlank && (!firstAudit || (firstAudit.relevant && firstAudit.anatomy !== "bad"))) return first;
   log.warn({ jobId: job.id, sceneId: scene.id, blank: firstBlank, audit: firstAudit }, "scene_picture_retry");
-  const retry = await provider.createImage(prompt, imageAspectFor(project.settings), { ...options, seed: (options.seed ?? 0) + 7919 });
+  const correction = firstAudit?.anatomy === "bad"
+    ? ", corrected anatomy, exactly five fingers per hand, natural hands and face, no extra fingers, no duplicated limbs"
+    : firstAudit?.relevant === false
+      ? ", follow the described action and important object exactly, make the main subject unmistakable"
+      : "";
+  const retry = await provider.createImage(`${prompt}${correction}`, imageAspectFor(project.settings), { ...options, seed: (options.seed ?? 0) + 7919 });
   // A flat second result is not a usable visual. Let the scene remain failed so the
   // user can regenerate only this scene instead of silently exporting a blank frame.
   if (await imageLooksBlank(retry, config.FFMPEG_PATH))
