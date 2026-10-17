@@ -38,6 +38,7 @@ const configSchema = z.object({
   ),
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   ANTHROPIC_BASE_URL: z.string().url().default("https://api.anthropic.com"),
+  ANTHROPIC_TREND_MODEL: z.string().default("claude-sonnet-4-6"),
   RENDER_WORKER_ENABLED: z
     .enum(["true", "false"])
     .default("false")

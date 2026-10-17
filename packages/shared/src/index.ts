@@ -8,6 +8,7 @@ export * from "./api-keys";
 export * from "./nodes";
 export * from "./node-settings";
 export * from "./logo";
+export * from "./trends";
 export * from "./content-quality";
 export * from "./publish-readiness";
 

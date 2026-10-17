@@ -36,6 +36,7 @@ import {
   Settings,
   Scale,
   Sparkles,
+  TrendingUp,
   Subtitles,
   Trash2,
   Upload,
@@ -89,6 +90,9 @@ import {
   VISUAL_PRESET_OPTIONS,
   drawsByHand,
   visualPresetPrompt,
+  TREND_NICHES,
+  type TrendDigest,
+  type TrendIdea,
 } from "@studio/shared";
 import { useAuth } from "./state/AuthContext";
 const AirSetupPanel = lazy(() => import("./AirSetupPanel").then((module) => ({ default: module.AirSetupPanel })));
@@ -167,6 +171,7 @@ function PresetPreviewArt({ id }: { id: string }) {
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
   { to: "/new", label: "Tạo video mới", icon: Plus },
+  { to: "/trends", label: "Ý tưởng xu hướng", icon: TrendingUp },
   { to: "/batch", label: "Tạo hàng loạt", icon: ListVideo },
   { to: "/dub-subtitle", label: "Lồng tiếng & phụ đề", icon: Subtitles },
   { to: "/tts", label: "Đọc văn bản (TTS)", icon: Mic2 },
@@ -4427,6 +4432,101 @@ class AppErrorBoundary extends Component<
   }
 }
 
+function TrendsPage() {
+  const navigate = useNavigate();
+  const { isDemo } = useAuth();
+  const [digest, setDigest] = useState<TrendDigest | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api.getTrends().then((r) => { if (active) setDigest(r.digest); }).catch(() => undefined).finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, []);
+
+  async function refresh() {
+    if (isDemo) { setError(DEMO_ONLY); return; }
+    setRefreshing(true); setError(null);
+    try {
+      const { digest: next } = await api.refreshTrends();
+      setDigest(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chưa tạo được ý tưởng xu hướng. Hãy thử lại.");
+    } finally { setRefreshing(false); }
+  }
+
+  /** Open the video wizard pre-filled from an idea: its niche picks the template, its hook + outline seed the content. */
+  function createFromIdea(idea: TrendIdea) {
+    const preset = CHANNEL_PRESETS.find((p) => p.id === idea.niche);
+    const base: ProjectSettings = { ...DEFAULT_PROJECT_SETTINGS, textProvider: "anthropic", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, autoMusic: true, captionHighlight: true, hookTitle: true };
+    const settings = preset ? preset.apply({ ...base, showKeyPoints: false }) : base;
+    const sourceText = [idea.hook, ...idea.scriptOutline].filter(Boolean).join("\n");
+    const state = { step: "template", sourceText, inputMode: "idea", modeChosen: true, templateId: preset ? preset.id : null, customized: false, settings, project: null };
+    try { sessionStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+    navigate("/new");
+  }
+
+  const nicheLabel = (id: string) => TREND_NICHES.find((n) => n.id === id)?.label ?? "Chủ đề";
+  return (
+    <div className="page trends-page">
+      <div className="page-heading">
+        <div>
+          <h1>Ý tưởng xu hướng</h1>
+          <p>Mỗi 7h sáng, Claude nghiên cứu xu hướng trên web rồi gợi ý ý tưởng và kịch bản video bám theo chủ đề kênh của bạn.</p>
+        </div>
+        <Button variant="secondary" busy={refreshing} disabled={isDemo} onClick={() => void refresh()}>
+          <RefreshCw size={16} /> {refreshing ? "Đang nghiên cứu xu hướng…" : "Làm mới hôm nay"}
+        </Button>
+      </div>
+
+      <Notice tone="info">Đây là ý tưởng do AI nghiên cứu để <strong>bám xu hướng</strong> — tham khảo, không đảm bảo chắc chắn viral. Danh sách tự cập nhật mỗi sáng; bấm “Làm mới” để tạo lại ngay.</Notice>
+      {error && <Notice tone="bad">{error}</Notice>}
+
+      {loading ? (
+        <div className="center-page"><LoaderCircle className="spin" /> Đang tải ý tưởng…</div>
+      ) : !digest || digest.ideas.length === 0 ? (
+        <div className="empty">
+          <TrendingUp size={42} />
+          <h2>Chưa có ý tưởng cho hôm nay</h2>
+          <p>Bấm “Làm mới hôm nay” để Claude nghiên cứu xu hướng và gợi ý ngay, hoặc chờ bản tự động lúc 7h sáng.</p>
+          {!isDemo && <Button onClick={() => void refresh()} busy={refreshing}><RefreshCw size={17} /> Làm mới hôm nay</Button>}
+          {isDemo && <Notice tone="warn">{DEMO_ONLY}</Notice>}
+        </div>
+      ) : (
+        <>
+          <p className="trends-meta">
+            Cập nhật {new Date(digest.generatedAt).toLocaleString("vi-VN")} · {digest.ideas.length} ý tưởng
+            {digest.usedWebSearch ? " · có tìm kiếm web" : " · chưa tìm web (dùng kiến thức AI)"}
+          </p>
+          <div className="trend-list">
+            {digest.ideas.map((idea, index) => (
+              <article key={index} className="trend-card">
+                <div className="trend-card-top">
+                  <Badge tone="info">{nicheLabel(idea.niche)}</Badge>
+                  <span className="trend-card-meta">{idea.platform} · {idea.durationSec}s</span>
+                </div>
+                <h2>{idea.title}</h2>
+                <p className="trend-hook">“{idea.hook}”</p>
+                {idea.whyTrending && <p className="trend-why"><strong>Vì sao bám xu hướng:</strong> {idea.whyTrending}</p>}
+                {idea.scriptOutline.length > 0 && (
+                  <details className="trend-outline">
+                    <summary>Dàn ý kịch bản</summary>
+                    <ol>{idea.scriptOutline.map((step, i) => <li key={i}>{step}</li>)}</ol>
+                  </details>
+                )}
+                {idea.hashtags.length > 0 && <p className="trend-tags">{idea.hashtags.join(" ")}</p>}
+                <Button variant="secondary" onClick={() => createFromIdea(idea)}><Clapperboard size={16} /> Tạo video từ ý tưởng này</Button>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function App() {
   return (
     <AppErrorBoundary>
@@ -4442,6 +4542,7 @@ export function App() {
               <Route index element={<DashboardPage />} />
               <Route path="new" element={<WizardPage />} />
               <Route path="batch" element={<BatchPage />} />
+              <Route path="trends" element={<TrendsPage />} />
               <Route path="studio/:id" element={<StudioPage />} />
               <Route path="dub-subtitle" element={<DubSubtitlePage />} />
               <Route path="tts" element={<TextToSpeechPage />} />

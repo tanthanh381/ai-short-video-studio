@@ -38,6 +38,7 @@ import {
 } from "@studio/shared";
 import { readBalancerSettings, writeBalancerSettings } from "@studio/shared/balancer-store";
 import { checkKeyWithProvider, createKeyVault } from "./api-keys";
+import { createTrendService, startDailyTrendScheduler } from "./trends";
 import type { AppConfig } from "./config";
 import type { AdminClient } from "./db";
 import { mapJob, mapProject } from "./mappers";
@@ -171,6 +172,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
   let balancerSnapshot: BalancerSummary | null = null;
   let airSetupSnapshot: AirSetupSummary | null = null;
   const keyVault = createKeyVault(db, config);
+  const trends = createTrendService(db, config, keyVault);
 
   async function getUsageStats(userId: string, budgetUsd: number): Promise<UsageStats> {
     const now = new Date();
@@ -347,6 +349,8 @@ export function createApp(config: AppConfig, db: AdminClient) {
   app.get("/health", (_req, res) =>
     res.json({ ok: true, service: "ai-short-video-studio-api" }),
   );
+
+  (app as unknown as { startDailyTrends: () => () => void }).startDailyTrends = () => startDailyTrendScheduler(trends);
 
   app.use("/v1", async (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
@@ -679,6 +683,18 @@ export function createApp(config: AppConfig, db: AdminClient) {
     await keyVault.remove(req.userId!, provider);
     req.log.info({ provider }, "api_key_removed");
     res.json(await accountView(req.userId!));
+  });
+
+  app.get("/v1/trends", async (req, res) => {
+    res.json({ digest: await trends.read(req.userId!) });
+  });
+  app.post("/v1/trends/refresh", async (req, res) => {
+    try {
+      res.json({ digest: await trends.refresh(req.userId!) });
+    } catch (error) {
+      const status = (error as { status?: number }).status ?? 502;
+      res.status(status).json({ error: error instanceof Error ? error.message : "Chưa tạo được ý tưởng xu hướng. Hãy thử lại." });
+    }
   });
 
   app.get("/v1/local-models", async (_req, res) => {

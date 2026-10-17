@@ -3943,3 +3943,18 @@ a.button { text-decoration: none; }
 .wizard-nav { display: flex; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-4); }
 .wizard-nav .button { min-width: 140px; justify-content: center; }
 @media (max-width: 560px) { .wizard-nav .button { min-width: 0; flex: 1; } }
+
+/* --- Ý tưởng xu hướng (TrendsPage) --- */
+.trends-meta { color: var(--text-muted); font-size: var(--text-sm); margin: var(--space-3) 0; }
+.trend-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-3); }
+.trend-card { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); padding: var(--space-4); display: flex; flex-direction: column; gap: 8px; }
+.trend-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.trend-card-meta { color: var(--text-muted); font-size: var(--text-sm); white-space: nowrap; }
+.trend-card h2 { margin: 2px 0; font-size: var(--text-lg); color: var(--text-strong); line-height: 1.3; }
+.trend-hook { margin: 0; color: var(--text-2); font-style: italic; line-height: 1.5; }
+.trend-why { margin: 0; font-size: var(--text-sm); color: var(--text-2); line-height: 1.5; }
+.trend-outline summary { cursor: pointer; font-size: var(--text-sm); font-weight: 600; color: var(--link); min-height: 32px; display: flex; align-items: center; }
+.trend-outline ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: var(--text-sm); color: var(--text-2); line-height: 1.5; }
+.trend-tags { margin: 0; font-size: var(--text-sm); color: var(--link); overflow-wrap: anywhere; }
+.trend-card .button { margin-top: auto; justify-content: center; }
+@media (max-width: 560px) { .trend-list { grid-template-columns: 1fr; } }

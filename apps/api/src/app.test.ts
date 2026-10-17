@@ -21,7 +21,7 @@ const config: AppConfig = {
   LOCAL_MEDIA_BASE_URL: "http://localhost:8765",
   RENDER_WORKER_ENABLED: false,
   OPENAI_BASE_URL: "https://api.openai.com/v1",
-  ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+  ANTHROPIC_BASE_URL: "https://api.anthropic.com", ANTHROPIC_TREND_MODEL: "claude-sonnet-4-6",
   NODE_ENV: "test",
 };
 
