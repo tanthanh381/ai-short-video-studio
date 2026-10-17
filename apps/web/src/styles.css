@@ -1258,6 +1258,20 @@ a:focus-visible {
 .scene-foot button svg {
   width: 13px;
 }
+.scene-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--bad-text-strong) 22%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--bad-soft);
+  color: var(--bad-text-strong);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+.scene-error svg { flex: 0 0 auto; margin-top: 2px; }
 .media-state {
   padding: 4px 6px;
   border-radius: var(--radius-sm);

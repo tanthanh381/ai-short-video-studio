@@ -2224,6 +2224,12 @@ function SceneCard({
             onChange={(e) => onChange({ ...scene, imagePrompt: e.target.value })}
           />
         </label>
+        {scene.errorMessage && (
+          <div className="scene-error" role="alert">
+            <CircleAlert size={15} aria-hidden="true" />
+            <span>{scene.errorMessage}</span>
+          </div>
+        )}
         <div className="scene-foot">
           <span>
             {formatDuration(
