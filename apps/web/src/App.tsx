@@ -18,6 +18,7 @@ import {
   Gauge,
   Image,
   Library,
+  ListVideo,
   LoaderCircle,
   LogOut,
   Menu,
@@ -110,6 +111,7 @@ import { projectIsProcessing } from "./lib/video-submission";
 import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
 import { InfoPopover } from "./components/Disclosure";
 import { useSaveShortcut } from "./hooks/use-save-shortcut";
+import { BATCH_MAX_ITEMS, parseBatchIdeas } from "./lib/batch";
 
 const CHANNEL_PRESET_VISUALS: Record<string, { tone: string; badge: string }> = {
   "co-tich": { tone: "storybook", badge: "Story" },
@@ -162,6 +164,7 @@ function PresetPreviewArt({ id }: { id: string }) {
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
   { to: "/new", label: "Tạo video mới", icon: Plus },
+  { to: "/batch", label: "Tạo hàng loạt", icon: ListVideo },
   { to: "/dub-subtitle", label: "Lồng tiếng & phụ đề", icon: Subtitles },
   { to: "/tts", label: "Đọc văn bản (TTS)", icon: Mic2 },
   { to: "/media", label: "Thư viện media", icon: Library },
@@ -2076,6 +2079,64 @@ function WizardPage() {
           : <Button type="button" busy={busy} disabled={(step === "input" && !canContinue) || (step === "template" && !templateId)} onClick={() => void goNext()}>Tiếp tục <ChevronRight size={16} /></Button>}
       </div>
     </div>
+  );
+}
+
+type BatchItem = { idea: string; state: "queued" | "error"; projectId?: string; error?: string };
+
+function BatchPage() {
+  const navigate = useNavigate();
+  const { isDemo } = useAuth();
+  const [source, setSource] = useState("");
+  const [templateId, setTemplateId] = useState("kien-thuc");
+  const [preset, setPreset] = useState<ProjectSettings["generationPreset"]>("balanced");
+  const [running, setRunning] = useState(false);
+  const [items, setItems] = useState<BatchItem[]>([]);
+  const ideas = useMemo(() => parseBatchIdeas(source), [source]);
+  const template = CHANNEL_PRESETS.find((item) => item.id === templateId) ?? CHANNEL_PRESETS[0]!;
+
+  async function enqueue() {
+    if (isDemo || !ideas.length || running) return;
+    setRunning(true);
+    setItems(ideas.map((idea) => ({ idea, state: "queued" })));
+    try {
+      for (const [index, idea] of ideas.entries()) {
+        try {
+          const project = await api.createVideo({
+            sourceText: idea,
+            inputMode: "idea",
+            settings: { ...template.apply({ ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local" }), generationPreset: preset },
+          });
+          setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, projectId: project.id } : item));
+        } catch (error) {
+          setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, state: "error", error: error instanceof Error ? error.message : "Chưa đưa được vào hàng đợi" } : item));
+        }
+      }
+    } finally { setRunning(false); }
+  }
+
+  return (
+    <SimplePage title="Tạo hàng loạt" subtitle="Đưa nhiều ý tưởng vào hàng đợi bằng cùng một mẫu video. Mỗi video vẫn là một project riêng để mở, sửa và tải xuống.">
+      <div className="batch-layout">
+        <section className="panel batch-form">
+          <div className="batch-section-title"><ListVideo size={19} /><strong>Danh sách ý tưởng</strong></div>
+          <p className="microcopy">Mỗi ý tưởng cách nhau bằng một dòng trống. Tối đa {BATCH_MAX_ITEMS} video mỗi lượt.</p>
+          <textarea value={source} onChange={(event) => setSource(event.target.value)} rows={12} maxLength={30000} disabled={running} placeholder={"Ví dụ: Vì sao chúng ta suy nghĩ quá nhiều?\n\nBa dấu hiệu cho thấy bạn đang bị quá tải thông tin…"} aria-label="Danh sách ý tưởng tạo hàng loạt" />
+          <div className="script-meta"><span>{ideas.length}/{BATCH_MAX_ITEMS} ý tưởng hợp lệ</span><span>{source.length.toLocaleString("vi-VN")} / 30.000 ký tự</span></div>
+          <div className="batch-options">
+            <label><span>Mẫu video</span><select value={templateId} onChange={(event) => setTemplateId(event.target.value)} disabled={running}>{CHANNEL_PRESETS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+            <label><span>Generation preset</span><select value={preset} onChange={(event) => setPreset(event.target.value as ProjectSettings["generationPreset"])} disabled={running}><option value="fast">Fast</option><option value="balanced">Balanced</option><option value="quality">Quality</option></select></label>
+          </div>
+          <div className="batch-template-summary"><PresetPreviewArt id={template.id} /><div><strong>{template.label}</strong><span>{template.hint}</span></div></div>
+          {isDemo && <Notice tone="warn">Chế độ mẫu chỉ cho xem giao diện. Hãy đăng nhập để đưa video thật vào hàng đợi.</Notice>}
+          <Button type="button" busy={running} disabled={isDemo || ideas.length === 0} onClick={() => void enqueue()}><ListVideo size={17} /> Đưa {ideas.length || "các"} video vào hàng đợi</Button>
+        </section>
+        <section className="panel batch-results" aria-live="polite">
+          <div className="batch-section-title"><Clapperboard size={19} /><strong>Kết quả enqueue</strong></div>
+          {!items.length ? <div className="batch-empty"><ListVideo size={24} /><strong>Chưa có lượt tạo nào</strong><span>Các project sẽ xuất hiện ở đây sau khi được đưa vào queue.</span></div> : <ol>{items.map((item) => <li key={item.idea}><div><strong>{item.idea}</strong><span>{item.error ?? (item.projectId ? "Đã vào queue" : "Đang gửi…")}</span></div>{item.projectId && <Button type="button" variant="ghost" onClick={() => navigate(`/studio/${item.projectId}`)}>Mở project</Button>}</li>)}</ol>}
+        </section>
+      </div>
+    </SimplePage>
   );
 }
 
@@ -4325,6 +4386,7 @@ export function App() {
             <Routes>
               <Route index element={<DashboardPage />} />
               <Route path="new" element={<WizardPage />} />
+              <Route path="batch" element={<BatchPage />} />
               <Route path="studio/:id" element={<StudioPage />} />
               <Route path="dub-subtitle" element={<DubSubtitlePage />} />
               <Route path="tts" element={<TextToSpeechPage />} />
