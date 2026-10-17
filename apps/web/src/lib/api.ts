@@ -1,4 +1,4 @@
-import { DEFAULT_PROJECT_SETTINGS, type AirSetupSummary, type ApiKeySummary, type BalancerSummary, type Estimate, type Job, type KeyProvider, type LocalModelCatalog, type Project, type RegenerationComponent, type SystemSummary } from "@studio/shared";
+import { DEFAULT_PROJECT_SETTINGS, type AirSetupSummary, type ApiKeySummary, type BalancerSummary, type Estimate, type Job, type KeyProvider, type LocalModelCatalog, type Project, type RegenerationComponent, type SystemSummary, type TrendDigest } from "@studio/shared";
 import { DEMO_ONLY } from "./copy";
 import { appConfig } from "./config";
 import { demoApi } from "./demo";
@@ -214,6 +214,8 @@ export const api = {
   /** The "Hệ thống" dashboard: machines, models, services and jobs. */
   getSystem: () => (appConfig.demoMode ? Promise.resolve(demoSystem()) : request<SystemSummary>("/v1/system")),
   getLocalModels: () => request<LocalModelCatalog>("/v1/local-models"),
+  getTrends: () => appConfig.demoMode ? Promise.resolve({ digest: null as TrendDigest | null }) : request<{ digest: TrendDigest | null }>("/v1/trends"),
+  refreshTrends: () => request<{ digest: TrendDigest | null }>("/v1/trends/refresh", { method: "POST" }),
   /** Checks the key with the provider, then saves it encrypted on the server. Resolves with the refreshed account view. */
   saveApiKey: (provider: KeyProvider, key: string) =>
     request<AccountSettings & { warning?: string }>(`/v1/api-keys/${provider}`, {
