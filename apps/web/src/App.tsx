@@ -2054,12 +2054,12 @@ function WizardPage() {
           <section className="wizard-section">
             <h1 id="wizard-heading">Xem lại &amp; tạo video</h1>
             <p className="wizard-lead">Kiểm tra nhanh rồi bấm Tạo video. Bạn có thể quay lại từng bước để sửa.</p>
-            <div className={`content-quality-card ${contentQuality.score >= 70 ? "is-good" : "is-review"}`} role="status" aria-live="polite">
+            <div className={`content-quality-card ${contentQuality.score >= 80 ? "is-good" : "is-review"}`} role="status" aria-live="polite">
               <div className="content-quality-head">
                 <span><Sparkles size={16} /> Content check</span>
                 <strong>{contentQuality.score}/100</strong>
               </div>
-              <p>{contentQuality.score >= 70 ? "Hook và cấu trúc đã đủ tốt để bắt đầu tạo video." : "Nội dung nên được tinh chỉnh trước khi tạo để tăng khả năng giữ người xem."}</p>
+              <p>{contentQuality.score >= 80 ? "Hook và cấu trúc đã đạt ngưỡng khuyến nghị để bắt đầu tạo video." : "Video vẫn tạo được, nhưng nên tinh chỉnh nội dung để tăng khả năng giữ người xem."}</p>
               {contentQuality.feedback.length > 0 && (
                 <details>
                   <summary>{contentQuality.feedback.length} gợi ý cải thiện</summary>
