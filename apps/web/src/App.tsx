@@ -91,13 +91,14 @@ const AirSetupPanel = lazy(() => import("./AirSetupPanel").then((module) => ({ d
 const MachinesPanel = lazy(() => import("./MachinesPanel").then((module) => ({ default: module.MachinesPanel })));
 const SystemPage = lazy(() => import("./SystemPage").then((module) => ({ default: module.SystemPage })));
 import { demoBalancerAfter, demoSystem } from "./lib/demo-system";
-import { api, type ServiceId, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
+import { api, type ServiceId, type ServiceState, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
 import { resetPasswordView } from "./lib/auth";
 import { withLayoutTemplate, withVisualPreset } from "./lib/visual-preset";
 import { ProjectSaver, type SaveState } from "./lib/project-saver";
-import { Button, Field, Notice } from "./components/ui";
+import { Badge, Button, Field, Notice } from "./components/ui";
 import { askConfirm, ConfirmHost } from "./components/ConfirmDialog";
+import { WIZARD_STEPS, stepIndex, detectInputMode, modelGroups, modelSummary, autoModelPatch, modelsReady, HEALTH_LABEL, HEALTH_TONE, type WizardStepId } from "./lib/wizard";
 import { DEMO_ONLY, DEMO_VOICE } from "./lib/copy";
 import { LOGO_MAX_BYTES, checkLogoFile } from "./lib/logo";
 import { StageGuides, StageLogo } from "./components/StageLogo";
@@ -1537,327 +1538,526 @@ function LocalModelPicker({ value, onChange, catalog }: {
   );
 }
 
-function NewProjectPage() {
+/** A representative gradient frame for the brand step's live preview (no scene picture exists yet). */
+function PreviewFrame({ settings }: { settings: ProjectSettings }) {
+  return (
+    <div className={`video-preview ratio-${settings.aspectRatio.replace(":", "-")}`}>
+      <div className="preview-art">
+        <div className="preview-orb" />
+        <div className="preview-ridge" />
+        <span>Khung xem trước</span>
+      </div>
+      {settings.subtitle.enabled && (
+        <div className={`subtitle-preview subtitle-${settings.subtitle.position}`}>Phụ đề mẫu sẽ hiện ở đây</div>
+      )}
+    </div>
+  );
+}
+
+const WIZARD_STORAGE_KEY = "studio:wizard";
+
+type WizardState = {
+  step: WizardStepId;
+  sourceText: string;
+  inputMode: Project["inputMode"];
+  modeChosen: boolean;
+  templateId: string | null;
+  customized: boolean;
+  settings: ProjectSettings;
+  project: Project | null;
+};
+
+function WizardPage() {
   const navigate = useNavigate();
   const { isDemo } = useAuth();
+  const localModels = useLocalModels(isDemo);
+  const [statuses, setStatuses] = useState<Partial<Record<ServiceId, ServiceState>> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sourceText, setSourceText] = useState("");
-  const [inputMode, setInputMode] = useState<Project["inputMode"]>("idea");
-  // A finished script pasted into "Một ý tưởng" is switched to "Kịch bản có sẵn" (so it is read as written, not rewritten);
-  // once the person has picked a mode themselves, that choice is never overridden.
-  const [modeChosen, setModeChosen] = useState(false);
-  const [autoScript, setAutoScript] = useState(false);
-  const [settings, setSettings] = useState<ProjectSettings>(
-    // 1.0x is already the short-form pace: the voice bridge brings every voice to about 3.7 words per second.
-    { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, autoMusic: true, captionHighlight: true, hookTitle: true },
-  );
-  const [channelPreset, setChannelPreset] = useState<string | null>(null);
-  const [customizePreset, setCustomizePreset] = useState(false);
-  const [advanced, setAdvanced] = useState(false);
-  // Read the real local catalog even before Advanced is opened so a ready LTX node can
-  // be selected automatically for new projects. When LTX is offline, the catalog's
-  // video default stays null and the existing still-image fallback remains unchanged.
-  const localModels = useLocalModels(isDemo);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [logoNote, setLogoNote] = useState<string | null>(null);
+  const [layoutEditing, setLayoutEditing] = useState(false);
+  const demoLogoUrl = useRef<string | null>(null);
+  const stepTop = useRef<HTMLDivElement | null>(null);
+
+  const [state, setState] = useState<WizardState>(() => {
+    const fresh: WizardState = {
+      step: "input",
+      sourceText: "",
+      inputMode: "idea",
+      modeChosen: false,
+      templateId: null,
+      customized: false,
+      settings: { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, autoMusic: true, captionHighlight: true, hookTitle: true },
+      project: null,
+    };
+    // Refresh keeps the draft: the whole wizard state was mirrored to sessionStorage; read it back before the first render.
+    try {
+      const saved = sessionStorage.getItem(WIZARD_STORAGE_KEY);
+      if (saved) return { ...fresh, ...(JSON.parse(saved) as WizardState) };
+    } catch { /* ignore */ }
+    return fresh;
+  });
+  const { step, sourceText, inputMode, settings, project, templateId, customized } = state;
+  const patch = (next: Partial<WizardState>) => setState((s) => ({ ...s, ...next }));
+  const setSettings = (next: ProjectSettings) => setState((s) => ({ ...s, settings: next }));
+
+  useEffect(() => {
+    try { sessionStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+  }, [state]);
+
+  // The AI-models step reads the real health of each service.
+  useEffect(() => {
+    if (isDemo) { setStatuses({ ollama: "healthy", localMedia: "healthy", openai: "disabled", anthropic: "disabled", render: "healthy" }); return; }
+    let active = true;
+    api.getSettings().then((account) => { if (active) setStatuses(Object.fromEntries(Object.entries(account.serviceStatuses).map(([id, status]) => [id, status.state])) as Partial<Record<ServiceId, ServiceState>>); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [isDemo]);
+  // A ready LTX node is selected automatically, as on the old create page.
   useEffect(() => {
     const defaultVideo = localModels?.video.default;
     if (!defaultVideo) return;
-    setSettings((current) => current.localModels.video
-      ? current
-      : { ...current, localModels: { ...current.localModels, video: defaultVideo } });
+    setState((s) => s.settings.localModels.video ? s : { ...s, settings: { ...s.settings, localModels: { ...s.settings.localModels, video: defaultVideo } } });
   }, [localModels]);
-  const submitting = useRef(false);
-  // Pasted subtitles are read without their cue numbers and timings, so count only what will be spoken.
-  const pastedSubtitles = looksLikeSubtitles(sourceText);
+  useEffect(() => {
+    const path = settings.logoPath;
+    if (!path) { setLogoPreviewUrl(null); return; }
+    if (isDemo || path === "demo:logo") { setLogoPreviewUrl(demoLogoUrl.current); return; }
+    if (!project) return;
+    let active = true;
+    void api.mediaUrl(project.id, path).then(({ url }) => active && setLogoPreviewUrl(url)).catch(() => active && setLogoPreviewUrl(null));
+    return () => { active = false; };
+  }, [settings.logoPath, project, isDemo]);
+  useEffect(() => () => { if (demoLogoUrl.current) URL.revokeObjectURL(demoLogoUrl.current); }, []);
+
   const spokenText = (() => { try { return cleanScriptForNarration(sourceText); } catch { return ""; } })();
   const wordCount = spokenText.trim() ? spokenText.trim().split(/\s+/u).length : 0;
-  // A script is read as written, so its length is known now; an idea is written to the chosen duration.
   const readsAsWritten = inputMode === "full-script";
+  const pastedSubtitles = looksLikeSubtitles(sourceText);
   const narrationSeconds = estimatedNarrationSeconds(wordCount, settings.voice, settings.voiceSpeed);
-  /** How many scenes a script read as written will be cut into: the same cuts the studio makes. */
   const sceneCount = useMemo(() => {
     if (!readsAsWritten || !spokenText.trim()) return null;
     try { return splitScript(spokenText).length; } catch { return null; }
   }, [readsAsWritten, spokenText]);
   const plan = contentPlan(settings.targetDurationSec, settings.style, settings.voice, settings.voiceSpeed);
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (submitting.current) return;
-    if (sourceText.trim().length < 10) { setError(SOURCE_TOO_SHORT); return; }
-    submitting.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      const project = await api.createVideo({ sourceText, inputMode, settings });
-      navigate(`/studio/${project.id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Chưa thể bắt đầu tạo video. Hãy thử lại.");
-    } finally {
-      submitting.current = false;
-      setBusy(false);
-    }
+  const groups = modelGroups(settings, statuses, localModels);
+  const canContinue = sourceText.trim().length >= 10;
+  const draftTitle = () => spokenText.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới";
+
+  function focusStep() {
+    window.setTimeout(() => stepTop.current?.focus(), 0);
   }
-  /** Makes the project, cuts the script into scenes and stops there, so the scenes can be read and edited before any picture or voice is made. */
-  async function splitFirst() {
-    if (submitting.current) return;
-    if (sourceText.trim().length < 10) { setError(SOURCE_TOO_SHORT); return; }
-    submitting.current = true;
-    setBusy(true);
-    setError(null);
+
+  /** Creates the draft the first time we leave the input step, then keeps it in sync as the person moves on. */
+  async function persist(): Promise<Project | null> {
+    if (!project) {
+      const created = await api.createProject({ title: draftTitle(), sourceText, inputMode, settings });
+      patch({ project: created });
+      return created;
+    }
     try {
-      const title = spokenText.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới";
-      const project = await api.createProject({ title, sourceText, inputMode, settings });
-      try {
-        await api.queue(project.id, "storyboard");
-      } catch (e) {
-        // The draft exists; the studio opens on it and says what is missing, instead of the script being lost.
-        navigate(`/studio/${project.id}`, { state: { notice: e instanceof Error ? e.message : "Chưa chia được cảnh." } });
-        return;
+      const saved = await api.updateProject({ ...project, title: draftTitle(), sourceText, inputMode, settings });
+      patch({ project: saved });
+      return saved;
+    } catch (e) {
+      if ((e as { status?: number }).status === 409) {
+        const fresh = await api.getProject(project.id);
+        const saved = await api.updateProject({ ...fresh, title: draftTitle(), sourceText, inputMode, settings });
+        patch({ project: saved });
+        return saved;
       }
-      navigate(`/studio/${project.id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Chưa chia được cảnh. Hãy thử lại; kịch bản của bạn vẫn còn nguyên.");
-    } finally {
-      submitting.current = false;
-      setBusy(false);
+      throw e;
     }
   }
-  async function saveDraft() {
-    if (submitting.current) return;
-    if (sourceText.trim().length < 10) { setError(SOURCE_TOO_SHORT); return; }
-    submitting.current = true;
-    setBusy(true);
-    setError(null);
+
+  async function goNext() {
+    if (step === "input" && !canContinue) { setError(SOURCE_TOO_SHORT); return; }
+    const index = stepIndex(step);
+    const next = WIZARD_STEPS[Math.min(index + 1, WIZARD_STEPS.length - 1)]!;
+    setBusy(true); setError(null);
     try {
-      const title = spokenText.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới";
-      const project = await api.createProject({
-        title,
-        sourceText,
-        inputMode,
-        settings,
-      });
-      navigate(`/studio/${project.id}`);
+      await persist();
+      patch({ step: next.id });
+      focusStep();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Chưa lưu được bản nháp. Hãy thử lại; nội dung bạn nhập vẫn còn trên trang.");
-    } finally {
-      submitting.current = false;
+      setError(e instanceof Error ? e.message : "Chưa lưu được bản nháp. Hãy thử lại.");
+    } finally { setBusy(false); }
+  }
+  function goBack() {
+    const prev = WIZARD_STEPS[Math.max(stepIndex(step) - 1, 0)]!;
+    patch({ step: prev.id });
+    setError(null);
+    focusStep();
+  }
+  function goTo(id: WizardStepId) { patch({ step: id }); setError(null); focusStep(); }
+
+  async function applyTemplate(id: string) {
+    const preset = CHANNEL_PRESETS.find((p) => p.id === id);
+    if (!preset) return;
+    if (templateId && templateId !== id && customized) {
+      const ok = await askConfirm({ title: "Đổi mẫu video?", detail: "Các tùy chỉnh thủ công của bạn sẽ được đặt lại theo mẫu mới.", confirmLabel: "Đổi mẫu", cancelLabel: "Giữ nguyên" });
+      if (!ok) return;
+    }
+    setState((s) => ({ ...s, templateId: id, customized: false, settings: preset.apply(s.settings) }));
+  }
+
+  function editSettings(next: ProjectSettings) {
+    setState((s) => ({ ...s, settings: next, customized: s.templateId ? true : s.customized }));
+  }
+
+  async function uploadLogo(file: File) {
+    if (file.size > LOGO_MAX_BYTES) { setError("Logo lớn hơn 5 MB. Hãy dùng ảnh nhỏ hơn (logo chỉ chiếm một góc nhỏ của video)."); return; }
+    setLogoNote(null);
+    const round = await checkLogoFile(file);
+    if (isDemo) {
+      if (demoLogoUrl.current) URL.revokeObjectURL(demoLogoUrl.current);
+      demoLogoUrl.current = URL.createObjectURL(file);
+      setLogoPreviewUrl(demoLogoUrl.current);
+      editSettings({ ...settings, logoPath: "demo:logo", logoShape: round ? "circle" : "original" });
+      setLogoNote("Chế độ mẫu: logo chỉ hiện trên trang này để thử bố cục, không được tải lên.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const draft = await persist();
+      if (!draft) return;
+      const path = await api.uploadMedia(draft.id, file, "logo");
+      if (round) setLogoNote("Logo có nền trắng quanh hình tròn nên đã được cắt tròn. Đổi lại ở “Hình dạng logo” nếu cần.");
+      editSettings({ ...settings, logoPath: path, logoShape: round ? "circle" : "original" });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chưa tải logo lên được. Hãy thử lại hoặc chọn ảnh khác.");
+    } finally { setBusy(false); }
+  }
+
+  async function uploadMusic(file: File) {
+    if (isDemo) { setError(DEMO_ONLY); return; }
+    setBusy(true); setError(null);
+    try {
+      const draft = await persist();
+      if (!draft) return;
+      const path = await api.uploadMedia(draft.id, file, "music");
+      editSettings({ ...settings, backgroundMusicPath: path, autoMusic: false });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chưa tải nhạc lên được. Hãy thử lại hoặc chọn file khác.");
+    } finally { setBusy(false); }
+  }
+
+  async function createVideo() {
+    if (isDemo) { setError(DEMO_ONLY); return; }
+    setBusy(true); setError(null);
+    try {
+      const draft = await persist();
+      if (!draft) return;
+      await api.continueVideo(draft.id);
+      try { sessionStorage.removeItem(WIZARD_STORAGE_KEY); } catch { /* ignore */ }
+      navigate(`/studio/${draft.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chưa bắt đầu tạo video được. Kiểm tra máy chính đang bật rồi bấm lại.");
       setBusy(false);
     }
   }
+
+  const stepNo = stepIndex(step) + 1;
   return (
-    <div className="page narrow">
-      <button type="button" className="back-link" onClick={() => navigate(-1)}>
-        <ArrowLeft size={17} /> Quay lại
-      </button>
-      <div className="page-heading">
-        <div>
-          <h1>Kịch bản của bạn, video hoàn chỉnh.</h1>
-          <p>Studio tự chia cảnh, tạo ảnh, đọc tiếng Việt, đồng bộ phụ đề và ghép video.</p>
-        </div>
-      </div>
-      <form className="creation-form" onSubmit={submit}>
-        <section>
-          <div className="mode-switch">
-            <span className="mode-switch-label" id="mode-switch-label">Bạn bắt đầu từ đâu?</span>
-            <div
-              className="mode-switch-options"
-              role="radiogroup"
-              aria-labelledby="mode-switch-label"
-              onKeyDown={(event) => {
-                // Radio group keyboard pattern: arrows move between the two options and select them.
-                if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key) || busy) return;
-                event.preventDefault();
-                const next = inputMode === "idea" ? "full-script" : "idea";
-                setInputMode(next);
-                setModeChosen(true);
-                setAutoScript(false);
-                event.currentTarget.querySelector<HTMLButtonElement>(`[data-mode="${next}"]`)?.focus();
-              }}
-            >
-              {([
-                ["idea", "Một ý tưởng", "AI viết kịch bản, chia cảnh và vẽ minh họa"],
-                ["full-script", "Kịch bản có sẵn", "Giữ nguyên lời bạn viết, dán được cả phụ đề .srt"],
-              ] as const).map(([mode, title, detail]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  role="radio"
-                  aria-checked={inputMode === mode}
-                  tabIndex={inputMode === mode ? 0 : -1}
-                  data-mode={mode}
-                  className={inputMode === mode ? "active" : ""}
-                  disabled={busy}
-                  onClick={() => { setInputMode(mode); setModeChosen(true); setAutoScript(false); }}
-                >
-                  <strong>{title}</strong>
-                  <small>{detail}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-          <Field
-            label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : "Kịch bản hoàn chỉnh"}
-            hint={inputMode === "idea"
-              ? "Một câu chủ đề, vài ý chính hay cả một câu chuyện dài: AI viết lại thành lời đọc vừa đúng thời lượng bạn chọn bên dưới."
-              : "Giữ nguyên câu chữ và dấu tiếng Việt. Có thể dán cả nội dung phụ đề (.srt/.vtt): số thứ tự và mốc thời gian được bỏ, chỉ đọc phần lời."}
-          >
-            <>
-              <textarea
-                aria-label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : "Kịch bản hoàn chỉnh"}
-                aria-invalid={error === SOURCE_TOO_SHORT || undefined}
-                aria-describedby={error === SOURCE_TOO_SHORT ? "create-error" : undefined}
-                value={sourceText}
-                onChange={(e) => {
-                  setSourceText(e.target.value);
-                  if (error === SOURCE_TOO_SHORT) setError(null);
-                  // Subtitles are someone's finished lines: read them as written, never rewrite them as an idea.
-                  if (looksLikeSubtitles(e.target.value)) setInputMode("full-script");
-                  else if (!modeChosen && inputMode === "idea" && looksLikeFinishedScript(e.target.value)) {
-                    setInputMode("full-script");
-                    setAutoScript(true);
-                  } else if (autoScript && !looksLikeFinishedScript(e.target.value)) {
-                    setInputMode("idea"); // the text changed into something that is no longer a finished script
-                    setAutoScript(false);
-                  }
-                }}
-                maxLength={30000}
-                rows={10}
-                disabled={busy}
-                placeholder={inputMode === "idea" ? "Ví dụ: Vì sao cần xác minh tin nhắn chuyển tiền trước khi bấm chuyển…" : "Dán toàn bộ lời đọc cho video vào đây…"}
-              />
-              <div className="script-meta" aria-live="polite">
-                <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>
-                <span>{wordCount.toLocaleString("vi-VN")} từ</span>
-                {readsAsWritten && wordCount > 0 && <span>≈ {formatDuration(narrationSeconds * 1000)} lời đọc</span>}
-                {sceneCount !== null && <span>≈ {sceneCount} cảnh</span>}
-              </div>
-              {autoScript && inputMode === "full-script" && !pastedSubtitles && (
-                <Notice tone="info">
-                  <span>
-                    Đây là kịch bản hoàn chỉnh nên Studio giữ nguyên từng câu bạn viết và chia cảnh theo các dòng của bạn{sceneCount ? ` (khoảng ${sceneCount} cảnh)` : ""}, thay vì để AI viết lại.
-                  </span>
-                  <Button variant="ghost" type="button" onClick={() => { setInputMode("idea"); setModeChosen(true); setAutoScript(false); }}>Để AI viết lại theo thời lượng</Button>
-                </Notice>
-              )}
-              {pastedSubtitles && <Notice tone="info">Đã nhận nội dung phụ đề: bỏ số thứ tự và mốc thời gian, nối các dòng thành câu và đọc nguyên văn.</Notice>}
-              {readsAsWritten && narrationSeconds > 90 && (
-                <Notice tone="warn">Video sẽ dài khoảng {formatDuration(narrationSeconds * 1000)}. Shorts, Reels và TikTok giữ chân tốt nhất dưới 60–90 giây: nên chia thành nhiều phần (Phần 1, Phần 2…).</Notice>
-              )}
-            </>
-          </Field>
-          {inputMode === "idea" && (
-            <div className="duration-picker">
-              <span className="duration-picker-label" id="duration-label">Thời lượng video</span>
-              <div className="duration-options" role="radiogroup" aria-labelledby="duration-label">
-                {DURATION_OPTIONS.map((seconds) => (
-                  <button
-                    key={seconds}
-                    type="button"
-                    role="radio"
-                    aria-checked={settings.targetDurationSec === seconds}
-                    className={settings.targetDurationSec === seconds ? "active" : ""}
-                    disabled={busy}
-                    onClick={() => setSettings((s) => ({ ...s, targetDurationSec: seconds }))}
-                  >
-                    {durationLabel(seconds)}
+    <div className="page narrow wizard">
+      <button type="button" className="back-link" onClick={() => navigate("/")}><ArrowLeft size={17} /> <span>Danh sách dự án</span></button>
+      <ol className="wizard-steps" aria-label="Các bước tạo video">
+        {WIZARD_STEPS.map((s, index) => {
+          const current = s.id === step;
+          const done = index < stepIndex(step);
+          return (
+            <li key={s.id} className={`${current ? "is-current" : ""} ${done ? "is-done" : ""}`}>
+              <button type="button" disabled={index > stepIndex(step) && !project} aria-current={current ? "step" : undefined} onClick={() => (index <= stepIndex(step) || project) && goTo(s.id)}>
+                <span className="wizard-step-no" aria-hidden="true">{done ? <Check size={14} /> : index + 1}</span>
+                <span className="wizard-step-label">{s.short}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="wizard-panel" ref={stepTop} tabIndex={-1} aria-labelledby="wizard-heading">
+        {step === "input" && (
+          <section className="wizard-section">
+            <h1 id="wizard-heading">Bạn muốn kể điều gì?</h1>
+            <p className="wizard-lead">Nhập một ý tưởng để AI viết kịch bản, hoặc dán kịch bản / phụ đề có sẵn để giữ nguyên lời bạn.</p>
+            <div className="mode-switch">
+              <span className="mode-switch-label" id="mode-switch-label">Bạn bắt đầu từ đâu?</span>
+              <div className="mode-switch-options" role="radiogroup" aria-labelledby="mode-switch-label">
+                {([["idea", "Một ý tưởng", "AI viết kịch bản, chia cảnh và vẽ minh họa"], ["full-script", "Kịch bản / phụ đề có sẵn", "Giữ nguyên lời bạn viết, dán được cả .srt/.vtt"]] as const).map(([mode, title, detail]) => (
+                  <button key={mode} type="button" role="radio" aria-checked={inputMode === mode} tabIndex={inputMode === mode ? 0 : -1} className={inputMode === mode ? "active" : ""} disabled={busy}
+                    onClick={() => patch({ inputMode: mode, modeChosen: true })}>
+                    <strong>{title}</strong><small>{detail}</small>
                   </button>
                 ))}
               </div>
-              <div className="duration-plan" aria-live="polite">
-                <strong>Dàn ý AI sẽ viết: {plan.summary}</strong>
-                <span>Khoảng {plan.words.target} từ lời đọc · {plan.scenes} cảnh · theo giọng và thể loại đang chọn</span>
-                <details>
-                  <summary>Xem dàn ý chi tiết</summary>
-                  <ol>
-                    {plan.beats.map((beat) => <li key={beat.label}><b>{beat.label}</b> · {beat.words} từ: {beat.brief}</li>)}
-                  </ol>
-                </details>
+            </div>
+            <Field label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : "Kịch bản hoàn chỉnh"}
+              hint={inputMode === "idea" ? "Một câu chủ đề hay cả một câu chuyện: AI viết lại thành lời đọc vừa đúng thời lượng." : "Giữ nguyên câu chữ và dấu. Dán được cả .srt/.vtt: số thứ tự và mốc thời gian sẽ được bỏ."}>
+              <>
+                <textarea aria-label={inputMode === "idea" ? "Ý tưởng hoặc chủ đề" : "Kịch bản hoàn chỉnh"}
+                  aria-invalid={error === SOURCE_TOO_SHORT || undefined} aria-describedby={error === SOURCE_TOO_SHORT ? "wizard-error" : undefined}
+                  value={sourceText} rows={9} maxLength={30000} disabled={busy}
+                  placeholder={inputMode === "idea" ? "Ví dụ: Vì sao cần xác minh tin nhắn chuyển tiền trước khi bấm chuyển…" : "Dán toàn bộ lời đọc cho video vào đây…"}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const detected = detectInputMode(value, inputMode, state.modeChosen);
+                    setState((s) => ({ ...s, sourceText: value, inputMode: detected.mode }));
+                    if (error === SOURCE_TOO_SHORT) setError(null);
+                  }} />
+                <div className="script-meta" aria-live="polite">
+                  <span>{sourceText.length.toLocaleString("vi-VN")} / 30.000 ký tự</span>
+                  <span>{wordCount.toLocaleString("vi-VN")} từ</span>
+                  {readsAsWritten && wordCount > 0 && <span>≈ {formatDuration(narrationSeconds * 1000)} lời đọc</span>}
+                  {sceneCount !== null && <span>≈ {sceneCount} cảnh</span>}
+                </div>
+                {pastedSubtitles && <Notice tone="info">Đã nhận nội dung phụ đề: bỏ số thứ tự và mốc thời gian, nối các dòng thành câu và đọc nguyên văn.</Notice>}
+                {readsAsWritten && narrationSeconds > 90 && <Notice tone="warn">Video sẽ dài khoảng {formatDuration(narrationSeconds * 1000)}. Shorts, Reels và TikTok giữ chân tốt nhất dưới 60–90 giây.</Notice>}
+              </>
+            </Field>
+            {inputMode === "idea" && (
+              <div className="duration-picker">
+                <span className="duration-picker-label" id="duration-label">Thời lượng video</span>
+                <div className="duration-options" role="radiogroup" aria-labelledby="duration-label">
+                  {DURATION_OPTIONS.map((seconds) => (
+                    <button key={seconds} type="button" role="radio" aria-checked={settings.targetDurationSec === seconds}
+                      className={settings.targetDurationSec === seconds ? "active" : ""} disabled={busy}
+                      onClick={() => setSettings({ ...settings, targetDurationSec: seconds })}>{durationLabel(seconds)}</button>
+                  ))}
+                </div>
+                <div className="duration-plan" aria-live="polite">
+                  <strong>Dàn ý AI sẽ viết: {plan.summary}</strong>
+                  <span>Khoảng {plan.words.target} từ lời đọc · {plan.scenes} cảnh</span>
+                </div>
               </div>
-              {settings.targetDurationSec > 90 && (
-                <small className="duration-note">Shorts, Reels và TikTok giữ chân tốt nhất dưới 60–90 giây; video dài hợp với YouTube hoặc chia thành nhiều phần.</small>
+            )}
+          </section>
+        )}
+
+        {step === "template" && (
+          <section className="wizard-section">
+            <h1 id="wizard-heading">Chọn mẫu video</h1>
+            <p className="wizard-lead">Mỗi mẫu đặt sẵn tone nội dung, phong cách ảnh, bố cục, tỷ lệ, nhịp dựng và phụ đề. Chọn một mẫu rồi tinh chỉnh nếu cần.</p>
+            <div className="channel-presets" role="radiogroup" aria-label="Mẫu video">
+              {CHANNEL_PRESETS.map((preset) => (
+                <button key={preset.id} type="button" role="radio" aria-checked={templateId === preset.id}
+                  className={`channel-preset-card ${templateId === preset.id ? "active" : ""}`} title={preset.hint} disabled={busy}
+                  onClick={() => void applyTemplate(preset.id)}>
+                  <PresetPreviewArt id={preset.id} />
+                  <span className="channel-preset-copy"><strong>{preset.label}</strong><small>{preset.hint}</small></span>
+                  <span className="channel-preset-check" aria-hidden="true">{templateId === preset.id ? "✓" : ""}</span>
+                </button>
+              ))}
+            </div>
+            {templateId && (
+              <div className="wizard-template-state">
+                <span>Đang dùng mẫu <strong>{CHANNEL_PRESETS.find((p) => p.id === templateId)?.label}</strong>{customized && <Badge tone="warn">Custom</Badge>}</span>
+                <Button type="button" variant="ghost" aria-expanded={customized} onClick={() => patch({ customized: !customized })}>
+                  <Settings size={16} /> {customized ? "Ẩn tùy chỉnh" : "Tùy chỉnh mẫu"}
+                </Button>
+              </div>
+            )}
+            {templateId && customized && (
+              <div className="setting-group wizard-customize">
+                <h3><BookOpenText /> Nội dung &amp; hình ảnh</h3>
+                <Field label="Tone nội dung" hint="Cách kể và mục tiêu của lời thoại.">
+                  <select value={settings.style} onChange={(e) => editSettings({ ...settings, style: e.target.value as ProjectSettings["style"] })}>
+                    <option value="ke-chuyen">Kể chuyện</option><option value="kien-thuc">Kiến thức</option>
+                    <option value="truyen-cam-hung">Truyền cảm hứng</option><option value="meo-cuoc-song">Mẹo cuộc sống</option>
+                  </select>
+                </Field>
+                <Field label="Visual style" hint={VISUAL_PRESET_OPTIONS.find((o) => o.id === settings.visualPreset)?.description ?? ""}>
+                  <select value={settings.visualPreset} onChange={(e) => editSettings(withVisualPreset(settings, e.target.value as ProjectSettings["visualPreset"]))}>
+                    {VISUAL_PRESET_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Chất lượng ảnh" hint="Fast ưu tiên tốc độ · Quality giảm lỗi khuôn mặt, bàn tay.">
+                  <select value={settings.generationPreset ?? "balanced"} onChange={(e) => editSettings({ ...settings, generationPreset: e.target.value as ProjectSettings["generationPreset"] })}>
+                    <option value="fast">Fast — nhanh nhất</option><option value="balanced">Balanced — khuyên dùng</option><option value="quality">Quality — chất lượng cao</option>
+                  </select>
+                </Field>
+                <p className="microcopy">Tỷ lệ và bố cục chỉnh ở bước “Logo &amp; Bố cục”.</p>
+              </div>
+            )}
+            {!templateId && <Notice tone="info">Hãy chọn một mẫu để tiếp tục. Mẫu chỉ là điểm bắt đầu — bạn đổi được mọi thứ ở các bước sau.</Notice>}
+          </section>
+        )}
+
+        {step === "models" && (
+          <section className="wizard-section">
+            <h1 id="wizard-heading">AI Models</h1>
+            <p className="wizard-lead">Chọn máy hoặc dịch vụ cho từng khâu. Trạng thái bên phải là kết quả kiểm tra thật.</p>
+            <div className="wizard-models-head">
+              <span className="model-summary">{modelSummary(settings, localModels)}</span>
+              <Button type="button" variant="secondary" onClick={() => editSettings({ ...settings, ...autoModelPatch(statuses) })}><WandSparkles size={16} /> Auto</Button>
+            </div>
+            <ul className="model-rows">
+              {groups.map((group) => (
+                <li key={group.key} className="model-row">
+                  <div className="model-row-head">
+                    <strong>{group.label}</strong>
+                    <Badge tone={HEALTH_TONE[group.health]}>{HEALTH_LABEL[group.health]}</Badge>
+                  </div>
+                  <select
+                    aria-label={group.label}
+                    value={group.current}
+                    disabled={group.key === "voice" && settings.mediaProvider === "openai"}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (group.key === "script") editSettings({ ...settings, textProvider: value as ProjectSettings["textProvider"] });
+                      else if (group.key === "image") editSettings(withMediaProvider(settings, value as ProjectSettings["mediaProvider"]));
+                      else if (group.key === "video") editSettings({ ...settings, localModels: { ...settings.localModels, video: value || null } });
+                      else if (group.key === "voice") editSettings({ ...settings, localModels: { ...settings.localModels, tts: value || null } });
+                      else if (group.key === "subtitle") editSettings({ ...settings, localModels: { ...settings.localModels, transcribe: value || null } });
+                    }}>
+                    {group.options.map((option) => (
+                      <option key={option.value || "auto"} value={option.value} disabled={!option.selectable}>
+                        {option.label}{option.selectable ? "" : ` — ${HEALTH_LABEL[option.health]}`}
+                      </option>
+                    ))}
+                  </select>
+                </li>
+              ))}
+            </ul>
+            {!modelsReady(settings, statuses) && <Notice tone="warn">Một số khâu đang chưa sẵn sàng. Bấm Auto để dùng cấu hình khả dụng, hoặc bật máy/khóa API ở <Link to="/settings">Cài đặt</Link>.</Notice>}
+          </section>
+        )}
+
+        {step === "audio" && (
+          <section className="wizard-section">
+            <h1 id="wizard-heading">Giọng đọc &amp; nhạc nền</h1>
+            <p className="wizard-lead">Chọn giọng, nghe thử, và thêm nhạc nền. Nhạc được tự giảm âm khi có lời đọc.</p>
+            <div className="setting-group">
+              <h3><Mic2 /> Giọng đọc</h3>
+              <Field label="Giọng tiếng Việt" hint={settings.mediaProvider === "local" ? voiceHint(settings.voice) : ""}>
+                <select value={settings.voice} onChange={(e) => editSettings({ ...settings, voice: e.target.value })}>
+                  {settings.mediaProvider === "local"
+                    ? <>{!isVoicePreset(settings.voice) && <option value={settings.voice}>Giọng trên máy</option>}{VOICE_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</>
+                    : OPENAI_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                </select>
+              </Field>
+              {settings.mediaProvider === "local" && <VoicePreview voice={settings.voice} engine={settings.localModels.tts} disabled={isDemo} />}
+              <Field label={`Tốc độ đọc · ${formatSpeed(settings.voiceSpeed)}`}>
+                <input type="range" min="0.8" max="1.3" step="0.05" value={settings.voiceSpeed} onChange={(e) => editSettings({ ...settings, voiceSpeed: Number(e.target.value) })} />
+              </Field>
+              <label className="check"><input type="checkbox" checked={settings.trimSilence} onChange={(e) => editSettings({ ...settings, trimSilence: e.target.checked })} /><span>Cắt khoảng lặng đầu/cuối giọng đọc</span></label>
+            </div>
+            <div className="setting-group">
+              <h3><Music2 /> Nhạc &amp; âm thanh</h3>
+              <label className="check"><input type="checkbox" checked={settings.autoMusic} onChange={(e) => editSettings({ ...settings, autoMusic: e.target.checked })} /><span>Nhạc nền êm tự tạo (không lo bản quyền)</span></label>
+              {settings.backgroundMusicPath
+                ? <div className="wizard-music-chip"><Music2 size={15} /> Đã chọn nhạc riêng <Button type="button" variant="ghost" onClick={() => editSettings({ ...settings, backgroundMusicPath: null })}>Bỏ nhạc</Button></div>
+                : <label className="button button-ghost file-button"><Upload size={16} /> Tải nhạc nền riêng<input type="file" accept="audio/mpeg,audio/wav,audio/mp4,audio/aac" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadMusic(f); e.target.value = ""; }} /></label>}
+              {(settings.backgroundMusicPath || settings.autoMusic) && (
+                <Field label={`Âm lượng nhạc · ${Math.round(settings.musicVolume * 100)}%`}>
+                  <input type="range" min="0" max="0.5" step="0.01" value={settings.musicVolume} onChange={(e) => editSettings({ ...settings, musicVolume: Number(e.target.value) })} />
+                </Field>
               )}
+              <label className="check"><input type="checkbox" checked={settings.sceneSfx} onChange={(e) => editSettings({ ...settings, sceneSfx: e.target.checked })} /><span>Âm “tích” nhẹ mỗi lần chuyển cảnh</span></label>
             </div>
-          )}
-          <div className="channel-presets" role="radiogroup" aria-label="Mẫu kênh">
-            <div className="channel-presets-heading">
-              <span className="channel-presets-label">Chọn mẫu video</span>
-              <small>Preview trước khi tạo</small>
+          </section>
+        )}
+
+        {step === "brand" && (
+          <section className="wizard-section">
+            <h1 id="wizard-heading">Logo &amp; bố cục</h1>
+            <p className="wizard-lead">Tải logo, kéo tới vị trí mong muốn trên khung, và chọn bố cục, tỷ lệ cho video.</p>
+            <div className="wizard-brand">
+              <div className="wizard-brand-preview">
+                <div className="preview-stage">
+                  <PreviewFrame settings={settings} />
+                  {layoutEditing && <StageGuides settings={settings} />}
+                  {logoPreviewUrl && <StageLogo src={logoPreviewUrl} settings={settings} editing={layoutEditing} onChange={(p) => editSettings({ ...settings, ...p })} />}
+                  {layoutEditing && <button type="button" className="stage-done" onClick={() => setLayoutEditing(false)}><Check size={14} /> Xong</button>}
+                </div>
+              </div>
+              <div className="wizard-brand-controls">
+                <div className="setting-group">
+                  <h3><Image /> Logo</h3>
+                  <p className="microcopy">Logo hiện trên mọi cảnh. Nên dùng PNG nền trong suốt, tối đa 5 MB.</p>
+                  {logoPreviewUrl && <img className={`logo-preview ${settings.logoShape === "circle" ? "is-circle" : ""}`} src={logoPreviewUrl} alt="Logo đang chọn" />}
+                  <label className="button button-ghost file-button"><Upload size={16} /> {settings.logoPath ? "Thay logo" : "Tải logo lên"}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); e.target.value = ""; }} /></label>
+                  {logoNote && <Notice tone="info">{logoNote}</Notice>}
+                  {settings.logoPath && <>
+                    <Button type="button" variant={layoutEditing ? "primary" : "secondary"} aria-pressed={layoutEditing} disabled={!logoPreviewUrl} onClick={() => setLayoutEditing(!layoutEditing)}><Move size={16} /> {layoutEditing ? "Xong, lưu vị trí" : "Kéo thả logo trên khung"}</Button>
+                    <Field label="Vị trí logo">
+                      <select value={settings.logoPosition} onChange={(e) => editSettings({ ...settings, logoPosition: e.target.value as ProjectSettings["logoPosition"] })}>
+                        <option value="top-center">Trên giữa</option><option value="top-left">Trên trái</option><option value="top-right">Trên phải</option>
+                        <option value="bottom-left">Dưới trái</option><option value="bottom-right">Dưới phải</option><option value="custom">Tự do (kéo thả)</option>
+                      </select>
+                    </Field>
+                    <Field label="Hình dạng logo" hint="Cắt tròn: cho logo tròn lưu trên nền vuông.">
+                      <select value={settings.logoShape} onChange={(e) => editSettings({ ...settings, logoShape: e.target.value as ProjectSettings["logoShape"] })}>
+                        <option value="original">Giữ nguyên ảnh</option><option value="circle">Cắt tròn</option>
+                      </select>
+                    </Field>
+                    <Field label={`Kích thước · ${Math.round(settings.logoScale * 100)}% chiều rộng`}><input type="range" min="0.05" max="0.35" step="0.01" value={settings.logoScale} onChange={(e) => editSettings({ ...settings, logoScale: Number(e.target.value) })} /></Field>
+                    <Field label={`Độ trong suốt · ${Math.round(settings.logoOpacity * 100)}%`}><input type="range" min="0.1" max="1" step="0.05" value={settings.logoOpacity} onChange={(e) => editSettings({ ...settings, logoOpacity: Number(e.target.value) })} /></Field>
+                  </>}
+                </div>
+                <div className="setting-group">
+                  <h3><Video /> Bố cục &amp; tỷ lệ</h3>
+                  <Field label="Bố cục" hint="Story card và Paper stage chỉ dùng cho video dọc 9:16.">
+                    <select value={settings.layoutTemplate} onChange={(e) => editSettings(withLayoutTemplate(settings, e.target.value as ProjectSettings["layoutTemplate"]))}>
+                      <option value="full-bleed">Toàn khung hình</option><option value="story-card">Thẻ truyện (tranh minh họa)</option><option value="paper-stage">Nhân vật trên nền giấy</option>
+                    </select>
+                  </Field>
+                  <Field label="Tỷ lệ">
+                    <select value={settings.aspectRatio} onChange={(e) => editSettings({ ...settings, aspectRatio: e.target.value as ProjectSettings["aspectRatio"] })}>
+                      <option>9:16</option><option>1:1</option><option>16:9</option>
+                    </select>
+                  </Field>
+                  {settings.layoutTemplate === "story-card" && <>
+                    <Field label="Màu thẻ truyện">
+                      <select value={settings.cardTheme} onChange={(e) => editSettings({ ...settings, cardTheme: e.target.value as ProjectSettings["cardTheme"] })}>
+                        <option value="blue">Nền xanh, tiêu đề vàng</option><option value="sepia">Nền be, tiêu đề đỏ + trắng</option><option value="blurred">Ảnh minh họa, nền mờ</option>
+                      </select>
+                    </Field>
+                    <Field label="Tiêu đề trên khung" hint="Để trống: AI chọn câu mở đầu hấp dẫn."><input maxLength={80} value={settings.cardTitle} onChange={(e) => editSettings({ ...settings, cardTitle: e.target.value })} /></Field>
+                  </>}
+                  <Field label="Tên kênh ở chân video" hint="Để trống nếu không muốn hiện."><input maxLength={60} value={settings.brandName} onChange={(e) => editSettings({ ...settings, brandName: e.target.value })} /></Field>
+                </div>
+              </div>
             </div>
-            {CHANNEL_PRESETS.map((preset) => (
-              (() => {
-                const visual = channelPresetVisual(preset.id);
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={channelPreset === preset.id}
-                    className={`channel-preset-card ${channelPreset === preset.id ? "active" : ""}`}
-                    title={preset.hint}
-                    disabled={busy}
-                    onClick={() => { setChannelPreset(preset.id); setCustomizePreset(false); setSettings((s) => preset.apply(s)); }}
-                  >
-                    <PresetPreviewArt id={preset.id} />
-                    <span className="channel-preset-copy">
-                      <strong>{preset.label}</strong>
-                      <small>{preset.hint}</small>
-                    </span>
-                    <span className="channel-preset-check" aria-hidden="true">{channelPreset === preset.id ? "✓" : ""}</span>
-                  </button>
-                );
-              })()
-            ))}
-            {channelPreset && <small className="channel-preset-selection">Đã chọn: {CHANNEL_PRESETS.find((preset) => preset.id === channelPreset)?.label}</small>}
-          </div>
-          <div className="creation-defaults">
-            <span><Video size={15} /> Video dọc 1080 × 1920</span>
-            <span><Mic2 size={15} /> Giọng tiếng Việt</span>
-            <span><Subtitles size={15} /> Phụ đề rõ nét</span>
-          </div>
-          {error && <Notice tone="bad" id="create-error">{error}</Notice>}
-          {isDemo && <Notice tone="warn">{DEMO_ONLY}</Notice>}
-        </section>
-        <section>
-          <button className="advanced-toggle" type="button" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>
-            <span>
-              Tùy chọn video
-              <small>{settings.aspectRatio} · {settings.generationPreset === "quality" ? "Quality" : settings.generationPreset === "fast" ? "Fast" : "Balanced"} · Voice {formatSpeed(settings.voiceSpeed)}</small>
-            </span>
-            {advanced ? <ChevronUp /> : <ChevronDown />}
-          </button>
-        </section>
-        <section hidden={!advanced}>
-          <div className="video-options">
-            <VideoOptions
-              settings={settings}
-              onChange={(next) => { setChannelPreset(null); setCustomizePreset(true); setSettings(next); }}
-              scriptMode={inputMode}
-              isDemo={isDemo}
-              capabilities={null}
-              localModels={localModels}
-              presetSelected={Boolean(channelPreset) && !customizePreset}
-              onCustomizePreset={() => setCustomizePreset(true)}
-            />
-            <p className="microcopy">Các mục dưới đây là thiết lập chi tiết. Nếu bạn đã chọn một mẫu video, thay đổi thủ công sẽ ghi đè mẫu đó.</p>
-          </div>
-        </section>
-        <div className="form-actions">
-          <Button type="button" variant="ghost" disabled={busy} onClick={() => void saveDraft()}>
-            <Save size={17} /> Lưu bản nháp
-          </Button>
-          <Button type="button" variant="secondary" disabled={busy || isDemo} onClick={() => void splitFirst()} title="Chia kịch bản thành cảnh để đọc và sửa từng cảnh, chưa tạo ảnh hay giọng">
-            <WandSparkles size={17} /> Chia cảnh để sửa trước
-          </Button>
-          <Button type="submit" busy={busy} disabled={isDemo}>
-            <Clapperboard size={18} /> Tạo video
-          </Button>
-        </div>
-        <p className="creation-footnote">
-          {settings.textProvider === "ollama" && settings.mediaProvider === "local"
-            ? "Xử lý trên máy đã kết nối, không gọi API trả phí. Máy cần bật trong lúc tạo video."
-            : "Video sẽ sử dụng API trả phí đã chọn; hãy bảo đảm khóa API và hạn mức tài khoản đã sẵn sàng."}
-        </p>
-      </form>
+          </section>
+        )}
+
+        {step === "review" && (
+          <section className="wizard-section">
+            <h1 id="wizard-heading">Xem lại &amp; tạo video</h1>
+            <p className="wizard-lead">Kiểm tra nhanh rồi bấm Tạo video. Bạn có thể quay lại từng bước để sửa.</p>
+            <dl className="wizard-summary">
+              {([
+                ["input", "Nội dung", `${inputMode === "idea" ? "Ý tưởng" : "Kịch bản có sẵn"} · ${wordCount.toLocaleString("vi-VN")} từ${inputMode === "idea" ? ` · ${durationLabel(settings.targetDurationSec)}` : ""}`],
+                ["template", "Mẫu", `${templateId ? CHANNEL_PRESETS.find((p) => p.id === templateId)?.label : "Chưa chọn"}${customized ? " (Custom)" : ""}`],
+                ["models", "AI Models", modelSummary(settings, localModels)],
+                ["audio", "Giọng & nhạc", `${settings.mediaProvider === "local" ? (VOICE_PRESETS.find((v) => v.id === settings.voice)?.label ?? settings.voice) : (OPENAI_VOICES.find((v) => v.id === settings.voice)?.label ?? settings.voice)} · ${settings.backgroundMusicPath ? "Nhạc riêng" : settings.autoMusic ? "Nhạc tự tạo" : "Không nhạc"}`],
+                ["brand", "Logo & bố cục", `${settings.logoPath ? "Có logo" : "Không logo"} · ${settings.layoutTemplate === "story-card" ? "Thẻ truyện" : settings.layoutTemplate === "paper-stage" ? "Nền giấy" : "Toàn khung"} · ${settings.aspectRatio}`],
+              ] as const).map(([id, label, value]) => (
+                <div key={id} className="wizard-summary-row">
+                  <div><dt>{label}</dt><dd>{value}</dd></div>
+                  <Button type="button" variant="ghost" onClick={() => goTo(id as WizardStepId)}><PenLine size={15} /> Sửa</Button>
+                </div>
+              ))}
+            </dl>
+            <div className="wizard-pipeline" aria-hidden="true">
+              {["Nội dung", "Kịch bản", "Hình ảnh", "Giọng đọc", "Phụ đề", "Ghép video", "Hoàn tất"].map((label, index) => (
+                <span key={label} className="wizard-pipeline-step">{index + 1 < 7 ? <>{label} <ChevronRight size={13} /></> : label}</span>
+              ))}
+            </div>
+            {isDemo && <Notice tone="warn">{DEMO_ONLY}</Notice>}
+          </section>
+        )}
+
+        {error && <Notice tone="bad" id="wizard-error">{error}</Notice>}
+      </div>
+
+      <div className="wizard-nav">
+        <Button type="button" variant="secondary" disabled={busy || step === "input"} onClick={goBack}><ArrowLeft size={16} /> Quay lại</Button>
+        {step === "review"
+          ? <Button type="button" busy={busy} disabled={isDemo} onClick={() => void createVideo()}><Clapperboard size={18} /> Tạo video</Button>
+          : <Button type="button" busy={busy} disabled={(step === "input" && !canContinue) || (step === "template" && !templateId)} onClick={() => void goNext()}>Tiếp tục <ChevronRight size={16} /></Button>}
+      </div>
     </div>
   );
 }
@@ -4107,7 +4307,7 @@ export function App() {
           <Protected>
             <Routes>
               <Route index element={<DashboardPage />} />
-              <Route path="new" element={<NewProjectPage />} />
+              <Route path="new" element={<WizardPage />} />
               <Route path="studio/:id" element={<StudioPage />} />
               <Route path="dub-subtitle" element={<DubSubtitlePage />} />
               <Route path="tts" element={<TextToSpeechPage />} />
