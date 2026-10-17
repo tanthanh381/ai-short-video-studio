@@ -106,7 +106,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
 
   async writeScript(input: {
     title: string; sourceText: string; duration: number; audience: string; style: string; model?: string | null; attempt?: number;
-    plan?: ContentPlan; previousWords?: number; draft?: string;
+    plan?: ContentPlan; previousWords?: number; draft?: string; feedback?: string;
   }): Promise<string> {
     const plan = input.plan ?? contentPlan(input.duration, input.style, "", 1);
     const { target, min, max } = plan.words;
@@ -146,9 +146,15 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
             ? "Nội dung người dùng dài hơn thời lượng: giữ nhân vật, diễn biến chính và từ khóa, lược bớt chi tiết phụ cho vừa độ dài. "
             : "Nội dung người dùng ngắn: phát triển bằng ví dụ cụ thể, đời thường cho đủ độ dài. ") +
           retry +
+          (input.feedback
+            ? `Biên tập viên nhận xét bản trước: ${input.feedback} Sửa đúng các điểm này trong lần viết mới, nhưng vẫn giữ chủ đề và thời lượng. `
+            : "") +
           "Mỗi câu một ý, dài 8-18 từ, dễ đọc thành tiếng: không nối nhiều vế bằng dấu phẩy thành một câu dài; viết mỗi câu trên một dòng riêng. " +
-          "Câu mở đầu chọn một kiểu hợp chủ đề: một câu hỏi chạm vào người xem, một tình huống quen thuộc hoặc một điều bất ngờ có thật; " +
-          "đừng mặc định mở bằng 'Bạn có biết'. " +
+          "Trước khi trả lời, hãy tự nghĩ thầm 5 hook khác nhau rồi chọn hook mạnh nhất, cụ thể nhất và trung thực nhất. " +
+          "Câu mở đầu phải tạo khoảng trống tò mò trong 3 giây đầu bằng câu hỏi chạm vào người xem, một tình huống quen thuộc, một mâu thuẫn hoặc một điều bất ngờ có thật; " +
+          "không mở bằng lời chào, 'Trong video này', 'Hãy cùng tìm hiểu' hoặc 'Bạn có biết'. " +
+          "Sau hook phải có ít nhất một tình huống, ví dụ, hành động hoặc chi tiết có thể hình dung; insight không được chỉ lặp lại câu hỏi. " +
+          "Kết thúc bằng một câu đọng lại hoặc hành động nhỏ phù hợp, không ép CTA nếu không tự nhiên. " +
           "Chỉ dùng từ tiếng Việt, không chèn từ tiếng Anh (viết 'bổ sung nước' chứ không viết 'hydrate'). " +
           "Chỉ nói điều phổ biến và chắc chắn đúng: không bịa số liệu, không tự giải thích cơ chế y khoa hay tài chính; " +
           "với sức khỏe và tiền bạc, đưa lời khuyên an toàn, thực tế. " +

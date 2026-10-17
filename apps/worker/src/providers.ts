@@ -72,6 +72,8 @@ export interface StoryboardProvider {
       plan?: ContentPlan; previousWords?: number;
       /** A draft that came out too short: the writer expands it (keeps its opening and order) instead of starting over. */
       draft?: string;
+      /** Concrete editorial feedback from the previous draft; used only on a bounded retry. */
+      feedback?: string;
     }): Promise<string>;
   /** Title, caption and hashtags to post the finished video with. */
   writePostCaption?(input: { sourceText: string; title: string; model?: string | null }): Promise<{ title: string; description: string; hashtags: string[] } | null>;
@@ -394,7 +396,7 @@ export function buildStoryboardInstruction(input: StoryboardInput) {
     input.inputMode === "full-script" && !input.rewrite
       ? "Giữ nguyên nội dung và câu chữ của kịch bản, chỉ chia cảnh."
       : "Có thể biên tập câu chữ để tăng nhịp kể.";
-  return `Bạn là biên tập viên trưởng cho kênh video ngắn Việt Nam có yêu cầu giữ chân cao. Tạo storyboard ${input.duration} giây cho đối tượng: ${input.audience}. Phong cách: ${input.style}. ${editingRule} Trước khi viết, xác định chủ đề trung tâm, các ý bắt buộc và thông điệp cuối; không bỏ sót ý chính người dùng đã cung cấp. Dựng mạch rõ: hook → bối cảnh → phát triển/xung đột → insight/payoff → kết thúc đáng nhớ. Hook dài 7-12 từ để nói gọn trong khoảng 3 giây đầu, phải tạo tò mò và là câu mở đầu nguyên văn của narration cảnh 1, không chỉ nằm ở trường hook. Tổng narration phải chính là toàn bộ lời đọc được phân bổ trong các scene; không để nội dung chỉ nằm ở trường narration mà không xuất hiện trong scene. Mỗi cảnh 4-9 giây, chỉ có một beat mới, không lặp ý hoặc cảnh minh họa chung chung. Cảnh cuối phải khép lại câu chuyện hoặc trả lời lời hứa của hook. Prompt ảnh (imagePrompt) viết bằng TIẾNG ANH, 28-48 từ, thể hiện đúng beat cụ thể của narration bằng chủ thể, hành động, đồ vật và bối cảnh; có shot size/góc máy, chiều sâu tiền cảnh-hậu cảnh và ánh sáng tự nhiên; giữ nhất quán nhân vật, trang phục và đạo cụ; không chứa chữ, logo hay thương hiệu; phong cách hình: ${input.visualStyle}. Trả về đúng JSON schema, không giải thích thêm.`;
+  return `Bạn là biên tập viên trưởng cho kênh video ngắn Việt Nam có yêu cầu giữ chân cao. Tạo storyboard ${input.duration} giây cho đối tượng: ${input.audience}. Phong cách: ${input.style}. ${editingRule} Trước khi viết, xác định chủ đề trung tâm, các ý bắt buộc và thông điệp cuối; không bỏ sót ý chính người dùng đã cung cấp. Hãy tự nghĩ thầm 5 hook rồi chọn hook cụ thể và hấp dẫn nhất. Dựng mạch rõ: hook → bối cảnh → phát triển/xung đột → ví dụ hoặc hành động cụ thể → insight/payoff → kết thúc đáng nhớ. Hook dài 7-12 từ để nói gọn trong khoảng 3 giây đầu, phải tạo tò mò bằng câu hỏi, mâu thuẫn, cảnh báo hoặc kết quả bất ngờ; không mở bằng lời chào, 'Trong video này', 'Hãy cùng tìm hiểu' hoặc 'Bạn có biết'. Hook phải là câu mở đầu nguyên văn của narration cảnh 1, không chỉ nằm ở trường hook. Tổng narration phải chính là toàn bộ lời đọc được phân bổ trong các scene; không để nội dung chỉ nằm ở trường narration mà không xuất hiện trong scene. Mỗi cảnh 4-9 giây, chỉ có một beat mới, không lặp ý hoặc cảnh minh họa chung chung. Sau phần giải thích phải có ít nhất một chi tiết đời thường có thể hình dung; insight không được chỉ lặp lại hook. Cảnh cuối phải khép lại câu chuyện hoặc trả lời lời hứa của hook bằng một câu đọng lại tự nhiên. Prompt ảnh (imagePrompt) viết bằng TIẾNG ANH, 28-48 từ, thể hiện đúng beat cụ thể của narration bằng chủ thể, hành động, đồ vật và bối cảnh; có shot size/góc máy, chiều sâu tiền cảnh-hậu cảnh và ánh sáng tự nhiên; giữ nhất quán nhân vật, trang phục và đạo cụ; không chứa chữ, logo hay thương hiệu; phong cách hình: ${input.visualStyle}. Trả về đúng JSON schema, không giải thích thêm.`;
 }
 
 /** Only accept measured ASR word timestamps when the words match the known script. */
@@ -759,6 +761,47 @@ const LENGTH_ATTEMPTS = 4;
 /** Expansions of a draft that stayed too short after every length attempt. */
 const EXPAND_ATTEMPTS = 3;
 
+const GENERIC_HOOKS = /^(?:xin chào(?: các bạn)?|trong video này|hãy cùng tìm hiểu|bạn có biết(?: rằng)?|hôm nay chúng ta sẽ|chào mừng bạn đến với)/iu;
+const HOOK_SIGNALS = /[?!]|(?:nhưng|vậy mà|sự thật|ít ai biết|đừng|vì sao|tại sao|nếu|thay vì|chỉ cần|điều bất ngờ)/iu;
+const CONCRETE_SIGNALS = /(?:ví dụ|khi|nếu|bởi vì|thay vì|chỉ cần|bước|phút|ngày|đồng|%|[0-9])/iu;
+const ENDING_SIGNALS = /(?:hãy nhớ|từ hôm nay|và đó là|cuối cùng|đừng quên|bạn sẽ|khi nhìn lại)/iu;
+
+export type ContentQualityReport = { score: number; feedback: string[] };
+
+/** Cheap editorial checks that catch generic AI narration before media generation is started. */
+export function evaluateContentQuality(script: string): ContentQualityReport {
+  const text = script.normalize("NFC").trim();
+  const sentences = text.split(/(?<=[.!?…])\s+/u).filter(Boolean);
+  const first = sentences[0] ?? text;
+  const words = contentWords(text);
+  const feedback: string[] = [];
+  let score = 50;
+  if (GENERIC_HOOKS.test(first)) {
+    score -= 35;
+    feedback.push("Mở đầu đang chung chung; thay bằng câu hỏi, mâu thuẫn hoặc kết quả cụ thể chạm đúng vấn đề.");
+  } else if (HOOK_SIGNALS.test(first)) score += 18;
+  else feedback.push("Tăng lực hút 3 giây đầu bằng câu hỏi, tương phản, cảnh báo hoặc một chi tiết bất ngờ.");
+  if (words.length < 8) {
+    score -= 20;
+    feedback.push("Hook quá ngắn; cần một lời hứa rõ ràng để người xem muốn nghe tiếp.");
+  } else if (words.length <= 20) score += 8;
+  if (sentences.length < 4) {
+    score -= 14;
+    feedback.push("Cần đủ nhịp: hook, diễn biến hoặc ví dụ, insight và một câu kết đáng nhớ.");
+  } else score += 8;
+  if (CONCRETE_SIGNALS.test(text)) score += 12;
+  else feedback.push("Thêm ít nhất một tình huống, ví dụ, hành động hoặc con số cụ thể thay cho mô tả khái niệm.");
+  if (ENDING_SIGNALS.test(text)) score += 8;
+  else feedback.push("Kết thúc bằng một insight hoặc câu đọng lại, không dừng đột ngột sau phần giải thích.");
+  const normalized = sentences.map((sentence) => sentence.toLocaleLowerCase("vi").replace(/[0-9]+/gu, "#").replace(/[^\p{L}# ]/gu, "").replace(/\s+/gu, " ").trim());
+  const repeated = normalized.length - new Set(normalized).size;
+  if (normalized.length >= 5 && repeated / normalized.length > 0.35) {
+    score -= 18;
+    feedback.push("Các câu đang lặp cùng một ý; mỗi câu cần thêm một bước phát triển hoặc hình ảnh mới.");
+  }
+  return { score: Math.max(0, Math.min(100, score)), feedback };
+}
+
 /** The plan for an idea's narration at the project's duration, voice and style. */
 export function ideaPlan(input: StoryboardInput): ContentPlan {
   return contentPlan(input.duration, input.style, input.voice ?? "", input.voiceSpeed ?? 1);
@@ -779,7 +822,7 @@ export async function writeIdeaScript(provider: StoryboardProvider, input: Story
   const plan = ideaPlan(input);
   const { target, min, max } = plan.words;
   const terms = importantTerms(input.sourceText);
-  let best = { draft: "", score: -Infinity, overlap: 0, words: 0 };
+  let best = { draft: "", score: -Infinity, overlap: 0, words: 0, quality: 0, feedback: [] as string[] };
   let previousWords: number | undefined;
   let lastError: unknown = new Error("AI chưa viết được lời đọc từ ý tưởng; hãy thử lại");
   /** Scores one answer of the writer against the plan; keeps it if it is the best so far. Returns whether it is good as it is. */
@@ -795,16 +838,21 @@ export async function writeIdeaScript(provider: StoryboardProvider, input: Story
     const english = foreignWords(draft).length + otherScript;
     // Being long enough weighs most: a 60-second video must not come out at 40 seconds.
     const length = words >= min ? 1 : words / min;
-    const score = overlap - 0.3 * english + 2 * length;
-    if (score > best.score) best = { draft, score, overlap, words };
-    return words >= min && (overlap >= 0.25 || terms.length < 2) && english === 0; // right length, on topic, all Vietnamese
+    const quality = evaluateContentQuality(draft);
+    // Keep length and topic as the hard constraints; use editorial quality as a tie-breaker so a small local model
+    // gets one concrete correction without looping forever on subjective preferences.
+    const score = overlap - 0.3 * english + 2 * length + quality.score / 100;
+    if (score > best.score) best = { draft, score, overlap, words, quality: quality.score, feedback: quality.feedback };
+    return words >= min && (overlap >= 0.25 || terms.length < 2) && english === 0 && quality.score >= 45; // right length, on topic, readable and not critically generic
   };
-  const request = (attempt: number, extra: { draft?: string } = {}) => provider.writeScript!({
+  const request = (attempt: number, extra: { draft?: string; feedback?: string } = {}) => provider.writeScript!({
     title: input.title, sourceText: input.sourceText, duration: input.duration,
     audience: input.audience, style: input.style, model: input.model ?? null, attempt, plan,
-    ...(previousWords !== undefined ? { previousWords } : {}), ...extra,
+    ...(previousWords !== undefined ? { previousWords } : {}),
+    ...(best.feedback.length && best.quality < 45 ? { feedback: best.feedback.join(" ") } : {}),
+    ...extra,
   });
-  const accepted = () => best.draft && (best.overlap >= 0.1 || terms.length < 2) && best.words >= Math.round(target * 0.75);
+  const accepted = () => best.draft && (best.overlap >= 0.1 || terms.length < 2) && best.words >= Math.round(target * 0.75) && best.quality >= 45;
   for (let attempt = 0; attempt < LENGTH_ATTEMPTS; attempt++) {
     try {
       if (consider(await request(attempt))) break;
@@ -819,6 +867,8 @@ export async function writeIdeaScript(provider: StoryboardProvider, input: Story
     } catch (error) { lastError = error; }
   }
   if (accepted()) return best.draft;
+  if (best.draft && best.quality < 45)
+    throw new Error("Lời đọc chưa đủ cuốn hút: hook còn chung chung hoặc nội dung thiếu chi tiết cụ thể. Hãy thử lại với một ý tưởng rõ hơn.");
   if (best.draft)
     throw new Error(`AI chỉ viết được ${best.words} từ cho video ${durationLabel(input.duration)} (cần khoảng ${target} từ). ` +
       "Hãy thử lại, thêm vài ý vào ý tưởng hoặc chọn thời lượng ngắn hơn.");

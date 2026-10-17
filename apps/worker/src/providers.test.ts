@@ -680,6 +680,22 @@ describe("idea mode becomes plain narration then faithful scenes", () => {
   });
 });
 
+describe("idea narration editorial quality gate", () => {
+  it("flags generic openings and explains how to improve them", async () => {
+    const { evaluateContentQuality } = await import("./providers");
+    const report = evaluateContentQuality("Xin chào các bạn, trong video này chúng ta sẽ nói về thói quen tốt. Hãy cùng tìm hiểu thêm.");
+    expect(report.score).toBeLessThan(45);
+    expect(report.feedback.join(" ")).toMatch(/chung chung|3 giây đầu/u);
+  });
+
+  it("rewards a specific hook, concrete example and memorable ending", async () => {
+    const { evaluateContentQuality } = await import("./providers");
+    const report = evaluateContentQuality("Vì sao bạn vẫn mệt dù đã ngủ đủ 8 giờ? Khi buổi chiều đến, hãy nhìn lại một việc đang làm bạn quá tải. Ví dụ, tắt thông báo trong 10 phút. Hãy nhớ, năng lượng không chỉ đến từ giấc ngủ.");
+    expect(report.score).toBeGreaterThanOrEqual(70);
+    expect(report.feedback).not.toContain("Mở đầu đang chung chung; thay bằng câu hỏi, mâu thuẫn hoặc kết quả cụ thể chạm đúng vấn đề.");
+  });
+});
+
 describe("visual action anchors do not fire on unrelated words", () => {
   const base = "A flooded street at dusk with a canal in the background";
   it.each([
