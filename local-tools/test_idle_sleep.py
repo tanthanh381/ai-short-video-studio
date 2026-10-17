@@ -267,7 +267,8 @@ class BridgeWiringTests(unittest.TestCase):
              unittest.mock.patch.object(m, "image_server_info", lambda: ("down", {})), \
              unittest.mock.patch.object(m, "service_up", lambda *a, **k: False), \
              unittest.mock.patch.object(m, "comfyui_state", lambda: ("offline", "")), \
-             unittest.mock.patch.object(m, "ltx_state", lambda: ("down", "")):
+             unittest.mock.patch.object(m, "ltx_state", lambda: ("down", "")), \
+             unittest.mock.patch.object(m.node_status, "read_resources", lambda: {"memTotalGb": 24.0}):
             m._NODE_STATUS_CACHE.update(at=0.0, value=None)
             status = m.node_status_payload(max_age_s=0)
             m._NODE_STATUS_CACHE.update(at=0.0, value=None)
