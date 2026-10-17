@@ -428,7 +428,7 @@ function JobsCard({ jobs }: { jobs: SystemJob[] }) {
                 <span>{job.status === "running" || job.status === "queued" ? job.stage : job.status === "failed" ? job.stage : `Xong trong ${formatDuration(job.durationSeconds)}`}</span>
                 {job.status === "running" ? <div className="sys-bar" role="progressbar" aria-valuenow={job.progress} aria-valuemin={0} aria-valuemax={100} aria-label={`${job.title}: ${job.progress}%`}><i style={{ width: `${Math.max(2, job.progress)}%` }} /></div> : null}
               </div>
-              <span className={`sys-badge tone-${label[job.status].tone}`}>{label[job.status].text}{job.status === "running" ? ` ${job.progress}%` : ""}</span>
+              <StatusBadge tone={label[job.status].tone} label={`${label[job.status].text}${job.status === "running" ? ` ${job.progress}%` : ""}`} />
             </li>
           ))}
         </ul>
@@ -450,7 +450,7 @@ function ServicesCard({ services }: { services: SystemSummary["services"] }) {
             <li key={id}>
               <span className={`sys-dot tone-${meta.tone}`} aria-hidden="true" />
               <div><strong>{name}</strong><span>{service.detail}</span></div>
-              <span className={`sys-badge tone-${meta.tone}`}>{meta.label}</span>
+              <StatusBadge tone={meta.tone} label={meta.label} />
             </li>
           );
         })}

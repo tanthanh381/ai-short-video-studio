@@ -40,4 +40,12 @@ describe("design tokens", () => {
   it("have no var(--var(...)) left over from a rename", () => {
     expect(css).not.toMatch(/var\(--var\(/);
   });
+
+  it("keeps shared status aliases in the global token scope", () => {
+    const root = css.match(/:root\s*{([\s\S]*?)\n}/)?.[1] ?? "";
+    for (const token of ["--tone-ok", "--tone-warn", "--tone-bad", "--tone-idle", "--bar-ok", "--bar-warn", "--bar-bad", "--bar-idle"]) {
+      expect(root).toContain(`${token}:`);
+    }
+    expect(css).not.toMatch(/\.system-page\s*{[^}]*--tone-/s);
+  });
 });

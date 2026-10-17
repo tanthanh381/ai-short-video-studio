@@ -64,6 +64,16 @@
   --bad-soft-2: #fff4f2;
   --bad-line: #f3c5c0;
   --idle: #9db0c0;
+  /* Shared semantic aliases for every page and reusable status component. */
+  --tone-ok: var(--ok-text);
+  --tone-warn: var(--warn-text);
+  --tone-bad: var(--bad-text);
+  --tone-idle: var(--text-muted);
+  --bar-ok: var(--ok);
+  --bar-warn: var(--warn);
+  --bar-bad: var(--bad);
+  --bar-idle: var(--idle);
+  --annotation-ok: var(--ok-strong);
   --coral: #ff6b55; /* brand mark */
   /* chart series (machines in the work-share bar); dark enough for a white label (AA) */
   --chart-1: #176bff;
@@ -2701,7 +2711,7 @@ a:focus-visible {
 /* SRT file upload area */
 
 /* Annotation badge on PenLine icon */
-.annotation-badge { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; border-radius: 50%; background: #16a34a; color: var(--text-on-accent); font-size: var(--text-sm); display: grid; place-items: center; line-height: 1; font-weight: 700; border: 1.5px solid var(--line-soft); }
+.annotation-badge { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; border-radius: 50%; background: var(--annotation-ok); color: var(--text-on-accent); font-size: var(--text-sm); display: grid; place-items: center; line-height: 1; font-weight: 700; border: 1.5px solid var(--line-soft); }
 
 /* Ready-to-post caption under the preview: folded, in the dark panel's colours */
 .post-caption-wrap { position: relative; flex: none; }
@@ -3058,16 +3068,6 @@ input[type="radio"] {
 }
 
 /* ---- Hệ thống: bảng giám sát các máy ---------------------------------------------------------------------------------- */
-.system-page {
-  --tone-ok: var(--ok-text);
-  --tone-warn: var(--warn-text);
-  --tone-bad: var(--bad-text);
-  --tone-idle: var(--text-muted);
-  --bar-ok: var(--ok);
-  --bar-warn: var(--warn);
-  --bar-bad: var(--bad);
-  --bar-idle: var(--idle);
-}
 .sys-live {
   display: flex;
   align-items: center;
@@ -3220,19 +3220,6 @@ input[type="radio"] {
   display: flex;
   flex-direction: column;
 }
-.sys-badge {
-  flex: none;
-  border-radius: var(--radius-full);
-  padding: 4px 10px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  background: var(--surface-3);
-  color: var(--tone-idle);
-  white-space: nowrap;
-}
-.sys-badge.tone-ok { background: var(--ok-soft); color: var(--ok-text); }
-.sys-badge.tone-warn { background: var(--warn-soft); color: var(--tone-warn); }
-.sys-badge.tone-bad { background: var(--bad-soft); color: var(--tone-bad); }
 .status-badge { display: inline-flex; align-items: center; gap: 6px; flex: none; border-radius: var(--radius-full); padding: 4px 10px; font-size: var(--text-sm); font-weight: 600; background: var(--surface-3); color: var(--tone-idle); white-space: nowrap; }
 .status-badge.tone-ok { background: var(--ok-soft); color: var(--ok-text); }
 .status-badge.tone-warn { background: var(--warn-soft); color: var(--tone-warn); }
@@ -3497,8 +3484,8 @@ input[type="radio"] {
 .sys-services li > div { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .sys-jobs li span,
 .sys-services li span { font-size: var(--text-sm); color: var(--text-muted); overflow-wrap: anywhere; }
-.sys-jobs li .sys-badge,
-.sys-services li .sys-badge { font-size: var(--text-sm); color: inherit; }
+.sys-jobs li .status-badge,
+.sys-services li .status-badge { font-size: var(--text-sm); }
 .sys-services li > .sys-dot { margin-top: 0; }
 .sys-jobs .sys-bar { max-width: 320px; margin-top: 6px; }
 .sys-foot { margin-top: 6px; }

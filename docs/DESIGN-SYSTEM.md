@@ -96,6 +96,31 @@ khác dùng `role="status"` + `polite`.
 
 Chip trạng thái nhỏ trong một trong năm tone (class `.badge.tone-*`).
 
+### StatusBadge
+
+`StatusBadge` dùng cho trạng thái vận hành của máy, service, job hoặc sync. Khác với `Badge`, component này luôn có
+status dot để người dùng nhận biết trạng thái ngay cả khi màu bị hạn chế.
+
+```tsx
+<StatusBadge tone="ok" label="Connected" />
+```
+
+| Prop | Kiểu | Mặc định | Mô tả |
+|---|---|---|---|
+| `label` | `string` | bắt buộc | Tên trạng thái ngắn, ví dụ `Connected`, `Offline`, `Checking` |
+| `tone` | `Tone` | `idle` | Màu semantic tương ứng với trạng thái |
+
+Không tạo thêm biến thể theo từng trang. Các status badge dùng token `--tone-*` ở `:root` để hoạt động nhất quán trên
+Dashboard, System và Settings.
+
+### InfoPopover và Metric
+
+`InfoPopover` chứa giải thích phụ, metadata hoặc hướng xử lý; không dùng cho CTA hay lỗi chính. Component hỗ trợ click,
+keyboard, Escape, focus trap và responsive bottom-sheet trên mobile.
+
+`Metric` dùng cho một con số chính kèm icon, progress bar và `InfoPopover` tùy chọn. Label vẫn phải tồn tại trong
+accessible name dù giao diện chỉ hiển thị icon.
+
 ### Field
 
 ```tsx
