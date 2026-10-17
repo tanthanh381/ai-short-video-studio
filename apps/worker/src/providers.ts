@@ -661,6 +661,31 @@ function topicsOf(text: string, side: "said" | "shown"): Set<number> {
 }
 
 /**
+ * Concrete props/actions that must survive the narration -> image translation.
+ * Topic overlap alone is too broad: a tailor shop can still omit the paper that
+ * drives the scene. These anchors deliberately cover only unambiguous nouns and
+ * actions; vague emotion or setting words stay out to avoid rejecting good art.
+ */
+const SCENE_ANCHORS: Array<[RegExp, RegExp]> = [
+  [/(?:mảnh|tờ|tờ giấy|mảnh giấy|danh sách|lá thư|bức thư|thư tay|ghi chú|giấy note|tờ note)/u,
+    /\b(?:paper|note|letter|list|document|handwritten|writing|written|sheet)\b/iu],
+  [/(?:điện thoại|smartphone|màn hình điện thoại|tin nhắn|gọi điện|gọi cho|nhắn tin)/u,
+    /\b(?:phone|smartphone|mobile|screen|text message|message|call(?:ing)?|dial(?:ing)?)\b/iu],
+  [/(?:áo cũ|chiếc áo|quần áo|vá áo|tiệm sửa|thợ may|may áo|vải|đường may)/u,
+    /\b(?:shirt|clothing|garment|coat|jacket|trouser|skirt|fabric|tailor|sew(?:ing)?|repair counter|stitch(?:ing)?)\b/iu],
+  [/(?:chìa khóa|mở khóa|khóa cửa|cánh cửa|cửa phòng)/u,
+    /\b(?:key|keys|unlock|lock|door|doorway)\b/iu],
+  [/(?:quà|gói quà|hộp quà|mở hộp|món quà)/u,
+    /\b(?:gift|present|package|box|unbox|unwrap)\b/iu],
+];
+
+function missingSceneAnchors(narration: string, prompt: string): number {
+  const source = narration.toLocaleLowerCase("vi");
+  const missing = SCENE_ANCHORS.filter(([said, shown]) => said.test(source) && !shown.test(prompt));
+  return missing.length;
+}
+
+/**
  * Scenes whose prompt shows what another scene of the batch says and nothing of its own narration: the model gave
  * the picture of a neighbouring beat. Scenes that name no known topic are never judged (no evidence either way).
  */
@@ -722,6 +747,7 @@ export function visualPromptFlaws(narration: string, prompt: string): number {
   if (/\b(?:thought bubble|label appears|written words?|text appears|text overlay|icon)\b/u.test(text)) flaws++;
   if (/\b(?:racing thoughts?|floating .*scribbles|shadow growing)\b/u.test(text)) flaws++;
   if (/\bfloating (?:pastel )?(?:shapes?|symbols?|icons?)\b/u.test(text)) flaws++;
+  flaws += missingSceneAnchors(narration, prompt);
   if (/\bghost\b/u.test(text) && !/(ma|quỷ|hồn|linh hồn|bóng ma|ghost)/iu.test(said)) flaws++;
   if (/\b(?:heart|hearts?)\b/u.test(text) && !/(tim|trái tim|yêu|tình yêu)/iu.test(said)) flaws++;
   if (/\b(?:old )?photo(?:graph)?\b/u.test(text) && !/(ảnh|hình|photo|photograph)/iu.test(said)) flaws++;
