@@ -53,6 +53,11 @@ describe("channel presets", () => {
     expect(settings).toMatchObject({ layoutTemplate: "story-card", visualPreset: "cartoon", voice: "doc-truyen" });
   });
 
+  it("the illustrated video preset matches its realistic thumbnail and blurred renderer", () => {
+    const settings = CHANNEL_PRESETS.find((preset) => preset.id === "video-minh-hoa")!.apply(DEFAULT_PROJECT_SETTINGS);
+    expect(settings).toMatchObject({ layoutTemplate: "story-card", cardTheme: "blurred", visualPreset: "cinematic-color", aspectRatio: "9:16" });
+  });
+
   it("the cổ nhân preset is the sepia story card with sepia ink pictures and green karaoke captions", () => {
     const settings = CHANNEL_PRESETS.find((preset) => preset.id === "quy-tac-co-nhan")!.apply(DEFAULT_PROJECT_SETTINGS);
     expect(settings).toMatchObject({ layoutTemplate: "story-card", cardTheme: "sepia", visualPreset: "thuy-mac-sepia", captionHighlight: true, aspectRatio: "9:16", progressBar: true, sceneSfx: true, targetDurationSec: 45 });

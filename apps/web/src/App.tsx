@@ -132,17 +132,17 @@ function channelPresetVisual(id: string) {
 function PresetPreviewArt({ id }: { id: string }) {
   const visual = channelPresetVisual(id);
   const previewFiles: Record<string, string> = {
-    "co-tich": "storybook-fox.jpg",
+    "co-tich": "cartoon-folk.jpg",
     "video-minh-hoa": "cinematic-reading.jpg",
-    "quy-tac-co-nhan": "historical-scholar.jpg",
-    "dao-ly-co-phong": "historical-scholar.jpg",
+    "quy-tac-co-nhan": "ink-wash-sepia.jpg",
+    "dao-ly-co-phong": "paper-stage.jpg",
     "tien-hiep-chibi": "fantasy-chibi.jpg",
-    "dan-gian-viet-chibi": "storybook-fox.jpg",
-    "co-trang-hai-chibi": "fantasy-chibi.jpg",
-    "huyen-bi-co-phong": "fantasy-chibi.jpg",
+    "dan-gian-viet-chibi": "vietnamese-folk.jpg",
+    "co-trang-hai-chibi": "comedy-chibi.jpg",
+    "huyen-bi-co-phong": "mystery-chibi.jpg",
     "chua-lanh": "watercolor-healing.jpg",
     "co-trang": "historical-scholar.jpg",
-    "tam-su": "watercolor-healing.jpg",
+    "tam-su": "paper-cut.jpg",
     "kien-thuc": "cinematic-reading.jpg",
     "ve-tay": "whiteboard-learning.jpg",
   };

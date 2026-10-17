@@ -17,7 +17,7 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     id: "video-minh-hoa",
     label: "Video minh họa",
     hint: "Ảnh hoạt hình ở giữa, nền mờ, tiêu đề glow và phụ đề lớn",
-    apply: (s) => ({ ...withLayoutTemplate(s, "story-card"), cardTheme: "blurred", style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: true, sceneSfx: true, subtitle: { ...s.subtitle, preset: "focus", position: "bottom", fontColor: "#FFFFFF", outlineColor: "#101010", backgroundOpacity: 0 } }),
+    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "story-card"), "cinematic-color"), cardTheme: "blurred", style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: true, sceneSfx: true, subtitle: { ...s.subtitle, preset: "focus", position: "bottom", fontColor: "#FFFFFF", outlineColor: "#101010", backgroundOpacity: 0 } }),
   },
   {
     id: "quy-tac-co-nhan",
