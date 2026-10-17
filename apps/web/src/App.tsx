@@ -3059,16 +3059,22 @@ function StudioPage() {
   const targetCheck = project.inputMode === "idea" && voiced
     ? { off: Math.abs(totalMs / 1000 - project.settings.targetDurationSec) > project.settings.targetDurationSec * 0.15 }
     : null;
+  // In idea mode the short user input is expanded into the actual narration during storyboard generation.
+  // Publish readiness must judge what will be heard in the exported video, not the original one-line idea;
+  // otherwise a valid expanded script is incorrectly blocked as low quality.
+  const renderedNarration = project.inputMode === "idea" && project.scenes.length
+    ? project.scenes.map((scene) => scene.narration).join(" ")
+    : project.sourceText;
   const publishReadiness = useMemo(() => evaluatePublishReadiness({
     completed: project.status === "completed" && !processing && saved,
     hasResult: Boolean(result),
     width: result?.width ?? null,
     height: result?.height ?? null,
     aspectRatio: project.settings.aspectRatio,
-    contentScore: evaluateContentQuality(project.sourceText).score,
+    contentScore: evaluateContentQuality(renderedNarration).score,
     subtitlesEnabled: project.settings.subtitle.enabled,
     scenes: project.scenes,
-  }), [project, processing, result, saved]);
+  }), [project, processing, renderedNarration, result, saved]);
   return (
     <div className="studio">
       <div className="studio-top">
