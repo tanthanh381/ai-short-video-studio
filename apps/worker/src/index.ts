@@ -590,6 +590,7 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
   let lastAudit: ImageQualityAudit | null = null;
   let lastBlank = false;
   let correction = "";
+  const strictQualityGate = project.settings.generationPreset === "quality" && process.env.VISION_QUALITY_GATE !== "false";
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const image = await provider.createImage(`${prompt}${correction}`, imageAspectFor(project.settings), {
       ...options,
@@ -597,9 +598,10 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     });
     lastBlank = await imageLooksBlank(image, config.FFMPEG_PATH);
     lastAudit = lastBlank ? null : await auditSceneImage(image, scene, project, job);
-    // A missing Vision response is intentionally fail-open: a temporary QA
-    // outage must not turn a complete production video into a failed job.
-    if (!lastBlank && (!lastAudit || (lastAudit.relevant && lastAudit.anatomy !== "bad"))) return image;
+    // Balanced/fast may continue during a temporary Vision outage. Quality is
+    // deliberately fail-closed: it must never export an image that was not
+    // semantically and anatomically checked.
+    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad") : !strictQualityGate)) return image;
     if (attempt === maxAttempts - 1) break;
     correction = lastAudit?.anatomy === "bad"
       ? ", corrected anatomy, exactly five fingers per hand, natural hands and face, no extra fingers, no duplicated limbs"
@@ -610,6 +612,8 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
   }
   if (lastBlank)
     throw new Error(`Ảnh cảnh ${scene.order + 1} vẫn là khung trống sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
+  if (strictQualityGate && !lastAudit)
+    throw new Error(`Cổng kiểm tra chất lượng hình ảnh chưa sẵn sàng ở cảnh ${scene.order + 1}; hãy bật Ollama Vision rồi thử lại`);
   throw new Error(`Ảnh cảnh ${scene.order + 1} chưa khớp nội dung hoặc anatomy không đạt sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
 }
 
