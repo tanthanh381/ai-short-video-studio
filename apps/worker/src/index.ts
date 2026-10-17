@@ -575,7 +575,12 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
   const first = await provider.createImage(prompt, imageAspectFor(project.settings), options);
   if (!(await imageLooksBlank(first, config.FFMPEG_PATH))) return first;
   log.warn({ jobId: job.id, sceneId: scene.id }, "blank_picture_redrawn");
-  return provider.createImage(prompt, imageAspectFor(project.settings), { ...options, seed: (options.seed ?? 0) + 7919 });
+  const retry = await provider.createImage(prompt, imageAspectFor(project.settings), { ...options, seed: (options.seed ?? 0) + 7919 });
+  // A flat second result is not a usable visual. Let the scene remain failed so the
+  // user can regenerate only this scene instead of silently exporting a blank frame.
+  if (await imageLooksBlank(retry, config.FFMPEG_PATH))
+    throw new Error(`Ảnh cảnh ${scene.order + 1} vẫn là khung trống sau khi thử lại; hãy tạo lại cảnh này`);
+  return retry;
 }
 
 async function generateMedia(job: JobRow, project: Project) {
