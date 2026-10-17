@@ -25,6 +25,8 @@ const schema = z.object({
   OLLAMA_MODEL: z.string().default("qwen3.5:4b"),
   /** Optional higher-quality writer selected only for the Quality generation preset when a node has it installed. */
   OLLAMA_QUALITY_MODEL: z.string().default("qwen3:8b"),
+  /** Vision-capable local model used only by the Quality image audit. */
+  OLLAMA_VISION_MODEL: z.string().default("qwen3.5:4b"),
   OLLAMA_NUM_CTX: z.coerce.number().int().min(2048).max(32768).default(8192),
   OLLAMA_KEEP_ALIVE: z.string().default("10m"),
   LOCAL_MEDIA_BASE_URL: z.string().url().default("http://host.docker.internal:8765"),

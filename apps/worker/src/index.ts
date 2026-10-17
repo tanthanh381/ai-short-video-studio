@@ -570,8 +570,8 @@ async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project
     return await pool.runOne("llm", (node) => ollamaOn(node.id).auditImage({
       image,
       sceneBrief: `${scene.narration}\nVisual brief: ${scene.imagePrompt}`,
-      model: project.settings.localModels.storyboard || config.OLLAMA_QUALITY_MODEL,
-    }), { llmModel: project.settings.localModels.storyboard || config.OLLAMA_QUALITY_MODEL });
+      model: config.OLLAMA_VISION_MODEL,
+    }), { llmModel: config.OLLAMA_VISION_MODEL });
   } catch (error) {
     log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "vision_quality_gate_unavailable");
     return null;
