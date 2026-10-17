@@ -177,6 +177,9 @@ COMFYUI_MODEL_DIR = Path(os.getenv(
     str(LOCAL_AI_ROOT / "ComfyUI" / "models" / "checkpoints"),
 ))
 COMFYUI_TIMEOUT_S = int(os.getenv("COMFYUI_TIMEOUT_S", "900"))
+# SDXL Base/ComfyUI is unsafe beside the rest of the local stack on a 16 GB Mac.
+# Larger nodes such as the 24 GB Air may still use it for Quality.
+COMFYUI_MIN_RAM_GB = max(8.0, float(os.getenv("COMFYUI_MIN_RAM_GB", "24")))
 # Voice presets selectable on the website. Keep ids in sync with packages/shared/src/voices.ts and duration.ts.
 # (VieNeu preset voice, mood, native words/second at speed 1.0).
 #
@@ -295,7 +298,7 @@ def choose_image_model(model=None, preset=None, comfy_ready=False):
     unavailable ComfyUI must never make a video job fail just because the user
     chose Quality, so it falls back to the persistent Turbo server.
     """
-    if model in (None, "") and preset == "quality" and comfy_ready:
+    if model in (None, "") and preset == "quality" and comfy_ready and comfyui_memory_safe():
         return COMFYUI_IMAGE_MODEL
     return model
 
@@ -405,10 +408,27 @@ def comfyui_state():
     return "offline", "Chưa kết nối ComfyUI local"
 
 
+def comfyui_memory_safe():
+    """Whether loading SDXL Base is safe for this node right now."""
+    resources = node_status.read_resources()
+    total = resources.get("memTotalGb")
+    if isinstance(total, (int, float)) and total < COMFYUI_MIN_RAM_GB:
+        return False
+    if resources.get("memPressure") in {"warn", "critical"}:
+        return False
+    swap_out = resources.get("swapOutMBps")
+    if isinstance(swap_out, (int, float)) and swap_out >= VIDEO_MAX_SWAP_OUT_MBPS:
+        return False
+    swap_used, swap_total = resources.get("swapUsedGb"), resources.get("swapTotalGb")
+    if isinstance(swap_used, (int, float)) and isinstance(swap_total, (int, float)) and swap_total > 0 and swap_used / swap_total >= VIDEO_MAX_SWAP_RATIO:
+        return False
+    return True
+
+
 def available_image_models():
     models = dict(IMAGE_MODELS)
     state, _ = comfyui_state()
-    if state == "ready":
+    if state == "ready" and comfyui_memory_safe():
         models[COMFYUI_IMAGE_MODEL] = COMFYUI_IMAGE_LABEL
     return models
 
@@ -1212,7 +1232,7 @@ def services_for(path, body):
             preset = payload.get("preset")
         except (ValueError, AttributeError):
             model, preset = None, None
-        wants_base = model == COMFYUI_IMAGE_MODEL or (model in (None, "") and preset == "quality")
+        wants_base = (model == COMFYUI_IMAGE_MODEL or (model in (None, "") and preset == "quality")) and comfyui_memory_safe()
         return ["image", "comfyui"] if wants_base else ["image"]
     if route in ("/tts", "/tts-aligned"):
         return ["vieneu"]

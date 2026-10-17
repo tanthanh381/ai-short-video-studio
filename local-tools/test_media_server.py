@@ -114,10 +114,13 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertIn("fps=24", vf)
 
     def test_quality_without_explicit_model_prefers_comfyui_base_only_when_ready(self):
-        self.assertEqual(
-            self.media.choose_image_model(None, "quality", comfy_ready=True),
-            self.media.COMFYUI_IMAGE_MODEL,
-        )
+        with patch.object(self.media, "comfyui_memory_safe", return_value=True):
+            self.assertEqual(
+                self.media.choose_image_model(None, "quality", comfy_ready=True),
+                self.media.COMFYUI_IMAGE_MODEL,
+            )
+        with patch.object(self.media, "comfyui_memory_safe", return_value=False):
+            self.assertIsNone(self.media.choose_image_model(None, "quality", comfy_ready=True))
         self.assertIsNone(self.media.choose_image_model(None, "quality", comfy_ready=False))
         self.assertIsNone(self.media.choose_image_model(None, "balanced", comfy_ready=True))
         self.assertEqual(
