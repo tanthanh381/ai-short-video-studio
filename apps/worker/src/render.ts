@@ -150,18 +150,32 @@ export function createAss(project: Project) {
   const unspoken = sepia ? SEPIA.captionPale : style.fontColor;
   const primary = highlight ? assColor(sepia ? SEPIA.captionSpoken : highlightColor(style.fontColor)) : assColor(unspoken);
   const edge = sepia ? SEPIA.captionEdge : style.outlineColor;
+  // Explainer theme: a short key point held at the top for the whole scene (full-bleed only, clear of the subtitles below).
+  const keyPoints = project.settings.showKeyPoints && !cardMode && !paperMode ? project.settings.keyPoints : [];
+  const keyPointSize = Math.round(height * 0.05);
+  const keyPointMarginV = Math.round(height * 0.12); // below the phone apps' top bar (see SAFE)
   let offset = 0;
   const lines: string[] = [];
-  for (const scene of project.scenes) {
+  project.scenes.forEach((scene, index) => {
     for (const cue of scene.subtitles) {
       const text = highlight ? karaokeText(cue.text, cue.endMs - cue.startMs) : assEscape(cue.text);
       lines.push(
         `Dialogue: 0,${assTime(offset + cue.startMs)},${assTime(offset + cue.endMs)},Default,,0,0,0,,${text}`,
       );
     }
-    offset += scene.actualDurationMs ?? scene.estimatedDurationMs;
-  }
-  return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,${ASS_FONT},${fontSize},${primary},${assColor(unspoken)},${assColor(edge)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
+    const duration = scene.actualDurationMs ?? scene.estimatedDurationMs;
+    const keyPoint = keyPoints[index]?.trim();
+    if (keyPoint) {
+      lines.push(
+        `Dialogue: 1,${assTime(offset)},${assTime(offset + duration)},KeyPoint,,0,0,0,,${assEscape(keyPoint.toUpperCase())}`,
+      );
+    }
+    offset += duration;
+  });
+  const keyPointStyle = keyPoints.some((point) => point.trim())
+    ? `\nStyle: KeyPoint,${ASS_FONT},${keyPointSize},${assColor("#FFFFFF")},${assColor("#FFFFFF")},${assColor("#101828")},${assColor("#000000", 0.5)},-1,0,0,0,100,100,0,0,3,2,0,8,${Math.round(width * 0.08)},${Math.round(width * 0.08)},${keyPointMarginV},1`
+    : "";
+  return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,${ASS_FONT},${fontSize},${primary},${assColor(unspoken)},${assColor(edge)},${assColor(style.backgroundColor, 1 - style.backgroundOpacity)},-1,0,0,0,100,100,0,0,${borderStyle},${outline},0,${alignment},${Math.round(width * 0.07)},${Math.round(width * 0.07)},${marginV},1${keyPointStyle}\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${lines.join("\n")}\n`;
 }
 
 /** Camera moves cycled across scenes so consecutive stills never move the same way. */

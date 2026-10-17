@@ -108,4 +108,43 @@ export class AnthropicStoryboardAdapter implements StoryboardProvider {
       return null;
     }
   }
+
+  /** Claude writes one short on-screen key point per scene (explainer theme), in the scenes' own order. */
+  async writeKeyPoints(input: { narrations: string[]; title: string }): Promise<string[] | null> {
+    if (!input.narrations.length) return null;
+    try {
+      const message = await this.client.messages.create({
+        model: this.model,
+        max_tokens: 1_500,
+        system:
+          "Video giải thích tiếng Việt: với mỗi cảnh, viết MỘT ý chính thật ngắn để hiện chữ to trên màn hình. " +
+          "Mỗi ý chính 2-5 từ tiếng Việt, cô đọng, bám đúng nội dung cảnh đó, không phải câu đầy đủ, không dấu câu cuối. " +
+          "Trả về JSON { keyPoints: [...] } với số phần tử ĐÚNG BẰNG số cảnh, theo đúng thứ tự.",
+        messages: [{ role: "user", content: `Tiêu đề: ${input.title}\nCác cảnh:\n${input.narrations.map((text, index) => `${index + 1}. ${text}`).join("\n").slice(0, 8_000)}` }],
+        output_config: {
+          format: {
+            type: "json_schema",
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["keyPoints"],
+              properties: { keyPoints: { type: "array", items: { type: "string" } } },
+            },
+          },
+        },
+      });
+      const text = message.content.find((block) => block.type === "text")?.text;
+      if (!text) return null;
+      const parsed = JSON.parse(text) as { keyPoints?: unknown };
+      const list: unknown[] = Array.isArray(parsed.keyPoints) ? parsed.keyPoints : [];
+      if (!list.length) return null;
+      // Align to the scenes: one key point per scene, in order; pad or trim to match.
+      return input.narrations.map((_, index) => {
+        const value = list[index];
+        return typeof value === "string" ? value.trim().slice(0, 80) : "";
+      });
+    } catch {
+      return null;
+    }
+  }
 }

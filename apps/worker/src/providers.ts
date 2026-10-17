@@ -77,6 +77,8 @@ export interface StoryboardProvider {
     }): Promise<string>;
   /** Title, caption and hashtags to post the finished video with. */
   writePostCaption?(input: { sourceText: string; title: string; model?: string | null }): Promise<{ title: string; description: string; hashtags: string[] } | null>;
+  /** A short on-screen key point for each scene (explainer theme): same length as `narrations`, 2-5 words each. */
+  writeKeyPoints?(input: { narrations: string[]; title: string }): Promise<string[] | null>;
   /** Rewrite one scene as an English image prompt when the storyboard model answered in Vietnamese. */
   translateImagePrompt?(input: { narration: string; draft: string; glossary: string; model?: string | null }): Promise<string>;
 }

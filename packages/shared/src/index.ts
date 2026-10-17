@@ -73,6 +73,8 @@ export const DEFAULT_PROJECT_SETTINGS = {
   progressBar: false,
   outroText: "",
   sceneSfx: false,
+  showKeyPoints: false,
+  keyPoints: [] as string[],
   trimSilence: false,
   subtitle: {
     enabled: true,
