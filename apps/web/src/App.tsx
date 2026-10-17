@@ -1304,7 +1304,7 @@ const LOCAL_MODEL_TASKS: Array<{ key: keyof LocalModels; label: string }> = [
 /** The video options both the create page and the studio show. One component, so a choice made before the video is made
  * reads, and can be changed, exactly as in the studio afterwards. The studio adds what only a saved project has
  * (logo, music upload, caption style and timing, "listen to this scene") through the `...Extra` slots. */
-function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, localModels, frameExtra, voiceExtra, musicExtra, subtitleExtra }: {
+function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, localModels, frameExtra, voiceExtra, musicExtra, subtitleExtra, presetSelected = false, onCustomizePreset }: {
   settings: ProjectSettings;
   onChange(next: ProjectSettings): void;
   scriptMode: Project["inputMode"];
@@ -1316,6 +1316,9 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
   voiceExtra?: ReactNode;
   musicExtra?: ReactNode;
   subtitleExtra?: ReactNode;
+  /** When a quick preset is active, content and visual defaults stay collapsed until the user asks to customize them. */
+  presetSelected?: boolean;
+  onCustomizePreset?(): void;
 }) {
   const set = (patch: Partial<ProjectSettings>) => onChange({ ...settings, ...patch });
   const setSubtitle = (patch: Partial<ProjectSettings["subtitle"]>) => onChange({ ...settings, subtitle: { ...settings.subtitle, ...patch } });
@@ -1353,6 +1356,14 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
           </Notice>
         )}
       </div>
+      {presetSelected && (
+        <div className="preset-config-summary" role="status">
+          <strong>Mẫu video đang áp dụng</strong>
+          <span>Tone nội dung, Visual style và Layout đã được thiết lập theo mẫu.</span>
+          {onCustomizePreset && <Button type="button" variant="ghost" onClick={onCustomizePreset}>Tùy chỉnh Nội dung &amp; Hình ảnh</Button>}
+        </div>
+      )}
+      {!presetSelected && <>
       <div className="setting-group">
         <h3><BookOpenText /> Nội dung</h3>
         <Field label="Tone nội dung" hint="Cách kể và mục tiêu của lời thoại; không quyết định phong cách hình ảnh.">
@@ -1427,6 +1438,7 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
         </label>
         <p className="microcopy">Đổi kiểu khung, màu hay tỷ lệ xong hãy bấm Tạo video lại để áp dụng cho video đã có.</p>
       </div>
+      </>}
       {frameExtra}
       <div className="setting-group">
         <h3><Mic2 /> Giọng đọc</h3>
@@ -1541,6 +1553,7 @@ function NewProjectPage() {
     { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, autoMusic: true, captionHighlight: true, hookTitle: true },
   );
   const [channelPreset, setChannelPreset] = useState<string | null>(null);
+  const [customizePreset, setCustomizePreset] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   // Read the real local catalog even before Advanced is opened so a ready LTX node can
   // be selected automatically for new projects. When LTX is offline, the catalog's
@@ -1782,7 +1795,7 @@ function NewProjectPage() {
                     className={`channel-preset-card ${channelPreset === preset.id ? "active" : ""}`}
                     title={preset.hint}
                     disabled={busy}
-                    onClick={() => { setChannelPreset(preset.id); setSettings((s) => preset.apply(s)); }}
+                    onClick={() => { setChannelPreset(preset.id); setCustomizePreset(false); setSettings((s) => preset.apply(s)); }}
                   >
                     <PresetPreviewArt id={preset.id} />
                     <span className="channel-preset-copy">
@@ -1817,11 +1830,13 @@ function NewProjectPage() {
           <div className="video-options">
             <VideoOptions
               settings={settings}
-              onChange={(next) => { setChannelPreset(null); setSettings(next); }}
+              onChange={(next) => { setChannelPreset(null); setCustomizePreset(true); setSettings(next); }}
               scriptMode={inputMode}
               isDemo={isDemo}
               capabilities={null}
               localModels={localModels}
+              presetSelected={Boolean(channelPreset) && !customizePreset}
+              onCustomizePreset={() => setCustomizePreset(true)}
             />
             <p className="microcopy">Các mục dưới đây là thiết lập chi tiết. Nếu bạn đã chọn một mẫu video, thay đổi thủ công sẽ ghi đè mẫu đó.</p>
           </div>

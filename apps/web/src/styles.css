@@ -3771,6 +3771,17 @@ input[type="radio"] {
   border-radius: var(--radius-md);
   overflow: hidden;
 }
+.preset-config-summary {
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+  color: var(--text-soft);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line-soft);
+}
+.preset-config-summary strong { color: var(--text-strong); }
+.preset-config-summary span { font-size: var(--text-sm); }
+.preset-config-summary .button { justify-self: start; margin-top: 4px; }
 .video-options .setting-group:last-of-type { border-bottom: 0; }
 .video-options .microcopy { padding: 0 16px 12px; }
 
