@@ -573,7 +573,7 @@ async function createLockedBatch(
       // A small model sometimes answers in Vietnamese (unreadable for SDXL) or repeats one prompt for several
       // scenes (identical pictures). Retry those, keeping the best answer so the video never fails over it.
       const flaws = promptFlaws(generated.scenes.map((scene) => scene.imagePrompt))
-        + generated.scenes.reduce((sum, scene, index) => sum + visualPromptFlaws(lockedScenes[index]!, scene.imagePrompt), 0);
+        + generated.scenes.reduce((sum, scene, index) => sum + visualPromptFlaws(lockedScenes[index]!, scene.imagePrompt, input.cast ?? ""), 0);
       if (!best || flaws < best.flaws) best = { generated, flaws };
       if (flaws === 0) break;
     } catch (error) {
@@ -598,7 +598,7 @@ async function createLockedBatch(
   if (realigned.misaligned.length)
     notes?.realigned?.({ misaligned: realigned.misaligned.map((index) => sceneOffset + index + 1), repaired: realigned.repaired.map((index) => sceneOffset + index + 1) });
   // Repair abstract placeholders scene-by-scene before image generation.
-  for (const index of prompts.flatMap((prompt, at) => visualPromptFlaws(lockedScenes[at]!, prompt) ? [at] : [])) {
+  for (const index of prompts.flatMap((prompt, at) => visualPromptFlaws(lockedScenes[at]!, prompt, input.cast ?? "") ? [at] : [])) {
     const current = prompts[index]!;
     for (let attempt = 0; attempt < 2; attempt++) {
       const candidate = await provider.createStoryboard({
@@ -608,12 +608,12 @@ async function createLockedBatch(
         totalScenes,
         attempt: BATCH_ATTEMPTS + attempt,
       }).then((answer) => answer.scenes[0]?.imagePrompt).catch(() => "");
-      if (candidate && isEnglishPrompt(candidate) && visualPromptFlaws(lockedScenes[index]!, candidate) < visualPromptFlaws(lockedScenes[index]!, current)) {
+      if (candidate && isEnglishPrompt(candidate) && visualPromptFlaws(lockedScenes[index]!, candidate, input.cast ?? "") < visualPromptFlaws(lockedScenes[index]!, current, input.cast ?? "")) {
         prompts[index] = candidate;
         break;
       }
     }
-    if (visualPromptFlaws(lockedScenes[index]!, prompts[index]!) > 0)
+    if (visualPromptFlaws(lockedScenes[index]!, prompts[index]!, input.cast ?? "") > 0)
       prompts[index] = concreteVisualFallback(lockedScenes[index]!);
   }
   return { ...best.generated, scenes: best.generated.scenes.map((scene, index) => ({ ...scene, imagePrompt: prompts[index]! })) };
@@ -738,16 +738,43 @@ function promptFlaws(prompts: string[]): number {
 }
 
 /** Reject abstract placeholders that look polished but do not show the spoken beat. */
-export function visualPromptFlaws(narration: string, prompt: string): number {
+type CastRole = "mother" | "father" | "grandmother" | "grandfather" | "girl" | "boy" | "sibling" | "wife" | "husband";
+
+const ROLE_PATTERNS: Array<[CastRole, RegExp]> = [
+  ["mother", /\b(?:mother|mom|mum|female parent)\b/iu],
+  ["father", /\b(?:father|dad|daddy|male parent)\b/iu],
+  ["grandmother", /\b(?:grandmother|grandma)\b/iu],
+  ["grandfather", /\b(?:grandfather|grandpa)\b/iu],
+  ["girl", /\b(?:girl|daughter|little girl)\b/iu],
+  ["boy", /\b(?:boy|son|little boy)\b/iu],
+  ["sibling", /\b(?:brother|sister|siblings?)\b/iu],
+  ["wife", /\bwife\b/iu],
+  ["husband", /\bhusband\b/iu],
+];
+
+function rolesIn(text: string): Set<CastRole> {
+  return new Set(ROLE_PATTERNS.flatMap(([role, pattern]) => pattern.test(text) ? [role] : []));
+}
+
+/** A cast is a continuity contract: a model may not swap a mother/daughter story for invented siblings. */
+function inventedCastRoles(prompt: string, cast: string): number {
+  if (!cast.trim()) return 0;
+  const allowed = rolesIn(cast);
+  return [...rolesIn(prompt)].filter((role) => !allowed.has(role)).length;
+}
+
+export function visualPromptFlaws(narration: string, prompt: string, cast = ""): number {
   const text = prompt.toLocaleLowerCase("en");
   const said = narration.toLocaleLowerCase("vi");
   let flaws = 0;
   if (/\b(?:abstract|symbolic|conceptual|metaphorical|representing|placeholder|generic|unrelated)\b/u.test(text)) flaws++;
   if (/\bquestion mark\b/u.test(text)) flaws++;
   if (/\b(?:thought bubble|label appears|written words?|text appears|text overlay|icon)\b/u.test(text)) flaws++;
+  if (/\b(?:blurry|faded|visible|readable) text\b|\btext written\b/u.test(text)) flaws++;
   if (/\b(?:racing thoughts?|floating .*scribbles|shadow growing)\b/u.test(text)) flaws++;
   if (/\bfloating (?:pastel )?(?:shapes?|symbols?|icons?)\b/u.test(text)) flaws++;
   if (/\bfloating .*\b(?:handwritten|letters?|characters?)\b/u.test(text)) flaws++;
+  flaws += inventedCastRoles(text, cast);
   flaws += missingSceneAnchors(narration, prompt);
   if (/\bghost\b/u.test(text) && !/(ma|quỷ|hồn|linh hồn|bóng ma|ghost)/iu.test(said)) flaws++;
   if (/\b(?:heart|hearts?)\b/u.test(text) && !/(tim|trái tim|yêu|tình yêu)/iu.test(said)) flaws++;

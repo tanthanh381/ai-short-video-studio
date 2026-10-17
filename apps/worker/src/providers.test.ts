@@ -198,6 +198,17 @@ describe("diffusion prompt quality", () => {
     expect(visualPromptFlaws("Cô ấy đọc tin nhắn trên điện thoại.", "A woman checks a smartphone screen beside a window")).toBe(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother stands beside floating handwritten characters")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother checks a phone beside a desk")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Trên đó là danh sách mua hàng.", "A little girl looks at blurry text written on a paper")).toBeGreaterThan(0);
+    expect(visualPromptFlaws(
+      "Minh gọi cho mẹ.",
+      "A little brother stands beside a big brother holding a phone",
+      "a Vietnamese mother with a black bun, and her little girl with two pigtails",
+    )).toBeGreaterThan(0);
+    expect(visualPromptFlaws(
+      "Minh gọi cho mẹ.",
+      "A Vietnamese mother holds a phone beside a quiet table",
+      "a Vietnamese mother with a black bun, and her little girl with two pigtails",
+    )).toBe(0);
     expect(concreteVisualFallback("Hãy gọi tên cảm xúc và viết lại điều đang nghĩ.")).toContain("open notebook");
     expect(concreteVisualFallback("Người thợ tìm thấy một mảnh giấy gấp tư.")).toContain("paper list");
     expect(concreteVisualFallback("Một hơi thở chậm đưa bạn về hiện tại.")).toContain("one slow breath");
