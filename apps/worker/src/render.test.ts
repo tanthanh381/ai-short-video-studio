@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assTime, createAss, hookOverlayFilters, karaokeText, logoInputFilter, mapWithConcurrency, renderProject, sceneMotion, validateRenderedOutput, videoEncoderPreset, videoSize } from "./render";
+import { assTime, createAss, hookOverlayFilters, illustratedStoryTitleFilters, karaokeText, logoInputFilter, mapWithConcurrency, renderProject, sceneMotion, validateRenderedOutput, videoEncoderPreset, videoSize } from "./render";
 import { DEFAULT_PROJECT_SETTINGS, PAPER_CAPTION_TOP, PLATFORM_SAFE, STORY_BAND, type Project } from "@studio/shared";
 import { CARD, PAPER, SAFE } from "./card-layout";
 
@@ -227,6 +227,18 @@ describe("sepia story card captions", () => {
     const style = createAss(project({ cardTheme: "blue" })).split("\n").find((line) => line.startsWith("Style: Default"))!.split(",");
     expect(style[2]).toBe("58");
     expect(style[3]).toBe("&H004DE1FF");
+  });
+});
+
+describe("blurred illustrated story card", () => {
+  it("uses large white captions and a two-layer title glow", () => {
+    const project = {
+      id: crypto.randomUUID(), userId: crypto.randomUUID(), title: "t", sourceText: "x", inputMode: "idea", hook: "", suggestedTitle: "",
+      suggestedDescription: "", status: "draft", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      settings: { ...DEFAULT_PROJECT_SETTINGS, layoutTemplate: "story-card", cardTheme: "blurred" }, scenes: [],
+    } as unknown as Project;
+    expect(createAss(project).split("\n").find((line) => line.startsWith("Style: Default"))?.split(",")[2]).toBe("78");
+    expect(illustratedStoryTitleFilters(["/tmp/title.txt", "/tmp/title-2.txt"], ["HÃY THƯƠNG", "NHIỀU HƠN"])).toHaveLength(4);
   });
 });
 

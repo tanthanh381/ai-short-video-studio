@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { drawsByHand, logoAnchor, logoOverlayXY, type Project, type Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
 import { EXPORT_LIMIT_BYTES, buildAudioMixFilter, buildAmbientMusicArgs, exportRateArgs, exportTooLargeMessage, validateCaptionTiming } from "./render-quality";
-import { CARD, PAPER, SEPIA, progressBarY, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesPaperStage, usesStoryCard } from "./card-layout";
+import { BLURRED_CARD, CARD, PAPER, SEPIA, progressBarY, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, cardFooterLines, cardTitleFontSize, fallbackCardTitle, PAPER_CORNERS, paperGrainArgs, paperFeatherFilter, paperShift, paperStageFilter, splitCardTitle, usesBlurredStoryCard, usesPaperStage, usesStoryCard } from "./card-layout";
 import { drawSceneByHand, type WhiteboardRunner } from "./whiteboard";
 
 const exec = promisify(execFile);
@@ -128,7 +128,9 @@ export function createAss(project: Project) {
       : style.position === "bottom"
       ? Math.round(height * (height > width ? 0.24 : 0.16)) // portrait: above the phone apps' caption and sound row (see SAFE)
       : Math.round(height * 0.1);
-  const fontSize = sepia
+  const fontSize = usesBlurredStoryCard(project.settings)
+    ? BLURRED_CARD.captionSize
+    : sepia
     ? SEPIA.captionFont
     : paperMode
     ? Math.round(height * 0.026)
@@ -218,6 +220,19 @@ export function hookOverlayFilters(lineFiles: string[], lines: string[], width: 
     + `:box=1:boxcolor=0x000000@0.38:boxborderw=14`
     + `:x=(w-text_w)/2:y=${top + index * Math.round(size * 1.3)}`
     + `:enable='lt(t,3)':alpha='if(lt(t,2.4),1,max(0,(3-t)/0.6))'`);
+}
+
+/** Persistent illustrated-story title: white lettering with the yellow glow used by the reference short. */
+export function illustratedStoryTitleFilters(lineFiles: string[], lines: string[]): string[] {
+  const longest = Math.max(1, ...lines.map((line) => line.length));
+  const size = Math.max(44, Math.min(BLURRED_CARD.titleSize, Math.floor((CARD.width * 0.88) / (longest * 0.62))));
+  return lineFiles.flatMap((file, index) => {
+    const y = BLURRED_CARD.titleTop + index * CARD.titleLineGap;
+    return [
+      `drawtext=fontfile=${FONT_BOLD_FILTER}:textfile=${file}:fontsize=${size}:fontcolor=${BLURRED_CARD.titleGlow}:borderw=${BLURRED_CARD.titleGlowWidth}:bordercolor=${BLURRED_CARD.titleGlow}@0.8:shadowcolor=${BLURRED_CARD.titleGlow}@0.5:shadowx=0:shadowy=0:x=(w-text_w)/2:y=${y}`,
+      `drawtext=fontfile=${FONT_BOLD_FILTER}:textfile=${file}:fontsize=${size}:fontcolor=0xFFFFFF:borderw=5:bordercolor=${BLURRED_CARD.titleEdge}:shadowcolor=0x000000@0.35:shadowx=2:shadowy=3:x=(w-text_w)/2:y=${y}`,
+    ];
+  });
 }
 
 export async function durationMs(config: WorkerConfig, path: string) {
@@ -375,7 +390,8 @@ export async function renderProject(
   try {
     const { width, height } = videoSize(project.settings.aspectRatio);
     const encoderPreset = videoEncoderPreset(project.settings.generationPreset);
-    const cardFrame = usesStoryCard(project.settings) ? await buildCardFrame(config, workdir, project) : null;
+    const blurredStoryCard = usesBlurredStoryCard(project.settings);
+    const cardFrame = usesStoryCard(project.settings) && !blurredStoryCard ? await buildCardFrame(config, workdir, project) : null;
     const paperStage = usesPaperStage(project.settings);
     // One grain still for the whole video, written by the first scene that needs it (the seed is fixed anyway).
     let paperGrain: Promise<unknown> | null = null;
@@ -432,6 +448,9 @@ export async function renderProject(
       const sharpen = ",unsharp=5:5:0.5:5:5:0.0";
       const filter = paperCanvas
         ? paperStageFilter(scene.order)
+        : blurredStoryCard
+        // Illustrated story: mirror the scene into a blurred canvas, then place the sharp 16:10 illustration on top.
+        ? `[0:v]split=2[main][back];[back]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},boxblur=luma_radius=${BLURRED_CARD.backgroundBlur}:luma_power=2:chroma_radius=12:chroma_power=2,eq=saturation=1.08:brightness=0.02[bg];[main]scale=${CARD.width * 2}:${CARD.bandH * 2}:force_original_aspect_ratio=increase,crop=${CARD.width * 2}:${CARD.bandH * 2}${monochrome},${clip ? `${clipFrames},scale=${CARD.width}:${CARD.bandH}:flags=lanczos` : `${motionFilter}:s=${CARD.width}x${CARD.bandH}:fps=30${sharpen}`}[band];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
         : cardFrame
         // Story card: the picture lives in a 16:10 band over the pre-rendered background (input 2).
         ? clip
@@ -559,8 +578,24 @@ export async function renderProject(
       hookFiles.push(file);
     }
     const hook = hookFiles.length ? `${hookOverlayFilters(hookFiles, hookLines, width, height).join(",")},` : "";
+    const illustratedTitleFiles: string[] = [];
+    let illustratedTitleLines: string[] = [];
+    if (blurredStoryCard) {
+      const title = (project.settings.cardTitle.trim() || project.suggestedTitle.trim() || fallbackCardTitle(project.sourceText)).replace(/\s*\|\s*/gu, " ");
+      illustratedTitleLines = splitCardTitle(title);
+      for (const [index, line] of illustratedTitleLines.entries()) {
+        const file = join(workdir, `illustrated-title-${index}.txt`);
+        await writeFile(file, line, "utf8");
+        illustratedTitleFiles.push(file);
+      }
+    }
+    const illustratedTitle = illustratedTitleFiles.length ? `${illustratedStoryTitleFilters(illustratedTitleFiles, illustratedTitleLines).join(",")},` : "";
     // Retention aids: a closing call to action faded in over the last seconds, and a thin bar that fills as the video plays.
-    const cardLook = usesStoryCard(project.settings) ? (cardThemeOf(project.settings) === "sepia" ? { fill: SEPIA.kickerColor, edge: SEPIA.kickerBorder } : { fill: CARD.titleColor, edge: "0x14202a" }) : { fill: "0xFFFFFF", edge: "0x000000" };
+    const cardLook = usesStoryCard(project.settings)
+      ? cardThemeOf(project.settings) === "sepia" ? { fill: SEPIA.kickerColor, edge: SEPIA.kickerBorder }
+        : cardThemeOf(project.settings) === "blurred" ? { fill: BLURRED_CARD.titleGlow, edge: BLURRED_CARD.titleEdge }
+        : { fill: CARD.titleColor, edge: "0x14202a" }
+      : { fill: "0xFFFFFF", edge: "0x000000" };
     const outro = project.settings.outroText.trim();
     let outroFilter = "";
     if (outro && total > 6000) {
@@ -570,7 +605,7 @@ export async function renderProject(
       const outroSize = Math.max(34, Math.min(58, Math.floor((width * 0.88) / (Math.max(1, [...outro].length) * 0.6))));
       outroFilter = `drawtext=fontfile=${FONT_BOLD_FILTER}:textfile=${file}:fontsize=${outroSize}:fontcolor=${cardLook.fill}:borderw=4:bordercolor=${cardLook.edge}:x=(w-text_w)/2:y=${usesStoryCard(project.settings) ? 1585 : Math.round(height * 0.68)}:alpha='min(1,(t-${from})/0.4)':enable='gte(t,${from})',`;
     }
-    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=${FONT_DIR_FILTER},` : ""}${hook}${outroFilter}format=yuv420p[base]`;
+    let filter = `[0:v]${project.settings.subtitle.enabled ? `subtitles=filename='${escapedAss}':fontsdir=${FONT_DIR_FILTER},` : ""}${illustratedTitle}${hook}${outroFilter}format=yuv420p[base]`;
     let baseLabel = "base";
     if (project.settings.progressBar) {
       const seconds = (total / 1000).toFixed(3);

@@ -14,6 +14,12 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     apply: (s) => ({ ...withLayoutTemplate(s, "story-card"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
   {
+    id: "video-minh-hoa",
+    label: "Video minh họa",
+    hint: "Ảnh hoạt hình ở giữa, nền mờ, tiêu đề glow và phụ đề lớn",
+    apply: (s) => ({ ...withLayoutTemplate(s, "story-card"), cardTheme: "blurred", style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: true, sceneSfx: true, subtitle: { ...s.subtitle, preset: "focus", position: "bottom", fontColor: "#FFFFFF", outlineColor: "#101010", backgroundOpacity: 0 } }),
+  },
+  {
     id: "quy-tac-co-nhan",
     label: "Quy tắc cổ nhân",
     hint: "Thẻ truyện nền be, tiêu đề đỏ + trắng, tranh thủy mặc nâu, phụ đề xanh lá chạy theo lời, giọng nam trầm",

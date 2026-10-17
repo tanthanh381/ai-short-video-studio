@@ -26,6 +26,19 @@ export const CARD = {
   badgeY: 200,
 } as const;
 
+/** Illustrated story-card: the same safe bands as CARD, with each scene mirrored and blurred into the canvas. */
+export const BLURRED_CARD = {
+  ...CARD,
+  titleTop: 372,
+  titleColor: "0xFFFFFF",
+  titleGlow: "0xFFE14D",
+  titleEdge: "0x101010",
+  titleGlowWidth: 14,
+  titleSize: 78,
+  captionSize: 78,
+  backgroundBlur: 22,
+} as const;
+
 /**
  * The sepia story card ("Quy tắc cổ nhân" shorts), measured on the reference short at 1080x1920: a flat beige canvas
  * (205,182,141), a red kicker with a white edge over a white title with a black edge, the channel's round logo hanging
@@ -77,10 +90,10 @@ export function progressBarY(settings: { layoutTemplate?: string; aspectRatio: s
   return height > width ? height - Math.round(height * 0.24) + 12 : height - 12;
 }
 
-export type CardTheme = "blue" | "sepia";
+export type CardTheme = "blue" | "sepia" | "blurred";
 
 export function cardThemeOf(settings: { cardTheme?: string }): CardTheme {
-  return settings.cardTheme === "sepia" ? "sepia" : "blue";
+  return settings.cardTheme === "sepia" ? "sepia" : settings.cardTheme === "blurred" ? "blurred" : "blue";
 }
 
 /**
@@ -251,6 +264,10 @@ export const PAPER_HEX = PAPER.paper.map((value) => value.toString(16).padStart(
 
 export function usesStoryCard(settings: { layoutTemplate?: string; aspectRatio: string }): boolean {
   return settings.layoutTemplate === "story-card" && settings.aspectRatio === "9:16";
+}
+
+export function usesBlurredStoryCard(settings: { layoutTemplate?: string; cardTheme?: string; aspectRatio: string }): boolean {
+  return usesStoryCard(settings) && settings.cardTheme === "blurred";
 }
 
 /**

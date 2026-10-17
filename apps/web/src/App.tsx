@@ -1350,6 +1350,7 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
               <select value={settings.cardTheme} onChange={(e) => set({ cardTheme: e.target.value as ProjectSettings["cardTheme"] })}>
                 <option value="blue">Nền xanh, tiêu đề vàng</option>
                 <option value="sepia">Nền be, tiêu đề đỏ + trắng</option>
+                <option value="blurred">Ảnh minh họa, nền mờ</option>
               </select>
             </Field>
             <Field label="Tiêu đề trên khung" hint="Để trống: AI chọn câu mở đầu hấp dẫn từ kịch bản. Nền be: gõ “DÒNG ĐỎ | DÒNG TRẮNG” để tự chia hai dòng.">

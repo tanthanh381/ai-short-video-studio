@@ -61,8 +61,8 @@ export const logoPositionSchema = z.enum(["top-left", "top-center", "top-right",
 /** original: the picture as uploaded; circle: cut to a circle (a round logo saved on a white or coloured square). */
 export const logoShapeSchema = z.enum(["original", "circle"]);
 
-/** Colours of the story card: blue (yellow title, channel footer) or sepia (beige canvas, red + white title, green karaoke: the "cổ nhân" shorts). */
-export const cardThemeSchema = z.enum(["blue", "sepia"]);
+/** Story-card looks: a blue/sepia canvas or a blurred-image frame like illustrated short-video channels. */
+export const cardThemeSchema = z.enum(["blue", "sepia", "blurred"]);
 
 /** full-bleed: ảnh phủ toàn khung. story-card: tiêu đề + dải tranh + phụ đề + chữ ký kênh trên nền màu (kiểu video truyện minh họa). */
 // paper-stage: one character on plain kraft paper, caption under it ("Đạo lý cổ phong" shorts).

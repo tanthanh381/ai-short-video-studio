@@ -72,7 +72,7 @@ describe("channel presets", () => {
     const paper = CHANNEL_PRESETS.find((preset) => preset.id === "dao-ly-co-phong")!.apply(DEFAULT_PROJECT_SETTINGS);
     expect(paper).toMatchObject({ layoutTemplate: "paper-stage", visualPreset: "chibi-co-phong", aspectRatio: "9:16", hookTitle: false, captionHighlight: false });
     expect(paper.subtitle.backgroundOpacity).toBe(0);
-    for (const preset of CHANNEL_PRESETS.filter((item) => item.id !== "dao-ly-co-phong" && item.id !== "co-tich" && item.id !== "quy-tac-co-nhan")) {
+    for (const preset of CHANNEL_PRESETS.filter((item) => item.id !== "dao-ly-co-phong" && item.id !== "co-tich" && item.id !== "quy-tac-co-nhan" && item.id !== "video-minh-hoa")) {
       const next = preset.apply(paper);
       expect(next.layoutTemplate, preset.id).toBe("full-bleed");
       expect(next.subtitle.fontColor, preset.id).toBe(DEFAULT_PROJECT_SETTINGS.subtitle.fontColor);

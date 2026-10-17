@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PROJECT_SETTINGS, type Project } from "@studio/shared";
-import { CARD, PAPER, SEPIA, progressBarY, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, castForScript, cardFooterLines, cardTitleFontSize, fallbackCardTitle, splitCardTitle, usesStoryCard } from "./card-layout";
+import { CARD, PAPER, SEPIA, progressBarY, brandInitials, cardThemeOf, sepiaLineSize, sepiaTitleLines, castForScript, cardFooterLines, cardTitleFontSize, fallbackCardTitle, splitCardTitle, usesBlurredStoryCard, usesStoryCard } from "./card-layout";
 import { createAss } from "./render";
 import { buildAmbientMusicArgs, buildAudioMixFilter } from "./render-quality";
 
@@ -48,6 +48,11 @@ describe("story-card title", () => {
     expect(usesStoryCard({ layoutTemplate: "story-card", aspectRatio: "9:16" })).toBe(true);
     expect(usesStoryCard({ layoutTemplate: "story-card", aspectRatio: "16:9" })).toBe(false);
     expect(usesStoryCard({ layoutTemplate: "full-bleed", aspectRatio: "9:16" })).toBe(false);
+  });
+
+  it("recognises the blurred illustrated story card theme", () => {
+    expect(usesBlurredStoryCard({ layoutTemplate: "story-card", cardTheme: "blurred", aspectRatio: "9:16" })).toBe(true);
+    expect(usesBlurredStoryCard({ layoutTemplate: "story-card", cardTheme: "blue", aspectRatio: "9:16" })).toBe(false);
   });
 });
 
