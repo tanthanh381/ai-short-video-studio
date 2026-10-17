@@ -97,7 +97,7 @@ export function SystemPage() {
       <div className="page-heading">
         <div>
           <h1>Hệ thống</h1>
-          <p>System health, resources & services · auto-refresh {REFRESH_MS / 1000}s.</p>
+          <p>System health · Auto-refresh {REFRESH_MS / 1000}s</p>
         </div>
         <div className="sys-live" role="status" aria-live="polite">
           <span className={`sys-dot tone-${live.tone}`} aria-hidden="true" />
@@ -127,8 +127,8 @@ export function SystemPage() {
             </section>
           ) : (
             <section className="sys-card sys-solo">
-              <h2>Single-node setup</h2>
-              <p>All jobs run on the primary device.</p>
+              <h2>Primary device</h2>
+              <p>Mọi tác vụ chạy trên máy chính.</p>
             </section>
           )}
           {(Boolean(system.balancer && system.balancer.nodes.length > 1) || Boolean(system.balancer?.recent?.length)) ? (
@@ -149,7 +149,7 @@ export function SystemPage() {
           </div>
           <p className="microcopy sys-foot sys-foot-note">
             <InfoPopover title="System data">Số liệu tác vụ tính từ lần khởi động dịch vụ gần nhất{system.balancer?.since ? ` (${new Date(system.balancer.since).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })})` : ""}.</InfoPopover>
-            <Link to="/settings">Settings</Link>
+            <Link to="/settings">Cài đặt</Link>
           </p>
         </>
       )}
