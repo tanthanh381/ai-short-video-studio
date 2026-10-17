@@ -1588,7 +1588,7 @@ function WizardPage() {
       modeChosen: false,
       templateId: null,
       customized: false,
-      settings: { ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, autoMusic: true, captionHighlight: true, hookTitle: true },
+      settings: { ...DEFAULT_PROJECT_SETTINGS, textProvider: "anthropic", mediaProvider: "local", voice: DEFAULT_VOICE_PRESET, autoMusic: true, captionHighlight: true, hookTitle: true },
       project: null,
     };
     // Refresh keeps the draft: the whole wizard state was mirrored to sessionStorage; read it back before the first render.
