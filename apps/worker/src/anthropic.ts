@@ -11,6 +11,28 @@ import {
 } from "./providers";
 import { providerErrorMessage } from "./openai";
 
+/**
+ * Claude's structured-output JSON schema rejects validation keywords it does not enforce itself (minItems/maxItems on
+ * arrays, minimum/maximum on numbers, …) with a 400. We strip them before sending; the zod parsers (parseStoryboard,
+ * parseLockedVisualStoryboard) still enforce every bound after the reply, so nothing is lost.
+ */
+const UNSUPPORTED_SCHEMA_KEYS = new Set([
+  "minItems", "maxItems", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
+  "minLength", "maxLength", "multipleOf", "pattern", "format", "minProperties", "maxProperties",
+]);
+export function claudeStructuredSchema<T>(schema: T): T {
+  if (Array.isArray(schema)) return schema.map((item) => claudeStructuredSchema(item)) as T;
+  if (schema && typeof schema === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(schema)) {
+      if (UNSUPPORTED_SCHEMA_KEYS.has(key)) continue;
+      out[key] = claudeStructuredSchema(value);
+    }
+    return out as T;
+  }
+  return schema;
+}
+
 export class AnthropicStoryboardAdapter implements StoryboardProvider {
   private readonly client: Anthropic;
 
@@ -45,9 +67,9 @@ export class AnthropicStoryboardAdapter implements StoryboardProvider {
         output_config: {
           format: {
             type: "json_schema",
-            schema: input.lockedScenes
+            schema: claudeStructuredSchema(input.lockedScenes
               ? lockedVisualStoryboardJsonSchema(input.lockedScenes.length)
-              : storyboardJsonSchema,
+              : storyboardJsonSchema),
           },
         },
       });
