@@ -2930,6 +2930,8 @@ input[type="radio"] {
   border-radius: var(--radius-md);
 }
 .scene-foot .scene-regenerate svg { width: 14px; }
+.transport-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.publish-readiness-note { margin: 8px 0 0; color: var(--warn-text); font-size: var(--text-sm); }
 .scene-menu { position: relative; }
 .scene-foot .scene-menu-trigger { width: 32px; height: 32px; }
 .scene-foot .scene-menu-trigger svg { width: 18px; }

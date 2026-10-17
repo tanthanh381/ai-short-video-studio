@@ -9,6 +9,7 @@ export * from "./nodes";
 export * from "./node-settings";
 export * from "./logo";
 export * from "./content-quality";
+export * from "./publish-readiness";
 
 import type { VisualPreset } from "./schemas";
 

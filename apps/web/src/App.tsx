@@ -64,6 +64,7 @@ import {
   type KeyProvider,
   contentPlan,
   evaluateContentQuality,
+  evaluatePublishReadiness,
   durationLabel,
   formatDuration,
   looksLikeSubtitles,
@@ -3045,6 +3046,16 @@ function StudioPage() {
   const targetCheck = project.inputMode === "idea" && voiced
     ? { off: Math.abs(totalMs / 1000 - project.settings.targetDurationSec) > project.settings.targetDurationSec * 0.15 }
     : null;
+  const publishReadiness = useMemo(() => evaluatePublishReadiness({
+    completed: project.status === "completed" && !processing && saved,
+    hasResult: Boolean(result),
+    width: result?.width ?? null,
+    height: result?.height ?? null,
+    aspectRatio: project.settings.aspectRatio,
+    contentScore: evaluateContentQuality(project.sourceText).score,
+    subtitlesEnabled: project.settings.subtitle.enabled,
+    scenes: project.scenes,
+  }), [project, processing, result, saved]);
   return (
     <div className="studio">
       <div className="studio-top">
@@ -3421,11 +3432,15 @@ function StudioPage() {
           </div>
           <div className="transport">
             <div>
-              <strong>{result ? project.status === "completed" && !processing && saved ? "MP4 hoàn chỉnh" : "Bản MP4 đã xuất trước đó" : resultLoading ? "Đang mở kết quả…" : "Ảnh minh họa cảnh"}</strong>
+              <strong>{result ? (publishReadiness.ready ? "Ready to publish" : "Needs review") : resultLoading ? "Đang mở kết quả…" : "Ảnh minh họa cảnh"}</strong>
               <span>{result ? `${formatDuration(result.durationMs)} · ${result.width} × ${result.height}` : activeScene ? `Cảnh ${selected + 1}/${project.scenes.length} · ${formatDuration(totalMs)}` : "Video sẽ xuất hiện sau khi ghép xong."}</span>
             </div>
-            {result && <Button onClick={() => void downloadResult()} busy={busyAction === "download"}><Download size={17} /> {project.status === "completed" && !processing && saved ? "Tải MP4" : "Tải bản trước"}</Button>}
+            {result && <div className="transport-actions">
+              <Badge tone={publishReadiness.ready ? "ok" : "warn"}>{publishReadiness.ready ? "Ready to publish" : "Needs review"}</Badge>
+              <Button onClick={() => void downloadResult()} busy={busyAction === "download"}><Download size={17} /> Tải MP4</Button>
+            </div>}
           </div>
+          {result && !publishReadiness.ready && <p className="publish-readiness-note" role="status">{publishReadiness.blockers.slice(0, 2).join(" · ")}. Bạn vẫn có thể tải bản này và chỉnh lại scene cần thiết.</p>}
           <PostCaptionCard project={project} />
           <div className="timeline">
             <div className="timeline-label">
