@@ -1245,6 +1245,9 @@ def ltx_state():
 def video_resources_available():
     """Prevent a known memory-starved Mac from entering a long LTX/OOM cycle."""
     resources = node_status.read_resources()
+    mem_total = resources.get("memTotalGb")
+    if isinstance(mem_total, (int, float)) and mem_total < VIDEO_MIN_RAM_GB:
+        return False, f"LTX cần tối thiểu {VIDEO_MIN_RAM_GB:.0f} GB RAM; máy có {mem_total:.1f} GB"
     if resources.get("memPressure") == "critical":
         return False, "RAM đang quá tải"
     swap_out = resources.get("swapOutMBps")
@@ -1482,7 +1485,10 @@ def node_status_payload(max_age_s=3.0):
         ffmpeg_ready = find_binary("ffmpeg", "FFMPEG_PATH") is not None
         ltx_ready, _ = ltx_state()
         resource_ok, _resource_detail = video_resources_available()
-        ltx_ok = (ltx_ready == "ready" and resource_ok) or SLEEPER.asleep("ltx")
+        # A sleeping LTX service is wakeable only when this machine can safely
+        # host the model. Do not advertise video capability from a 16 GB node;
+        # otherwise the balancer sends a job that can only end in fallback/OOM.
+        ltx_ok = (ltx_ready == "ready" and resource_ok) or (SLEEPER.asleep("ltx") and resource_ok)
         settings = {
             "IMAGE_PRESET": IMAGE_PRESET, "IMAGE_STEPS": IMAGE_STEPS_OVERRIDE or "", "IMAGE_PERSON_STEPS": IMAGE_PERSON_STEPS,
             "VIENEU_STEPS": VIENEU_STEPS, "TTS_BREAK_WORDS": TTS_BREAK_WORDS, "TTS_ENGINES": ",".join(TTS_ENGINES),
