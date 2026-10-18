@@ -364,7 +364,8 @@ EMOTION_PROFILE = {
     "clear_throat": {"tag": "[hắng giọng]", "speed": 0.98},
 }
 # A non-verbal cue (a sigh, a chuckle, a throat-clear) is a sound in the recording: used often it is a tic. It needs this many
-# different markers in the same sentence, and a narration (one scene) gets at most one.
+# different markers in the same sentence. A scene may carry one cue for each distinct emotion, so a reflective opening can
+# move into an encouraging or cautionary line without making every sentence sigh or laugh.
 EMOTION_MIN_MARKERS = 2
 
 
@@ -1138,11 +1139,19 @@ def tts_aligned(text, voice, engine=None, speed=1.0):
     with tempfile.TemporaryDirectory(prefix="studio-aligned-") as workdir:
         # Phrase synthesis is independent. Keep output order deterministic while
         # overlapping a small, bounded number of local requests.
-        # A non-verbal cue (sigh, chuckle) is a sound in the recording: at most one in a narration, on the first sentence that earns it.
-        cue_index = next((index for index, phrase in enumerate(phrases) if selected_engine == "vieneu" and emotion_profile(phrase, voice)), None)
+        # A non-verbal cue is a sound in the recording: use each distinct emotion at most once per scene. This preserves
+        # natural delivery while allowing a scene with genuinely changing sentiment to change expression with the words.
+        cue_indexes = set()
+        cue_emotions = set()
+        if selected_engine == "vieneu":
+            for index, phrase in enumerate(phrases):
+                profile = emotion_profile(phrase, voice)
+                if profile and profile["tag"] not in cue_emotions:
+                    cue_indexes.add(index)
+                    cue_emotions.add(profile["tag"])
         with ThreadPoolExecutor(max_workers=min(TTS_CONCURRENCY, len(phrases))) as pool:
             futures = [
-                pool.submit(synth_phrase, phrase, workdir, index, voice, selected_engine, speed, index == cue_index)
+                pool.submit(synth_phrase, phrase, workdir, index, voice, selected_engine, speed, index in cue_indexes)
                 for index, phrase in enumerate(phrases)
             ]
             sources = [future.result() for future in futures]

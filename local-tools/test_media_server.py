@@ -712,6 +712,28 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             self.media.tts_aligned(script, "tam-su")
         self.assertEqual([text.startswith("[thở dài]") for text in sent], [True, False, False])
 
+    def test_a_narration_can_change_expression_once_per_distinct_emotion(self):
+        sent = []
+
+        def fake_http(url, payload):
+            sent.append(payload["input"])
+            return b"RIFF-fake-network-audio"
+
+        def fake_run(command, **kwargs):
+            command = [str(item) for item in command]
+            with wave.open(command[-1], "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(22050)
+                audio.writeframes(b"\x80\x01" * 11025)
+            return subprocess.CompletedProcess(command, 0)
+
+        script = "Hôm nay tôi thấy buồn và cô đơn. Tin vui, tôi rất hạnh phúc và may mắn. Cảnh báo: điều này rất quan trọng."
+        with patch.object(self.media, "TTS_ENGINES", ["vieneu"]), patch.object(self.media, "service_up", return_value=True), \
+             patch.object(self.media, "_http_wav", side_effect=fake_http), patch.object(self.media.subprocess, "run", side_effect=fake_run):
+            self.media.tts_aligned(script, "tam-su")
+        self.assertEqual([text.startswith(tag) for text, tag in zip(sent, ["[thở dài]", "[cười]", "[hắng giọng]"])], [True, True, True])
+
     def test_every_voice_is_stretched_only_as_far_as_sounds_natural(self):
         low, high = self.media.PACE_TEMPO_RANGE
         for voice, (_name, _mood, native) in self.media.VOICE_PRESETS.items():
