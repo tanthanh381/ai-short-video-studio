@@ -1,6 +1,10 @@
 name: Live authenticated smoke
 
 on:
+  push:
+    paths:
+      - "scripts/audit/live-auth-browser.mjs"
+      - ".github/workflows/live-auth-smoke.yml"
   workflow_dispatch:
     inputs:
       generate:
