@@ -48,6 +48,15 @@ try {
   // Give the browser storage adapter a moment to flush the Supabase session;
   // the following hard navigation intentionally verifies persistence.
   await page.waitForTimeout(1_000);
+  const postLoginStorage = await page.evaluate(() => ({
+    local: Object.keys(localStorage).filter((key) => key.startsWith("sb-")).length,
+    session: Object.keys(sessionStorage).length,
+  }));
+  check(
+    "session-persisted-before-reload",
+    postLoginStorage.local > 0,
+    `authStorage=${postLoginStorage.local}; sessionStorage=${postLoginStorage.session}`,
+  );
   check("email-login-redirects-to-app", true);
 
   const protectedRoutes = ["", "new", "library", "settings", "system"];
