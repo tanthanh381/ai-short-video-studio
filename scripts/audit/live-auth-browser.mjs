@@ -114,6 +114,11 @@ try {
     if (process.env.STUDIO_QA_SUBMIT === "1") {
       await page.getByLabel("Ý tưởng hoặc chủ đề").fill("Một thói quen nhỏ giúp bạn bớt suy nghĩ quá nhiều mỗi ngày.");
       for (let step = 0; step < 5; step += 1) {
+        const templateHeading = page.getByRole("heading", { name: "Chọn mẫu video", exact: true });
+        if (await templateHeading.count()) {
+          const templateOptions = page.getByRole("radio");
+          if (await templateOptions.count()) await templateOptions.first().click();
+        }
         const nextButton = page.getByRole("button", { name: "Tiếp tục", exact: true });
         await waitUntilEnabled(nextButton);
         await nextButton.click();
