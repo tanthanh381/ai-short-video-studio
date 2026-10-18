@@ -216,6 +216,9 @@ PACE_VIDEO_FACTOR = 0.84
 PACE_TEMPO_RANGE = (0.85, 1.18)
 # Ordered preference for local Vietnamese engines.
 TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu").split(",") if e == "vieneu"] or ["vieneu"]
+# Bumped when a media-process migration changes the active engine contract. It is part of the node fingerprint so
+# a long-lived Air bridge cannot keep accepting work with an older process after the files sync.
+MEDIA_RUNTIME_VERSION = "vieneu-only-1"
 TTS_CONCURRENCY = max(1, min(int(os.getenv("TTS_CONCURRENCY", "2")), 4))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/ggml-base.bin"))
@@ -1578,6 +1581,7 @@ def node_status_payload(max_age_s=3.0):
         # otherwise the balancer sends a job that can only end in fallback/OOM.
         ltx_ok = (ltx_ready == "ready" and resource_ok) or (SLEEPER.asleep("ltx") and resource_ok)
         settings = {
+            "MEDIA_RUNTIME_VERSION": MEDIA_RUNTIME_VERSION,
             "IMAGE_PRESET": IMAGE_PRESET, "IMAGE_STEPS": IMAGE_STEPS_OVERRIDE or "", "IMAGE_PERSON_STEPS": IMAGE_PERSON_STEPS,
             "VIENEU_STEPS": VIENEU_STEPS, "TTS_BREAK_WORDS": TTS_BREAK_WORDS, "TTS_ENGINES": ",".join(TTS_ENGINES),
             "PACE_TARGET_WPS": PACE_TARGET_WPS, "VIENEU_VOICE": VIENEU_VOICE, "FACE_DETAIL": FACE_DETAIL,
