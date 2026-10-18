@@ -15,7 +15,7 @@
  */
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
-import { chromium } from "playwright";
+import { chromium, expect } from "playwright";
 
 const baseUrl = process.env.STUDIO_LIVE_URL?.trim();
 const email = process.env.STUDIO_QA_EMAIL?.trim();
@@ -105,7 +105,9 @@ try {
     if (process.env.STUDIO_QA_SUBMIT === "1") {
       await page.getByLabel("Ý tưởng hoặc chủ đề").fill("Một thói quen nhỏ giúp bạn bớt suy nghĩ quá nhiều mỗi ngày.");
       for (let step = 0; step < 5; step += 1) {
-        await page.getByRole("button", { name: "Tiếp tục", exact: true }).click();
+        const nextButton = page.getByRole("button", { name: "Tiếp tục", exact: true });
+        await expect(nextButton).toBeEnabled({ timeout: 120_000 });
+        await nextButton.click();
         await page.waitForTimeout(250);
       }
       await page.getByRole("button", { name: "Tạo video hoàn chỉnh", exact: true }).click();
