@@ -1744,7 +1744,7 @@ function WizardPage() {
       if (demoLogoUrl.current) URL.revokeObjectURL(demoLogoUrl.current);
       demoLogoUrl.current = URL.createObjectURL(file);
       setLogoPreviewUrl(demoLogoUrl.current);
-      editSettings({ ...settings, logoPath: "demo:logo", logoShape: round ? "circle" : "original" });
+      editSettings({ ...settings, logoPath: "demo:logo", logoPosition: "top-left", logoShape: round ? "circle" : "original" });
       setLogoNote("Chế độ mẫu: logo chỉ hiện trên trang này để thử bố cục, không được tải lên.");
       return;
     }
@@ -1754,7 +1754,7 @@ function WizardPage() {
       if (!draft) return;
       const path = await api.uploadMedia(draft.id, file, "logo");
       if (round) setLogoNote("Logo có nền trắng quanh hình tròn nên đã được cắt tròn. Đổi lại ở “Hình dạng logo” nếu cần.");
-      editSettings({ ...settings, logoPath: path, logoShape: round ? "circle" : "original" });
+      editSettings({ ...settings, logoPath: path, logoPosition: "top-left", logoShape: round ? "circle" : "original" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chưa tải logo lên được. Hãy thử lại hoặc chọn ảnh khác.");
     } finally { setBusy(false); }
@@ -2976,7 +2976,7 @@ function StudioPage() {
       if (demoLogoUrl.current) URL.revokeObjectURL(demoLogoUrl.current);
       demoLogoUrl.current = URL.createObjectURL(file);
       setLogoPreviewUrl(demoLogoUrl.current);
-      change({ ...project, settings: { ...project.settings, logoPath: "demo:logo", logoShape: round ? "circle" : "original" } });
+      change({ ...project, settings: { ...project.settings, logoPath: "demo:logo", logoPosition: project.settings.logoPath ? project.settings.logoPosition : "top-left", logoShape: round ? "circle" : "original" } });
       setLogoNote("Chế độ mẫu: logo chỉ hiện trên trang này để thử bố cục, không được tải lên.");
       return;
     }
@@ -2987,7 +2987,7 @@ function StudioPage() {
       // A round logo saved on a white square would show as a box on the video: cut it to a circle, and say so.
       const round = await checkLogoFile(file);
       const path = await api.uploadMedia(id, file, "logo");
-      const next = { ...project, settings: { ...project.settings, logoPath: path, logoShape: round ? "circle" as const : "original" as const } };
+      const next = { ...project, settings: { ...project.settings, logoPath: path, logoPosition: project.settings.logoPath ? project.settings.logoPosition : "top-left" as const, logoShape: round ? "circle" as const : "original" as const } };
       if (round) setLogoNote("Logo có nền trắng quanh hình tròn nên đã được cắt tròn. Đổi lại ở “Hình dạng logo” nếu cần.");
       setProject(next);
       saver.current?.edit(next);

@@ -188,7 +188,7 @@ export const projectSettingsSchema = z.object({
   backgroundMusicPath: z.string().nullable().default(null),
   musicVolume: z.number().min(0).max(0.5).default(0.12),
   logoPath: z.string().nullable().default(null),
-  logoPosition: logoPositionSchema.default("top-right"),
+  logoPosition: logoPositionSchema.default("top-left"),
   logoScale: z.number().min(0.05).max(0.35).default(0.14),
   logoOpacity: z.number().min(0.1).max(1).default(0.9),
   logoShape: logoShapeSchema.default("original"),

@@ -58,7 +58,8 @@ export const DEFAULT_PROJECT_SETTINGS = {
   backgroundMusicPath: null,
   musicVolume: 0.12,
   logoPath: null,
-  logoPosition: "top-right" as const,
+  // Default brand placement: platform-safe upper-left corner for TikTok, Reels and Shorts.
+  logoPosition: "top-left" as const,
   logoScale: 0.14,
   logoOpacity: 0.9,
   logoShape: "original" as const,

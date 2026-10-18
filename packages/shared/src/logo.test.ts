@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_PROJECT_SETTINGS } from "./index";
 import { logoAnchor, logoOverlayXY, PLATFORM_SAFE, STORY_BAND } from "./logo";
 
 const portrait = { width: 1080, height: 1920 };
 const base = { logoScale: 0.14, aspectRatio: "9:16" as const };
 
 describe("logoAnchor", () => {
+  it("defaults to the platform-safe upper-left corner", () => {
+    expect(DEFAULT_PROJECT_SETTINGS.logoPosition).toBe("top-left");
+    expect(logoAnchor(DEFAULT_PROJECT_SETTINGS, portrait)).toEqual({
+      width: 151,
+      x: { from: "left", px: PLATFORM_SAFE.side },
+      y: { from: "top", px: PLATFORM_SAFE.top },
+    });
+  });
+
   it("story cards honour the chosen corner, inside the picture band", () => {
     const card = (logoPosition: "top-left" | "top-right" | "top-center" | "bottom-left" | "bottom-right") =>
       logoAnchor({ ...base, logoPosition, layoutTemplate: "story-card" }, portrait);
