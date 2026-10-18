@@ -51,6 +51,32 @@ describe("durable one-click pipeline", () => {
     expect(f.project.scenes).toHaveLength(1);
   });
 
+  it("resumes a partial media failure without recreating scenes that already finished", async () => {
+    const f = fixture();
+    const second = sceneSchema.parse({
+      ...f.pending,
+      id: crypto.randomUUID(),
+      order: 1,
+      narration: "Một bước nhỏ cũng có thể thay đổi cả ngày.",
+    });
+    f.project.scenes = [f.pending, second];
+    let attempts = 0;
+    f.actions.media.mockImplementation(async () => {
+      attempts += 1;
+      stepsForPartialFailure(f.project.scenes, attempts);
+    });
+
+    await expect(runVideoPipeline({ pipeline: { step: "media" } }, f.actions)).rejects.toThrow("tạm thời");
+    expect(f.project.scenes[0]!.mediaStatus).toBe("ready");
+    expect(f.project.scenes[1]!.mediaStatus).toBe("pending");
+    expect(f.actions.render).not.toHaveBeenCalled();
+
+    await runVideoPipeline({ pipeline: { step: "media" } }, f.actions);
+    expect(attempts).toBe(2);
+    expect(f.project.scenes.every((scene) => sceneMediaReady(scene))).toBe(true);
+    expect(f.actions.render).toHaveBeenCalledTimes(1);
+  });
+
   it("retry keeps ready scenes and skips successful storyboard/media", async () => {
     const f = fixture();
     f.project.scenes = [f.pending];
@@ -82,3 +108,19 @@ describe("durable one-click pipeline", () => {
     expect(pipelineCheckpoint({ pipeline: { step: "invalid" } }).step).toBe("storyboard");
   });
 });
+
+function stepsForPartialFailure(scenes: ReturnType<typeof fixture>["project"]["scenes"], attempt: number) {
+  const first = scenes[0]!;
+  first.imagePath = "image-1.png";
+  first.audioPath = "speech-1.wav";
+  first.actualDurationMs = 4210;
+  first.mediaStatus = "ready";
+  first.subtitles = [{ id: crypto.randomUUID(), startMs: 0, endMs: 4210, text: first.narration }];
+  if (attempt === 1) throw new Error("media tạm thời");
+  const second = scenes[1]!;
+  second.imagePath = "image-2.png";
+  second.audioPath = "speech-2.wav";
+  second.actualDurationMs = 4210;
+  second.mediaStatus = "ready";
+  second.subtitles = [{ id: crypto.randomUUID(), startMs: 0, endMs: 4210, text: second.narration }];
+}
