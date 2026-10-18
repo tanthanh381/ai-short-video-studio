@@ -16,7 +16,7 @@ from faster_whisper import WhisperModel
 from uvicorn import run
 
 
-MODEL_NAME = os.getenv("FASTER_WHISPER_MODEL", "small")
+MODEL_NAME = os.getenv("FASTER_WHISPER_MODEL", "large-v3-turbo")
 _model_dir = os.getenv("FASTER_WHISPER_MODEL_DIR", "").strip()
 MODEL_DIR = Path(_model_dir) if _model_dir else None
 COMPUTE_TYPE = os.getenv("FASTER_WHISPER_COMPUTE_TYPE", "int8")

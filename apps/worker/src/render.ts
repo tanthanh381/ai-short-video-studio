@@ -564,8 +564,29 @@ export async function renderProject(
     let musicPath: string | null = null;
     let musicVolume = project.settings.musicVolume;
     if (!project.settings.backgroundMusicPath && project.settings.autoMusic) {
-      musicPath = join(workdir, "ambient.wav");
-      await exec(config.FFMPEG_PATH, buildAmbientMusicArgs(musicPath), { timeout: 60_000 });
+      if (config.MUSICGEN_ENABLED) {
+        try {
+          const response = await fetch(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/u, "")}/music`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              prompt: `instrumental background music, no vocals, short-form video, ${project.settings.style}, ${project.scenes.slice(0, 2).map((scene) => scene.narration).join(" ").slice(0, 600)}`,
+              duration: Math.ceil(total / 1000),
+            }),
+            signal: AbortSignal.timeout(300_000),
+          });
+          if (response.ok) {
+            musicPath = join(workdir, "musicgen.wav");
+            await writeFile(musicPath, new Uint8Array(await response.arrayBuffer()));
+          }
+        } catch {
+          // Music is an enhancement, never a reason to fail an otherwise valid export.
+        }
+      }
+      if (!musicPath) {
+        musicPath = join(workdir, "ambient.wav");
+        await exec(config.FFMPEG_PATH, buildAmbientMusicArgs(musicPath), { timeout: 60_000 });
+      }
       args.push("-stream_loop", "-1", "-i", musicPath);
       musicVolume = Math.max(musicVolume, 0.35); // the synthesised pad is quiet by design
     } else if (project.settings.backgroundMusicPath) {

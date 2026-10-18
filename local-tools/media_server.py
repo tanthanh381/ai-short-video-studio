@@ -222,9 +222,16 @@ TTS_CONCURRENCY = max(1, min(int(os.getenv("TTS_CONCURRENCY", "2")), 4))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/ggml-base.bin"))
 WHISPER_ENGINE = os.getenv("WHISPER_ENGINE", "faster-whisper")
-WHISPER_MODEL_ID = os.getenv("WHISPER_MODEL_ID", f"faster-whisper-{os.getenv('FASTER_WHISPER_MODEL', 'small')}" if WHISPER_ENGINE == "faster-whisper" else Path(WHISPER_MODEL).stem)
-# Image models the toolkit has installed (id -> label). image_server.py serves them.
+WHISPER_MODEL_ID = os.getenv("WHISPER_MODEL_ID", f"faster-whisper-{os.getenv('FASTER_WHISPER_MODEL', 'large-v3-turbo')}" if WHISPER_ENGINE == "faster-whisper" else Path(WHISPER_MODEL).stem)
+# Optional next-generation image runtimes are opt-in and only advertised when their own health endpoint responds.
+ZIMAGE_URL = os.getenv("ZIMAGE_URL", "").strip()
+FLUX2_URL = os.getenv("FLUX2_URL", "").strip()
+MUSICGEN_URL = os.getenv("MUSICGEN_URL", "").strip()
 IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo — nhanh (~15–25 giây/ảnh)"}
+OPTIONAL_IMAGE_MODELS = {
+    "z-image-turbo": ("Z-Image-Turbo — chất lượng cao, nhẹ hơn FLUX", ZIMAGE_URL),
+    "flux2-klein": ("FLUX.2 Klein — Quality, cần runtime riêng", FLUX2_URL),
+}
 COMFYUI_IMAGE_MODEL = "sdxl-base-1.0-comfyui"
 COMFYUI_IMAGE_LABEL = "SDXL Base 1.0 — đẹp hơn, ít người thừa, chậm (~1–1,5 phút/ảnh)"
 TTS_ENGINE_LABELS = {"vieneu": "VieNeu-TTS v3 Turbo (ONNX/CPU)", "piper": "Piper (giọng Việt nhẹ)"}
@@ -450,10 +457,33 @@ def comfyui_memory_safe():
 
 def available_image_models():
     models = dict(IMAGE_MODELS)
+    for model_id, (label, url) in OPTIONAL_IMAGE_MODELS.items():
+        if url and service_up(url, "/health"):
+            models[model_id] = label
     state, _ = comfyui_state()
     if state == "ready" and comfyui_memory_safe():
         models[COMFYUI_IMAGE_MODEL] = COMFYUI_IMAGE_LABEL
     return models
+
+
+def image_default_model(models=None):
+    models = models or available_image_models()
+    configured = os.getenv("IMAGE_DEFAULT_MODEL", "").strip()
+    return configured if configured in models else "sdxl-turbo" if "sdxl-turbo" in models else next(iter(models), None)
+
+
+def proxy_image_model(base_url, prompt, aspect_ratio, seed, preset, reference_image_base64=None):
+    """Call an optional Z-Image/FLUX bridge using the local image contract."""
+    payload = {"prompt": prompt, "aspectRatio": aspect_ratio, "seed": seed, "preset": preset}
+    if reference_image_base64:
+        payload["referenceImage"] = reference_image_base64
+    request = urllib.request.Request(f"{base_url.rstrip('/')}/generate", data=json.dumps(payload).encode(),
+                                     headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
+        data = response.read()
+    if not data.startswith(b"\x89PNG"):
+        raise RuntimeError("Image runtime local trả dữ liệu không hợp lệ")
+    return data
 
 
 # Only one image model fits next to the rest of the stack on a 16 GB Mac: SDXL Base (ComfyUI) and SDXL-Turbo
@@ -639,6 +669,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     nonhuman_focus = "" if (is_human or stylized) else ", the described object or environment is the main subject, no people, no human figures, no face"
     flat_guard = ", only the described characters, no crowd" if is_flat and is_human else ""
     styled = f"{IMAGE_STYLES[style]}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, {clean}, no text, no logo, no watermark"
+    if selected_model in OPTIONAL_IMAGE_MODELS:
+        return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64)
     if selected_model == COMFYUI_IMAGE_MODEL:
         if reference_image_base64:
             raise ValueError("SDXL Base qua ComfyUI hiện hỗ trợ text-to-image; hãy bỏ ảnh tham chiếu hoặc chọn SDXL-Turbo")
@@ -1210,6 +1242,23 @@ def service_up(url, path="/health"):
         return False
 
 
+def music_runtime_ready():
+    return bool(MUSICGEN_URL) and service_up(MUSICGEN_URL, "/health")
+
+
+def generate_music(prompt, duration_s):
+    if not music_runtime_ready():
+        raise RuntimeError("MusicGen local chưa sẵn sàng")
+    payload = {"prompt": str(prompt)[:1000], "duration": max(4, min(int(duration_s), 60))}
+    request = urllib.request.Request(f"{MUSICGEN_URL.rstrip('/')}/generate", data=json.dumps(payload).encode(),
+                                     headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=300) as response:
+        data = response.read()
+    if not data.startswith((b"RIFF", b"ID3", b"\xff\xfb", b"OggS")):
+        raise RuntimeError("MusicGen local trả dữ liệu audio không hợp lệ")
+    return data
+
+
 def _comfy_up():
     return comfyui_state()[0] == "ready"
 
@@ -1386,7 +1435,7 @@ def model_catalog():
         "storyboard": {"models": [{"id": t, "label": LLM_LABELS.get(t, t)} for t in tags],
                        "default": default_llm if default_llm in tags else (tags[0] if tags else None)},
         "image": {"models": [{"id": i, "label": l} for i, l in available_image_models().items()],
-                  "default": next(iter(available_image_models()))},
+                  "default": image_default_model()},
         "tts": {"models": [{"id": e, "label": TTS_ENGINE_LABELS[e]} for e in TTS_ENGINES
                            if available_engines.get(e)],
                 "default": next((e for e in TTS_ENGINES if available_engines.get(e)), None)},
@@ -1507,7 +1556,7 @@ def _models_digest(max_age_s=30.0):
 
 _NODE_STATUS_CACHE = {"at": 0.0, "value": None}
 _NODE_STATUS_LOCK = threading.Lock()
-KIND_BY_PATH = {"/image": "image", "/video": "video", "/tts": "tts", "/tts-aligned": "tts", "/transcribe": "transcribe"}
+KIND_BY_PATH = {"/image": "image", "/video": "video", "/tts": "tts", "/tts-aligned": "tts", "/transcribe": "transcribe", "/music": "music"}
 
 
 def node_status_payload(max_age_s=3.0):
@@ -1689,6 +1738,9 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, 200, tts_aligned(str(payload.get("text", "")), str(payload.get("voice", "doc-truyen")), payload.get("engine"), payload.get("speed", 1.0)))
             elif self.path.split("?")[0] == "/transcribe":
                 json_response(self, 200, {"words": transcribe(body, urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("model", [None])[0])})
+            elif self.path == "/music":
+                payload = json.loads(body)
+                binary_response(self, "audio/wav", generate_music(str(payload.get("prompt", "ambient cinematic background music")), payload.get("duration", 30)))
             else:
                 json_response(self, 404, {"error": "Không tìm thấy endpoint"})
             served = True
