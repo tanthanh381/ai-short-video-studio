@@ -24,6 +24,7 @@ tmp/
 *.jpg
 *.jpeg
 !apps/web/public/*.png
+!apps/web/public/voice-samples/*.mp3
 !docs/*.png
 supabase/.temp/
 local-tools/ComfyUI/
