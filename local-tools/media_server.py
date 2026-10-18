@@ -200,6 +200,14 @@ VOICE_PRESETS = {
     "tin-tuc-nu": ("Ngọc Huyền", 1.05, 4.16),
     "thuyet-minh": ("Phạm Tuyên", 1.02, 4.10),
     "nang-dong": ("Xuân Vĩnh", 1.05, 4.30),
+    "tre-trung": ("Trúc Ly", 1.05, 4.20),
+    "review": ("Hải Đăng", 1.08, 4.30),
+    "hai-huoc": ("Adam bựa", 1.10, 4.40),
+    "nang-dong-nu": ("Đoan Trang", 1.05, 4.20),
+    "ke-chuyen-nu": ("Ngọc Linh", 0.84, 3.20),
+    "truyen-dem": ("Thanh Bình", 0.80, 2.90),
+    "tam-su-nam": ("Thiện Minh", 0.80, 3.00),
+    "mien-trung": ("Ngọc Trân", 1.00, 3.80),
 }
 # Short-form narration lands at 3.3-4.2 words/s; 3.7 is the middle (before a voice's mood).
 PACE_TARGET_WPS = float(os.getenv("PACE_TARGET_WPS", "3.7"))

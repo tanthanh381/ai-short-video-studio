@@ -28,6 +28,14 @@ export const VOICE_MOOD: Record<string, number> = {
   "tin-tuc-nu": 1.05,
   "thuyet-minh": 1.02,
   "nang-dong": 1.05,
+  "tre-trung": 1.05,
+  "review": 1.08,
+  "hai-huoc": 1.1,
+  "nang-dong-nu": 1.05,
+  "ke-chuyen-nu": 0.84,
+  "truyen-dem": 0.8,
+  "tam-su-nam": 0.8,
+  "mien-trung": 1.0,
 };
 
 /** Words a second each voice speaks on its own, without pauses or any stretch (media_server.py VOICE_PRESETS, third value). */
@@ -41,6 +49,14 @@ export const VOICE_NATIVE_WPS: Record<string, number> = {
   "tin-tuc-nu": 4.16,
   "thuyet-minh": 4.1,
   "nang-dong": 4.3,
+  "tre-trung": 4.2,
+  "review": 4.3,
+  "hai-huoc": 4.4,
+  "nang-dong-nu": 4.2,
+  "ke-chuyen-nu": 3.2,
+  "truyen-dem": 2.9,
+  "tam-su-nam": 3.0,
+  "mien-trung": 3.8,
 };
 
 /** How far a script may miss its word budget before it is rewritten or trimmed (±10% ≈ ±6 s on a minute). */

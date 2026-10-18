@@ -12,6 +12,14 @@ export const VOICE_PRESETS = [
   { id: "tin-tuc-nu", label: "Tin tức (nữ)", hint: "Nữ, rõ ràng, nhịp linh hoạt theo nội dung", sample: "Bản tin hôm nay xin gửi đến quý vị những thông tin nổi bật trong ngày." },
   { id: "thuyet-minh", label: "Thuyết minh / kiến thức", hint: "Nam, tự nhiên, nhấn vào điều cần biết", sample: "Bạn có biết, mỗi giây trôi qua, Trái Đất đã di chuyển hàng chục ki-lô-mét quanh Mặt Trời?" },
   { id: "nang-dong", label: "Năng động / quảng cáo", hint: "Nam, tươi sáng, nhịp nhanh ở câu kêu gọi", sample: "Ưu đãi chỉ trong hôm nay! Nhanh tay chọn ngay món bạn thích và nhận quà liền tay!" },
+  { id: "tre-trung", label: "Trẻ trung / vlog (nữ)", hint: "Nữ trẻ, tươi, hợp vlog & bắt trend", sample: "Chào cả nhà! Hôm nay mình thử một thứ đang siêu hot, xem có đúng lời đồn không nhé!" },
+  { id: "review", label: "Review / phản ứng (nam)", hint: "Nam trẻ, cuốn, hợp review & reaction", sample: "Mình đã dùng thử suốt một tuần, và thật sự có vài điều khiến mình khá bất ngờ. Xem ngay nào!" },
+  { id: "hai-huoc", label: "Hài hước / bắt trend (nam)", hint: "Nam, dí dỏm, tự nhiên như kể cho bạn", sample: "Nói thật nha, lúc đầu mình cũng chẳng tin đâu. Nhưng mà thôi, xem rồi tự hiểu!" },
+  { id: "nang-dong-nu", label: "Năng động / quảng cáo (nữ)", hint: "Nữ, tươi sáng, nhịp nhanh ở câu kêu gọi", sample: "Chỉ hôm nay thôi nha! Nhanh tay chốt đơn ngay để không bỏ lỡ ưu đãi cực hời này!" },
+  { id: "ke-chuyen-nu", label: "Kể chuyện (nữ)", hint: "Nữ, ấm, truyền cảm theo từng câu", sample: "Có một câu chuyện mà bà tôi hay kể, về một người phụ nữ cả đời chỉ sống vì người khác." },
+  { id: "truyen-dem", label: "Truyện đêm khuya (nam)", hint: "Nam, trầm, chậm và nhiều khoảng lặng", sample: "Đã khuya rồi. Nếu bạn vẫn còn thức, hãy để tôi kể bạn nghe một câu chuyện nhỏ." },
+  { id: "tam-su-nam", label: "Tâm sự / chữa lành (nam)", hint: "Nam, ấm, nhẹ ở câu buồn", sample: "Đôi khi, mạnh mẽ không phải là không gục ngã, mà là lặng lẽ đứng dậy sau mỗi lần đau." },
+  { id: "mien-trung", label: "Giọng miền Trung (nữ)", hint: "Nữ, giọng Trung, gần gũi và chân chất", sample: "Quê tôi miền Trung, nắng gió quanh năm, nhưng tình người thì ấm áp lạ thường." },
 ] as const;
 
 export type VoicePresetId = (typeof VOICE_PRESETS)[number]["id"];
