@@ -45,6 +45,9 @@ try {
   await page.getByLabel("Mật khẩu").fill(password);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
   await page.waitForURL((url) => !url.pathname.endsWith("/login"), { timeout: 30_000 });
+  // Give the browser storage adapter a moment to flush the Supabase session;
+  // the following hard navigation intentionally verifies persistence.
+  await page.waitForTimeout(1_000);
   check("email-login-redirects-to-app", true);
 
   const protectedRoutes = ["", "new", "library", "settings", "system"];
