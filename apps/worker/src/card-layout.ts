@@ -143,7 +143,9 @@ export const PAPER_MASCOT = "little chibi boy, topknot hair bun, long olive head
 /** Told to the storyboard writer for paper-stage videos: one character on bare paper, never a place. */
 export const PAPER_STORYBOARD_STYLE =
   "one small chibi character on plain kraft paper with no scenery: no room, street, forest, sky or landscape. " +
-  "Describe only the character's pose, facial expression, gesture and at most one simple prop or one small second figure, in under 20 words";
+  "Build a visual story, not a portrait: every scene must show one readable action, one facial emotion and at most one simple prop or one small second figure. " +
+  "Progress the character from the opening tension or problem through a concrete change to a calm, satisfying final beat. " +
+  "Describe only the character's pose, facial expression, gesture and prop in under 20 words";
 
 /**
  * How the paper-stage writer must describe each picture. The generic rules ("show the object, change the subject, add

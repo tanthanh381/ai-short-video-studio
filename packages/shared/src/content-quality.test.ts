@@ -15,5 +15,12 @@ describe("content quality gate", () => {
     expect(report.dimensions.hook.score).toBeGreaterThanOrEqual(80);
     expect(report.dimensions.specificity.score).toBeGreaterThanOrEqual(80);
     expect(report.dimensions.ending.score).toBeGreaterThanOrEqual(80);
+    expect(report.dimensions.visualAction.score).toBeGreaterThanOrEqual(80);
+  });
+
+  it("flags a script that gives the image model no visible action", () => {
+    const report = evaluateContentQuality("Sự bình yên là một trạng thái sâu sắc. Mọi thứ rồi sẽ ổn. Hãy nhớ điều đó.");
+    expect(report.dimensions.visualAction.score).toBeLessThan(50);
+    expect(report.feedback.join(" ")).toMatch(/hành động hoặc đạo cụ/u);
   });
 });

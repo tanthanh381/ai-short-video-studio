@@ -579,13 +579,16 @@ async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project
   }
 }
 
-async function drawScenePicture(provider: MediaProvider, scene: Scene, project: Project, job: JobRow): Promise<Uint8Array> {
+async function drawScenePicture(provider: MediaProvider, scene: Scene, project: Project, job: JobRow, referenceImageBase64?: string | null): Promise<Uint8Array> {
   const prompt = buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project), visualPresetPrompt(project.settings.visualPreset));
   const options = {
     ...project.settings.localModels,
     seed: sceneSeed(project, scene),
     style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
     preset: project.settings.generationPreset,
+    // SDXL-Turbo can use the first paper-stage frame as a light identity anchor. ComfyUI/SDXL Base
+    // intentionally remains text-to-image because the local bridge does not support img2img there.
+    ...(referenceImageBase64 && project.settings.generationPreset !== "quality" ? { referenceImageBase64 } : {}),
   };
   const maxAttempts = 3;
   let lastAudit: ImageQualityAudit | null = null;
@@ -740,12 +743,22 @@ async function generateMedia(job: JobRow, project: Project) {
     })().catch((error: unknown) => log.warn({ jobId: job.id, err: error instanceof Error ? error.message : String(error) }, "voice_prepass_aborted"))
     : Promise.resolve();
   let imagesDone = 0;
-  const images = await batch("image", pendingImages, async (scene, provider, machine) => {
+  let paperReferenceImageBase64: string | null = null;
+  if (usesPaperStage(project.settings) && targetId) {
+    const anchor = project.scenes.find((scene) => scene.id !== targetId && scene.imagePath);
+    if (anchor?.imagePath) {
+      try { paperReferenceImageBase64 = Buffer.from(await download(anchor.imagePath)).toString("base64"); }
+      catch (error) { log.warn({ jobId: job.id, sceneId: anchor.id, err: error instanceof Error ? error.message : String(error) }, "paper_reference_unavailable"); }
+    }
+  }
+  const imageWork = async (scene: Scene, provider: MediaProvider, machine: string) => {
     await local(async () => {
       await updateScene(scene.id, { media_status: "processing", error_message: null });
       await progress(job, Math.round((imagesDone / pendingImages.length) * 42), `Đang tạo ảnh cảnh ${scene.order + 1}${onMachine(machine)}`);
     });
-    const image = await drawScenePicture(provider, scene, project, job);
+    const image = await drawScenePicture(provider, scene, project, job, paperReferenceImageBase64);
+    if (usesPaperStage(project.settings) && !paperReferenceImageBase64 && project.settings.generationPreset !== "quality")
+      paperReferenceImageBase64 = Buffer.from(image).toString("base64");
     await local(async () => {
       const imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
       await upload(imagePath, image, "image/png");
@@ -753,7 +766,23 @@ async function generateMedia(job: JobRow, project: Project) {
       (scene as { imagePath: string | null }).imagePath = imagePath;
       imagesDone += 1;
     });
-  }, { imageModel: project.settings.localModels.image ?? null }, true);
+  };
+  // A paper-stage story has one recurring mascot. Generate those frames in order so every later frame can use
+  // the first successful image as a light img2img identity anchor; other layouts retain the faster balanced pool.
+  const images = usesPaperStage(project.settings)
+    ? await (async () => {
+      const outcomes: Array<Outcome<void>> = [];
+      for (const scene of pendingImages) {
+        try {
+          await imageWork(scene, media, "paper");
+          outcomes.push({ ok: true, value: undefined, nodeId: "paper" });
+        } catch (error) {
+          outcomes.push({ ok: false, error: error instanceof Error ? error : new Error(String(error)) });
+        }
+      }
+      return outcomes;
+    })()
+    : await batch("image", pendingImages, imageWork, { imageModel: project.settings.localModels.image ?? null }, true);
   images.forEach((image, index) => {
     // Not fatal: the per-scene pass below retries this image once more and records a clear failure.
     if (!image.ok) log.warn({ jobId: job.id, sceneId: pendingImages[index]!.id, err: image.error.message }, "image_prepass_failed");
@@ -794,7 +823,9 @@ async function generateMedia(job: JobRow, project: Project) {
           mediaProgress(finished),
           `Đang tạo ảnh cảnh ${scene.order + 1}`,
         );
-        const image = await drawScenePicture(media, scene, project, job);
+        const image = await drawScenePicture(media, scene, project, job, paperReferenceImageBase64);
+        if (usesPaperStage(project.settings) && !paperReferenceImageBase64 && project.settings.generationPreset !== "quality")
+          paperReferenceImageBase64 = Buffer.from(image).toString("base64");
         imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
         await upload(imagePath, image, "image/png");
         await updateScene(scene.id, { image_path: imagePath });

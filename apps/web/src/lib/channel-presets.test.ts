@@ -53,6 +53,19 @@ describe("channel presets", () => {
     expect(settings).toMatchObject({ layoutTemplate: "story-card", visualPreset: "cartoon", voice: "doc-truyen" });
   });
 
+  it("the kraft chibi story preset is a short action-led paper-stage video", () => {
+    const settings = CHANNEL_PRESETS.find((preset) => preset.id === "truyen-chibi-kraft")!.apply(DEFAULT_PROJECT_SETTINGS);
+    expect(settings).toMatchObject({
+      layoutTemplate: "paper-stage",
+      visualPreset: "chibi-co-phong",
+      aspectRatio: "9:16",
+      targetDurationSec: 30,
+      autoMusic: true,
+      captionHighlight: false,
+      hookTitle: false,
+    });
+  });
+
   it("the illustrated video preset matches its realistic thumbnail and blurred renderer", () => {
     const settings = CHANNEL_PRESETS.find((preset) => preset.id === "video-minh-hoa")!.apply(DEFAULT_PROJECT_SETTINGS);
     expect(settings).toMatchObject({ layoutTemplate: "story-card", cardTheme: "blurred", visualPreset: "cinematic-color", aspectRatio: "9:16" });
@@ -77,7 +90,7 @@ describe("channel presets", () => {
     const paper = CHANNEL_PRESETS.find((preset) => preset.id === "dao-ly-co-phong")!.apply(DEFAULT_PROJECT_SETTINGS);
     expect(paper).toMatchObject({ layoutTemplate: "paper-stage", visualPreset: "chibi-co-phong", aspectRatio: "9:16", hookTitle: false, captionHighlight: false });
     expect(paper.subtitle.backgroundOpacity).toBe(0);
-    for (const preset of CHANNEL_PRESETS.filter((item) => item.id !== "dao-ly-co-phong" && item.id !== "co-tich" && item.id !== "quy-tac-co-nhan" && item.id !== "video-minh-hoa")) {
+    for (const preset of CHANNEL_PRESETS.filter((item) => !["dao-ly-co-phong", "truyen-chibi-kraft", "co-tich", "quy-tac-co-nhan", "video-minh-hoa"].includes(item.id))) {
       const next = preset.apply(paper);
       expect(next.layoutTemplate, preset.id).toBe("full-bleed");
       expect(next.subtitle.fontColor, preset.id).toBe(DEFAULT_PROJECT_SETTINGS.subtitle.fontColor);

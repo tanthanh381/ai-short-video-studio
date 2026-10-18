@@ -2,6 +2,7 @@ const GENERIC_HOOKS = /^(?:xin chào(?: các bạn)?|trong video này|hãy cùng
 const HOOK_SIGNALS = /[?!]|(?:nhưng|vậy mà|sự thật|ít ai biết|đừng|vì sao|tại sao|nếu|thay vì|chỉ cần|điều bất ngờ)/iu;
 const CONCRETE_SIGNALS = /(?:ví dụ|khi|nếu|bởi vì|thay vì|chỉ cần|bước|phút|ngày|đồng|%|[0-9])/iu;
 const ENDING_SIGNALS = /(?:hãy nhớ|từ hôm nay|và đó là|cuối cùng|đừng quên|bạn sẽ|khi nhìn lại)/iu;
+const VISUAL_ACTION_SIGNALS = /(?:cầm|mở|đóng|bước|đi bộ|chạy|gọi|viết|đọc|nhìn|đặt|nâng|dọn|rót|uống|tặng|hỏi|trả lời|ngồi|đứng|quay|chạm|bật|tắt|nhặt|gấp|mang|đưa|ôm|mỉm cười|thở|thiền|hold|open|walk|call|write|read|look|place|drink|give|ask)/iu;
 
 export type ContentQualityDimension = {
   score: number;
@@ -18,6 +19,7 @@ export type ContentQualityReport = {
     specificity: ContentQualityDimension;
     ending: ContentQualityDimension;
     repetition: ContentQualityDimension;
+    visualAction: ContentQualityDimension;
   };
 };
 
@@ -63,6 +65,8 @@ export function evaluateContentQuality(script: string): ContentQualityReport {
   const ending = ENDING_SIGNALS.test(text);
   if (ending) score += 8;
   else feedback.push("Kết thúc bằng một insight hoặc câu đọng lại, không dừng đột ngột.");
+  const visualAction = VISUAL_ACTION_SIGNALS.test(text);
+  if (!visualAction) feedback.push("Thêm hành động hoặc đạo cụ có thể nhìn thấy để hình minh họa bám đúng lời thoại.");
   const normalized = sentences.map((sentence) => sentence.toLocaleLowerCase("vi").replace(/[0-9]+/gu, "#").replace(/[^\p{L}# ]/gu, "").replace(/\s+/gu, " ").trim());
   const repeated = normalized.length - new Set(normalized).size;
   const repetitionScore = normalized.length >= 5 && repeated / normalized.length > 0.35 ? 35 : 92;
@@ -76,6 +80,7 @@ export function evaluateContentQuality(script: string): ContentQualityReport {
     specificity: { score: specific ? 88 : 42, label: "Cụ thể" },
     ending: { score: ending ? 88 : 44, label: "Kết thúc" },
     repetition: { score: repetitionScore, label: "Lặp ý" },
+    visualAction: { score: visualAction ? 88 : 38, label: "Minh họa" },
   } as const;
   return { score: Math.max(0, Math.min(100, score)), feedback, dimensions };
 }

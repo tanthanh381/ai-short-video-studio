@@ -37,6 +37,14 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1 }),
   },
   {
+    id: "truyen-chibi-kraft",
+    label: "Truyện chibi giấy kraft",
+    hint: "Video 30 giây: một nhân vật, hành động theo từng câu, cảm xúc chuyển từ căng thẳng sang nhẹ nhõm",
+    // Reference-like short: a single recurring mascot acts out each beat on a quiet kraft-paper stage.
+    // Keep the layout deliberately simple so the action and caption remain the focus.
+    apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, targetDurationSec: 30, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: false, sceneSfx: false, outroText: "" }),
+  },
+  {
     id: "tien-hiep-chibi",
     label: "Chibi tiên hiệp",
     hint: "Tu tiên, linh thú, mây núi và pháp bảo chuyển động nhẹ",
