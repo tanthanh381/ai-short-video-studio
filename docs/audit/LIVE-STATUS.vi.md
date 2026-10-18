@@ -24,7 +24,7 @@ Frontend đã deploy và backend self-host đã được kiểm tra bằng runti
 | Rollout mới nhất | API và worker build thành công, container đã restart; API healthy và worker Up |
 | Supabase production schema | PASS — đã áp dụng `input_mode_one_click` và `dub_video_job`; RPC overload, enum `dub_video`, bucket 50 MB đã kiểm tra bằng SQL |
 | Supabase security advisor | WARN — Leaked Password Protection đang tắt; performance advisor không có finding |
-| Supabase Auth public settings | PASS cấu hình — `google: true`, `email: true`, signup không bị khóa; OAuth browser E2E vẫn chưa chạy |
+| Supabase Auth public settings | PASS cấu hình — `google: true`, `email: true`, signup không bị khóa; authenticated smoke đã chạy nhưng `/auth/v1/token` trả HTTP 400 nên chưa tạo session |
 | Supabase runtime data | Có 6 project, 11 job, 4 export; 4 `create_video` completed, 2 failed, 1 running; chưa có job `dub_video` |
 | CI/Pages | PASS cho `c451f5e`; live HTTP 200 |
 | Local quality gates | Đã đạt trong lần chạy trước: typecheck, 195 test TypeScript, 15 test Python, build, audit dependency 0 advisory |
@@ -62,7 +62,7 @@ Rollout self-host đã đạt điều kiện kỹ thuật tối thiểu. Tuy nhi
 | Upload video và lồng tiếng | PARTIAL — code, schema và UI có; dữ liệu production chưa có job `dub_video`, chưa E2E job/render trên Mini |
 | Tách ý tưởng/kịch bản | PASS ở UI/API; chất lượng script AI chưa benchmark |
 | TTS nghe thử/chọn giọng | PARTIAL — wiring có; chưa đánh giá giọng thật tiếng Việt/Anh/mixed |
-| Signup/login Google | PARTIAL — provider Google đã bật trên production; chưa xác minh redirect, tạo session và allowlist qua browser |
+| Signup/login Google | PARTIAL — provider Google đã bật trên production; email smoke chạy được tới Supabase nhưng QA credential bị từ chối HTTP 400, vì vậy chưa xác minh session/redirect đầy đủ |
 | Subtitle timing/style | PARTIAL — kỹ thuật có; chưa đánh giá lệch tiếng và safe-zone trên video thật |
 | Tạo video AI 10 chủ đề | PARTIAL — 10/10 MP4 benchmark đạt technical gate; chưa chấm thủ công đủ 10 video |
 | Video generative motion | PARTIAL — LTX-Video 2B Distilled đã ready trên Air; smoke image-to-video 6 giây tạo MP4 có frame motion; Mini dùng camera-motion fallback |
@@ -76,7 +76,7 @@ Rollout self-host đã đạt điều kiện kỹ thuật tối thiểu. Tuy nhi
 
 | Priority | Vấn đề | Điều kiện đóng |
 |---|---|---|
-| P0 | Chưa có E2E authenticated | Có tài khoản QA allowlist, chạy login → project → generate → render → download → reopen |
+| P0 | QA credential không được Supabase chấp nhận | Cập nhật tài khoản QA hợp lệ/đã xác nhận email trong GitHub Secrets, sau đó chạy login → project → generate → render → download → reopen |
 | P1 | Chưa chấm chất lượng biên tập | Chấm đủ 10 MP4 thật theo 10 tiêu chí; technical pass không thay thế playback review |
 | P1 | Chưa nghe/đánh giá TTS thực | Kiểm tra tiếng Việt, English, mixed, pause, emotion và fallback consistency |
 | P1 | Chưa chứng minh retry/resume/provider failure | Worker crash/timeout/storage failure và retry giữ được scene thành công |
@@ -113,7 +113,7 @@ docker-compose --env-file .env.selfhost -f docker-compose.selfhost.yml ps
 
 ## Quyết định readiness
 
-Chưa đánh dấu READY. Frontend live, backend self-host, benchmark kỹ thuật và LTX smoke đã xác minh; E2E có xác thực qua trình duyệt, playback review đủ 10 video, đánh giá TTS thực và retry/resume vẫn còn thiếu.
+Chưa đánh dấu READY. Frontend live, backend self-host, benchmark kỹ thuật và LTX smoke đã xác minh; authenticated smoke đã chạy tới Supabase nhưng bị từ chối HTTP 400 do QA credential, ngoài ra playback review đủ 10 video, đánh giá TTS thực và retry/resume vẫn còn thiếu.
 
 ## Benchmark cập nhật ngày 18/10/2026
 
