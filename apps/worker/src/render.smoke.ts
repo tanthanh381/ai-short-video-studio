@@ -129,6 +129,8 @@ const result = await renderProject(
 try {
   const mp4 = join(outputDir, "smoke-output.mp4");
   const thumbnail = join(outputDir, "smoke-thumbnail.jpg");
+  const motionFrameA = join(outputDir, "motion-a.gray");
+  const motionFrameB = join(outputDir, "motion-b.gray");
   await copyFile(result.output, mp4);
   await copyFile(result.thumbnail, thumbnail);
   const { stdout } = await exec(ffprobe, [
@@ -160,10 +162,15 @@ try {
     throw new Error("Video stream không đúng preset dọc H.264");
   if (!audio || audio.codec_name !== "aac")
     throw new Error("Audio stream không phải AAC");
+  for (const [time, output] of [["0.2", motionFrameA], ["1.2", motionFrameB]] as const)
+    await exec(ffmpeg, ["-y", "-hide_banner", "-loglevel", "error", "-ss", time, "-i", mp4, "-vf", "scale=64:64,format=gray", "-frames:v", "1", "-f", "rawvideo", output]);
+  const cameraMotion = !Buffer.from(await readFile(motionFrameA)).equals(Buffer.from(await readFile(motionFrameB)));
+  if (!cameraMotion)
+    throw new Error("Camera motion không tạo ra khác biệt giữa các frame");
   if (!createAss(project).includes("Xin chào Việt Nam"))
     throw new Error("ASS không giữ được dấu tiếng Việt");
   process.stdout.write(
-    `${JSON.stringify({ mp4, thumbnail, durationSeconds: Number(probe.format.duration), video: video.codec_name, audio: audio.codec_name, size: `${video.width}x${video.height}`, subtitleAssUtf8: true }, null, 2)}\n`,
+    `${JSON.stringify({ mp4, thumbnail, durationSeconds: Number(probe.format.duration), video: video.codec_name, audio: audio.codec_name, size: `${video.width}x${video.height}`, subtitleAssUtf8: true, cameraMotion }, null, 2)}\n`,
   );
 } finally {
   await rm(result.workdir, { recursive: true, force: true });
