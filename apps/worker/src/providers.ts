@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { cleanScriptForNarration, contentPlan, durationLabel, evaluateContentQuality, splitScript, type ContentPlan } from "@studio/shared";
+import { cleanScriptForNarration, contentPlan, durationLabel, evaluateContentQuality, passesIdeaQuality, splitScript, type ContentPlan } from "@studio/shared";
 
 export { splitScript };
 export { evaluateContentQuality } from "@studio/shared";
@@ -843,6 +843,11 @@ export async function writeIdeaScript(provider: StoryboardProvider, input: Story
   const plan = ideaPlan(input);
   const { target, min, max } = plan.words;
   const terms = importantTerms(input.sourceText);
+  // A short idea is authored by the model and needs the editorial gate. A
+  // long source is usually an author's existing story being fitted to a
+  // duration; preserve it and let the full-script path validate fidelity.
+  const qualityRequired = contentWords(input.sourceText).length <= 80;
+  const draftQualityPasses = (draft: string) => !qualityRequired || passesIdeaQuality(evaluateContentQuality(draft));
   let best = { draft: "", score: -Infinity, overlap: 0, words: 0, quality: 0, feedback: [] as string[] };
   let previousWords: number | undefined;
   let lastError: unknown = new Error("AI chưa viết được lời đọc từ ý tưởng; hãy thử lại");
@@ -864,16 +869,16 @@ export async function writeIdeaScript(provider: StoryboardProvider, input: Story
     // gets one concrete correction without looping forever on subjective preferences.
     const score = overlap - 0.3 * english + 2 * length + quality.score / 100;
     if (score > best.score) best = { draft, score, overlap, words, quality: quality.score, feedback: quality.feedback };
-    return words >= min && (overlap >= 0.25 || terms.length < 2) && english === 0 && quality.score >= 45; // right length, on topic, readable and not critically generic
+    return words >= min && (overlap >= 0.25 || terms.length < 2) && english === 0 && draftQualityPasses(draft); // right length, on topic, readable and editorially publishable
   };
   const request = (attempt: number, extra: { draft?: string; feedback?: string } = {}) => provider.writeScript!({
     title: input.title, sourceText: input.sourceText, duration: input.duration,
     audience: input.audience, style: input.style, model: input.model ?? null, attempt, plan,
     ...(previousWords !== undefined ? { previousWords } : {}),
-    ...(best.feedback.length && best.quality < 45 ? { feedback: best.feedback.join(" ") } : {}),
+    ...(best.feedback.length && !draftQualityPasses(best.draft) ? { feedback: best.feedback.join(" ") } : {}),
     ...extra,
   });
-  const accepted = () => best.draft && (best.overlap >= 0.1 || terms.length < 2) && best.words >= Math.round(target * 0.75) && best.quality >= 45;
+  const accepted = () => best.draft && (best.overlap >= 0.1 || terms.length < 2) && best.words >= Math.round(target * 0.75) && draftQualityPasses(best.draft);
   for (let attempt = 0; attempt < LENGTH_ATTEMPTS; attempt++) {
     try {
       if (consider(await request(attempt))) break;
@@ -888,8 +893,11 @@ export async function writeIdeaScript(provider: StoryboardProvider, input: Story
     } catch (error) { lastError = error; }
   }
   if (accepted()) return best.draft;
-  if (best.draft && best.quality < 45)
-    throw new Error("Lời đọc chưa đủ cuốn hút: hook còn chung chung hoặc nội dung thiếu chi tiết cụ thể. Hãy thử lại với một ý tưởng rõ hơn.");
+  if (best.draft && best.words < Math.round(target * 0.75))
+    throw new Error(`AI chỉ viết được ${best.words} từ cho video ${durationLabel(input.duration)} (cần khoảng ${target} từ). ` +
+      "Hãy thử lại, thêm vài ý vào ý tưởng hoặc chọn thời lượng ngắn hơn.");
+  if (best.draft && qualityRequired && !draftQualityPasses(best.draft))
+    throw new Error("Lời đọc chưa đạt chuẩn biên tập: cần hook rõ trong 3 giây đầu, một chi tiết cụ thể và câu kết đủ đọng lại. Hãy thử lại với một ý tưởng rõ hơn.");
   if (best.draft)
     throw new Error(`AI chỉ viết được ${best.words} từ cho video ${durationLabel(input.duration)} (cần khoảng ${target} từ). ` +
       "Hãy thử lại, thêm vài ý vào ý tưởng hoặc chọn thời lượng ngắn hơn.");

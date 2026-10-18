@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateContentQuality } from "./content-quality";
+import { evaluateContentQuality, passesIdeaQuality } from "./content-quality";
 
 describe("content quality gate", () => {
   it("flags generic openings before media generation", () => {
@@ -38,5 +38,12 @@ describe("content quality gate", () => {
     const report = evaluateContentQuality("Sự bình yên là một trạng thái sâu sắc. Mọi thứ rồi sẽ ổn. Hãy nhớ điều đó.");
     expect(report.dimensions.visualAction.score).toBeLessThan(50);
     expect(report.feedback.join(" ")).toMatch(/hành động hoặc đạo cụ/u);
+  });
+
+  it("requires the core editorial dimensions before an idea can enter media generation", () => {
+    const weak = evaluateContentQuality("Mọi thứ rồi sẽ ổn. Hãy nghĩ tích cực và cố gắng mỗi ngày.");
+    const strong = evaluateContentQuality("Vì sao bạn vẫn mệt dù đã ngủ đủ 8 giờ? Khi buổi chiều đến, hãy tắt thông báo trong 10 phút. Ví dụ, ghi lại một việc đang làm bạn quá tải. Hãy nhớ, năng lượng không chỉ đến từ giấc ngủ.");
+    expect(passesIdeaQuality(weak)).toBe(false);
+    expect(passesIdeaQuality(strong)).toBe(true);
   });
 });

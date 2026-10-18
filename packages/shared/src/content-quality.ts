@@ -26,6 +26,22 @@ export type ContentQualityReport = {
   };
 };
 
+/**
+ * Minimum editorial bar for an AI-written idea before spending time on media.
+ * Full scripts supplied by a creator are never rejected by this helper; it is
+ * used only by the idea-to-script writer and keeps weak drafts in the rewrite
+ * loop instead of exporting a technically valid but unpublishable video.
+ */
+export function passesIdeaQuality(report: ContentQualityReport): boolean {
+  // Keep this gate focused on the failure that is most expensive to discover
+  // after rendering: a weak or generic opening. A short, strong question can
+  // be fewer than eight words, while concrete detail and ending vary by genre
+  // and remain visible as feedback rather than a false hard failure.
+  return report.score >= 50
+    && report.dimensions.hook.score >= 70
+    && report.dimensions.structure.score >= 78;
+}
+
 /** Cheap, deterministic editorial checks shared by the wizard and the worker. */
 export function evaluateContentQuality(script: string): ContentQualityReport {
   const text = script.normalize("NFC").trim();
@@ -49,8 +65,14 @@ export function evaluateContentQuality(script: string): ContentQualityReport {
   } else feedback.push("Tăng lực hút 3 giây đầu bằng câu hỏi, tương phản, cảnh báo hoặc chi tiết bất ngờ.");
   if (firstWordCount < 8) {
     score -= 20;
-    hookScore = Math.min(hookScore, 35);
-    feedback.push("Hook quá ngắn; cần một lời hứa rõ ràng để người xem muốn nghe tiếp.");
+    if (firstWordCount >= 5 && HOOK_SIGNALS.test(first)) {
+      // A compact question such as “Vì sao buông bỏ giúp lòng nhẹ hơn?” can
+      // land in three seconds without being padded with filler words.
+      hookScore = Math.max(hookScore, 72);
+    } else {
+      hookScore = Math.min(hookScore, 35);
+      feedback.push("Hook quá ngắn; cần một lời hứa rõ ràng để người xem muốn nghe tiếp.");
+    }
   } else if (firstWordCount <= 20) {
     score += 8;
     hookScore = Math.min(100, hookScore + 12);

@@ -674,7 +674,8 @@ describe("idea mode becomes plain narration then faithful scenes", () => {
   });
 
   it("never reads out another writing system and prefers a clean draft", async () => {
-    const drafts = [`${sentences(14)} Hãy bắt đầu今夜 với giấc ngủ sâu.`, `${sentences(14)} Hãy bắt đầu tối nay với giấc ngủ sâu.`];
+    const hook = "Vì sao buông bỏ giúp lòng nhẹ hơn?";
+    const drafts = [`${hook}\n${sentences(14)} Hãy bắt đầu今夜 với giấc ngủ sâu.`, `${hook}\n${sentences(14)} Hãy bắt đầu tối nay với giấc ngủ sâu.`];
     const provider = { writeScript: vi.fn(async (_request: unknown) => drafts.shift() ?? script), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
     const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: "buông bỏ" });
     expect(provider.writeScript).toHaveBeenCalledTimes(2);
