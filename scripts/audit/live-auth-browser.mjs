@@ -34,6 +34,21 @@ page.on("response", (response) => {
   if (response.url().includes("/auth/v1/")) {
     result.authResponses ??= [];
     result.authResponses.push({ path: new URL(response.url()).pathname, status: response.status() });
+    if (new URL(response.url()).pathname === "/auth/v1/token" && response.status() >= 400) {
+      void response.json().then((body) => {
+        // Keep only Supabase's diagnostic fields; never retain tokens or the submitted email/password.
+        const safe = body && typeof body === "object" ? body : {};
+        const code = typeof safe.error_code === "string" ? safe.error_code : typeof safe.code === "string" ? safe.code : undefined;
+        const message = typeof safe.msg === "string" ? safe.msg : typeof safe.error_description === "string" ? safe.error_description : typeof safe.error === "string" ? safe.error : undefined;
+        result.authError = {
+          status: response.status(),
+          ...(code ? { code: code.slice(0, 80) } : {}),
+          ...(message ? { message: message.slice(0, 160) } : {}),
+        };
+      }).catch(() => {
+        result.authError = { status: response.status(), message: "Supabase returned a non-JSON auth error" };
+      });
+    }
   }
 });
 
