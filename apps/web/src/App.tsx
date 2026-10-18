@@ -3223,8 +3223,8 @@ function StudioPage() {
           >
             <summary aria-label="Mở công cụ nâng cao" title="Các bước riêng lẻ dành cho người cần kiểm soát từng khâu"><MoreHorizontal size={18} /><span>Nâng cao</span></summary>
             <div>
-              <p className="menu-label">Chạy riêng từng bước</p>
-              <p className="menu-help">Luồng chính đã tự động làm toàn bộ. Chỉ dùng các nút dưới đây khi cần kiểm tra hoặc sửa riêng một khâu.</p>
+              <p className="menu-label">Công cụ chỉnh sửa nâng cao</p>
+              <p className="menu-help">Bạn không cần chạy các bước này để tạo video. Hãy dùng <b>Tạo video hoàn chỉnh</b> ở trên; các nút dưới đây chỉ dành cho việc sửa hoặc tạo lại từng phần.</p>
           <Button
             variant="secondary"
             onClick={() => void runAction("storyboard")}
@@ -3250,16 +3250,16 @@ function StudioPage() {
             }
             title={
               !project.scenes.length
-                ? "Hãy bấm Chia cảnh hoặc Thêm cảnh trước"
+                ? "Hãy chia kịch bản thành cảnh trước"
                 : capabilities?.openai
-                ? "Tạo ảnh, giọng đọc và phụ đề bằng OpenAI"
+                ? "Tạo lại ảnh, giọng đọc và phụ đề cho các cảnh bằng OpenAI"
                 : capabilities?.localMedia
-                  ? "Tạo ảnh, giọng đọc và phụ đề local"
-                : "Chế độ 0 đồng API: tải ảnh và audio của bạn lên"
+                  ? "Tạo lại ảnh, giọng đọc và phụ đề cho các cảnh bằng AI local"
+                : "Chế độ 0 đồng API: tải ảnh và audio lên từng cảnh"
             }
           >
             <Sparkles size={17} />
-            Tạo ảnh &amp; giọng cho cảnh
+            Tạo lại media cảnh
           </Button>
           <Button
             variant="secondary"
@@ -3268,7 +3268,7 @@ function StudioPage() {
             disabled={processing || Boolean(busyAction) || (!isDemo && (!project.scenes.length || !capabilities?.render))}
             title={!project.scenes.length ? "Hãy tạo ít nhất một cảnh trước" : undefined}
           >
-            <Video size={17} /> Xuất MP4 từ media có sẵn
+            <Video size={17} /> Xuất từ media có sẵn
           </Button>
               <p className="menu-label">Lưu</p>
               <Button
