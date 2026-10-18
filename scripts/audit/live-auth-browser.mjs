@@ -30,6 +30,12 @@ const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 const page = await context.newPage();
 page.on("pageerror", (error) => result.errors.push(`pageerror: ${error.message}`));
+page.on("response", (response) => {
+  if (response.url().includes("/auth/v1/")) {
+    result.authResponses ??= [];
+    result.authResponses.push({ path: new URL(response.url()).pathname, status: response.status() });
+  }
+});
 
 function check(name, passed, detail = undefined) {
   result.checks.push({ name, passed, ...(detail ? { detail } : {}) });
@@ -50,12 +56,13 @@ try {
   await page.waitForTimeout(1_000);
   const postLoginStorage = await page.evaluate(() => ({
     local: Object.keys(localStorage).filter((key) => key.startsWith("sb-")).length,
+    localKeys: Object.keys(localStorage),
     session: Object.keys(sessionStorage).length,
   }));
   check(
     "session-persisted-before-reload",
     postLoginStorage.local > 0,
-    `authStorage=${postLoginStorage.local}; sessionStorage=${postLoginStorage.session}`,
+    `authStorage=${postLoginStorage.local}; sessionStorage=${postLoginStorage.session}; keys=${postLoginStorage.localKeys.join(",") || "none"}`,
   );
   check("email-login-redirects-to-app", true);
 
