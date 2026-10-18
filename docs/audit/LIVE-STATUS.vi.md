@@ -14,20 +14,20 @@ Frontend đã deploy và backend self-host đã được kiểm tra bằng runti
 
 | Hạng mục | Kết quả |
 |---|---|
-| Repository | `main` tại commit `c451f5e` (còn giữ 2 tài liệu nghiên cứu local chưa commit) |
+| Repository | `main` tại commit `7b06651` (còn giữ 2 tài liệu nghiên cứu local chưa commit) |
 | GitHub Pages | HTTP 200 |
-| Live asset | `assets/index-N_9o_R-B.js` |
+| Live asset | Asset mới sau deploy commit `7b06651` |
 | Tính năng trong bundle live | Lồng tiếng, Ý tưởng, Kịch bản, giới hạn 50 MB |
 | API health lịch sử | `/health` từng trả `{"ok":true,"service":"ai-short-video-studio-api"}` trên Mini |
 | Self-host hiện tại | Funnel `https://mini.tail743b7a.ts.net/health` trả HTTP 200; `/v1/projects`, `/v1/videos` không token đều trả HTTP 401 |
-| Commit self-host hiện tại | `c451f5e`; worker đã rebuild/restart bằng `.env.selfhost` |
+| Commit self-host hiện tại | Source `7b06651`; API healthy, worker Up; media bridge host đã restart |
 | Rollout mới nhất | API và worker build thành công, container đã restart; API healthy và worker Up |
 | Supabase production schema | PASS — đã áp dụng `input_mode_one_click` và `dub_video_job`; RPC overload, enum `dub_video`, bucket 50 MB đã kiểm tra bằng SQL |
 | Supabase security advisor | WARN — Leaked Password Protection đang tắt; performance advisor không có finding |
 | Supabase Auth public settings | PASS cấu hình — `google: true`, `email: true`, signup không bị khóa; authenticated smoke đã chạy nhưng `/auth/v1/token` trả HTTP 400 nên chưa tạo session |
 | Supabase runtime data | Có 6 project, 11 job, 4 export; 4 `create_video` completed, 2 failed, 1 running; chưa có job `dub_video` |
-| CI/Pages | PASS cho `c451f5e`; live HTTP 200 |
-| Local quality gates | Đã đạt trong lần chạy trước: typecheck, 195 test TypeScript, 15 test Python, build, audit dependency 0 advisory |
+| CI/Pages | PASS cho `7b06651`; live HTTP 200 |
+| Local quality gates | Shared 104 test, worker 386 test, local-tools 18 test, typecheck và production build PASS |
 | Lint | Chưa có script lint trong project |
 | FFmpeg native trên máy audit | Host thiếu filter `subtitles`; Docker worker production đã smoke PASS H.264/AAC 1080×1920, ASS UTF-8 và camera motion |
 
@@ -61,7 +61,7 @@ Rollout self-host đã đạt điều kiện kỹ thuật tối thiểu. Tuy nhi
 | Schema Supabase cho release | PASS — migration và các invariant chính đã xác minh |
 | Upload video và lồng tiếng | PARTIAL — code, schema và UI có; dữ liệu production chưa có job `dub_video`, chưa E2E job/render trên Mini |
 | Tách ý tưởng/kịch bản | PASS ở UI/API; chất lượng script AI chưa benchmark |
-| TTS nghe thử/chọn giọng | PARTIAL — wiring có; chưa đánh giá giọng thật tiếng Việt/Anh/mixed |
+| TTS nghe thử/chọn giọng | PARTIAL — VieNeu smoke thật PASS; đã hỗ trợ đổi biểu cảm một lần cho mỗi cảm xúc khác nhau trong scene; chưa đánh giá đủ Việt/Anh/mixed bằng người nghe |
 | Signup/login Google | PARTIAL — provider Google đã bật trên production; email smoke chạy được tới Supabase nhưng QA credential bị từ chối HTTP 400, vì vậy chưa xác minh session/redirect đầy đủ |
 | Subtitle timing/style | PARTIAL — kỹ thuật có; chưa đánh giá lệch tiếng và safe-zone trên video thật |
 | Tạo video AI 10 chủ đề | PARTIAL — 10/10 MP4 benchmark đạt technical gate; chưa chấm thủ công đủ 10 video |
@@ -80,7 +80,7 @@ Rollout self-host đã đạt điều kiện kỹ thuật tối thiểu. Tuy nhi
 | P1 | Chưa chấm chất lượng biên tập | Chấm đủ 10 MP4 thật theo 10 tiêu chí; technical pass không thay thế playback review |
 | P1 | Chưa nghe/đánh giá TTS thực | Kiểm tra tiếng Việt, English, mixed, pause, emotion và fallback consistency |
 | P1 | Chưa chứng minh retry/resume/provider failure | Worker crash/timeout/storage failure và retry giữ được scene thành công |
-| P1 | Quality gate semantic còn thiếu một phần | Gate storyboard về coverage/hook/narration đã được bổ sung trong checkout audit; cần rollout và tiếp tục tách lỗi visual/voice/subtitle để regenerate đúng component |
+| P1 | Quality gate semantic còn thiếu một phần | Gate storyboard về coverage/hook/narration và image QA trong Quality preset đã có; chưa có evaluator biên tập được hiệu chuẩn bằng người xem và chưa tự chấm voice/retention |
 | P1 | Leaked Password Protection đang tắt | Bật trong Supabase Auth và kiểm tra lại security advisor |
 
 ## Điều kiện cần từ máy Mini
@@ -117,7 +117,7 @@ Chưa đánh dấu READY. Frontend live, backend self-host, benchmark kỹ thu�
 
 ## Benchmark cập nhật ngày 18/10/2026
 
-Worker self-host đã tạo đủ 10 case benchmark thật bằng local pipeline; B05 được chạy lại sau khi sửa prompt và B06 được retry sau lỗi mạng tạm thời.
+Worker self-host đã tạo đủ 10 case benchmark thật bằng local pipeline; B05 được chạy lại sau khi sửa prompt và B06 được retry sau lỗi mạng tạm thời. Commit `7b06651` bổ sung smoke VieNeu thật với 3 cue cảm xúc khác nhau trong một scene (9.653 giây).
 
 | Case | Kết quả kỹ thuật | Điểm biên tập |
 |---|---|---|
@@ -131,7 +131,7 @@ Các benchmark hiện tại chạy bằng direct worker/local pipeline, vì vậ
 
 | Kiểm tra | Kết quả hiện tại |
 |---|---|
-| Python unit tests trong `local-tools` | PASS — 15/15 |
+| Python unit tests trong `local-tools` | PASS — 18/18 |
 | `git diff --check` | PASS |
 | FFmpeg native có filter `subtitles` | FAIL — binary hiện tại không liệt kê filter này; không dùng làm bằng chứng render production |
 | Node.js/pnpm trong executor audit | BLOCKED — không có executable trong `PATH`, nên chưa rerun được typecheck/test/build JavaScript |
@@ -142,8 +142,8 @@ Các kết quả trên chỉ cập nhật trạng thái xác minh của executor
 
 ## Cải tiến chất lượng nội dung ngày 18/10/2026
 
-Checkout audit đã bổ sung gate trước bước tạo media để chặn storyboard bỏ sót chủ đề, hook không được đọc ở scene đầu, narration không nằm trong các scene và mật độ lời đọc không phù hợp thời lượng. Prompt visual theo batch giờ nhận vị trí trong toàn bộ câu chuyện và prompt diffusion được chuẩn hóa tiếng Anh để giảm ảnh chung chung.
+Checkout audit đã bổ sung gate trước bước tạo media để chặn storyboard bỏ sót chủ đề, hook không được đọc ở scene đầu, narration không nằm trong các scene và mật độ lời đọc không phù hợp thời lượng. Prompt visual theo batch giờ nhận vị trí trong toàn bộ câu chuyện và prompt diffusion được chuẩn hóa tiếng Anh để giảm ảnh chung chung. Commit `7b06651` bổ sung phân bổ cue cảm xúc theo từng cảm xúc khác nhau trong một scene, tránh lặp cùng một hiệu ứng ở mọi câu.
 
-Các kiểm tra hiện tại đã đạt: typecheck 4/4 workspace, API 70 test, web 135 test, worker 386 test, shared 104 test, Python local-tools 18 test, production build và FFmpeg smoke H.264/AAC 1080×1920 với phụ đề ASS UTF-8 và camera motion. Project chưa có script lint.
+Các kiểm tra hiện tại đã đạt: worker 386 test, shared 104 test, Python local-tools 18 test, typecheck và production build; CI GitHub cũng PASS cho commit `7b06651`. Project chưa có script lint.
 
 LTX hiện chạy được trên Air; authenticated browser E2E và playback review đủ 10 video vẫn còn thiếu. Vì vậy trạng thái sản phẩm vẫn là PARTIALLY READY.
