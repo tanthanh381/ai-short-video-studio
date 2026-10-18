@@ -1,5 +1,8 @@
 const GENERIC_HOOKS = /^(?:xin chào(?: các bạn)?|trong video này|hãy cùng tìm hiểu|bạn có biết(?: rằng)?|hôm nay chúng ta sẽ|chào mừng bạn đến với)/iu;
-const HOOK_SIGNALS = /[?!]|(?:nhưng|vậy mà|sự thật|ít ai biết|đừng|vì sao|tại sao|nếu|thay vì|chỉ cần|điều bất ngờ)/iu;
+// A compelling Vietnamese hook is not always punctuated as a question. Contrast
+// patterns such as "vẫn...", "chưa..." and "càng...càng..." are common in
+// short-form scripts and should receive the same credit as an explicit question.
+const HOOK_SIGNALS = /[?!]|(?:nhưng|vậy mà|sự thật|ít ai biết|đừng|vì sao|tại sao|nếu|thay vì|chỉ cần|điều bất ngờ|đâu phải|không phải|vẫn\b|chưa\b|càng\b[\s\S]{0,80}\bcàng\b|ai cũng)/iu;
 const CONCRETE_SIGNALS = /(?:ví dụ|khi|nếu|bởi vì|thay vì|chỉ cần|bước|phút|ngày|đồng|%|[0-9])/iu;
 const ENDING_SIGNALS = /(?:hãy nhớ|từ hôm nay|và đó là|cuối cùng|đừng quên|bạn sẽ|khi nhìn lại)/iu;
 const VISUAL_ACTION_SIGNALS = /(?:cầm|mở|đóng|bước|đi bộ|chạy|gọi|viết|đọc|nhìn|đặt|nâng|dọn|rót|uống|tặng|hỏi|trả lời|ngồi|đứng|quay|chạm|bật|tắt|nhặt|gấp|mang|đưa|ôm|mỉm cười|thở|thiền|hold|open|walk|call|write|read|look|place|drink|give|ask)/iu;

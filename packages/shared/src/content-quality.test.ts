@@ -18,6 +18,11 @@ describe("content quality gate", () => {
     expect(report.dimensions.visualAction.score).toBeGreaterThanOrEqual(80);
   });
 
+  it("recognizes a contrast hook without requiring a question mark", () => {
+    const report = evaluateContentQuality("Một câu trả lời trôi chảy vẫn có thể sai. Hãy kiểm tra nguồn trước khi tin.");
+    expect(report.dimensions.hook.score).toBeGreaterThanOrEqual(80);
+  });
+
   it("flags a script that gives the image model no visible action", () => {
     const report = evaluateContentQuality("Sự bình yên là một trạng thái sâu sắc. Mọi thứ rồi sẽ ổn. Hãy nhớ điều đó.");
     expect(report.dimensions.visualAction.score).toBeLessThan(50);
