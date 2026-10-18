@@ -36,7 +36,11 @@ jobs:
             echo "STUDIO_QA_EMAIL and STUDIO_QA_PASSWORD repository secrets are required."
             exit 1
           fi
-          NODE_PATH=/tmp/studio-live-smoke/node_modules node scripts/audit/live-auth-browser.mjs
+          # Node ESM does not resolve bare imports through NODE_PATH. Run the
+          # audit module from the temporary package root so Playwright resolves
+          # from /tmp/studio-live-smoke/node_modules without copying secrets.
+          cp scripts/audit/live-auth-browser.mjs /tmp/studio-live-smoke/live-auth-browser.mjs
+          node /tmp/studio-live-smoke/live-auth-browser.mjs
       - name: Upload redacted result
         if: always()
         uses: actions/upload-artifact@v4
