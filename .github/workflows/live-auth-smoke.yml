@@ -29,8 +29,8 @@ jobs:
       STUDIO_LIVE_URL: https://tanthanh381.github.io/ai-short-video-studio/
       STUDIO_QA_EMAIL: ${{ secrets.STUDIO_QA_EMAIL }}
       STUDIO_QA_PASSWORD: ${{ secrets.STUDIO_QA_PASSWORD }}
-      STUDIO_QA_GENERATE: ${{ (inputs.generate || inputs.submit || (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-one-video-qa]'))) && '1' || '0' }}
-      STUDIO_QA_SUBMIT: ${{ (inputs.submit || (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-one-video-qa]'))) && '1' || '0' }}
+      STUDIO_QA_GENERATE: ${{ (inputs.generate || inputs.submit) && '1' || '0' }}
+      STUDIO_QA_SUBMIT: ${{ inputs.submit && '1' || '0' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
