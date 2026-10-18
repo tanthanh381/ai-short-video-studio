@@ -39,6 +39,10 @@ class Geometry(unittest.TestCase):
         self.assertGreater(mask[centre], 0.95)
         self.assertLess(max(mask[0].max(), mask[-1].max(), mask[:, 0].max(), mask[:, -1].max()), 0.01)
 
+    def test_large_face_crop_is_not_redrawn_at_the_picture_edge(self):
+        self.assertFalse(face_detail.should_redraw((80, 120, 150, 260), 512, 896))
+        self.assertTrue(face_detail.should_redraw((120, 180, 42, 48), 512, 896))
+
 
 class WhenItRuns(unittest.TestCase):
     def test_face_detail_is_opt_in_to_preserve_a_good_generated_picture(self):

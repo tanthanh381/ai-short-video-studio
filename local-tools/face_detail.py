@@ -56,6 +56,18 @@ def head_square(box, w, h):
     return x0, y0, side
 
 
+def should_redraw(box, w, h):
+    """Only redraw small faces whose crop leaves a real surrounding margin.
+
+    When the head crop reaches the picture width, resizing and compositing it
+    back can introduce a visible horizontal seam in tall SDXL-Turbo frames.
+    Large faces already contain enough native detail and are safer untouched.
+    """
+    _, _, face_width, _ = box
+    _, _, side = head_square(box, w, h)
+    return face_width >= 20 and side < CROP and side < w
+
+
 def redraw(crop: Image.Image, prompt: str, seed: int) -> Image.Image:
     buffer = io.BytesIO()
     crop.save(buffer, format="PNG")
@@ -101,7 +113,9 @@ def main() -> int:
     for index, box in enumerate(boxes):
         x0, y0, side = head_square(box, w, h)
         # Big faces are already drawn in detail, and tiny ones are specks; neither gains from a redraw.
-        if side > CROP or box[2] < 20:
+        # A crop that touches the image width is also excluded: compositing it
+        # back is a known source of horizontal seams in tall Turbo frames.
+        if not should_redraw(box, w, h):
             continue
         original = picture[y0:y0 + side, x0:x0 + side]
         redrawn = redraw(Image.fromarray(original).resize((CROP, CROP), Image.Resampling.LANCZOS), prompt, args.seed + index)
