@@ -144,23 +144,11 @@ function channelPresetVisual(id: string) {
 
 function PresetPreviewArt({ id }: { id: string }) {
   const visual = channelPresetVisual(id);
-  const previewFiles: Record<string, string> = {
-    "co-tich": "cartoon-folk.jpg",
-    "video-minh-hoa": "cinematic-reading.jpg",
-    "quy-tac-co-nhan": "ink-wash-sepia.jpg",
-    "dao-ly-co-phong": "paper-stage.jpg",
-    "tien-hiep-chibi": "fantasy-chibi.jpg",
-    "dan-gian-viet-chibi": "vietnamese-folk.jpg",
-    "co-trang-hai-chibi": "comedy-chibi.jpg",
-    "huyen-bi-co-phong": "mystery-chibi.jpg",
-    "chua-lanh": "watercolor-healing.jpg",
-    "co-trang": "historical-scholar.jpg",
-    "tam-su": "paper-cut.jpg",
-    "kien-thuc": "cinematic-reading.jpg",
-    "giai-thich": "cinematic-reading.jpg",
-    "ve-tay": "whiteboard-learning.jpg",
-  };
-  const file = previewFiles[id] ?? "cinematic-reading.jpg";
+  // Use the same preset settings as the actual creation flow. Keeping a second
+  // id -> image table here made template cards drift away from the renderer
+  // whenever a preset's visual/layout was changed.
+  const preset = CHANNEL_PRESETS.find((item) => item.id === id);
+  const file = previewImageForSettings(preset?.apply(DEFAULT_PROJECT_SETTINGS) ?? DEFAULT_PROJECT_SETTINGS);
   return (
     <span className={`channel-preset-art ${visual.tone}`} aria-hidden="true">
       <img src={`${import.meta.env.BASE_URL}preset-previews/${file}`} alt="" loading="lazy" decoding="async" />
