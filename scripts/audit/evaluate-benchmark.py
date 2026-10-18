@@ -22,6 +22,10 @@ def run(cmd):
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
+def run_bytes(cmd):
+    return subprocess.run(cmd, capture_output=True)
+
+
 def probe(path):
     out = run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,codec_name,width,height,pix_fmt:format=duration,size,bit_rate",
                "-of", "json", str(path)])
@@ -57,15 +61,30 @@ def average_hash(image):
     return [1 if p > mean else 0 for p in pixels]
 
 
-def picture_repetition(folder):
-    try:
-        from PIL import Image
-    except ImportError:
+def average_hash_ffmpeg(image_path):
+    """Portable fallback when Pillow is not installed in a CI/worker image."""
+    result = run_bytes([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(image_path),
+        "-vf", "scale=8:8,format=gray", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", "-",
+    ])
+    pixels = list(result.stdout)
+    if len(pixels) != 64:
         return None
+    mean = sum(pixels) / len(pixels)
+    return [1 if p > mean else 0 for p in pixels]
+
+
+def picture_repetition(folder):
     files = sorted(folder.glob("*.png"), key=lambda f: f.stat().st_mtime)  # pictures were drawn in scene order
     if len(files) < 2:
         return None
-    hashes = [average_hash(Image.open(f)) for f in files]
+    try:
+        from PIL import Image
+        hashes = [average_hash(Image.open(f)) for f in files]
+    except ImportError:
+        hashes = [average_hash_ffmpeg(f) for f in files]
+    if any(value is None for value in hashes):
+        return None
     close = sum(1 for a, b in zip(hashes, hashes[1:]) if sum(x != y for x, y in zip(a, b)) <= 6)
     return {"pairsChecked": len(files) - 1, "nearIdenticalNeighbours": close}
 
@@ -137,7 +156,8 @@ def evaluate(out, case):
         "no clipping (TP < -1 dBTP)": tp is not None and tp < -1.0,
         "no dead air (> 1.5 s)": longest <= 1.5,
         "no scene > 9 s": max(seconds, default=0) <= 9.0,
-        "no repeated neighbour pictures": result["repetition"] is None or result["repetition"]["nearIdenticalNeighbours"] == 0,
+        # A missing repetition measurement is not a pass: a quality gate must not silently skip a check.
+        "no repeated neighbour pictures": result["repetition"] is not None and result["repetition"]["nearIdenticalNeighbours"] == 0,
     }
     result["gates"] = gates
     result["gatesPassed"] = sum(gates.values())
