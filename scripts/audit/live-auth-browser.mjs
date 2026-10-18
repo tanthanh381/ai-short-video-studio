@@ -10,8 +10,8 @@
  *   STUDIO_QA_PASSWORD    QA account password
  *
  * Optional:
- *   STUDIO_QA_GENERATE=1  continue into the new-video flow; does not submit a
- *                         generation job unless explicitly extended below.
+ *   STUDIO_QA_GENERATE=1  continue into the new-video flow without submitting.
+ *   STUDIO_QA_SUBMIT=1    submit exactly one short QA video and wait for its MP4.
  */
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -102,8 +102,17 @@ try {
       "new-video-flow-visible",
       await page.getByRole("heading", { name: /Bạn muốn kể điều gì\?|Chọn mẫu video|Tạo video/i }).count() > 0,
     );
-    // Deliberately stop before submission. Generation requires an explicit,
-    // separately reviewed test case so a CI smoke run cannot create jobs by accident.
+    if (process.env.STUDIO_QA_SUBMIT === "1") {
+      await page.getByLabel("Ý tưởng hoặc chủ đề").fill("Một thói quen nhỏ giúp bạn bớt suy nghĩ quá nhiều mỗi ngày.");
+      for (let step = 0; step < 5; step += 1) {
+        await page.getByRole("button", { name: "Tiếp tục", exact: true }).click();
+        await page.waitForTimeout(250);
+      }
+      await page.getByRole("button", { name: "Tạo video hoàn chỉnh", exact: true }).click();
+      await page.waitForURL((url) => /\/studio\//.test(url.pathname), { timeout: 30_000 });
+      await page.getByRole("button", { name: "Tải MP4", exact: true }).waitFor({ timeout: 25 * 60_000 });
+      check("one-video-render-and-download-ready", true, `path=${new URL(page.url()).pathname}`);
+    }
   }
 
   check("no-browser-page-errors", result.errors.length === 0);

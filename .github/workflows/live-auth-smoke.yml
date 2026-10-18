@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      submit:
+        description: "Submit exactly one short QA video and wait for its MP4"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -19,12 +24,13 @@ permissions:
 jobs:
   authenticated-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     env:
       STUDIO_LIVE_URL: https://tanthanh381.github.io/ai-short-video-studio/
       STUDIO_QA_EMAIL: ${{ secrets.STUDIO_QA_EMAIL }}
       STUDIO_QA_PASSWORD: ${{ secrets.STUDIO_QA_PASSWORD }}
       STUDIO_QA_GENERATE: ${{ inputs.generate && '1' || '0' }}
+      STUDIO_QA_SUBMIT: ${{ inputs.submit && '1' || '0' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
