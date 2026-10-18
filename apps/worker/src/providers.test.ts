@@ -199,6 +199,9 @@ describe("diffusion prompt quality", () => {
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother stands beside floating handwritten characters")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother checks a phone beside a desk")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Trên đó là danh sách mua hàng.", "A little girl looks at blurry text written on a paper")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Một câu trả lời trôi chảy vẫn có thể sai.", "Close-up of a laptop displaying polished text on screen")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Tôi chia công việc thành hai bước.", "A desk with two stacks labeled Draft and Verify")).toBeGreaterThan(0);
+    expect(concreteVisualFallback("Tôi dùng AI để tóm tắt một tài liệu rồi đối chiếu con số trong bản gốc.")).toContain("blank laptop screen");
     expect(visualPromptFlaws(
       "Minh gọi cho mẹ.",
       "A little brother stands beside a big brother holding a phone",
