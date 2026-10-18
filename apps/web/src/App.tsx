@@ -1586,6 +1586,12 @@ type WizardState = {
   project: Project | null;
 };
 
+function layoutTemplateLabel(layoutTemplate: ProjectSettings["layoutTemplate"]): string {
+  if (layoutTemplate === "story-card") return "Thẻ truyện";
+  if (layoutTemplate === "paper-stage") return "Nhân vật trên nền giấy";
+  return "Toàn khung hình";
+}
+
 function WizardPage() {
   const navigate = useNavigate();
   const { isDemo } = useAuth();
@@ -2034,25 +2040,38 @@ function WizardPage() {
                   </>}
                 </div>
                 <div className="setting-group">
-                  <h3><Video /> Bố cục &amp; tỷ lệ</h3>
-                  <Field label="Bố cục" hint="Story card và Paper stage chỉ dùng cho video dọc 9:16.">
-                    <select value={settings.layoutTemplate} onChange={(e) => editSettings(withLayoutTemplate(settings, e.target.value as ProjectSettings["layoutTemplate"]))}>
-                      <option value="full-bleed">Toàn khung hình</option><option value="story-card">Thẻ truyện (tranh minh họa)</option><option value="paper-stage">Nhân vật trên nền giấy</option>
-                    </select>
-                  </Field>
+                  <h3><Video /> Khung &amp; tỷ lệ</h3>
+                  <div className="layout-template-summary" role="status">
+                    <span className="layout-template-summary-label">Khung trình bày</span>
+                    <strong>{layoutTemplateLabel(settings.layoutTemplate)}</strong>
+                    <small>Được thiết lập theo mẫu video đã chọn.</small>
+                  </div>
                   <Field label="Tỷ lệ">
                     <select value={settings.aspectRatio} onChange={(e) => editSettings({ ...settings, aspectRatio: e.target.value as ProjectSettings["aspectRatio"] })}>
                       <option>9:16</option><option>1:1</option><option>16:9</option>
                     </select>
                   </Field>
-                  {settings.layoutTemplate === "story-card" && <>
-                    <Field label="Màu thẻ truyện">
-                      <select value={settings.cardTheme} onChange={(e) => editSettings({ ...settings, cardTheme: e.target.value as ProjectSettings["cardTheme"] })}>
-                        <option value="blue">Nền xanh, tiêu đề vàng</option><option value="sepia">Nền be, tiêu đề đỏ + trắng</option><option value="blurred">Ảnh minh họa, nền mờ</option>
-                      </select>
-                    </Field>
-                    <Field label="Tiêu đề trên khung" hint="Để trống: AI chọn câu mở đầu hấp dẫn."><input maxLength={80} value={settings.cardTitle} onChange={(e) => editSettings({ ...settings, cardTitle: e.target.value })} /></Field>
-                  </>}
+                  <details className="settings-more layout-template-advanced">
+                    <summary>
+                      <span>Đổi khung trình bày</span>
+                      <small>Chỉ dùng khi muốn ghi đè lựa chọn của mẫu</small>
+                    </summary>
+                    <div className="advanced-panel">
+                      <Field label="Khung trình bày" hint="Story card và Paper stage chỉ dùng cho video dọc 9:16. Việc đổi khung có thể thay đổi visual style và cách hiển thị phụ đề.">
+                        <select value={settings.layoutTemplate} onChange={(e) => editSettings(withLayoutTemplate(settings, e.target.value as ProjectSettings["layoutTemplate"]))}>
+                          <option value="full-bleed">Toàn khung hình</option><option value="story-card">Thẻ truyện (tranh minh họa)</option><option value="paper-stage">Nhân vật trên nền giấy</option>
+                        </select>
+                      </Field>
+                      {settings.layoutTemplate === "story-card" && <>
+                        <Field label="Màu thẻ truyện">
+                          <select value={settings.cardTheme} onChange={(e) => editSettings({ ...settings, cardTheme: e.target.value as ProjectSettings["cardTheme"] })}>
+                            <option value="blue">Nền xanh, tiêu đề vàng</option><option value="sepia">Nền be, tiêu đề đỏ + trắng</option><option value="blurred">Ảnh minh họa, nền mờ</option>
+                          </select>
+                        </Field>
+                        <Field label="Tiêu đề trên khung" hint="Để trống: AI chọn câu mở đầu hấp dẫn."><input maxLength={80} value={settings.cardTitle} onChange={(e) => editSettings({ ...settings, cardTitle: e.target.value })} /></Field>
+                      </>}
+                    </div>
+                  </details>
                   <Field label="Tên kênh ở chân video" hint="Để trống nếu không muốn hiện."><input maxLength={60} value={settings.brandName} onChange={(e) => editSettings({ ...settings, brandName: e.target.value })} /></Field>
                 </div>
               </div>

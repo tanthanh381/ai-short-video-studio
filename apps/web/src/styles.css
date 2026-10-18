@@ -2889,6 +2889,33 @@ input[type="radio"] {
 .settings-more summary small { font-weight: 500; font-size: var(--text-sm); color: var(--text-muted); }
 .settings-more .budget-meter { margin-top: 10px; }
 .settings-more .usage-metrics { margin: 14px 0 16px; }
+.layout-template-summary {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+}
+.layout-template-summary-label {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.layout-template-summary strong {
+  color: var(--text-strong);
+  font-size: var(--text-md);
+}
+.layout-template-summary small {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.layout-template-advanced {
+  margin: 0 0 14px;
+}
+.layout-template-advanced .advanced-panel {
+  margin-top: 14px;
+}
 .mode-switch-options button:focus-visible { outline: var(--focus-outline); outline-offset: 2px; }
 .settings-page-grid section > .button { margin-top: 16px; }
 
