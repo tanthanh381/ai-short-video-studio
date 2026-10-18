@@ -416,7 +416,6 @@ function Protected({ children }: { children: React.ReactNode }) {
 
 function LoginPage() {
   const { signIn, signInWithGoogle, sendMagicLink, sendPasswordReset, user, authError, isDemo } = useAuth();
-  const navigate = useNavigate();
   useEffect(() => { document.title = `Đăng nhập · ${APP_NAME}`; }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -462,7 +461,6 @@ function LoginPage() {
     const nextError = await signIn(email, password);
     setError(nextError);
     setBusy(false);
-    if (!nextError) navigate("/");
   }
   async function signInWithGoogleAccount() {
     setBusy(true);
