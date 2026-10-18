@@ -1,0 +1,46 @@
+name: Live authenticated smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      generate:
+        description: "Only enable the new-video screen check; never submits an AI job"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  authenticated-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      STUDIO_LIVE_URL: https://tanthanh381.github.io/ai-short-video-studio/
+      STUDIO_QA_EMAIL: ${{ secrets.STUDIO_QA_EMAIL }}
+      STUDIO_QA_PASSWORD: ${{ secrets.STUDIO_QA_PASSWORD }}
+      STUDIO_QA_GENERATE: ${{ inputs.generate && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install browser runtime
+        run: |
+          npm install --prefix /tmp/studio-live-smoke --no-save playwright@1.56.1
+          /tmp/studio-live-smoke/node_modules/.bin/playwright install --with-deps chromium
+      - name: Run authenticated live smoke
+        run: |
+          if [ -z "$STUDIO_QA_EMAIL" ] || [ -z "$STUDIO_QA_PASSWORD" ]; then
+            echo "STUDIO_QA_EMAIL and STUDIO_QA_PASSWORD repository secrets are required."
+            exit 1
+          fi
+          NODE_PATH=/tmp/studio-live-smoke/node_modules node scripts/audit/live-auth-browser.mjs
+      - name: Upload redacted result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-auth-smoke-${{ github.run_id }}
+          path: audit-artifacts/live-auth-browser.json
+          if-no-files-found: ignore
