@@ -90,10 +90,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isDemo: appConfig.demoMode,
       async signIn(email, password) {
         if (!supabase || appConfig.demoMode) return null;
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
+        // Do not wait for the auth event before rendering the protected route.
+        // Supabase persists the session asynchronously; setting it from the
+        // successful response prevents an immediate navigate("/") from seeing
+        // a transient null user and bouncing back to /login.
+        if (!error && data.session) {
+          setSession(data.session);
+          setLoading(false);
+        }
         const message = authErrorMessage(error?.message);
         if (message) setAuthError(message);
         return message;
