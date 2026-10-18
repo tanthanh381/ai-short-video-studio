@@ -68,6 +68,10 @@ class WhenItRuns(unittest.TestCase):
         self.assertFalse(media_server.FACE_DETAIL_REQUEST_RE.search("a Vietnamese man typing beside a laptop"))
         self.assertFalse(media_server.FACE_DETAIL_REQUEST_RE.search("hands checking a document at a desk"))
 
+    def test_action_first_guard_prioritizes_objects_over_faces(self):
+        self.assertTrue(media_server.ACTION_FIRST_RE.search("hands typing beside a laptop"))
+        self.assertFalse(media_server.ACTION_FIRST_RE.search("close-up portrait of a Vietnamese woman"))
+
     def test_a_failing_redraw_keeps_the_picture_and_is_reported(self):
         original = (media_server.FACE_PYTHON, dict(media_server.FACE_STATS))
         try:

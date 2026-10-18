@@ -596,6 +596,10 @@ FACE_DETAIL_REQUEST_RE = re.compile(
     r"\b(?:portrait|headshot|close[- ]up portrait|detailed face|facial features|symmetrical eyes|face close[- ]up)\b",
     re.I,
 )
+ACTION_FIRST_RE = re.compile(
+    r"\b(?:hands?|typing|keyboard|laptop|document|paper|tablet|desk|pen|writing|monitor|screen)\b",
+    re.I,
+)
 NATIONALITY_RE = re.compile(r"\b(Vietnamese|Japanese|Korean|Chinese|Thai|Asian|Indian|African|European|American)\b", re.I)
 
 
@@ -669,6 +673,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     stylized = style in STYLIZED_IMAGE_STYLES
     is_human = has_human_subject(clean)
     face_focus = bool(FACE_DETAIL_REQUEST_RE.search(clean))
+    action_first = bool(ACTION_FIRST_RE.search(clean)) and not face_focus
     anatomy = (
         "one person only, one face, two aligned eyes, symmetrical natural facial features, natural skin texture, "
         "anatomically correct hands, natural body proportions, complete limbs, "
@@ -682,9 +687,10 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     human_detail = ", natural skin, detailed face" if is_human and not stylized and face_focus else ""
     nonhuman_focus = "" if (is_human or stylized) else ", the described object or environment is the main subject, no people, no human figures, no face"
     flat_guard = ", only the described characters, no crowd" if is_flat and is_human else ""
+    action_guard = ", hands and essential object in the foreground, face outside the frame, action shot" if action_first else ""
     # Keep the requested action and essential object near the front of the CLIP context. Safety/style clauses are
     # deliberately appended so the 77-token limit does not silently discard the actual scene.
-    styled = f"{IMAGE_STYLES[style]}, {clean}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
+    styled = f"{IMAGE_STYLES[style]}, {clean}{action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     if selected_model in OPTIONAL_IMAGE_MODELS:
         return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64)
     if selected_model == COMFYUI_IMAGE_MODEL:
