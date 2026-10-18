@@ -2258,6 +2258,7 @@ function SceneCard({
             onChange={(e) => onChange({ ...scene, imagePrompt: e.target.value })}
           />
         </details>
+        <SceneSubtitleEditor scene={scene} onChange={onChange} />
         {scene.errorMessage && (
           <div className="scene-error" role="alert">
             <CircleAlert size={15} aria-hidden="true" />
@@ -2306,6 +2307,63 @@ function SceneCard({
         </div>
       </div>
     </article>
+  );
+}
+
+/** Subtitle timing belongs to the scene being edited, not to a second global editor. */
+function SceneSubtitleEditor({ scene, onChange }: { scene: Scene; onChange(next: Scene): void }) {
+  const durationMs = scene.actualDurationMs ?? scene.estimatedDurationMs;
+  const updateCue = (cueIndex: number, patch: Partial<Scene["subtitles"][number]>) => {
+    const subtitles = scene.subtitles.map((cue, index) => index === cueIndex ? { ...cue, ...patch } : cue);
+    onChange({ ...scene, subtitles });
+  };
+  return (
+    <details className="scene-subtitle-editor">
+      <summary>Phụ đề cảnh · {scene.subtitles.length ? `${scene.subtitles.length} đoạn` : "chưa có"}</summary>
+      <div className="cue-editor" onClick={(event) => event.stopPropagation()}>
+        <div className="cue-heading">
+          <small>Chỉnh nội dung và timestamp của riêng cảnh này.</small>
+          <button
+            type="button"
+            onClick={() => onChange({
+              ...scene,
+              subtitles: [
+                ...scene.subtitles,
+                { id: crypto.randomUUID(), startMs: 0, endMs: Math.min(2000, durationMs), text: "Phụ đề mới" },
+              ],
+            })}
+          >
+            <Plus size={14} /> Thêm
+          </button>
+        </div>
+        {scene.subtitles.map((cue, cueIndex) => (
+          <div className="cue-row" key={cue.id}>
+            <input
+              aria-label={`Bắt đầu phụ đề ${cueIndex + 1}`}
+              type="number"
+              min="0"
+              step="0.1"
+              value={cue.startMs / 1000}
+              onChange={(event) => updateCue(cueIndex, { startMs: Math.round(Number(event.target.value) * 1000) })}
+            />
+            <input
+              aria-label={`Kết thúc phụ đề ${cueIndex + 1}`}
+              type="number"
+              min="0.1"
+              step="0.1"
+              value={cue.endMs / 1000}
+              onChange={(event) => updateCue(cueIndex, { endMs: Math.round(Number(event.target.value) * 1000) })}
+            />
+            <input
+              aria-label={`Nội dung phụ đề ${cueIndex + 1}`}
+              value={cue.text}
+              onChange={(event) => updateCue(cueIndex, { text: event.target.value })}
+            />
+          </div>
+        ))}
+        {!scene.subtitles.length && <small>Phụ đề sẽ được tạo từ audio thật sau khi tạo giọng đọc.</small>}
+      </div>
+    </details>
   );
 }
 
@@ -3708,88 +3766,6 @@ function StudioPage() {
                   <option value="bottom">Vùng an toàn phía dưới</option>
                 </select>
               </Field>
-              {activeScene && (
-                <div className="cue-editor">
-                  <div className="cue-heading">
-                    <strong>Timestamp cảnh đang chọn</strong>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateScene(selected, {
-                          ...activeScene,
-                          subtitles: [
-                            ...activeScene.subtitles,
-                            {
-                              id: crypto.randomUUID(),
-                              startMs: 0,
-                              endMs: Math.min(
-                                2000,
-                                activeScene.actualDurationMs ??
-                                  activeScene.estimatedDurationMs,
-                              ),
-                              text: "Phụ đề mới",
-                            },
-                          ],
-                        })
-                      }
-                    >
-                      <Plus size={14} /> Thêm
-                    </button>
-                  </div>
-                  {activeScene.subtitles.map((cue, cueIndex) => (
-                    <div className="cue-row" key={cue.id}>
-                      <input
-                        aria-label="Bắt đầu phụ đề"
-                        type="number"
-                        min="0"
-                        step="0.1"
-                        value={cue.startMs / 1000}
-                        onChange={(e) => {
-                          const subtitles = [...activeScene.subtitles];
-                          subtitles[cueIndex] = {
-                            ...cue,
-                            startMs: Math.round(Number(e.target.value) * 1000),
-                          };
-                          updateScene(selected, { ...activeScene, subtitles });
-                        }}
-                      />
-                      <input
-                        aria-label="Kết thúc phụ đề"
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={cue.endMs / 1000}
-                        onChange={(e) => {
-                          const subtitles = [...activeScene.subtitles];
-                          subtitles[cueIndex] = {
-                            ...cue,
-                            endMs: Math.round(Number(e.target.value) * 1000),
-                          };
-                          updateScene(selected, { ...activeScene, subtitles });
-                        }}
-                      />
-                      <input
-                        aria-label="Nội dung phụ đề"
-                        value={cue.text}
-                        onChange={(e) => {
-                          const subtitles = [...activeScene.subtitles];
-                          subtitles[cueIndex] = {
-                            ...cue,
-                            text: e.target.value,
-                          };
-                          updateScene(selected, { ...activeScene, subtitles });
-                        }}
-                      />
-                    </div>
-                  ))}
-                  {!activeScene.subtitles.length && (
-                    <small>
-                      Timestamp sẽ được tạo từ audio thật; bạn cũng có thể thêm
-                      thủ công.
-                    </small>
-                  )}
-                </div>
-              )}
               </>}
             />
           </fieldset>

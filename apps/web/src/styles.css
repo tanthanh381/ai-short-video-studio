@@ -1623,6 +1623,29 @@ a:focus-visible {
   border-top: 1px solid var(--line);
   padding-top: 12px;
 }
+.scene-subtitle-editor {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.scene-subtitle-editor > summary {
+  cursor: pointer;
+  list-style-position: inside;
+  padding: 9px 12px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.scene-subtitle-editor[open] > summary {
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+.scene-subtitle-editor > .cue-editor {
+  margin: 0;
+  border-top: 0;
+  padding: 10px 12px 12px;
+}
 .cue-heading {
   display: flex;
   align-items: center;
