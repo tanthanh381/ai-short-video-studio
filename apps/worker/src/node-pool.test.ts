@@ -7,7 +7,7 @@ const status = (over: Partial<NodeStatus> = {}): NodeStatus => ({
   accepting: true,
   capabilities: { image: true, tts: true, transcribe: true, video: false },
   image: { state: "ready", models: ["sdxl-turbo"], defaultModel: "sdxl-turbo" },
-  tts: { engines: ["vieneu", "piper"], defaultEngine: "vieneu" },
+  tts: { engines: ["vieneu"], defaultEngine: "vieneu" },
   resources: { cpuCores: 8, memTotalGb: 16, memPressure: "normal", loadAvg1: 1, power: "ac", batteryPercent: null, thermal: "nominal" },
   fingerprint: "same",
   ...over,
@@ -441,7 +441,7 @@ describe("what the dashboard shows", () => {
     expect(air(pool).models).toEqual({
       llm: { up: true, installed: ["qwen3.5:4b", "llama3:8b"], loaded: [{ name: "qwen3.5:4b", sizeGb: 3.4, expiresAt: "2026-10-10T10:05:00Z" }] },
       image: { state: "ready", models: ["sdxl-turbo"], defaultModel: "sdxl-turbo" },
-      tts: { engines: ["vieneu", "piper"], defaultEngine: "vieneu" },
+      tts: { engines: ["vieneu"], defaultEngine: "vieneu" },
       transcribe: true, whiteboard: true, faceDetail: true,
     });
   });

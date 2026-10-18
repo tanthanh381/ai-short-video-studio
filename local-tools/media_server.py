@@ -123,7 +123,6 @@ IMAGE_SERVER_URL = os.getenv("IMAGE_SERVER_URL", "http://127.0.0.1:5002")
 IMAGE_TIMEOUT_S = int(os.getenv("IMAGE_TIMEOUT_S", "900"))
 WHISPER_URL = os.getenv("WHISPER_URL", "http://127.0.0.1:8080")
 VIENEU_URL = os.getenv("VIENEU_URL", "http://127.0.0.1:5001")
-PIPER_URL = os.getenv("PIPER_URL", "http://127.0.0.1:5000")
 VIENEU_VOICE = os.getenv("VIENEU_VOICE", "Đức Trí")
 LTX_VIDEO_URL = os.getenv("LTX_VIDEO_URL", "http://127.0.0.1:8770")
 # Official multi-scale inference can exceed three minutes on a 24 GB Apple
@@ -215,9 +214,8 @@ PACE_TARGET_WPS = float(os.getenv("PACE_TARGET_WPS", "3.7"))
 # real script read by all nine presets: 0.78-0.87, 0.835 on average (shorter sentences, more pauses).
 PACE_VIDEO_FACTOR = 0.84
 PACE_TEMPO_RANGE = (0.85, 1.18)
-PIPER_NATIVE_WPS = 4.31
 # Ordered preference for local Vietnamese engines.
-TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu,piper").split(",") if e in {"vieneu", "piper"}]
+TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu").split(",") if e == "vieneu"] or ["vieneu"]
 TTS_CONCURRENCY = max(1, min(int(os.getenv("TTS_CONCURRENCY", "2")), 4))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/ggml-base.bin"))
@@ -234,7 +232,7 @@ OPTIONAL_IMAGE_MODELS = {
 }
 COMFYUI_IMAGE_MODEL = "sdxl-base-1.0-comfyui"
 COMFYUI_IMAGE_LABEL = "SDXL Base 1.0 — đẹp hơn, ít người thừa, chậm (~1–1,5 phút/ảnh)"
-TTS_ENGINE_LABELS = {"vieneu": "VieNeu-TTS v3 Turbo (ONNX/CPU)", "piper": "Piper (giọng Việt nhẹ)"}
+TTS_ENGINE_LABELS = {"vieneu": "VieNeu-TTS v3 Turbo (ONNX/CPU)"}
 LLM_LABELS = {
     "qwen3:8b": "Qwen3 8B — Quality script (chậm hơn)",
     "qwen3.5:4b": "Qwen3.5 4B — Balanced script",
@@ -940,9 +938,12 @@ def _to_pcm22050(source):
 def select_tts_engine(voice, engine=None):
     """Select once per job so a long narration never changes voice halfway through."""
     if engine:
+        # Projects created before Piper was removed remain renderable with the
+        # supported Vietnamese engine instead of failing at the old setting.
+        engine = "vieneu" if engine == "piper" else engine
         return check_choice("giọng đọc", engine, TTS_ENGINE_LABELS)
     for candidate in TTS_ENGINES:
-        if service_up({"vieneu": VIENEU_URL, "piper": PIPER_URL}.get(candidate, ""), "/health"):
+        if service_up(VIENEU_URL, "/health"):
             return candidate
     raise RuntimeError("Không engine giọng đọc local nào sẵn sàng")
 
@@ -952,8 +953,6 @@ def pace_tempo(voice, engine, speed=1.0, emotion=1.0):
     the video's own reading speed (and an emotion cue) multiply on top of that."""
     requested_speed = max(0.75, min(float(speed), 1.3))
     _name, mood, native = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0, None))
-    if engine != "vieneu":
-        mood, native = 1.0, PIPER_NATIVE_WPS
     if native is None:  # a voice that was never measured keeps its own pace
         return mood * requested_speed * emotion
     wanted = PACE_TARGET_WPS * mood / PACE_VIDEO_FACTOR
@@ -971,8 +970,6 @@ def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0, emotion_ok=Tr
         payload = {"input": input_text, "voice": vieneu_voice, "speed": vieneu_speed, "steps": VIENEU_STEPS}
         with VIENEU_LOCK:
             source.write_bytes(_http_wav(VIENEU_URL, payload))
-    elif engine == "piper":
-        source.write_bytes(_http_wav(PIPER_URL, {"input": input_text}))
     else:
         raise RuntimeError("Engine giọng đọc local không được hỗ trợ")
     # VieNeu v3 Turbo (and Piper) ignore the `speed` field, so pace — the voice preset, the emotion profile and the
@@ -1427,8 +1424,7 @@ def model_catalog():
     whisper_runtime = whisper_runtime_info()
     whisper_id = whisper_runtime["id"]
     whisper_ready = whisper_runtime["ready"]
-    available_engines = {"vieneu": service_up(VIENEU_URL), "piper": service_up(PIPER_URL),
-                         }
+    available_engines = {"vieneu": service_up(VIENEU_URL)}
     ltx_ready, _ = ltx_state()
     return {
         "available": True,
@@ -1533,7 +1529,7 @@ def remembered_image_config(config):
 
 
 def tts_engines_up():
-    return [e for e in TTS_ENGINES if service_up({"vieneu": VIENEU_URL, "piper": PIPER_URL}.get(e, ""), "/health") or SLEEPER.asleep(e)]
+    return [e for e in TTS_ENGINES if service_up(VIENEU_URL, "/health") or SLEEPER.asleep(e)]
 
 
 # Everything whose change would make this Mac's pictures or voices come out differently. Two Macs with different files here must not
@@ -1634,7 +1630,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             comfy_ready, _ = comfyui_state()
             image_ready = image_server_state() != "down" or SLEEPER.asleep("image") or comfy_ready == "ready" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
-            engines = {"vieneu": service_up(VIENEU_URL) or SLEEPER.asleep("vieneu"), "piper": service_up(PIPER_URL)}
+            engines = {"vieneu": service_up(VIENEU_URL) or SLEEPER.asleep("vieneu")}
             ffmpeg_ready = find_binary("ffmpeg", "FFMPEG_PATH") is not None
             tts_ready = ffmpeg_ready and any(engines.get(e) for e in TTS_ENGINES)
             transcribe_ready = service_up(WHISPER_URL, "/") or SLEEPER.asleep("whisper")

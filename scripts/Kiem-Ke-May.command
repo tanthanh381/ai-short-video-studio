@@ -65,7 +65,7 @@ have() { command -v "$1" >/dev/null 2>&1 && print -- "$1: $(command -v "$1")" ||
   lsof -iTCP -sTCP:LISTEN -nP 2>/dev/null | awk 'NR==1 || /:(5000|5001|5002|8080|8765|8766|8770|8787|11434)[ ]/' | awk '{print $1, $9}' | sort -u | sed 's/^/  /'
   print ""
   print "=== TỰ KHỞI ĐỘNG (launchd) ==="
-  ls "$HOME/Library/LaunchAgents" 2>/dev/null | grep -iE 'ai-short|studio|whiteboard|vieneu|piper|whisper|image|ollama|tailscale' | sed 's/^/  /'
+  ls "$HOME/Library/LaunchAgents" 2>/dev/null | grep -iE 'ai-short|studio|whiteboard|vieneu|whisper|image|ollama|tailscale' | sed 's/^/  /'
 } 2>&1 | tee "$out"
 
 print ""

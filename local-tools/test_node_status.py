@@ -319,7 +319,7 @@ class BridgeEndpointTests(unittest.TestCase):
         cls.patches = [
             patch.object(cls.media, "image_server_info", return_value=("ready", {"steps": 4, "preset": "balanced"})),
             patch.object(cls.media, "comfyui_state", return_value=("offline", "no")),
-            patch.object(cls.media, "tts_engines_up", return_value=["vieneu", "piper"]),
+            patch.object(cls.media, "tts_engines_up", return_value=["vieneu"]),
             patch.object(cls.media, "find_binary", return_value="/usr/bin/ffmpeg"),
             patch.object(cls.media, "ltx_state", return_value=("offline", "no")),
             patch.object(cls.media, "service_up", return_value=True),

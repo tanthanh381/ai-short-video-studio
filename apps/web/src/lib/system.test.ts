@@ -122,7 +122,7 @@ describe("modelRows", () => {
   const models = (over: Partial<NonNullable<NodeSummary["models"]>> = {}): NonNullable<NodeSummary["models"]> => ({
     llm: { up: true, installed: ["qwen3.5:4b"], loaded: [] },
     image: { state: "ready", models: ["sdxl-turbo"], defaultModel: "sdxl-turbo" },
-    tts: { engines: ["vieneu", "piper"], defaultEngine: "vieneu" },
+    tts: { engines: ["vieneu"], defaultEngine: "vieneu" },
     transcribe: true, whiteboard: true, faceDetail: true,
     ...over,
   });
@@ -139,7 +139,7 @@ describe("modelRows", () => {
   it("reports the picture model loading, voices, Whisper, faces and the hand-drawing server", () => {
     const all = rows(models({ image: { state: "loading", models: ["sdxl-turbo"], defaultModel: "sdxl-turbo" }, transcribe: false, faceDetail: false, whiteboard: false }));
     expect(all.image).toMatchObject({ state: "loading", chips: ["sdxl-turbo"] });
-    expect(all.tts).toMatchObject({ state: "ready", chips: ["vieneu", "piper"] });
+    expect(all.tts).toMatchObject({ state: "ready", chips: ["vieneu"] });
     expect(all.transcribe!.state).toBe("down");
     expect(all.face!.state).toBe("down");
     expect(all.whiteboard!.state).toBe("down");

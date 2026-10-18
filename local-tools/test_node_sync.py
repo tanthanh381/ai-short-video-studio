@@ -228,7 +228,7 @@ class SyncSet(unittest.TestCase):
         self.assertEqual(services(["code/local-tools/image_server.py", "models/image/hf-cache/x"]), {"image"})
         self.assertEqual(services(["code/local-tools/whiteboard/draw.py"]), {"whiteboard"})
         self.assertEqual(services(["code/local-tools/node_sync_agent.py"]), {"agent"})
-        self.assertEqual(services(["toolkit/vieneu_api.py", "toolkit/tts_api.py"]), {"vieneu", "piper"})
+        self.assertEqual(services(["toolkit/vieneu_api.py", "toolkit/bin/start-vieneu.sh"]), {"vieneu"})
         self.assertEqual(services(["models/face/yunet.onnx"]), {"media"})
         self.assertEqual(services(["code/scripts/Mo-May-Phu.command", "code/local-tools/toolkit/requirements-venv.txt"]), set())
 

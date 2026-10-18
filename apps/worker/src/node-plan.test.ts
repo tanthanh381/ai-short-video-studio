@@ -11,7 +11,7 @@ const status = (over: Partial<NodeStatus> = {}): NodeStatus => ({
   accepting: true,
   capabilities: { image: true, tts: true, transcribe: true, video: false },
   image: { state: "ready", models: ["sdxl-turbo"], defaultModel: "sdxl-turbo" },
-  tts: { engines: ["vieneu", "piper"], defaultEngine: "vieneu" },
+  tts: { engines: ["vieneu"], defaultEngine: "vieneu" },
   resources: resources(),
   fingerprint: "same",
   ...over,
@@ -76,10 +76,9 @@ describe("assessNode", () => {
   });
 
   it("does not hand over a voice the main machine would not use", () => {
-    const piperOnly = node("air", { status: status({ tts: { engines: ["piper"], defaultEngine: "piper" } }) });
-    expect(assess(piperOnly, "tts").reasons[0]).toMatch(/vieneu/);
-    // Asked for piper by name, a machine that has piper may take it.
-    expect(assess(piperOnly, "tts", { request: { ttsEngine: "piper" } }).eligible).toBe(true);
+    const noVoice = node("air", { status: status({ tts: { engines: [], defaultEngine: null } }) });
+    expect(assess(noVoice, "tts").reasons[0]).toMatch(/vieneu/);
+    expect(assess(noVoice, "tts", { request: { ttsEngine: "vieneu" } }).eligible).toBe(false);
     const sameVoices = node("air");
     expect(assess(sameVoices, "tts", { request: { ttsEngine: "vieneu" } }).eligible).toBe(true);
     expect(assess(sameVoices, "tts", { request: { ttsEngine: "xtts" } }).eligible).toBe(false);

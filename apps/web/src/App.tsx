@@ -906,9 +906,9 @@ function VoicePreview({ voice, engine, disabled }: { voice: string; engine: stri
       let url = previewUrls.get(key);
       if (!url) {
         // Preset voices ship a pre-generated clip in public/voice-samples, so "nghe thử" plays instantly
-        // without waking the local TTS node. The Piper engine and non-preset voices (OpenAI, a cloned
-        // voice) have no bundled clip, so they fall back to on-demand synthesis.
-        url = isVoicePreset(voice) && engine !== "piper"
+        // without waking the local TTS node. Non-preset voices (OpenAI, a cloned voice) fall back to
+        // on-demand synthesis.
+        url = isVoicePreset(voice)
           ? `${import.meta.env.BASE_URL}voice-samples/${voice}.mp3`
           : URL.createObjectURL(await api.voicePreview(voice, engine));
         previewUrls.set(key, url);

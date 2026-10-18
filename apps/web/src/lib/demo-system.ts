@@ -24,7 +24,6 @@ export function demoSystem(now = Date.now()): SystemSummary {
         { id: "ollama", label: "Ollama (viết kịch bản)", memGb: 3.2, count: 1 },
         { id: "vieneu", label: "Giọng VieNeu", memGb: 1.25, count: 1 },
         { id: "comfy", label: "ComfyUI (SDXL Base)", memGb: 0.56, count: 1 },
-        { id: "piper", label: "Giọng Piper", memGb: 0.41, count: 2 },
         { id: "whisper", label: "Whisper (nhận dạng giọng)", memGb: 0.27, count: 1 },
       ],
     },
@@ -36,7 +35,7 @@ export function demoSystem(now = Date.now()): SystemSummary {
     models: {
       llm: { up: true, installed: ["qwen3.5:4b"], loaded: [{ name: "qwen3.5:4b", sizeGb: 3.4, expiresAt: iso(4 * 60_000) }] },
       image: { state: "ready", models: ["sdxl-turbo", "sdxl-base-1.0-comfyui"], defaultModel: "sdxl-turbo" },
-      tts: { engines: ["vieneu", "piper"], defaultEngine: "vieneu" },
+      tts: { engines: ["vieneu"], defaultEngine: "vieneu" },
       transcribe: true, whiteboard: true, faceDetail: true,
     },
     history: history(now, (m) => wave(m, 3, 25, 95), () => 86 + Math.sin((now / 60_000 - 0) / 5) * 3, 8, (m) => (m < 6 ? 1 : 0)),
@@ -50,7 +49,6 @@ export function demoSystem(now = Date.now()): SystemSummary {
       processes: [
         { id: "image", label: "Vẽ ảnh SDXL-Turbo", memGb: 4.1, count: 1 },
         { id: "vieneu", label: "Giọng VieNeu", memGb: 1.3, count: 1 },
-        { id: "piper", label: "Giọng Piper", memGb: 0.4, count: 2 },
         { id: "whisper", label: "Whisper (nhận dạng giọng)", memGb: 0.3, count: 1 },
       ],
     },
@@ -61,7 +59,7 @@ export function demoSystem(now = Date.now()): SystemSummary {
     models: {
       llm: { up: true, installed: ["qwen3.5:4b"], loaded: [] },
       image: { state: "ready", models: ["sdxl-turbo"], defaultModel: "sdxl-turbo" },
-      tts: { engines: ["vieneu", "piper"], defaultEngine: "vieneu" },
+      tts: { engines: ["vieneu"], defaultEngine: "vieneu" },
       transcribe: true, whiteboard: true, faceDetail: true,
     },
     history: history(now, (m) => wave(m, 4, 8, 55), () => wave(now / 60_000 - 0, 7, 44, 52), 0.3, (m) => (m < 6 ? 1 : 0)),

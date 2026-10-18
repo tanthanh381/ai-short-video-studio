@@ -22,7 +22,7 @@ from pathlib import Path
 PORT = 8899
 TTL_S = 90 * 60
 # Without the picture model: voices, Whisper and faces, about half a gigabyte.
-SMALL_MODELS = ["models/whisper", "models/piper", "models/vieneu-v3-turbo", "models/moss-audio-tokenizer-onnx", "models/face", "models/vieneu-cache"]
+SMALL_MODELS = ["models/whisper", "models/vieneu-v3-turbo", "models/moss-audio-tokenizer-onnx", "models/face", "models/vieneu-cache"]
 IMAGE_MODELS = ["models/image"]
 PLACEHOLDERS = {"@@BUNDLE_URL@@": "bundle_url", "@@NODE_TOKEN@@": "token", "@@NODE_NAME@@": "name"}
 

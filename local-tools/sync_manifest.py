@@ -20,8 +20,8 @@ CODE_SKIP_DIRS = {"__pycache__", "tests", ".pytest_cache", "node_modules", ".git
 # Programs that only the main machine runs (they serve the others) are not copied to them.
 CODE_SKIP_FILES = {"air_bundle_server.py", "node_sync_server.py", ".DS_Store"}
 CODE_EXTRA_FILES = ["scripts/Mo-May-Phu.command"]
-TOOLKIT_FILES = ["bin/env.sh", "bin/start-tts.sh", "bin/start-vieneu.sh", "bin/start-whisper.sh", "faster_whisper_server.py", "vieneu_api.py", "vieneu_tts.py", "tts_api.py"]
-MODEL_DIRS = ["whisper", "piper", "vieneu-v3-turbo", "moss-audio-tokenizer-onnx", "face"]
+TOOLKIT_FILES = ["bin/env.sh", "bin/start-vieneu.sh", "bin/start-whisper.sh", "faster_whisper_server.py", "vieneu_api.py", "vieneu_tts.py"]
+MODEL_DIRS = ["whisper", "vieneu-v3-turbo", "moss-audio-tokenizer-onnx", "face"]
 IMAGE_DIR = "image"
 # Runtime leftovers inside the model folders: logs, lock files, markers. Not part of a model.
 MODEL_SKIP_DIRS = {".locks", "xet", ".no_exist", "__pycache__"}
@@ -194,7 +194,6 @@ SERVICE_PATTERNS = {
     "image": "local-tools/image_server.py",
     "whiteboard": "local-tools/whiteboard_server.py",
     "vieneu": "vieneu_api:app",
-    "piper": "tts_api:app",
     "whisper": "whisper-server",
 }
 
@@ -217,15 +216,13 @@ def services_for(keys):
         elif key.startswith("toolkit/"):
             if name in ("vieneu_api.py", "vieneu_tts.py", "start-vieneu.sh"):
                 services.add("vieneu")
-            elif name in ("tts_api.py", "start-tts.sh"):
-                services.add("piper")
             elif name == "start-whisper.sh":
                 services.add("whisper")
             elif name == "env.sh":
-                services.update({"vieneu", "piper", "whisper"})
+                services.update({"vieneu", "whisper"})
         elif key.startswith("models/"):
             folder = key.split("/")[1]
-            services.add({"image": "image", "whisper": "whisper", "piper": "piper", "vieneu-v3-turbo": "vieneu", "moss-audio-tokenizer-onnx": "vieneu", "face": "media"}.get(folder, "media"))
+            services.add({"image": "image", "whisper": "whisper", "vieneu-v3-turbo": "vieneu", "moss-audio-tokenizer-onnx": "vieneu", "face": "media"}.get(folder, "media"))
     return services
 
 

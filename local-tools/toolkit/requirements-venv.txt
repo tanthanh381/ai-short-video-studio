@@ -50,7 +50,6 @@ packaging==26.3
 pandas==3.0.6
 pathvalidate==3.3.1
 pillow==12.3.0
-piper-tts==1.8.0
 platformdirs==4.12.3
 pooch==1.9.0
 protobuf==7.36.2

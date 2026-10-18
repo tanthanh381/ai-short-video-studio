@@ -104,7 +104,7 @@ main() {
   MODELS_DONE="$LOCAL_AI/models/.air-models-complete-$WITH_IMAGE"
   UNET=$(ls "$LOCAL_AI"/models/image/hf-cache/hub/models--stabilityai--sdxl-turbo/snapshots/*/unet/diffusion_pytorch_model.safetensors 2>/dev/null | head -1 || true)
   UNET_BYTES=0; [ -n "$UNET" ] && UNET_BYTES=$(wc -c < "$UNET" 2>/dev/null | tr -d ' ' || echo 0)
-  SMALL_OK=0; [ -e "$LOCAL_AI/models/whisper/ggml-base.bin" ] && [ -d "$LOCAL_AI/models/piper" ] && [ -d "$LOCAL_AI/models/vieneu-v3-turbo" ] && SMALL_OK=1
+  SMALL_OK=0; [ -e "$LOCAL_AI/models/whisper/ggml-base.bin" ] && [ -d "$LOCAL_AI/models/vieneu-v3-turbo" ] && SMALL_OK=1
   IMAGE_OK=1; [ "$WITH_IMAGE" = "yes" ] && [ "$UNET_BYTES" -lt "${AIR_NODE_MIN_UNET_BYTES:-5000000000}" ] && IMAGE_OK=0
   if [ -f "$MODELS_DONE" ] || { [ "$SMALL_OK" = "1" ] && [ "$IMAGE_OK" = "1" ]; }; then
     echo "Model đã có đủ trên máy này, bỏ qua bước tải (muốn tải lại: xóa $LOCAL_AI/models)"

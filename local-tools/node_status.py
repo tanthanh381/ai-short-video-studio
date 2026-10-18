@@ -207,7 +207,6 @@ SERVICE_PATTERNS = [
     ("ltx", "Chuyển động video LTX", re.compile(r"ltx_server\.py")),
     ("whisper", "Whisper (nhận dạng giọng)", re.compile(r"whisper-(server|cli)")),
     ("vieneu", "Giọng VieNeu", re.compile(r"vieneu_(api|tts)")),
-    ("piper", "Giọng Piper", re.compile(r"tts_api|piper")),
     ("media", "Cầu nối media", re.compile(r"media_server\.py")),
     ("whiteboard", "Máy vẽ tay", re.compile(r"whiteboard_server\.py")),
     ("ffmpeg", "FFmpeg (ghép video)", re.compile(r"(^|/)ffmpeg( |$)")),

@@ -87,7 +87,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         # The synthesis processes are mocked; tests must not depend on ffmpeg being installed (CI runners).
         cls.media.find_binary = lambda name, env_var: f"/usr/bin/{name}"
         cls.media.listener_pid = lambda port: None  # never inspect or restart the real model servers from tests
-        cls.media.TTS_ENGINES = ["piper"]  # deterministic: never reach for local network services in tests
+        cls.media.TTS_ENGINES = ["vieneu"]  # deterministic: never reach for local network services in tests
         cls.media.TTS_CONCURRENCY = 1  # keep mocked subprocess ordering deterministic
 
     def test_phrase_split_preserves_original_unicode_and_every_character(self):
@@ -237,7 +237,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
                 audio.writeframes(b"\x80\x01" * 11025)
             return subprocess.CompletedProcess(command, 0)
 
-        with patch.object(self.media, "TTS_ENGINES", ["vieneu", "piper"]), \
+        with patch.object(self.media, "TTS_ENGINES", ["vieneu"]), \
              patch.object(self.media, "service_up", return_value=True), \
              patch.object(self.media, "_http_wav", side_effect=fake_http), \
              patch.object(self.media.subprocess, "run", side_effect=fake_run):
@@ -720,9 +720,8 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         # a naturally slow storyteller keeps to its own pace (about 3 words a second) instead of being forced to 3.7
         self.assertAlmostEqual(self.media.pace_tempo("doc-truyen", "vieneu"), high)
         self.assertLess(self.media.VOICE_PRESETS["doc-truyen"][2] * high * self.media.PACE_VIDEO_FACTOR, 3.1)
-        # the video's own reading speed still counts on top, and a Piper voice reaches the pace exactly
+        # the video's own reading speed still counts on top of the VieNeu voice
         self.assertAlmostEqual(self.media.pace_tempo("doc-truyen", "vieneu", 1.2) / self.media.pace_tempo("doc-truyen", "vieneu", 1.0), 1.2)
-        self.assertAlmostEqual(self.media.PIPER_NATIVE_WPS * self.media.pace_tempo("doc-truyen", "piper") * self.media.PACE_VIDEO_FACTOR, 3.7)
 
     def test_the_emotional_voices_are_the_models_storytelling_voices(self):
         story_voices = {"Thiện Minh", "Thiền Tâm Đức", "Thái Sơn", "Thanh Bình", "Ngọc Linh", "Thục Đoan", "Mỹ Duyên", "Quỳnh Anh", "Đức Trí", "Kim Thanh"}  # style "doc_truyen"
