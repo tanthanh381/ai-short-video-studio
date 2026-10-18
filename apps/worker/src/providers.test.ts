@@ -977,6 +977,16 @@ describe("trimToWords", () => {
     expect(trimToWords(script, 9)).toBe("Câu một có bốn từ.");
     expect(trimToWords(script, 100)).toBe(script);
   });
+
+  it("keeps newline-delimited beats intact when shortening a pasted script", () => {
+    const script = [
+      "Hook khiến người xem dừng lại",
+      "Một ví dụ cụ thể giúp họ hiểu vấn đề",
+      "Hãy nhớ hành động nhỏ tạo khác biệt",
+      "Theo dõi để xem phần tiếp theo",
+    ].join("\n");
+    expect(trimToWords(script, 16)).toBe("Hook khiến người xem dừng lại Một ví dụ cụ thể giúp họ hiểu vấn đề");
+  });
 });
 
 

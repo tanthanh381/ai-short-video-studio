@@ -902,17 +902,21 @@ export async function writeIdeaScript(provider: StoryboardProvider, input: Story
  */
 export function fitToWords(script: string, maximum: number): string {
   if (contentWords(script).length <= maximum) return script;
-  const sentences = script.trim().split(/(?<=[.!?…])\s+/u);
+  const sentences = splitEditorialBeats(script);
   if (sentences.length < 3) return trimToWords(script, maximum);
   const kept = [...sentences];
   while (kept.length > 2 && contentWords(kept.join(" ")).length > maximum) kept.splice(kept.length - 2, 1);
   return contentWords(kept.join(" ")).length <= maximum ? kept.join(" ") : trimToWords(script, maximum);
 }
 
+function splitEditorialBeats(script: string): string[] {
+  return script.trim().split(/(?<=[.!?…])\s+|\n+/u).map((beat) => beat.trim()).filter(Boolean);
+}
+
 /** Whole sentences from the start of `script` while they fit in `maximum` words (unchanged if it already fits). */
 export function trimToWords(script: string, maximum: number): string {
   if (contentWords(script).length <= maximum) return script;
-  const sentences = script.trim().split(/(?<=[.!?…])\s+/u);
+  const sentences = splitEditorialBeats(script);
   let kept = "";
   for (const sentence of sentences) {
     const next = kept ? `${kept} ${sentence}` : sentence;
