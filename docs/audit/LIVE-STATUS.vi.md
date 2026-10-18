@@ -66,7 +66,7 @@ Rollout self-host đã đạt điều kiện kỹ thuật tối thiểu. Tuy nhi
 | Subtitle timing/style | PARTIAL — kỹ thuật có; chưa đánh giá lệch tiếng và safe-zone trên video thật |
 | Tạo video AI 10 chủ đề | PARTIAL — 10/10 MP4 benchmark đạt technical gate; chưa chấm thủ công đủ 10 video |
 | Video generative motion | PARTIAL — LTX-Video 2B Distilled đã ready trên Air; smoke image-to-video 6 giây tạo MP4 có frame motion; Mini dùng camera-motion fallback |
-| Auto music/SFX theo cảm xúc | NOT IMPLEMENTED |
+| Auto music/SFX theo cảm xúc | PARTIAL — auto ambient fallback, MusicGen khi runtime sẵn sàng và scene-change tick đã có; chưa có bộ thư viện/ bộ phân loại cảm xúc để chọn track bản quyền có kiểm soát |
 | Quality gate kỹ thuật và content gate | PARTIAL — có gate hook/cấu trúc/minh họa, subtitle/audio/render; chưa có điểm biên tập tự động đáng tin cậy ≥80 |
 | Render lại riêng segment lỗi bằng cache | NOT IMPLEMENTED |
 | Cost thực 30/60/90 giây | NOT VERIFIED |
