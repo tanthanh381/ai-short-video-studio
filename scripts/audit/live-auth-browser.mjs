@@ -15,7 +15,7 @@
  */
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
-import { chromium, expect } from "playwright";
+import { chromium } from "playwright";
 
 const baseUrl = process.env.STUDIO_LIVE_URL?.trim();
 const email = process.env.STUDIO_QA_EMAIL?.trim();
@@ -55,6 +55,15 @@ page.on("response", (response) => {
 function check(name, passed, detail = undefined) {
   result.checks.push({ name, passed, ...(detail ? { detail } : {}) });
   assert.equal(passed, true, name);
+}
+
+async function waitUntilEnabled(locator, timeout = 120_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await locator.isEnabled()) return;
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`Timed out waiting for ${await locator.getAttribute("aria-label") || "button"} to become enabled`);
 }
 
 try {
@@ -106,7 +115,7 @@ try {
       await page.getByLabel("Ý tưởng hoặc chủ đề").fill("Một thói quen nhỏ giúp bạn bớt suy nghĩ quá nhiều mỗi ngày.");
       for (let step = 0; step < 5; step += 1) {
         const nextButton = page.getByRole("button", { name: "Tiếp tục", exact: true });
-        await expect(nextButton).toBeEnabled({ timeout: 120_000 });
+        await waitUntilEnabled(nextButton);
         await nextButton.click();
         await page.waitForTimeout(250);
       }
