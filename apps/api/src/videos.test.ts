@@ -165,9 +165,9 @@ describe("local model selection API", () => {
   it("stores per-task model choices in the project settings", async () => {
     const f = fixture();
     const response = await request(f.app).post("/v1/videos").set("Authorization", "Bearer test")
-      .send({ sourceText: script, settings: { textProvider: "ollama", mediaProvider: "local", localModels: { storyboard: "qwen2.5:3b", tts: "piper" } } });
+      .send({ sourceText: script, settings: { textProvider: "ollama", mediaProvider: "local", localModels: { storyboard: "qwen2.5:3b", tts: "vieneu" } } });
     expect(response.status).toBe(202);
-    expect((f.rpc.mock.calls[0]![1].p_settings as { localModels: unknown }).localModels).toEqual({ storyboard: "qwen2.5:3b", image: null, video: null, tts: "piper", transcribe: null });
+    expect((f.rpc.mock.calls[0]![1].p_settings as { localModels: unknown }).localModels).toEqual({ storyboard: "qwen2.5:3b", image: null, video: null, tts: "vieneu", transcribe: null });
   });
 
   it("rejects model names that could smuggle other values", async () => {

@@ -54,7 +54,6 @@ def build_machine(base, *, unet=b"unet-weights-v1"):
     write(local_ai / "bin/start-whisper.sh", "#!/bin/zsh\nwhisper", 0o755)
     write(local_ai / "bin/generate-image.sh", "# only on the main machine")
     write(local_ai / "vieneu_api.py", "# vieneu v1")
-    write(local_ai / "tts_api.py", "# tts v1")
     write(local_ai / "models/whisper/ggml-base.bin", b"whisper-weights")
     write(local_ai / "models/piper/voice.onnx", b"piper-voice")
     write(local_ai / "models/face/yunet.onnx", b"face")
@@ -212,11 +211,11 @@ class SyncSet(unittest.TestCase):
         cache = sync_manifest.HashCache()
         expected = sync_manifest.scan(self.roots, True, cache)
         local = dict(expected)
-        del local["toolkit/tts_api.py"]
+        del local["toolkit/vieneu_api.py"]
         local["code/local-tools/media_server.py"] = {**local["code/local-tools/media_server.py"], "sha256": "other"}
         local["code/local-tools/only_here.py"] = {"kind": "file", "size": 1, "sha256": "z", "exec": False}
         gaps = sync_manifest.diff(expected, local, True)
-        self.assertEqual(gaps["missing"], ["toolkit/tts_api.py"])
+        self.assertEqual(gaps["missing"], ["toolkit/vieneu_api.py"])
         self.assertEqual(gaps["changed"], ["code/local-tools/media_server.py"])
         # without the picture model those files are not expected
         self.assertFalse(any(key.startswith("models/image/") for key in sync_manifest.diff(expected, {}, False)["missing"]))

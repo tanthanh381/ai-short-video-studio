@@ -336,7 +336,8 @@ class LocalSpeechCaptionTests(unittest.TestCase):
                  patch.object(self.media.urllib.request, "urlopen") as request:
                 request.return_value.__enter__.return_value.read.return_value = b"PNG"
                 self.media.local_image("Young woman sitting on a park bench at dusk", "9:16", style=style)
-            prompts[style] = json.loads(request.call_args.args[0].data)["prompt"]
+            image_request = next(call.args[0] for call in reversed(request.call_args_list) if hasattr(call.args[0], "data"))
+            prompts[style] = json.loads(image_request.data)["prompt"]
         self.assertEqual(len(set(prompts.values())), 6)
         for style in ("historical", "ink", "watercolor", "paper-cut"):
             self.assertTrue(prompts[style].startswith(self.media.IMAGE_STYLES[style]))
@@ -435,7 +436,8 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         with patch.object(self.media, "image_server_state", return_value="ready"), \
              patch.object(self.media.urllib.request, "urlopen", return_value=ImageResponse()) as request:
             self.media.local_image("Young woman reading a book", "9:16", reference_image_base64="aW1hZ2U=")
-        payload = json.loads(request.call_args.args[0].data)
+        image_request = next(call.args[0] for call in reversed(request.call_args_list) if hasattr(call.args[0], "data"))
+        payload = json.loads(image_request.data)
         self.assertEqual(payload["referenceImage"], "aW1hZ2U=")
 
     def test_image_quality_guard_handles_vietnamese_human_prompts(self):

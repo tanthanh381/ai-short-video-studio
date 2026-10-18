@@ -46,7 +46,7 @@ class Fixture(unittest.TestCase):
         git(self.repo, "commit", "-q", "-m", "x")
         (self.repo / "untracked.txt").write_text("not committed")
         self.local_ai = root / "local-ai"
-        for folder in ("whisper", "piper", "vieneu-v3-turbo", "moss-audio-tokenizer-onnx", "face", "vieneu-cache", "image/hf-cache"):
+        for folder in ("whisper", "vieneu-v3-turbo", "moss-audio-tokenizer-onnx", "face", "vieneu-cache", "image/hf-cache"):
             (self.local_ai / "models" / folder).mkdir(parents=True)
         (self.local_ai / "models/whisper/ggml-base.bin").write_bytes(b"w" * 2048)
         (self.local_ai / "models/image/hf-cache/unet.safetensors").write_bytes(b"i" * 4096)
@@ -217,7 +217,7 @@ class Installer(Fixture):
         self.assertEqual(token_file.read_text(), "node-token-123")  # the same code the mini wrote to AI_NODES_TOKEN
         self.assertEqual(oct(token_file.stat().st_mode & 0o777), "0o600")
         local_ai = home / "Developer/local-ai"
-        for name in ("bin/start-vieneu.sh", "bin/start-tts.sh", "bin/start-whisper.sh", "bin/env.sh", "vieneu_api.py", "vieneu_tts.py", "tts_api.py"):
+        for name in ("bin/start-vieneu.sh", "bin/start-whisper.sh", "bin/env.sh", "vieneu_api.py", "vieneu_tts.py"):
             self.assertTrue((local_ai / name).exists(), name)
         self.assertTrue(os.access(local_ai / "bin/start-vieneu.sh", os.X_OK))
         self.assertTrue((local_ai / "output").is_dir())  # whisper-server writes its temporary files there
@@ -293,7 +293,6 @@ class Installer(Fixture):
             models = home / "Developer/local-ai/models"
             (models / "whisper").mkdir(parents=True)
             (models / "whisper/ggml-base.bin").write_bytes(b"w")
-            (models / "piper").mkdir()
             (models / "vieneu-v3-turbo").mkdir()
             unet = models / "image/hf-cache/hub/models--stabilityai--sdxl-turbo/snapshots/abc123/unet"
             unet.mkdir(parents=True)

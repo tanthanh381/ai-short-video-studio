@@ -1536,7 +1536,7 @@ def tts_engines_up():
 # share a video, so a change in any of them (not only in the two servers) separates the fingerprints.
 NODE_STATUS_SOURCES = [
     Path(__file__).resolve(), Path(__file__).with_name("image_server.py"), Path(__file__).with_name("face_detail.py"),
-    LOCAL_AI_ROOT / "vieneu_api.py", LOCAL_AI_ROOT / "vieneu_tts.py", LOCAL_AI_ROOT / "tts_api.py",
+    LOCAL_AI_ROOT / "vieneu_api.py", LOCAL_AI_ROOT / "vieneu_tts.py",
 ]
 _MODELS_DIGEST_CACHE = {"at": -1e9, "value": ""}
 
