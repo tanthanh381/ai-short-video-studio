@@ -124,6 +124,10 @@ export const sceneSchema = z.object({
   order: z.number().int().min(0),
   narration: z.string().min(1).max(2000),
   imagePrompt: z.string().min(1).max(3000),
+  /** Vietnamese, human-readable scene description shown/edited in the studio. The English
+   * imagePrompt stays the source for the image model; this is for the creator to read. Empty
+   * on scenes created before this field existed (and on the one-click/SRT path). */
+  description: z.string().max(2000).default(""),
   estimatedDurationMs: z.number().int().min(1000).max(120000),
   actualDurationMs: z
     .number()
@@ -279,6 +283,7 @@ export const updateSceneSchema = sceneSchema
   .pick({
     narration: true,
     imagePrompt: true,
+    description: true,
     subtitles: true,
   })
   .partial();

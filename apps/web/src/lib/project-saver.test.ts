@@ -4,7 +4,7 @@ import { ProjectSaver, isStaleSave, type SaveState } from "./project-saver";
 import { rebaseEdits } from "./project-merge";
 
 const scene = (n: number, over: Partial<Scene> = {}): Scene => ({
-  id: `00000000-0000-4000-8000-00000000000${n}`, order: n - 1, narration: `Lời đọc ${n}`, imagePrompt: `ảnh ${n}`, estimatedDurationMs: 3000,
+  id: `00000000-0000-4000-8000-00000000000${n}`, order: n - 1, narration: `Lời đọc ${n}`, imagePrompt: `ảnh ${n}`, description: "", estimatedDurationMs: 3000,
   actualDurationMs: 3000, imagePath: `img${n}`, videoPath: null, audioPath: `aud${n}`, thumbnailUrl: null, mediaStatus: "ready", errorMessage: null,
   annotationJson: null, subtitles: [], ...over,
 });

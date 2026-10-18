@@ -90,6 +90,7 @@ for (const item of cases) {
     const scenes: Scene[] = storyboard.scenes.map((scene, order) => ({
       id: crypto.randomUUID(), order, narration: scene.narration,
       imagePrompt: withCast(cast, vietnameseByDefault(youthfulSiblings(scene.imagePrompt), nationality), scene.narration, cardMode),
+      description: "",
       estimatedDurationMs: 3000, actualDurationMs: null, imagePath: null, videoPath: null, audioPath: null, thumbnailUrl: null,
       mediaStatus: "pending", errorMessage: null, annotationJson: null, subtitles: [],
     } as Scene));

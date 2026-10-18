@@ -82,6 +82,8 @@ export interface StoryboardProvider {
   writeKeyPoints?(input: { narrations: string[]; title: string }): Promise<string[] | null>;
   /** Rewrite one scene as an English image prompt when the storyboard model answered in Vietnamese. */
   translateImagePrompt?(input: { narration: string; draft: string; glossary: string; model?: string | null }): Promise<string>;
+  /** One short Vietnamese sentence describing what a scene's (English) image prompt shows, for the creator to read/edit. */
+  describeSceneVietnamese?(input: { imagePrompt: string; narration: string; model?: string | null }): Promise<string>;
 }
 
 /** What the storyboard step noticed on the way, for the caller to log; it never changes the result. */

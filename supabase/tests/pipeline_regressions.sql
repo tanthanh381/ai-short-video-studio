@@ -56,7 +56,7 @@ begin
   v_project_json := jsonb_build_object('title','Atomic rollback QC','sourceText','Kịch bản nguyên văn.',
     'inputMode','full-script','hook','','suggestedTitle','','suggestedDescription','','settings',v_settings);
   select jsonb_agg(to_jsonb(s) order by s.scene_order,s.id) into v_scenes_json from (
-    select id,scene_order,narration,image_prompt,estimated_duration_ms,actual_duration_ms,
+    select id,scene_order,narration,image_prompt,description,estimated_duration_ms,actual_duration_ms,
       image_path,audio_path,media_status,error_message,subtitles from public.scenes where project_id=v_project
   ) s;
   perform public.save_project(v_project,v_user,date_trunc('milliseconds',v_timestamp),v_project_json,v_scenes_json);

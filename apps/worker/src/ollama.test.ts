@@ -315,3 +315,20 @@ describe("OllamaStoryboardAdapter.writeScript", () => {
     expect(system).toMatch(/narrator who says 'tôi'/);
   });
 });
+
+describe("OllamaStoryboardAdapter.describeSceneVietnamese", () => {
+  it("returns the Vietnamese one-liner the model gives for an English image prompt", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ response: JSON.stringify({ description: "Người vẫy tay bên cửa sổ lúc bình minh" }) }))));
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b");
+    expect(await adapter.describeSceneVietnamese({ imagePrompt: "A person waving by a window at dawn", narration: "Chào buổi sáng" }))
+      .toBe("Người vẫy tay bên cửa sổ lúc bình minh");
+  });
+
+  it("falls back to empty string on a bad or too-short answer", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ response: JSON.stringify({ description: "ngắn" }) }))));
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b");
+    expect(await adapter.describeSceneVietnamese({ imagePrompt: "x", narration: "y" })).toBe("");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
+    expect(await adapter.describeSceneVietnamese({ imagePrompt: "x", narration: "y" })).toBe("");
+  });
+});

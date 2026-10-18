@@ -3,7 +3,7 @@ import { DEFAULT_PROJECT_SETTINGS, type Project, type Scene } from "@studio/shar
 import { withScriptFromScenes } from "./script-sync";
 
 const scene = (n: number, narration: string): Scene => ({
-  id: `00000000-0000-4000-8000-00000000000${n}`, order: n - 1, narration, imagePrompt: "x", estimatedDurationMs: 3000, actualDurationMs: null,
+  id: `00000000-0000-4000-8000-00000000000${n}`, order: n - 1, narration, imagePrompt: "x", description: "", estimatedDurationMs: 3000, actualDurationMs: null,
   imagePath: null, videoPath: null, audioPath: null, thumbnailUrl: null, mediaStatus: "pending", errorMessage: null, annotationJson: null, subtitles: [],
 });
 const project = (scenes: Scene[], sourceText = "Ý tưởng ban đầu của tôi"): Project => ({

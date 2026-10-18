@@ -20,6 +20,7 @@ export function mapScene(row: Row): Scene {
     order: Number(row.scene_order),
     narration: String(row.narration),
     imagePrompt: String(row.image_prompt),
+    description: row.description == null ? "" : String(row.description),
     estimatedDurationMs: Number(row.estimated_duration_ms),
     actualDurationMs:
       row.actual_duration_ms == null ? null : Number(row.actual_duration_ms),

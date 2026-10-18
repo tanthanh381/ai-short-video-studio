@@ -78,6 +78,7 @@ function scene(order: number, durationMs: number): Scene {
     order,
     narration: order === 0 ? "Xin chào Việt Nam" : "Một phút sống chậm",
     imagePrompt: "Ảnh màu dùng kiểm thử",
+    description: "",
     estimatedDurationMs: durationMs,
     actualDurationMs: durationMs,
     imagePath: order === 0 ? "one.png" : "two.png",

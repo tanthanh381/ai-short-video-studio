@@ -17,6 +17,7 @@ function sampleProject(): Project {
       narration: "Có những lúc, đi chậm lại không phải là tụt phía sau.",
       imagePrompt:
         "Một người Việt trẻ đứng bên cửa sổ lúc bình minh, ánh sáng dịu, minh họa điện ảnh, khung dọc",
+      description: "Người trẻ đứng bên cửa sổ lúc bình minh, ánh sáng dịu nhẹ.",
       estimatedDurationMs: 6500,
       actualDurationMs: null,
       imagePath: null,
@@ -35,6 +36,7 @@ function sampleProject(): Project {
         "Đó là lúc ta đủ tĩnh để nhìn thấy điều gì thật sự quan trọng.",
       imagePrompt:
         "Con đường nhỏ qua cánh đồng Việt Nam trong sương sớm, không khí bình yên, khung dọc",
+      description: "Con đường nhỏ băng qua cánh đồng trong sương sớm, yên bình.",
       estimatedDurationMs: 7500,
       actualDurationMs: null,
       imagePath: null,
@@ -52,6 +54,7 @@ function sampleProject(): Project {
       narration: "Một phút thở sâu hôm nay có thể cứu cả một ngày vội vã.",
       imagePrompt:
         "Tách trà bốc khói trên bàn gỗ, nắng sớm, bàn tay nghỉ ngơi, cảm giác chữa lành, khung dọc",
+      description: "Tách trà bốc khói trên bàn gỗ dưới nắng sớm, cảm giác thư thái.",
       estimatedDurationMs: 6500,
       actualDurationMs: null,
       imagePath: null,

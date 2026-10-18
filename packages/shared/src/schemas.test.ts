@@ -3,7 +3,9 @@ import {
   createProjectSchema,
   createVideoSchema,
   projectSettingsSchema,
+  sceneSchema,
   subtitleCueSchema,
+  updateSceneSchema,
   whiteboardAnnotationSchema,
 } from "./schemas";
 import { DEFAULT_PROJECT_SETTINGS } from "./index";
@@ -84,5 +86,30 @@ describe("schema du an", () => {
     expect(annotation.elements[0]?.reveal.protectedRegions).toEqual([]);
     expect(() => whiteboardAnnotationSchema.parse({ ...annotation, canvas: { width: 100_001, height: 1920 } })).toThrow();
     expect(() => whiteboardAnnotationSchema.parse({ ...annotation, elements: [{ ...annotation.elements[0], extra: true }] })).toThrow();
+  });
+});
+
+describe("sceneSchema Vietnamese description", () => {
+  const base = {
+    id: "00000000-0000-4000-8000-000000000001",
+    order: 0,
+    narration: "Xin chào",
+    imagePrompt: "A person waving, morning light",
+    estimatedDurationMs: 3000,
+  };
+
+  it("defaults description to empty for scenes saved before the field existed", () => {
+    const scene = sceneSchema.parse(base);
+    expect(scene.description).toBe("");
+  });
+
+  it("round-trips a Vietnamese description and rejects one over 2000 chars", () => {
+    expect(sceneSchema.parse({ ...base, description: "Người vẫy tay trong nắng sớm" }).description)
+      .toBe("Người vẫy tay trong nắng sớm");
+    expect(() => sceneSchema.parse({ ...base, description: "a".repeat(2001) })).toThrow();
+  });
+
+  it("lets a scene update carry the description", () => {
+    expect(updateSceneSchema.parse({ description: "Mô tả mới" }).description).toBe("Mô tả mới");
   });
 });

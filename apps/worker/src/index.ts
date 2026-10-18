@@ -23,7 +23,7 @@ import { PooledMediaAdapter } from "./pooled-media";
 import { groupWords, OpenAIAdapter } from "./openai";
 import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE, paperStagePrompt, storyNationality, usesPaperStage, usesStoryCard, withNationality } from "./card-layout";
 import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
-import { alignSpeechToScript, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, imageAspectFor, vietnameseByDefault, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
+import { alignSpeechToScript, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, fallbackImagePrompt, imageAspectFor, isEnglishPrompt, vietnameseByDefault, visualGlossary, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { assertDiskSpace } from "./disk-space";
 import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
@@ -338,6 +338,7 @@ async function getProject(id: string): Promise<Project> {
       order: s.scene_order,
       narration: s.narration,
       imagePrompt: s.image_prompt,
+      description: s.description ?? "",
       estimatedDurationMs: s.estimated_duration_ms,
       actualDurationMs: s.actual_duration_ms,
       imagePath: s.image_path,
@@ -398,6 +399,7 @@ async function storyboard(job: JobRow, project: Project) {
       scene_order: i,
       narration: e.text,
       image_prompt: e.text,
+      description: "",
       estimated_duration_ms: e.endMs - e.startMs,
       media_status: "pending",
       subtitles: [{ id: crypto.randomUUID(), startMs: 0, endMs: e.endMs - e.startMs, text: e.text }],
@@ -526,11 +528,28 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
   if (project.settings.layoutTemplate !== "story-card") suggestedTitle = caption.title || suggestedTitle;
   if (providerName === "ollama" && ollama) await ollama.unload(project.settings.localModels.storyboard);
   await local(() => setProgress(job.id, job.job_type === "create_video" ? 18 : 70, "Đang lưu storyboard"));
+  const imagePrompts = result.scenes.map((scene) =>
+    withCast(cast, vietnameseByDefault(youthfulSiblings(scene.imagePrompt), nationality), scene.narration, cardMode));
+  // Reverse-translate each English image prompt into a Vietnamese description the creator reads/edits.
+  // Best-effort and capped at 4 in flight so it never dominates the storyboard step; "" on any failure
+  // (and "" when no local Ollama node is available), which the UI shows as an empty, editable field.
+  const descriptions: string[] = new Array(result.scenes.length).fill("");
+  if (ollama) {
+    let cursor = 0;
+    await Promise.all(Array.from({ length: Math.min(4, result.scenes.length) }, async () => {
+      for (let index = cursor++; index < result.scenes.length; index = cursor++) {
+        descriptions[index] = await ollama
+          .describeSceneVietnamese({ imagePrompt: imagePrompts[index]!, narration: result.scenes[index]!.narration, model: project.settings.localModels.storyboard })
+          .catch(() => "");
+      }
+    }));
+  }
   const rows = result.scenes.map((scene, index) => ({
     project_id: project.id,
     scene_order: index,
     narration: scene.narration,
-    image_prompt: withCast(cast, vietnameseByDefault(youthfulSiblings(scene.imagePrompt), nationality), scene.narration, cardMode),
+    image_prompt: imagePrompts[index]!,
+    description: descriptions[index] ?? "",
     estimated_duration_ms: scene.estimatedDurationMs,
     media_status: "pending",
     subtitles: [],
@@ -580,6 +599,20 @@ async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project
 }
 
 async function drawScenePicture(provider: MediaProvider, scene: Scene, project: Project, job: JobRow, referenceImageBase64?: string | null): Promise<Uint8Array> {
+  // The studio edits the Vietnamese `description`; on a description edit the web copies that text into
+  // `imagePrompt`, so a non-English imagePrompt here means "re-derive the English prompt from the edit".
+  // A fresh storyboard (already English) and an advanced English override both skip this, so the image
+  // model always receives English without the creator having to write it.
+  if (scene.description?.trim() && !isEnglishPrompt(scene.imagePrompt)) {
+    const glossary = visualGlossary(`${project.title}\n${scene.narration}`);
+    const nationality = storyNationality(`${project.title}\n${project.sourceText}`);
+    const translated = await pool
+      .runOne("llm", (node) => ollamaOn(node.id).translateImagePrompt({ narration: scene.narration, draft: scene.description, glossary, model: project.settings.localModels.storyboard }))
+      .catch(() => "");
+    const english = translated && isEnglishPrompt(translated) ? translated : fallbackImagePrompt(scene.narration, glossary, nationality);
+    scene.imagePrompt = english;
+    await updateScene(scene.id, { image_prompt: english });
+  }
   const prompt = buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project), visualPresetPrompt(project.settings.visualPreset));
   const options = {
     ...project.settings.localModels,

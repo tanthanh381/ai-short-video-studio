@@ -2235,14 +2235,24 @@ function SceneCard({
           onChange={(e) => onChange({ ...scene, narration: e.target.value })}
         />
         <label className="scene-prompt">
-          <span>Mô tả ảnh</span>
+          <span>Mô tả cảnh</span>
           <textarea
             rows={2}
-            aria-label={`Mô tả ảnh cảnh ${scene.order + 1}`}
+            aria-label={`Mô tả cảnh ${scene.order + 1}`}
+            placeholder="Mô tả hình ảnh của cảnh bằng tiếng Việt…"
+            value={scene.description}
+            onChange={(e) => onChange({ ...scene, description: e.target.value })}
+          />
+        </label>
+        <details className="scene-advanced-prompt">
+          <summary>Prompt vẽ ảnh (AI · tiếng Anh)</summary>
+          <textarea
+            rows={2}
+            aria-label={`Prompt vẽ ảnh cảnh ${scene.order + 1}`}
             value={scene.imagePrompt}
             onChange={(e) => onChange({ ...scene, imagePrompt: e.target.value })}
           />
-        </label>
+        </details>
         {scene.errorMessage && (
           <div className="scene-error" role="alert">
             <CircleAlert size={15} aria-hidden="true" />
@@ -2683,11 +2693,19 @@ function StudioPage() {
     const scenes = [...project.scenes];
     const previous = scenes[index];
     const narrationChanged = previous?.narration !== scene.narration;
-    const imageChanged = previous?.imagePrompt !== scene.imagePrompt;
+    const imagePromptChanged = previous?.imagePrompt !== scene.imagePrompt;
+    const descriptionChanged = previous?.description !== scene.description;
+    // A direct (advanced) English prompt edit wins; otherwise a Vietnamese description edit re-derives the
+    // prompt. Copying the Vietnamese text into imagePrompt is the signal the worker translates back to English
+    // before drawing, so the image model always gets English. The advanced field briefly shows the Vietnamese
+    // text until regeneration writes the English prompt back.
+    const nextImagePrompt = imagePromptChanged ? scene.imagePrompt : descriptionChanged ? scene.description : scene.imagePrompt;
+    const imageEdited = imagePromptChanged || descriptionChanged;
     scenes[index] = {
       ...scene,
+      imagePrompt: nextImagePrompt,
       ...(narrationChanged ? { audioPath: null, actualDurationMs: null, subtitles: [], mediaStatus: "pending" as const } : {}),
-      ...(imageChanged ? { imagePath: null, videoPath: null, mediaStatus: "pending" as const } : {}),
+      ...(imageEdited ? { imagePath: null, videoPath: null, mediaStatus: "pending" as const } : {}),
     };
     change(withScriptFromScenes({ ...project, scenes, status: "draft" }));
   }
@@ -2711,6 +2729,7 @@ function StudioPage() {
       order: project.scenes.length,
       narration: "Nhập lời đọc cho cảnh mới",
       imagePrompt: "Mô tả hình ảnh minh họa cho cảnh",
+      description: "",
       estimatedDurationMs: 5000,
       actualDurationMs: null,
       imagePath: null,
