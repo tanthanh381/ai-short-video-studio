@@ -14,8 +14,9 @@ const missingObjectError = () => ({
 const userId = "8d5f3a6e-0e53-4c45-9d3a-1d6dbf5a1a11";
 const projectId = "3b968fb5-a00d-4b9d-8bd5-638598d9ef4d";
 const SECRET = "a-test-secret-that-is-longer-than-thirty-two-characters";
-const OPENAI_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd";
-const CLAUDE_KEY = "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-wxyz";
+// Fabricated placeholder keys for tests only (no real secret). Deliberately not in the sk-proj-/sk-ant-api03- shape so secret scanners do not flag them.
+const OPENAI_KEY = "sk-fake-openai-key-for-tests-not-a-secret-abcd";
+const CLAUDE_KEY = "sk-ant-fake-claude-key-for-tests-not-secret-wxyz";
 const now = "2026-10-10T10:00:00.000Z";
 const sceneRow = { id: "5f0f7f64-4d5e-4c4e-8f55-0f6d4a8d2c11", project_id: projectId, scene_order: 0, narration: "Một câu chuyện ngắn.", image_prompt: "A quiet street",
   estimated_duration_ms: 4000, actual_duration_ms: null, image_path: null, video_path: null, audio_path: null, media_status: "pending", error_message: null, subtitles: [], annotation_json: null };
