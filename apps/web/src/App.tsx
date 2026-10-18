@@ -3065,7 +3065,9 @@ function StudioPage() {
   const renderedNarration = project.inputMode === "idea" && project.scenes.length
     ? project.scenes.map((scene) => scene.narration).join(" ")
     : project.sourceText;
-  const publishReadiness = useMemo(() => evaluatePublishReadiness({
+  // Plain computation, not useMemo: it sits after the early returns above, so a hook here would be called
+  // conditionally and crash the page ("rendered more hooks than during the previous render").
+  const publishReadiness = evaluatePublishReadiness({
     completed: project.status === "completed" && !processing && saved,
     hasResult: Boolean(result),
     width: result?.width ?? null,
@@ -3074,7 +3076,7 @@ function StudioPage() {
     contentScore: evaluateContentQuality(renderedNarration).score,
     subtitlesEnabled: project.settings.subtitle.enabled,
     scenes: project.scenes,
-  }), [project, processing, renderedNarration, result, saved]);
+  });
   return (
     <div className="studio">
       <div className="studio-top">
