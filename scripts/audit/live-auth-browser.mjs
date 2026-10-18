@@ -117,7 +117,10 @@ try {
         const templateHeading = page.getByRole("heading", { name: "Chọn mẫu video", exact: true });
         if (await templateHeading.count()) {
           const templateOptions = page.getByRole("radio");
-          if (await templateOptions.count()) await templateOptions.first().click();
+          if (await templateOptions.count()) {
+            await waitUntilEnabled(templateOptions.first());
+            await templateOptions.first().click();
+          }
         }
         const nextButton = page.getByRole("button", { name: "Tiếp tục", exact: true });
         await waitUntilEnabled(nextButton);
