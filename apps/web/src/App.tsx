@@ -2082,7 +2082,7 @@ function WizardPage() {
         {step === "review" && (
           <section className="wizard-section">
             <h1 id="wizard-heading">Xem lại &amp; tạo video</h1>
-            <p className="wizard-lead">Kiểm tra nhanh rồi bấm Tạo video. Bạn có thể quay lại từng bước để sửa.</p>
+            <p className="wizard-lead">Kiểm tra nhanh rồi bấm Tạo video hoàn chỉnh. Studio sẽ tự chia cảnh, tạo media, đồng bộ phụ đề và xuất MP4.</p>
             <div className={`content-quality-card ${contentQuality.score >= 80 ? "is-good" : "is-review"}`} role="status" aria-live="polite">
               <div className="content-quality-head">
                 <span><Sparkles size={16} /> Content check</span>
@@ -2132,7 +2132,7 @@ function WizardPage() {
       <div className="wizard-nav">
         <Button type="button" variant="secondary" disabled={busy || step === "input"} onClick={goBack}><ArrowLeft size={16} /> Quay lại</Button>
         {step === "review"
-          ? <Button type="button" busy={busy} disabled={isDemo} onClick={() => void createVideo()}><Clapperboard size={18} /> Tạo video</Button>
+          ? <Button type="button" busy={busy} disabled={isDemo} onClick={() => void createVideo()} title="Tự động thực hiện toàn bộ quy trình và xuất MP4"><Clapperboard size={18} /> Tạo video hoàn chỉnh</Button>
           : <Button type="button" busy={busy} disabled={(step === "input" && !canContinue) || (step === "template" && !templateId)} onClick={() => void goNext()}>Tiếp tục <ChevronRight size={16} /></Button>}
       </div>
     </div>
@@ -3160,8 +3160,8 @@ function StudioPage() {
           </span>
         </div>
         <div className="studio-actions">
-          <Button onClick={() => void createVideo()} busy={busyAction === "create_video"} disabled={processing || Boolean(busyAction)}>
-            <Video size={17} /> {failedJob ? "Tiếp tục tạo video" : "Tạo video"}
+          <Button onClick={() => void createVideo()} busy={busyAction === "create_video"} disabled={processing || Boolean(busyAction)} title="Tự động chia cảnh, tạo ảnh, giọng đọc, phụ đề và xuất MP4">
+            <Video size={17} /> {failedJob ? "Tiếp tục tạo video" : "Tạo video hoàn chỉnh"}
           </Button>
           <Button variant="secondary" aria-expanded={optionsOpen} onClick={() => setOptionsOpen(!optionsOpen)}>
             <Settings size={17} /> Tùy chọn
@@ -3175,9 +3175,10 @@ function StudioPage() {
               event.currentTarget.querySelector("summary")?.focus();
             }}
           >
-            <summary aria-label="Thêm thao tác" title="Thêm thao tác"><MoreHorizontal size={18} /></summary>
+            <summary aria-label="Mở công cụ nâng cao" title="Các bước riêng lẻ dành cho người cần kiểm soát từng khâu"><MoreHorizontal size={18} /><span>Nâng cao</span></summary>
             <div>
-              <p className="menu-label">Chỉnh từng bước</p>
+              <p className="menu-label">Chạy riêng từng bước</p>
+              <p className="menu-help">Luồng chính đã tự động làm toàn bộ. Chỉ dùng các nút dưới đây khi cần kiểm tra hoặc sửa riêng một khâu.</p>
           <Button
             variant="secondary"
             onClick={() => void runAction("storyboard")}
@@ -3190,7 +3191,7 @@ function StudioPage() {
             }
           >
             <WandSparkles size={17} />
-            Chia cảnh
+            Chia cảnh để chỉnh sửa
           </Button>
           <Button
             variant="secondary"
@@ -3212,7 +3213,7 @@ function StudioPage() {
             }
           >
             <Sparkles size={17} />
-            Tạo media
+            Tạo ảnh &amp; giọng cho cảnh
           </Button>
           <Button
             variant="secondary"
@@ -3221,7 +3222,7 @@ function StudioPage() {
             disabled={processing || Boolean(busyAction) || (!isDemo && (!project.scenes.length || !capabilities?.render))}
             title={!project.scenes.length ? "Hãy tạo ít nhất một cảnh trước" : undefined}
           >
-            <Video size={17} /> Xuất video
+            <Video size={17} /> Xuất MP4 từ media có sẵn
           </Button>
               <p className="menu-label">Lưu</p>
               <Button
@@ -3358,7 +3359,7 @@ function StudioPage() {
               <p>
                 {processing
                   ? "Studio đang chia kịch bản thành các cảnh. Cảnh thật sẽ xuất hiện khi bước này hoàn tất."
-                  : "Chia cảnh trước để xem và sửa lời đọc từng cảnh, hoặc bấm Tạo video ở trên để studio làm một lèo từ đầu đến cuối."}
+                  : "Chia cảnh trước để xem và sửa lời đọc từng cảnh, hoặc bấm Tạo video hoàn chỉnh ở trên để Studio tự làm từ đầu đến cuối."}
               </p>
               <Button
                 onClick={() => void runAction("storyboard")}
@@ -3376,7 +3377,7 @@ function StudioPage() {
             <div className="scene-list">
               {project.status === "draft" && !processing && (
                 <Notice tone="info">
-                  Sửa lời đọc hoặc mô tả ảnh ngay trong từng ô; mọi thay đổi tự lưu. Xong bấm <b>Tạo video</b>: chỉ các cảnh bạn đã sửa được tạo lại ảnh và giọng, cảnh còn lại giữ nguyên.
+                  Sửa lời đọc hoặc mô tả ảnh ngay trong từng ô; mọi thay đổi tự lưu. Xong bấm <b>Tạo video hoàn chỉnh</b>: chỉ các cảnh bạn đã sửa được tạo lại ảnh và giọng, cảnh còn lại giữ nguyên.
                 </Notice>
               )}
               {project.scenes.map((scene, index) => (

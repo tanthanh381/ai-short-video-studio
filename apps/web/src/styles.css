@@ -1026,19 +1026,26 @@ a:focus-visible {
 .manual-actions {
   position: relative;
   flex: none;
-  width: 40px;
+  width: auto;
 }
 .manual-actions summary {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
+  gap: 5px;
+  width: auto;
   height: 40px;
+  padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--text-muted);
   list-style: none;
+}
+.manual-actions summary span {
+  display: inline;
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 .manual-actions summary::-webkit-details-marker { display: none; }
 .manual-actions summary:hover,
@@ -1053,6 +1060,13 @@ a:focus-visible {
   color: var(--text-muted);
 }
 .manual-actions .menu-label + .button { margin-top: -2px; }
+.manual-actions .menu-help {
+  max-width: 260px;
+  margin: -2px 2px 4px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
 .manual-actions .button { justify-content: flex-start; }
 .manual-actions .auto-save { padding: 4px 2px; }
 .manual-actions > div {
@@ -2173,12 +2187,14 @@ a:focus-visible {
     min-height: 44px;
   }
   .manual-actions {
-    width: 44px;
+    width: auto;
   }
   .manual-actions summary {
     width: 44px;
     height: 44px;
+    padding: 0;
   }
+  .manual-actions summary span { display: none; }
   .manual-actions > div {
     top: auto;
     bottom: calc(100% + 8px);
