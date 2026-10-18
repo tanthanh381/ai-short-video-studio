@@ -50,7 +50,16 @@ try {
   const protectedRoutes = ["", "new", "library", "settings", "system"];
   for (const route of protectedRoutes) {
     await page.goto(new URL(route, root).toString(), { waitUntil: "networkidle", timeout: 30_000 });
-    check(`protected-route:${route || "home"}`, !page.url().includes("/login"));
+    const currentUrl = new URL(page.url());
+    const storageKeys = await page.evaluate(() => ({
+      local: Object.keys(localStorage).filter((key) => key.startsWith("sb-")).length,
+      session: Object.keys(sessionStorage).length,
+    }));
+    check(
+      `protected-route:${route || "home"}`,
+      !currentUrl.pathname.endsWith("/login"),
+      `path=${currentUrl.pathname}; authStorage=${storageKeys.local}; sessionStorage=${storageKeys.session}`,
+    );
   }
 
   if (process.env.STUDIO_QA_GENERATE === "1") {
