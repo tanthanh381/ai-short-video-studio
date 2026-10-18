@@ -3,8 +3,9 @@ import { cleanApiKey, keyFormatError, lastFour, maskedKey } from "./api-keys";
 import { emptyVault, isMissingStorageObject, openKey, parseVault, sealKey, summarizeVault, withKey, withoutKey } from "./secret-box";
 
 const SECRET = "test-secret-with-more-than-thirty-two-characters";
-const OPENAI_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd";
-const CLAUDE_KEY = "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-wxyz";
+// Fabricated placeholder keys for tests only (no real secret). Deliberately not in the sk-proj-/sk-ant-api03- shape so secret scanners do not flag them.
+const OPENAI_KEY = "sk-fake-openai-key-for-tests-not-a-secret-abcd";
+const CLAUDE_KEY = "sk-ant-fake-claude-key-for-tests-not-secret-wxyz";
 
 describe("sealing the owner's own API keys", () => {
   it("opens with the same secret, user and provider and gives the key back", () => {
@@ -79,7 +80,7 @@ describe("checking a pasted key before anything is sent", () => {
     expect(keyFormatError("anthropic", OPENAI_KEY)).toMatch(/bắt đầu bằng "sk-ant-"/);
     expect(keyFormatError("openai", CLAUDE_KEY)).toMatch(/khóa của Claude/);
     expect(keyFormatError("openai", "sk-short")).toMatch(/độ dài/);
-    expect(keyFormatError("openai", "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789$%^")).toMatch(/chỉ gồm chữ, số/);
+    expect(keyFormatError("openai", "sk-fake-key-with-bad-chars-0123456789$%^")).toMatch(/chỉ gồm chữ, số/);
     for (const bad of ["sk-short", "hunter2-hunter2-hunter2-hunter2-hunter2"]) expect(keyFormatError("openai", bad)).not.toContain(bad);
   });
 

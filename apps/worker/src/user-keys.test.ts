@@ -7,8 +7,9 @@ import { AnthropicStoryboardAdapter } from "./anthropic";
 import { OpenAIAdapter, providerErrorMessage } from "./openai";
 
 const SECRET = "a-test-secret-that-is-longer-than-thirty-two-characters";
-const OPENAI_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd";
-const CLAUDE_KEY = "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-wxyz";
+// Fabricated placeholder keys for tests only (no real secret). Deliberately not in the sk-proj-/sk-ant-api03- shape so secret scanners do not flag them.
+const OPENAI_KEY = "sk-fake-openai-key-for-tests-not-a-secret-abcd";
+const CLAUDE_KEY = "sk-ant-fake-claude-key-for-tests-not-secret-wxyz";
 
 /** What the real Supabase client returns for a file that is not there: HTTP 400, message "{}", the 404 only in the body. */
 const missingObjectError = () => ({
