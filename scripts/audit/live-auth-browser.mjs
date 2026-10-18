@@ -98,7 +98,10 @@ try {
 
   if (process.env.STUDIO_QA_GENERATE === "1") {
     await page.goto(new URL("new", root).toString(), { waitUntil: "networkidle", timeout: 30_000 });
-    check("new-video-flow-visible", await page.getByRole("heading", { name: /Tạo video/i }).count() > 0);
+    check(
+      "new-video-flow-visible",
+      await page.getByRole("heading", { name: /Bạn muốn kể điều gì\?|Chọn mẫu video|Tạo video/i }).count() > 0,
+    );
     // Deliberately stop before submission. Generation requires an explicit,
     // separately reviewed test case so a CI smoke run cannot create jobs by accident.
   }
