@@ -771,7 +771,7 @@ export function visualPromptFlaws(narration: string, prompt: string, cast = ""):
   if (/\bquestion mark\b/u.test(text)) flaws++;
   if (/\b(?:thought bubble|label appears|written words?|text appears|text overlay|icon)\b/u.test(text)) flaws++;
   if (/\b(?:blurry|faded|visible|readable) text\b|\btext written\b/u.test(text)) flaws++;
-  if (/\b(?:labeled|labelled|displaying text|displaying polished text|bullet points?|suggestions?|readable screen|written on|words on|numbers on|ai interface|branded interface)\b/iu.test(text)) flaws++;
+  if (/\b(?:labeled|labelled|displaying text|displaying polished text|screen showing|screen displays?|showing text|text summary|bullet points?|suggestions?|readable screen|written on|words on|numbers on|ai interface|branded interface|rows of .*text)\b/iu.test(text)) flaws++;
   if (/\b(?:racing thoughts?|floating .*scribbles|shadow growing)\b/u.test(text)) flaws++;
   if (/\bfloating (?:pastel )?(?:shapes?|symbols?|icons?)\b/u.test(text)) flaws++;
   if (/\bfloating .*\b(?:handwritten|letters?|characters?)\b/u.test(text)) flaws++;

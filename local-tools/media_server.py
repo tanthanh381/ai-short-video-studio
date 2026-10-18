@@ -280,6 +280,10 @@ def clean_image_prompt(prompt):
     text = text.encode("ascii", "ignore").decode()
     # SDXL paints gibberish ("CLOSED CE") on anything that implies lettering; the picture reads better without it.
     text = re.sub(r"\b(?:signs?|signboards?|billboards?|banners?|posters?|newspapers?|neon|lettering)\b", "", text, flags=re.IGNORECASE)
+    # Keep the subject/action, but neutralize common model-output wording that makes Turbo draw fake UI or
+    # oversized document text. The storyboard validator catches these prompts too; this is the final local guard.
+    text = re.sub(r"\b(?:showing|displaying|contains?)\s+(?:[a-z]+\s+){0,5}(?:text|words?|letters?|numbers?|writing)\b", "blank screen", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:rows? of|list of)\s+(?:[a-z]+\s+){0,4}(?:text|words?|letters?|numbers?)\b", "blank screen", text, flags=re.IGNORECASE)
     text = re.sub(r"\bclosed\b", "quiet", text, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip(" .,")
     if not text:
@@ -586,6 +590,12 @@ FACE_SUBJECT_RE = re.compile(
     r"king|queen|princess|prince|lady|gentleman|character|customers?|vendors?|chefs?|drivers?)\b",
     re.I,
 )
+# Face redraw is a targeted portrait repair, not a generic human-scene enhancer. Running it on every prompt that
+# mentions a person made desk/document scenes drift toward repeated face close-ups and textured skin.
+FACE_DETAIL_REQUEST_RE = re.compile(
+    r"\b(?:portrait|headshot|close[- ]up portrait|detailed face|facial features|symmetrical eyes|face close[- ]up)\b",
+    re.I,
+)
 NATIONALITY_RE = re.compile(r"\b(Vietnamese|Japanese|Korean|Chinese|Thai|Asian|Indian|African|European|American)\b", re.I)
 
 
@@ -658,6 +668,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     is_flat = style == "flat"
     stylized = style in STYLIZED_IMAGE_STYLES
     is_human = has_human_subject(clean)
+    face_focus = bool(FACE_DETAIL_REQUEST_RE.search(clean))
     anatomy = (
         "one person only, one face, two aligned eyes, symmetrical natural facial features, natural skin texture, "
         "anatomically correct hands, natural body proportions, complete limbs, "
@@ -666,10 +677,14 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         else ""
     )
     anatomy_prefix = f", {anatomy}" if anatomy else ""
-    human_detail = ", natural skin, detailed face" if is_human and not stylized else ""
+    # Do not put face-focused language in every human scene: SDXL-Turbo then turns a person typing or
+    # checking a document into a repeated headshot. Portrait-specific detail belongs only to portrait beats.
+    human_detail = ", natural skin, detailed face" if is_human and not stylized and face_focus else ""
     nonhuman_focus = "" if (is_human or stylized) else ", the described object or environment is the main subject, no people, no human figures, no face"
     flat_guard = ", only the described characters, no crowd" if is_flat and is_human else ""
-    styled = f"{IMAGE_STYLES[style]}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, {clean}, no text, no logo, no watermark"
+    # Keep the requested action and essential object near the front of the CLIP context. Safety/style clauses are
+    # deliberately appended so the 77-token limit does not silently discard the actual scene.
+    styled = f"{IMAGE_STYLES[style]}, {clean}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     if selected_model in OPTIONAL_IMAGE_MODELS:
         return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64)
     if selected_model == COMFYUI_IMAGE_MODEL:
@@ -722,7 +737,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
             image = response.read()
         # Chibi faces are big, simple shapes by design; a "detailed face" redraw would turn them half-realistic.
-        return detail_faces(image, IMAGE_STYLES[style], clean, seed) if style != "chibi" and has_human_subject(clean) and FACE_SUBJECT_RE.search(clean) else image
+        return detail_faces(image, IMAGE_STYLES[style], clean, seed) if style != "chibi" and has_human_subject(clean) and FACE_DETAIL_REQUEST_RE.search(clean) else image
     with IMAGE_LOCK, tempfile.TemporaryDirectory(prefix="studio-image-") as workdir:
         target = Path(workdir) / "image.png"
         subprocess.run(["/bin/zsh", str(IMAGE_SCRIPT), styled, str(target)],

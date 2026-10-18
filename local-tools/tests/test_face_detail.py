@@ -62,6 +62,12 @@ class WhenItRuns(unittest.TestCase):
         for prompt in others:
             self.assertFalse(media_server.FACE_SUBJECT_RE.search(prompt), prompt)
 
+    def test_face_redraw_only_runs_for_explicit_portrait_requests(self):
+        self.assertTrue(media_server.FACE_DETAIL_REQUEST_RE.search("close-up portrait of a Vietnamese woman"))
+        self.assertTrue(media_server.FACE_DETAIL_REQUEST_RE.search("detailed face, symmetrical eyes"))
+        self.assertFalse(media_server.FACE_DETAIL_REQUEST_RE.search("a Vietnamese man typing beside a laptop"))
+        self.assertFalse(media_server.FACE_DETAIL_REQUEST_RE.search("hands checking a document at a desk"))
+
     def test_a_failing_redraw_keeps_the_picture_and_is_reported(self):
         original = (media_server.FACE_PYTHON, dict(media_server.FACE_STATS))
         try:
