@@ -20,7 +20,8 @@ export function validateCaptionTiming(scene: Scene, audioDurationMs: number) {
 /** Preserve voice gain; lower the music while speech is present. */
 /** Platform-style loudness target (short-form feeds normalise around −14 LUFS). */
 // The explicit layout after aresample matters: ffmpeg 5.1 cannot hand aresample's output to alimiter otherwise.
-const LOUDNESS = "loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo";
+// Leave 2 dBTP of headroom: AAC encoding and downstream platform transcodes can add a small true-peak overshoot.
+const LOUDNESS = "loudnorm=I=-14:TP=-2.0:LRA=11,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo";
 
 /**
  * A soft tick (620 Hz, 0.12 s, fast decay) at each cut, synthesised inside the filter graph: no extra input or file. The
