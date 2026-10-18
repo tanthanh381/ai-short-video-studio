@@ -227,6 +227,23 @@ describe("OllamaStoryboardAdapter.writeCardTitle", () => {
   });
 });
 
+describe("OllamaStoryboardAdapter.writeKeyPoints", () => {
+  it("returns one on-screen key point per scene, in order, padding to match the scene count", async () => {
+    // The model returns only two points for three scenes; the adapter aligns to the scenes and pads the gap.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ response: JSON.stringify({ keyPoints: ["Lắng nghe trước", "Nói lời yêu thương"] }) }))));
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b");
+    const result = await adapter.writeKeyPoints({ title: "Yêu thương", narrations: ["Hãy lắng nghe.", "Nói lời yêu thương.", "Và hành động."] });
+    expect(result).toEqual(["Lắng nghe trước", "Nói lời yêu thương", ""]);
+  });
+
+  it("returns null for no scenes and never throws on a bad response", async () => {
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b");
+    expect(await adapter.writeKeyPoints({ title: "t", narrations: [] })).toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("not json", { status: 500 })));
+    expect(await adapter.writeKeyPoints({ title: "t", narrations: ["Một cảnh."] })).toBeNull();
+  });
+});
+
 describe("thinking models", () => {
   it("every Ollama call turns reasoning off, so qwen3.5 answers instead of spending its budget thinking", async () => {
     const bodies: Array<Record<string, unknown>> = [];
