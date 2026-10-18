@@ -29,7 +29,10 @@ export type ContentQualityReport = {
 /** Cheap, deterministic editorial checks shared by the wizard and the worker. */
 export function evaluateContentQuality(script: string): ContentQualityReport {
   const text = script.normalize("NFC").trim();
-  const sentences = text.split(/(?<=[.!?…])\s+/u).filter(Boolean);
+  // Creators commonly paste scripts as one beat per line without punctuation.
+  // Treat those line breaks as editorial beats too, otherwise the structure
+  // gate sees the whole script as one sentence and under-scores a usable draft.
+  const sentences = text.split(/(?<=[.!?…])\s+|\n+/u).map((sentence) => sentence.trim()).filter(Boolean);
   const first = sentences[0] ?? text;
   const words = (text.match(/[\p{L}\p{N}]+/gu) ?? []);
   const firstWordCount = first.match(/[\p{L}\p{N}]+/gu)?.length ?? 0;

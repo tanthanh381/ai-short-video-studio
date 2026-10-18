@@ -23,6 +23,17 @@ describe("content quality gate", () => {
     expect(report.dimensions.hook.score).toBeGreaterThanOrEqual(80);
   });
 
+  it("treats newline-delimited creator beats as structure", () => {
+    const report = evaluateContentQuality([
+      "Một câu trả lời trôi chảy vẫn có thể sai",
+      "Hãy kiểm tra nguồn trước khi tin",
+      "Ví dụ, đối chiếu ngày và tác giả trước khi chia sẻ",
+      "Hãy nhớ: chậm một nhịp để chắc hơn",
+    ].join("\n"));
+    expect(report.dimensions.structure.score).toBeGreaterThanOrEqual(78);
+    expect(report.score).toBeGreaterThanOrEqual(80);
+  });
+
   it("flags a script that gives the image model no visible action", () => {
     const report = evaluateContentQuality("Sự bình yên là một trạng thái sâu sắc. Mọi thứ rồi sẽ ổn. Hãy nhớ điều đó.");
     expect(report.dimensions.visualAction.score).toBeLessThan(50);
