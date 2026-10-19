@@ -723,7 +723,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     elif is_flat and ("chibi" in clean.lower() or "ancient robe" in clean.lower()):
         # Paper-stage illustrations occasionally hallucinate a few glyphs on the blank sheet.
         # Keep the fast 4-step path, but enable the small negative CFG pass for this preset only.
-        turbo_negative = "text, letters, words, writing, watermark, logo, gibberish"
+        turbo_negative = "text, letters, words, writing, watermark, logo, gibberish, hat, cap, bonnet, turban, head covering"
     elif is_human and not stylized and selected_preset == "balanced":
         steps = IMAGE_PERSON_STEPS
     # The server may still be importing/loading the model (minutes). Wait for it rather than loading a

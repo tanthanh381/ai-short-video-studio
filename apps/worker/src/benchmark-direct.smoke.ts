@@ -115,7 +115,11 @@ for (const item of cases) {
         const png = await media.createImage(
           buildProductionImagePrompt(scene.imagePrompt, visualPresetPrompt(settings.visualPreset)), imageAspectFor(settings),
           {
-            seed: imageSeedFor(`${projectId}:${scene.id}`), style: imageStyleFor(settings.visualStyle, settings.visualPreset), preset: settings.generationPreset,
+            // Keep the direct benchmark identical to production: paper-stage uses one
+            // project seed for the recurring mascot, while other layouts remain
+            // independently deterministic per scene.
+            seed: imageSeedFor(usesPaperStage(settings) ? projectId : `${projectId}:${scene.id}`),
+            style: imageStyleFor(settings.visualStyle, settings.visualPreset), preset: settings.generationPreset,
             ...(usesPaperStage(settings) && referenceImageBase64 && (paperReferenceMode === "all" || (paperReferenceMode === "first" && scene.order === 0) || (paperReferenceMode === "alternate" && scene.order % 2 === 0))
               ? { referenceImageBase64, referenceStrength: 0.20 } : {}),
           },

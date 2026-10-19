@@ -49,7 +49,7 @@ NEGATIVE_PROMPT = os.getenv(
     "IMAGE_NEGATIVE_PROMPT",
     "deformed face, asymmetrical face, bad anatomy, malformed hands, extra fingers, fused fingers, missing fingers, "
     "extra limbs, duplicated person, warped body, broken arms, broken legs, unnatural eyes, blurry face, low detail, "
-    "cropped head, cut off hands, text, logo, watermark",
+    "cropped head, cut off hands, text, logo, watermark, hat, cap, bonnet, turban, head covering",
 )
 
 LOCK = threading.Lock()
