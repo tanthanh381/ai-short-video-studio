@@ -315,7 +315,12 @@ def generate(payload):
             if CPU_FALLBACK:
                 attempts.append((safe_width, safe_height, min(safe_frames, 17), True, "compact-cpu"))
         else:
-            attempts = [(width, height, frames, False, "native")]
+            # CPU is used on the 24 GB Air when MPS is unavailable. The native
+            # 576x1024 / 41-frame profile creates a large transient VAE tensor
+            # and was the cause of the bridge disconnecting under swap. Keep
+            # real motion, but use the compact profile and cap the first pass
+            # at 17 frames; the final renderer upscales to the requested video.
+            attempts = [(safe_width, safe_height, min(safe_frames, 17), True, "compact-cpu")]
         last_error = None
         with GENERATION_LOCK:
             for render_width, render_height, render_frames, force_cpu, label in attempts:
