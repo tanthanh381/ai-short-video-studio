@@ -141,6 +141,8 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     expect(usesPaperStage({ layoutTemplate: "paper-stage", aspectRatio: "16:9" })).toBe(false);
     expect(imageAspectFor({ layoutTemplate: "paper-stage", aspectRatio: "9:16" })).toBe("1:1");
     expect(PAPER_MASCOT).toMatch(/chibi/);
+    expect(PAPER_MASCOT).toMatch(/topknot|ribbon/iu);
+    expect(PAPER_MASCOT).toMatch(/no hat|head covering/iu);
     // the character stands on the same line in every scene and the captions start below it
     expect(PAPER.stageBottom).toBeLessThan(PAPER.captionTop);
     expect(paperStageFilter(0)).toContain(`y='${PAPER.stageBottom}-h+`);
