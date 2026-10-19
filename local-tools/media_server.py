@@ -788,10 +788,15 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         flags=re.IGNORECASE,
     ) if paper_identity else clean
     # Keep the requested action and essential object near the front of the CLIP context. Safety/style clauses are
-    # deliberately appended so the 77-token limit does not silently discard the actual scene.
-    # Keep the fixed identity immediately after the style; putting the action first
-    # makes Turbo switch gender/headwear on this preset even when the negative pass is enabled.
-    styled = f"{IMAGE_STYLES[style]}{paper_identity}, {paper_scene}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
+    # deliberately appended so the 77-token limit does not silently discard the actual scene. For paper-stage,
+    # put a compact identity token before the action, then the clothing details after it: this keeps Turbo from
+    # changing gender while giving the concrete prop/gesture more weight than a long character description.
+    if paper_identity:
+        paper_action = paper_scene.lstrip(" ,")
+        paper_prompt = f"exactly one male chibi boy {paper_action}, short dark-brown topknot bun, small olive ribbon, thick eyebrows, olive ancient robe, visible ears"
+        styled = f"{IMAGE_STYLES[style]}, {paper_prompt}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
+    else:
+        styled = f"{IMAGE_STYLES[style]}{paper_identity}, {paper_scene}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     if selected_model in OPTIONAL_IMAGE_MODELS:
         return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64, reference_strength)
     if selected_model == COMFYUI_IMAGE_MODEL:
@@ -850,7 +855,12 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         recycle_if_bloated("image", IMAGE_SERVER_URL)  # a restart reloads the model (~1 min) but frees GBs of cache
         payload = {"prompt": styled, "model": selected_model, "seed": seed, "steps": int(IMAGE_STEPS_OVERRIDE or steps), "preset": selected_preset,
                    "width": width, "height": height, "negativePrompt": turbo_negative}
-        if reference_image_base64 and is_human:
+        # Full-frame Turbo img2img is not a character adapter: on a 16 GB node it
+        # copies the anchor pose and removes the narrated prop/action. Only pass the
+        # paper reference to the real ComfyUI/IP-Adapter route on a memory-safe node;
+        # an explicit reference setting must not silently degrade Mini output.
+        turbo_reference_allowed = not (style == "chibi" and reference_image_base64 and not comfyui_memory_safe())
+        if reference_image_base64 and is_human and turbo_reference_allowed:
             payload["referenceImage"] = reference_image_base64
             if reference_strength is not None:
                 # Keep the worker's low-strength identity anchors intact. Values

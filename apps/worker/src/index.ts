@@ -25,21 +25,23 @@ import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE,
 
 /**
  * A full-frame img2img anchor is excellent for identity but collapses SDXL-Turbo's pose into
- * the anchor. Paper-stage therefore anchors only the opening frame by default; operators can
- * opt into the older all-scene behavior for a deliberately static character card.
+ * the anchor. Paper-stage therefore leaves reference images off by default on the 16 GB Mini;
+ * operators on a 24 GB+ node can opt into the ComfyUI/IP-Adapter path with PAPER_REFERENCE_MODE.
  */
 const PAPER_REFERENCE_MODE = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "")
   ? process.env.PAPER_REFERENCE_MODE!
-  : "first";
-const parsedPaperReferenceStrength = Number(process.env.PAPER_REFERENCE_STRENGTH ?? "0.20");
+  : "none";
+const parsedPaperReferenceStrength = Number(process.env.PAPER_REFERENCE_STRENGTH ?? "0.08");
 const PAPER_REFERENCE_STRENGTH = Number.isFinite(parsedPaperReferenceStrength)
   ? Math.max(0.05, Math.min(0.65, parsedPaperReferenceStrength))
-  : 0.20;
+  : 0.08;
 
 function paperReferenceOptions(referenceImageBase64: string | null | undefined, sceneOrder: number): { referenceImageBase64?: string; referenceStrength?: number } {
   if (!referenceImageBase64 || PAPER_REFERENCE_MODE === "none") return {};
   const useReference = PAPER_REFERENCE_MODE === "all"
-    || (PAPER_REFERENCE_MODE === "first" && sceneOrder === 0)
+    // "first" means the first generated frame is the anchor for subsequent frames;
+    // scene 0 cannot reference itself because the anchor is not available yet.
+    || (PAPER_REFERENCE_MODE === "first" && sceneOrder > 0)
     || (PAPER_REFERENCE_MODE === "alternate" && sceneOrder % 2 === 0);
   return useReference ? { referenceImageBase64, referenceStrength: PAPER_REFERENCE_STRENGTH } : {};
 }

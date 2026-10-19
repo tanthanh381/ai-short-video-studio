@@ -492,6 +492,15 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(payload["referenceImage"], "aW1hZ2U=")
         self.assertEqual(payload["referenceStrength"], 0.20)
 
+    def test_paper_reference_does_not_freeze_turbo_actions_on_low_memory_nodes(self):
+        with patch.object(self.media, "comfyui_memory_safe", return_value=False):
+            payload = self._turbo_payload(
+                "exactly one male chibi boy holding a small tea cup, short dark-brown topknot bun, olive ancient robe",
+                style="chibi", reference_image_base64="aW1hZ2U=", reference_strength=0.08,
+            )
+        self.assertNotIn("referenceImage", payload)
+        self.assertNotIn("referenceStrength", payload)
+
     def test_image_quality_guard_handles_vietnamese_human_prompts(self):
         with patch.object(self.media, "image_server_state", return_value="down"), \
              patch.object(self.media, "IMAGE_TIMEOUT_S", 0), \

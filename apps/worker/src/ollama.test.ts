@@ -54,6 +54,7 @@ describe("OllamaStoryboardAdapter", () => {
     const payload = JSON.parse((request.mock.calls[0]![1] as RequestInit).body as string);
     expect(payload.images).toHaveLength(2);
     expect(payload.options.temperature).toBe(0);
+    expect(payload.system).toContain("recurring-character contract");
   });
 });
 

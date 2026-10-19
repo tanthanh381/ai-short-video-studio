@@ -29,11 +29,11 @@ type Case = { id: string; topic: string; hook: string; sourceText: string };
 const corpus = JSON.parse(await readFile(corpusPath, "utf8")) as { cases?: Case[] } & Record<string, unknown>;
 const cases: Case[] = (corpus.cases ?? (Object.values(corpus).find(Array.isArray) as Case[])).filter((item) => !only.length || only.includes(item.id));
 const benchmarkPreset: ProjectSettings["generationPreset"] = process.env.BENCHMARK_PRESET === "quality" ? "quality" : "balanced";
-const paperReferenceMode = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "") ? process.env.PAPER_REFERENCE_MODE : "first";
-const parsedPaperReferenceStrength = Number(process.env.PAPER_REFERENCE_STRENGTH ?? "0.20");
+const paperReferenceMode = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "") ? process.env.PAPER_REFERENCE_MODE : "none";
+const parsedPaperReferenceStrength = Number(process.env.PAPER_REFERENCE_STRENGTH ?? "0.08");
 const paperReferenceStrength = Number.isFinite(parsedPaperReferenceStrength)
   ? Math.max(0.05, Math.min(0.65, parsedPaperReferenceStrength))
-  : 0.20;
+  : 0.08;
 
 // One look per topic, chosen the way a channel owner would: the same retention aids everywhere.
 const LOOK: Record<string, Partial<ProjectSettings>> = {
@@ -124,7 +124,7 @@ for (const item of cases) {
             // independently deterministic per scene.
             seed: imageSeedFor(usesPaperStage(settings) ? projectId : `${projectId}:${scene.id}`),
             style: imageStyleFor(settings.visualStyle, settings.visualPreset), preset: settings.generationPreset,
-            ...(usesPaperStage(settings) && referenceImageBase64 && (paperReferenceMode === "all" || (paperReferenceMode === "first" && scene.order === 0) || (paperReferenceMode === "alternate" && scene.order % 2 === 0))
+            ...(usesPaperStage(settings) && referenceImageBase64 && (paperReferenceMode === "all" || (paperReferenceMode === "first" && scene.order > 0) || (paperReferenceMode === "alternate" && scene.order % 2 === 0))
               ? { referenceImageBase64, referenceStrength: paperReferenceStrength } : {}),
           },
         );
