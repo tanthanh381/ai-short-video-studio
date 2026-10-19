@@ -14,7 +14,7 @@
  *   STUDIO_QA_SUBMIT=1    submit exactly one short QA video and wait for its MP4.
  */
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const baseUrl = process.env.STUDIO_LIVE_URL?.trim();
@@ -129,8 +129,20 @@ try {
       await continueTo("Xem lại & tạo video");
       await page.getByRole("button", { name: "Tạo video hoàn chỉnh", exact: true }).click();
       await page.waitForURL((url) => /\/studio\//.test(url.pathname), { timeout: 30_000 });
-      await page.getByRole("button", { name: "Tải MP4", exact: true }).waitFor({ timeout: 25 * 60_000 });
-      check("one-video-render-and-download-ready", true, `path=${new URL(page.url()).pathname}`);
+      const downloadButton = page.getByRole("button", { name: "Tải MP4", exact: true });
+      await downloadButton.waitFor({ timeout: 25 * 60_000 });
+      check("one-video-render-ready", true, `path=${new URL(page.url()).pathname}`);
+      await waitUntilEnabled(downloadButton, 120_000);
+      const downloadPromise = page.waitForEvent("download", { timeout: 120_000 });
+      await downloadButton.click();
+      const download = await downloadPromise;
+      const downloadedPath = await download.path();
+      const downloadedBytes = downloadedPath ? (await stat(downloadedPath)).size : 0;
+      check(
+        "one-video-mp4-download-completes",
+        !download.failure() && /\.mp4$/i.test(download.suggestedFilename()) && downloadedBytes > 0,
+        `filename=${download.suggestedFilename()}; bytes=${downloadedBytes}`,
+      );
     }
   }
 
