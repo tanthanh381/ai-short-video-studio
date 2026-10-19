@@ -33,7 +33,7 @@ export function videoEncoderPreset(preset?: string) {
 
 type OutputProbe = {
   format?: { duration?: string };
-  streams?: Array<{ codec_type?: string; codec_name?: string; width?: number; height?: number }>;
+  streams?: Array<{ codec_type?: string; codec_name?: string; width?: number; height?: number; duration?: string }>;
 };
 
 /**
@@ -53,6 +53,17 @@ export function validateRenderedOutput(probe: OutputProbe, expected: { width: nu
     throw new Error("Bản xuất không có audio AAC hợp lệ");
   if (!Number.isFinite(duration) || duration <= 0)
     throw new Error("Bản xuất có thời lượng không hợp lệ");
+  const videoDuration = Number(video.duration);
+  const audioDuration = Number(audio.duration);
+  // Some ffprobe builds omit per-stream duration. When present, reject a file
+  // whose streams drift apart enough to produce a frozen tail or cut-off voice.
+  if (Number.isFinite(videoDuration) && Number.isFinite(audioDuration)
+    && Math.abs(videoDuration - audioDuration) > 0.75)
+    throw new Error("Bản xuất bị lệch thời lượng giữa hình ảnh và audio");
+  if (Number.isFinite(videoDuration) && Math.abs(videoDuration - duration) > 0.75)
+    throw new Error("Bản xuất có thời lượng video không khớp container");
+  if (Number.isFinite(audioDuration) && Math.abs(audioDuration - duration) > 0.75)
+    throw new Error("Bản xuất có thời lượng audio không khớp container");
   return duration;
 }
 
@@ -734,7 +745,7 @@ export async function renderProject(
       config.FFPROBE_PATH,
       [
         "-v", "error",
-        "-show_entries", "format=duration:stream=codec_type,codec_name,width,height",
+        "-show_entries", "format=duration:stream=codec_type,codec_name,width,height,duration",
         "-of", "json",
         output,
       ],

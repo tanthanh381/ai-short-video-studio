@@ -81,7 +81,7 @@ export class LocalMediaAdapter implements MediaProvider {
         method: "POST",
         signal: this.signal(120_000),
         headers: this.headers("application/json"),
-        body: JSON.stringify({ text, voice, engine: models.tts ?? undefined, speed: models.speed ?? undefined }),
+        body: JSON.stringify({ text, voice, engine: models.tts ?? undefined, speed: models.speed ?? undefined, direction: models.voiceDirection ?? undefined }),
       }),
     );
     return new Uint8Array(await response.arrayBuffer());
@@ -92,7 +92,7 @@ export class LocalMediaAdapter implements MediaProvider {
       method: "POST",
       signal: this.signal(240_000),
       headers: this.headers("application/json"),
-      body: JSON.stringify({ text, voice, engine: models.tts ?? undefined, speed: models.speed ?? undefined }),
+      body: JSON.stringify({ text, voice, engine: models.tts ?? undefined, speed: models.speed ?? undefined, direction: models.voiceDirection ?? undefined }),
     }));
     const parsed = z.object({
       audioBase64: z.string().min(10),

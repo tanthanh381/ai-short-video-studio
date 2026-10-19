@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateContentQuality, passesIdeaQuality } from "./content-quality";
+import { evaluateContentQuality, passesIdeaQuality, voiceDirectionForScript } from "./content-quality";
 
 describe("content quality gate", () => {
   it("flags generic openings before media generation", () => {
@@ -45,5 +45,23 @@ describe("content quality gate", () => {
     const strong = evaluateContentQuality("Vì sao bạn vẫn mệt dù đã ngủ đủ 8 giờ? Khi buổi chiều đến, hãy tắt thông báo trong 10 phút. Ví dụ, ghi lại một việc đang làm bạn quá tải. Hãy nhớ, năng lượng không chỉ đến từ giấc ngủ.");
     expect(passesIdeaQuality(weak)).toBe(false);
     expect(passesIdeaQuality(strong)).toBe(true);
+  });
+
+  it("reports the creator-facing signals needed for emotional, retaining narration", () => {
+    const report = evaluateContentQuality("Vì sao bạn vẫn mệt dù đã ngủ đủ 8 giờ? Nhưng đến chiều, hãy tắt thông báo trong 10 phút. Ví dụ, ghi lại việc đang làm bạn quá tải. Hãy nhớ, bắt đầu từ hôm nay và lưu lại.");
+    expect(report.dimensions).toMatchObject({
+      emotion: { label: "Cảm xúc" },
+      pacing: { label: "Nhịp" },
+      retention: { label: "Giữ chân" },
+      cta: { label: "CTA" },
+    });
+    expect(report.dimensions.emotion.score).toBeGreaterThanOrEqual(80);
+    expect(report.dimensions.retention.score).toBeGreaterThanOrEqual(80);
+    expect(report.dimensions.cta.score).toBeGreaterThanOrEqual(80);
+  });
+
+  it("derives a bounded prosody direction from the narration", () => {
+    expect(voiceDirectionForScript("Đừng bấm vào đường link lạ, bạn có thể mất tiền.")).toMatch(/cảnh báo/u);
+    expect(voiceDirectionForScript("Hãy giữ hy vọng và bắt đầu lại.")).toMatch(/sáng/u);
   });
 });

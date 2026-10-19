@@ -6,6 +6,9 @@ const HOOK_SIGNALS = /[?!]|(?:nhưng|vậy mà|sự thật|ít ai biết|đừng
 const CONCRETE_SIGNALS = /(?:ví dụ|khi|nếu|bởi vì|thay vì|chỉ cần|bước|phút|ngày|đồng|%|[0-9])/iu;
 const ENDING_SIGNALS = /(?:hãy nhớ|từ hôm nay|và đó là|cuối cùng|đừng quên|bạn sẽ|khi nhìn lại)/iu;
 const VISUAL_ACTION_SIGNALS = /(?:cầm|mở|đóng|bước|đi bộ|chạy|gọi|viết|đọc|nhìn|đặt|nâng|dọn|rót|uống|tặng|hỏi|trả lời|ngồi|đứng|quay|chạm|bật|tắt|nhặt|gấp|mang|đưa|ôm|mỉm cười|thở|thiền|hold|open|walk|call|write|read|look|place|drink|give|ask)/iu;
+const EMOTION_SIGNALS = /(?:sợ|lo|mệt|vui|buồn|bất ngờ|hy vọng|tức giận|nhẹ nhõm|im lặng|nhớ|thương|đau|cười|khóc|thở|chậm lại|mất tiền|quá tải|an toàn|fear|relief|surprise|hope|smile|cry)/iu;
+const CTA_SIGNALS = /(?:theo dõi|lưu lại|chia sẻ|bình luận|thử ngay|bắt đầu từ hôm nay|gửi cho|follow|save|share|comment)/iu;
+const RETENTION_SIGNALS = /(?:nhưng|vậy mà|đến khi|sau đó|rồi|bước tiếp theo|điều quan trọng|cuối cùng|tưởng rằng|hóa ra|ví dụ|hãy nhớ)/iu;
 
 export type ContentQualityDimension = {
   score: number;
@@ -23,8 +26,24 @@ export type ContentQualityReport = {
     ending: ContentQualityDimension;
     repetition: ContentQualityDimension;
     visualAction: ContentQualityDimension;
+    emotion: ContentQualityDimension;
+    pacing: ContentQualityDimension;
+    retention: ContentQualityDimension;
+    cta: ContentQualityDimension;
   };
 };
+
+/** A short, provider-neutral direction for TTS engines that support prosody hints. */
+export function voiceDirectionForScript(script: string): string {
+  const text = script.normalize("NFC");
+  if (/(?:sợ|lo|cảnh báo|đừng|nguy hiểm|mất tiền|khẩn cấp)/iu.test(text))
+    return "Giọng cảnh báo nhưng không gắt; nhấn các từ khóa quan trọng, ngắt ngắn trước kết luận.";
+  if (/(?:vui|cười|hy vọng|may mắn|chúc mừng|tuyệt vời)/iu.test(text))
+    return "Giọng sáng, ấm và có năng lượng; nhấn nhẹ từ khóa tích cực, tránh đọc đều đều.";
+  if (/(?:buồn|đau|nhớ|im lặng|mất mát|cô đơn)/iu.test(text))
+    return "Giọng trầm, chậm và đồng cảm; để khoảng nghỉ tự nhiên, không bi lụy.";
+  return "Giọng kể tự nhiên, có nhịp; nhấn câu hỏi hoặc từ khóa và ngắt nhẹ giữa các ý.";
+}
 
 /**
  * Minimum editorial bar for an AI-written idea before spending time on media.
@@ -95,6 +114,13 @@ export function evaluateContentQuality(script: string): ContentQualityReport {
   else feedback.push("Kết thúc bằng một insight hoặc câu đọng lại, không dừng đột ngột.");
   const visualAction = VISUAL_ACTION_SIGNALS.test(text);
   if (!visualAction) feedback.push("Thêm hành động hoặc đạo cụ có thể nhìn thấy để hình minh họa bám đúng lời thoại.");
+  const emotion = EMOTION_SIGNALS.test(text);
+  const pacing = sentences.length >= 4 && sentences.every((sentence) => (sentence.match(/[\p{L}\p{N}]+/gu) ?? []).length <= 32);
+  const retention = sentences.length >= 4 && RETENTION_SIGNALS.test(text);
+  const cta = CTA_SIGNALS.test(text);
+  if (!emotion) feedback.push("Thêm một sắc thái cảm xúc hoặc sự thay đổi trạng thái để giọng đọc có điểm nhấn.");
+  if (!pacing) feedback.push("Rút ngắn câu dài để nhịp đọc và phụ đề dễ theo dõi trên điện thoại.");
+  if (!retention) feedback.push("Thêm một chuyển ý hoặc bước ngoặt để người xem có lý do nghe tiếp.");
   const normalized = sentences.map((sentence) => sentence.toLocaleLowerCase("vi").replace(/[0-9]+/gu, "#").replace(/[^\p{L}# ]/gu, "").replace(/\s+/gu, " ").trim());
   const repeated = normalized.length - new Set(normalized).size;
   const repetitionScore = normalized.length >= 5 && repeated / normalized.length > 0.35 ? 35 : 92;
@@ -109,6 +135,10 @@ export function evaluateContentQuality(script: string): ContentQualityReport {
     ending: { score: ending ? 88 : 44, label: "Kết thúc" },
     repetition: { score: repetitionScore, label: "Lặp ý" },
     visualAction: { score: visualAction ? 88 : 38, label: "Minh họa" },
+    emotion: { score: emotion ? 86 : 44, label: "Cảm xúc" },
+    pacing: { score: pacing ? 86 : 48, label: "Nhịp" },
+    retention: { score: retention ? 86 : 46, label: "Giữ chân" },
+    cta: { score: cta ? 86 : 64, label: "CTA" },
   } as const;
   return { score: Math.max(0, Math.min(100, score)), feedback, dimensions };
 }

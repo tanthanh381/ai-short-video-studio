@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
-import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt } from "@studio/shared";
+import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt, voiceDirectionForScript } from "@studio/shared";
 import { sceneMotionPrompt } from "./motion-prompts";
 import { getConfig } from "./config";
 import { imageLooksBlank } from "./image-check";
@@ -713,10 +713,11 @@ async function generateMedia(job: JobRow, project: Project) {
   const onMachine = (machine: string) => (pooled?.distributed ? ` · máy ${machine}` : "");
   const speak = async (scene: Scene, speedFactor = 1, provider: MediaProvider = media) => {
     const speed = project.settings.voiceSpeed * speedFactor;
+    const voiceDirection = voiceDirectionForScript(scene.narration);
     const aligned = provider.createSpeechAligned
-      ? await provider.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, speed })
+      ? await provider.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, speed, voiceDirection })
       : null;
-    let audio = aligned?.audio ?? await provider.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed });
+    let audio = aligned?.audio ?? await provider.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed, voiceDirection });
     // From here on the machine has answered: a failure saving it is not the machine's.
     return local(async () => {
       let subtitles = aligned?.cues ?? [];

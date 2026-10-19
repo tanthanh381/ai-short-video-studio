@@ -27,6 +27,12 @@ describe("render helpers", () => {
       { codec_type: "audio", codec_name: "aac" },
     ] }, { width: 1080, height: 1920 })).toThrow(/kích thước/i);
   });
+  it("rejects an export whose audio and video tails drift apart", () => {
+    expect(() => validateRenderedOutput({ format: { duration: "4.2" }, streams: [
+      { codec_type: "video", codec_name: "h264", width: 1080, height: 1920, duration: "4.2" },
+      { codec_type: "audio", codec_name: "aac", duration: "2.9" },
+    ] }, { width: 1080, height: 1920 })).toThrow(/lệch thời lượng/u);
+  });
   it("dinh dang thoi gian ASS", () => {
     expect(assTime(65_230)).toBe("0:01:05.23");
   });

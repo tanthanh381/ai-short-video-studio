@@ -119,7 +119,7 @@ export class OpenAIAdapter implements AIProvider {
     return Uint8Array.from(Buffer.from(base64, "base64"));
   }
 
-  async createSpeech(text: string, voice: string): Promise<Uint8Array> {
+  async createSpeech(text: string, voice: string, models: { voiceDirection?: string } = {}): Promise<Uint8Array> {
     const response = await checked(
       await fetch(this.url("/audio/speech"), {
         method: "POST",
@@ -131,7 +131,7 @@ export class OpenAIAdapter implements AIProvider {
           input: text,
           response_format: "mp3",
           instructions:
-            "Đọc tiếng Việt tự nhiên, ấm áp, rõ dấu, nhịp kể chuyện vừa phải. Không đọc quá kịch.",
+            `Đọc tiếng Việt tự nhiên, ấm áp, rõ dấu, nhịp kể chuyện vừa phải. Không đọc quá kịch. ${models.voiceDirection ?? ""}`,
         }),
       }),
     );

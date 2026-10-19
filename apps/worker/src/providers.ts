@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { cleanScriptForNarration, contentPlan, durationLabel, evaluateContentQuality, passesIdeaQuality, splitScript, type ContentPlan } from "@studio/shared";
+import { cleanScriptForNarration, contentPlan, durationLabel, evaluateContentQuality, passesIdeaQuality, splitScript, type ContentPlan, voiceDirectionForScript } from "@studio/shared";
 
 export { splitScript };
 export { evaluateContentQuality } from "@studio/shared";
+export { voiceDirectionForScript } from "@studio/shared";
 import type { Scene } from "@studio/shared";
 import type { generationPresetSchema } from "@studio/shared";
 import { isOldTimeStory, PAPER_PROMPT_RULES, storyNationality, VIETNAMESE, withNationality, type Nationality } from "./card-layout";
@@ -105,6 +106,8 @@ export type MediaModelOptions = {
   style?: ImageStyle;
   /** Tốc độ đọc (1 = bình thường). */
   speed?: number | null;
+  /** Provider-neutral prosody hint; unsupported local bridges may safely ignore it. */
+  voiceDirection?: string;
   preset?: z.infer<typeof generationPresetSchema>;
 };
 
