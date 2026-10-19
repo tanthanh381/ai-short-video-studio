@@ -138,7 +138,7 @@ export const PAPER = {
  * The one recurring character of a paper-stage video. Short on purpose: the image model reads 77 tokens, and the
  * bridge's style words come first; a 25-word description pushed the scene's action out of the prompt.
  */
-export const PAPER_MASCOT = "a clearly male little chibi boy, short dark-brown hair in a small topknot bun, an olive ribbon trailing behind the bun, thick eyebrows, olive ancient robe, no hat or head covering";
+export const PAPER_MASCOT = "a clearly male little chibi boy, short dark-brown hair in a small topknot bun, small olive ribbon tied to the bun, thick eyebrows, olive ancient robe, bare head, visible ears";
 
 /** Everyday actions that make the paper-stage character feel alive instead of posing for a portrait. */
 export const PAPER_DAILY_ACTIONS =
@@ -213,6 +213,7 @@ export function paperStagePrompt(prompt: string, narration = ""): string {
     .replace(/clearly male little chibi boy, visible short dark-brown topknot bun, thick eyebrows, olive-green headband ribbon with long tails, olive-green ancient robe\.?/giu, "")
     .replace(/clearly male little chibi boy, short dark-brown topknot bun, thick eyebrows, olive headband ribbon with long tails, olive ancient robe, not wearing a hat\.?/giu, "")
     .replace(/a clearly male little chibi boy, short dark-brown hair in a small topknot bun, an olive ribbon trailing behind the bun, thick eyebrows, olive ancient robe, no hat or head covering\.?/giu, "")
+    .replace(/a clearly male little chibi boy, short dark-brown hair in a small topknot bun, small olive ribbon tied to the bun, thick eyebrows, olive ancient robe, bare head, visible ears\.?/giu, "")
     .replace(/a little chibi boy with a topknot hair bun and a long olive headband ribbon, wearing an olive green ancient robe\.?/giu, "")
     .replace(/\b(another|a second|two|other) chibis?\b/giu, "$1 small child")
     // A small model may turn "two boys" or "two children" into a second mascot even when the narration names
