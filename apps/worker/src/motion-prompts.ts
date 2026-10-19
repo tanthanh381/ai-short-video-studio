@@ -14,6 +14,9 @@ const MOTION_CUES = [
 ] as const;
 
 const STYLE_MOTION: Partial<Record<VisualPreset, string>> = {
+  // The ancient-wisdom paper stage uses the chibi-co-phong image preset. Keep the motion grounded in
+  // ordinary gestures from the reference shorts instead of defaulting to atmospheric fantasy motion.
+  "chibi-co-phong": "the same little boy performs one gentle everyday gesture that matches the reference pose, such as a small nod, lifting a tea cup, turning a page, sweeping once or offering the prop, then settles",
   "chibi-tien-hiep": "floating talismans and mountain mist drift slowly",
   "chibi-dan-gian-viet": "lotus petals, bamboo leaves or a rice-paper fleck moves gently",
   "chibi-co-trang-hai": "the sleeve bounces slightly with the comic reaction, then settles",
@@ -40,7 +43,13 @@ function narrativeMotion(narration: string): string | null {
 }
 
 export function sceneMotionPrompt(preset: VisualPreset, sceneIndex: number, narration = ""): string {
-  const cue = STYLE_MOTION[preset] ?? MOTION_CUES[sceneIndex % MOTION_CUES.length];
+  // Keep the legacy micro-motion cycle when narration is unavailable (it is covered by the generic
+  // prompt tests), but use the more grounded everyday cue for real paper-stage scenes.
+  const cue = preset === "chibi-co-phong" && narration.trim()
+    ? STYLE_MOTION[preset]!
+    : preset === "chibi-co-phong"
+      ? MOTION_CUES[sceneIndex % MOTION_CUES.length]
+      : STYLE_MOTION[preset] ?? MOTION_CUES[sceneIndex % MOTION_CUES.length];
   const storyCue = narrativeMotion(narration) ?? "make one visible but restrained action over the shot, then settle naturally";
   return [
     "Create a short image-to-video shot from this exact reference image.",

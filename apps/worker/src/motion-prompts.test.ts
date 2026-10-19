@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { sceneMotionPrompt } from "./motion-prompts";
 
 describe("scene motion prompts", () => {
+  it("keeps the ancient-wisdom preset grounded in everyday character movement", () => {
+    const prompt = sceneMotionPrompt("chibi-co-phong", 0, "Cậu bé khẽ nâng chén trà rồi nhìn ra xa.");
+    expect(prompt).toContain("everyday gesture");
+    expect(prompt).toContain("mentioned object");
+    expect(prompt).toContain("Preserve the same face");
+  });
+
   it("cycles distinct micro-motions for the existing chibi preset", () => {
     const prompts = [0, 1, 2, 3, 4].map((index) => sceneMotionPrompt("chibi-co-phong", index));
     expect(new Set(prompts).size).toBe(5);
