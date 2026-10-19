@@ -138,10 +138,11 @@ try {
       const download = await downloadPromise;
       const downloadedPath = await download.path();
       const downloadedBytes = downloadedPath ? (await stat(downloadedPath)).size : 0;
+      const downloadFailure = await download.failure();
       check(
         "one-video-mp4-download-completes",
-        !download.failure() && /\.mp4$/i.test(download.suggestedFilename()) && downloadedBytes > 0,
-        `filename=${download.suggestedFilename()}; bytes=${downloadedBytes}`,
+        !downloadFailure && /\.mp4$/i.test(download.suggestedFilename()) && downloadedBytes > 0,
+        `filename=${download.suggestedFilename()}; bytes=${downloadedBytes}; failure=${downloadFailure ?? "none"}`,
       );
     }
   }
