@@ -250,6 +250,22 @@ describe("sepia story card captions", () => {
   });
 });
 
+describe("paper-stage captions", () => {
+  it("uses large outlined text without a subtitle box", () => {
+    const project = {
+      id: crypto.randomUUID(), userId: crypto.randomUUID(), title: "t", sourceText: "x", inputMode: "idea", hook: "", suggestedTitle: "",
+      suggestedDescription: "", status: "draft", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      settings: { ...DEFAULT_PROJECT_SETTINGS, layoutTemplate: "paper-stage", visualPreset: "chibi-co-phong" }, scenes: [],
+    } as unknown as Project;
+    const style = createAss(project).split("\n").find((line) => line.startsWith("Style: Default"))!.split(",");
+    expect(style[2]).toBe("73");
+    expect(style[16]).toBe("4");
+    expect(style[17]).toBe("0");
+    expect(style[18]).toBe("8");
+    expect(style[21]).toBe("1320");
+  });
+});
+
 describe("blurred illustrated story card", () => {
   it("uses large white captions and a two-layer title glow", () => {
     const project = {

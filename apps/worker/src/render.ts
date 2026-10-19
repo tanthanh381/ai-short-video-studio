@@ -144,7 +144,9 @@ export function createAss(project: Project) {
     : sepia
     ? SEPIA.captionFont
     : paperMode
-    ? Math.round(height * 0.026)
+    // The reference paper shorts use large outlined captions, not a small
+    // boxed subtitle. Keep enough width for two short lines on a phone.
+    ? Math.round(height * 0.038)
     : cardMode
     ? Math.round(height * 0.03)
     : style.preset === "focus"
@@ -153,8 +155,8 @@ export function createAss(project: Project) {
         ? Math.round(height * 0.029)
         : Math.round(height * 0.034);
   const card = usesStoryCard(project.settings);
-  const outline = sepia ? SEPIA.captionOutline : style.preset === "minimal" ? 1 : 2;
-  const borderStyle = card ? 1 : style.backgroundOpacity > 0 ? 3 : 1;
+  const outline = sepia ? SEPIA.captionOutline : paperMode ? 4 : style.preset === "minimal" ? 1 : 2;
+  const borderStyle = card || paperMode ? 1 : style.backgroundOpacity > 0 ? 3 : 1;
   const highlight = project.settings.captionHighlight === true;
   // Karaoke: words start in the caption colour (secondary) and switch to the highlight (primary) when spoken.
   // The sepia card has its own pale words, green spoken words and dark brown edge whatever the caption colours say.
