@@ -823,6 +823,13 @@ describe("paper-stage prompt writer: the boy acts, he is never replaced by an ob
     expect(buildStoryboardInstruction(scenes)).not.toContain("THE BOY");
   });
 
+  it("keeps the paper-stage contract when a retry also carries a cast", () => {
+    const paper = buildStoryboardInstruction({ ...scenes, paperStage: true, cast: "a clearly male little chibi boy" });
+    expect(paper).toContain("ONE little boy");
+    expect(paper).toContain("NEVER write a place");
+    expect(paper).not.toContain("NEVER describe their faces");
+  });
+
   it("gives no scene-shaped example a small model could copy into every scene", () => {
     const paper = buildStoryboardInstruction({ ...scenes, paperStage: true });
     // measured on qwen3.5:4b: examples such as "a huge dark boulder on his back" came back in scenes about something else
