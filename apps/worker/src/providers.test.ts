@@ -190,17 +190,19 @@ describe("diffusion prompt quality", () => {
     expect(visualPromptFlaws("Bạn cố quên một ký ức cũ.", "A person at a desk with an abstract ghost and a question mark")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Bạn cố xua đuổi một suy nghĩ.", "A person with floating blurred scribbles representing racing thoughts")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Một bóng ma xuất hiện trong căn phòng.", "A frightened person faces a ghost in a dark room")).toBe(0);
-    expect(visualPromptFlaws("Bạn viết lại điều mình đang nghĩ.", "Hands writing in an open notebook at a sunlit desk")).toBe(0);
+    expect(visualPromptFlaws("Bạn viết lại điều mình đang nghĩ.", "Hands writing in an open notebook at a sunlit desk")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Tin nhắn càng giục, bạn càng nên chậm lại.", "Close-up of a smartphone displaying an urgent money transfer request")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Người thợ tìm thấy một mảnh giấy gấp tư.", "A Vietnamese father and his little girl inspect a paper")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Có những câu chuyện trở nên đáng sợ chỉ vì ta chưa nghe đến đoạn cuối.", "A grandmother points at a timer beside a lamp")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Tờ giấy trong túi áo làm anh bật khóc. Minh mang chiếc áo cũ đến tiệm sửa.", "A tailor repairs an old skirt at a wooden counter")).toBeGreaterThan(0);
-    expect(visualPromptFlaws("Tờ giấy trong túi áo làm anh bật khóc. Minh mang chiếc áo cũ đến tiệm sửa.", "One pair of hands unfolds a handwritten paper note beside an old shirt at a repair counter")).toBe(0);
+    expect(visualPromptFlaws("Tờ giấy trong túi áo làm anh bật khóc. Minh mang chiếc áo cũ đến tiệm sửa.", "One pair of hands unfolds a handwritten paper note beside an old shirt at a repair counter")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Cô ấy đọc tin nhắn trên điện thoại.", "A woman stands beside a window holding a notebook")).toBeGreaterThan(0);
     // Do not ask SDXL to render a readable phone screen: it produces pseudo-text.
     expect(visualPromptFlaws("Cô ấy đọc tin nhắn trên điện thoại.", "A woman checks a smartphone screen beside a window")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhận được yêu cầu chuyển tiền.", "Close-up of a smartphone with a banking app open")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh mở ứng dụng ngân hàng.", "Wide room view showing a young man typing in a mobile app")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Lương tăng, vì sao ví vẫn trống?", "Close-up of hands counting cash and banknotes")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Một ghi chú nằm trên bàn.", "A person reads a handwritten note on a sheet of paper")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother stands beside floating handwritten characters")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother checks a phone beside a desk")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Minh gọi cho mẹ.", "A Vietnamese mother holds a phone beside a quiet table")).toBeGreaterThan(0);
@@ -218,8 +220,8 @@ describe("diffusion prompt quality", () => {
       "A Vietnamese mother holds a phone beside a quiet table",
       "a Vietnamese mother with a black bun, and her little girl with two pigtails",
     )).toBeGreaterThan(0);
-    expect(concreteVisualFallback("Hãy gọi tên cảm xúc và viết lại điều đang nghĩ.")).toContain("open notebook");
-    expect(concreteVisualFallback("Người thợ tìm thấy một mảnh giấy gấp tư.")).toContain("paper list");
+    expect(concreteVisualFallback("Hãy gọi tên cảm xúc và viết lại điều đang nghĩ.")).toContain("open blank notebook");
+    expect(concreteVisualFallback("Người thợ tìm thấy một mảnh giấy gấp tư.")).toContain("blank paper");
     expect(concreteVisualFallback("Một hơi thở chậm đưa bạn về hiện tại.")).toContain("one slow breath");
     expect(concreteVisualFallback("Anh gọi đến số điện thoại đã lưu.")).toContain("trusted friend");
   });

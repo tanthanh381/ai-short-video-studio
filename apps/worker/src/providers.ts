@@ -785,6 +785,9 @@ export function visualPromptFlaws(narration: string, prompt: string, cast = ""):
   // is a prompt that explicitly removes the device from the frame (our fallback
   // does that), so force repair for every phone/mobile mention.
   if (/(?:phone|smartphone|mobile phone|mobile device|cellphone|mobile app|bank(?:ing)? app)/u.test(text)) flaws++;
+  if (/(?:money|cash|banknotes?|currency|wallet)/u.test(text)) flaws++;
+  if (/(?:paper|document|notebook|page|book)/u.test(text)
+    && /(?:writing|written|text|words?|list|note|label|page)/u.test(text)) flaws++;
   if (/\b(?:racing thoughts?|floating .*scribbles|shadow growing)\b/u.test(text)) flaws++;
   if (/\bfloating (?:pastel )?(?:shapes?|symbols?|icons?)\b/u.test(text)) flaws++;
   if (/\bfloating .*\b(?:handwritten|letters?|characters?)\b/u.test(text)) flaws++;
@@ -814,10 +817,12 @@ export function concreteVisualFallback(narration: string): string {
   const said = narration.toLocaleLowerCase("vi");
   if (/(?:ai|trí tuệ nhân tạo|công cụ|tóm tắt|tài liệu|bản gốc|con số|kiểm tra|đối chiếu)/u.test(said))
     return "Close-up of hands comparing a blank laptop screen with an open paper document and a pen on a wooden desk, realistic office light, no readable text, letters, numbers or logos";
+  if (/(tiền|lương|ví|chi tiêu|tiết kiệm|nợ|tài chính)/u.test(said))
+    return "Close-up of hands placing a few plain coins beside a closed unbranded wallet on a wooden desk, realistic natural light, no readable numbers, letters or logos";
   if (/(mảnh giấy|danh sách|tờ giấy|tiệm sửa)/u.test(said))
-    return "Close-up of one pair of hands unfolding a small paper list beside a wooden repair counter, realistic paper texture, natural indoor light";
+    return "Close-up of one pair of hands unfolding a small blank paper beside a wooden repair counter, realistic paper texture, natural indoor light, no writing or letters";
   if (/(sách|đọc|học|viết|ghi chép|trang giấy|bút)/u.test(said))
-    return "Visible hands write one line in an open notebook on a wooden desk, close-up shot, natural window light, realistic paper and pen details";
+    return "Visible hands rest beside an open blank notebook and a pen on a wooden desk, close-up shot, natural window light, realistic paper texture, no writing or letters";
   if (/(gọi|cuộc gọi|bắt máy)/u.test(said))
     return "A Vietnamese young man speaks with a trusted friend across a small desk, relieved expression, medium shot, natural practical light, plain clean wall, uncluttered background, no visible device, screen, interface, text, glyphs or numbers";
   if (/(điện thoại|tin nhắn|ứng dụng|màn hình|xác minh|điện thoại)/u.test(said))
