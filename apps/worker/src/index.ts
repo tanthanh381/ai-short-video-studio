@@ -589,7 +589,7 @@ async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project
   // Diffusion models frequently hallucinate pseudo-writing on phones, screens,
   // documents and signs. These scenes need a semantic check even in Balanced;
   // the normal Quality preset remains the strict gate for every scene.
-  const textRisk = /(?:phone|smartphone|screen|display|mobile|document|paper|sign|book|notebook|money|cash|banknote|currency|wallet|bank(?:ing)? app|message|notification|poster|màn hình|điện thoại|tin nhắn|tờ giấy|tài liệu|tiền|lương|ví)/iu.test(sceneText);
+  const textRisk = /(?:phone|smartphone|screen|display|mobile|laptop|computer|document|paper|sign|book|notebook|notepad|planner|sticky note|task card|money|cash|banknote|currency|wallet|bank(?:ing)? app|message|notification|poster|màn hình|điện thoại|tin nhắn|tờ giấy|tài liệu|tiền|lương|ví)/iu.test(sceneText);
   const visionEnabled = process.env.VISION_QUALITY_GATE !== "false"
     && (project.settings.generationPreset === "quality" || (textRisk && process.env.VISION_TEXT_GATE !== "false"));
   if (!visionEnabled) return null;

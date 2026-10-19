@@ -788,6 +788,10 @@ export function visualPromptFlaws(narration: string, prompt: string, cast = ""):
   if (/(?:money|cash|banknotes?|currency|wallet)/u.test(text)) flaws++;
   if (/(?:paper|document|notebook|page|book|list|planner)/u.test(text)
     && /(?:handwritten|writing|written|text|words?|list|checkmarks?|circled|ink|note|label)/u.test(text)) flaws++;
+  if (/(?:paper|document|notebook|notepad|page|book|list|planner|note|sticky note|task card)/u.test(text)
+    && /(?:handwritten|writing|written|text|words?|list|checkmarks?|circled|ink|note|label|task)/u.test(text)) flaws++;
+  if (/(?:screen|display|laptop|computer)/u.test(text)
+    && /(?:display(?:ing)?|showing|icon|interface|meeting|text|writing|open)/u.test(text)) flaws++;
   if (/\b(?:racing thoughts?|floating .*scribbles|shadow growing)\b/u.test(text)) flaws++;
   if (/\bfloating (?:pastel )?(?:shapes?|symbols?|icons?)\b/u.test(text)) flaws++;
   if (/\bfloating .*\b(?:handwritten|letters?|characters?)\b/u.test(text)) flaws++;
