@@ -819,14 +819,14 @@ export function concreteVisualFallback(narration: string): string {
   if (/(sách|đọc|học|viết|ghi chép|trang giấy|bút)/u.test(said))
     return "Visible hands write one line in an open notebook on a wooden desk, close-up shot, natural window light, realistic paper and pen details";
   if (/(điện thoại|tin nhắn|gọi|màn hình|xác minh|điện thoại)/u.test(said))
-    return "A Vietnamese young man pauses beside a quiet desk, one hand resting next to a sealed envelope, medium close-up, natural practical light, no phone, screen, interface, text, glyphs or numbers";
+    return "A Vietnamese young man pauses beside a quiet desk, one hand resting next to a sealed envelope, medium close-up, natural practical light, plain clean wall, uncluttered background, no posters, papers, phone, screen, interface, text, glyphs or numbers";
   if (/(đèn|ngọn đèn|căn nhà|cửa sổ|ổ điện|hẹn giờ)/u.test(said))
     return "An empty room with one warm lamp and a visible wall timer beside a window, wide shot, realistic evening light, no people";
   if (/(thở|hơi thở|bình tĩnh|thiền)/u.test(said))
     return "A person sits upright beside a window with one hand on the chest, taking one slow breath, medium shot, soft natural light, quiet room in focus";
   if (/(ký ức|quên|nghĩ|cảm xúc|suy nghĩ)/u.test(said))
     return "A person pauses at a desk with both hands resting beside a closed notebook, looking toward a quiet window, medium shot, natural afternoon light";
-  return "A person performs one calm deliberate action at a simple desk beside a window, medium shot, realistic natural light and clear foreground details";
+  return "A person performs one calm deliberate action at a simple desk beside a window, medium shot, realistic natural light, plain clean wall, uncluttered background and clear foreground details, no posters, signs, labels or writing";
 }
 
 /** Drafts asked for before settling on the closest one: length misses are retried with the previous word count. */
@@ -1105,7 +1105,7 @@ export function buildProductionImagePrompt(imagePrompt: string, presetPrompt: st
   // positive subject words to decide whether anatomy/face restoration is safe;
   // putting those words in a generic suffix made object-only scenes become
   // portraits (for example running shoes turned into a close-up face).
-  return `${imagePrompt.trim()}. ${presetPrompt.trim()}. Depict one concrete story beat with a clear subject, action, essential object and setting. Keep the same appearance and wardrobe when applicable. Do not add unrelated subjects, writing, brand marks or watermarks. If a phone, screen, document or sign appears, keep it blank or softly defocused: no readable text, pseudo-writing, glyphs, numbers or interface details.`.slice(0, 3_000);
+  return `${imagePrompt.trim()}. ${presetPrompt.trim()}. Depict one concrete story beat with a clear subject, action, essential object and setting. Keep the same appearance and wardrobe when applicable. Do not add unrelated subjects, writing, brand marks or watermarks. Prefer a clean, uncluttered background; do not add accidental posters, signs, labels, papers or wall writing. If a phone, screen, document or sign appears, keep it blank or softly defocused: no readable text, pseudo-writing, glyphs, numbers or interface details.`.slice(0, 3_000);
 }
 
 export function parseStoryboard(value: unknown): StoryboardResult {
