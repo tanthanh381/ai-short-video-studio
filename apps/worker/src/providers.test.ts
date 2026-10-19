@@ -200,6 +200,7 @@ describe("diffusion prompt quality", () => {
     // Do not ask SDXL to render a readable phone screen: it produces pseudo-text.
     expect(visualPromptFlaws("Cô ấy đọc tin nhắn trên điện thoại.", "A woman checks a smartphone screen beside a window")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhận được yêu cầu chuyển tiền.", "Close-up of a smartphone with a banking app open")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Anh mở ứng dụng ngân hàng.", "Wide room view showing a young man typing in a mobile app")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother stands beside floating handwritten characters")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother checks a phone beside a desk")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Minh gọi cho mẹ.", "A Vietnamese mother holds a phone beside a quiet table")).toBeGreaterThan(0);
@@ -220,6 +221,7 @@ describe("diffusion prompt quality", () => {
     expect(concreteVisualFallback("Hãy gọi tên cảm xúc và viết lại điều đang nghĩ.")).toContain("open notebook");
     expect(concreteVisualFallback("Người thợ tìm thấy một mảnh giấy gấp tư.")).toContain("paper list");
     expect(concreteVisualFallback("Một hơi thở chậm đưa bạn về hiện tại.")).toContain("one slow breath");
+    expect(concreteVisualFallback("Anh gọi đến số điện thoại đã lưu.")).toContain("trusted friend");
   });
 });
 

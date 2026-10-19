@@ -784,7 +784,7 @@ export function visualPromptFlaws(narration: string, prompt: string, cast = ""):
   // are often flipped by SDXL into a front-facing screen. The only safe output
   // is a prompt that explicitly removes the device from the frame (our fallback
   // does that), so force repair for every phone/mobile mention.
-  if (/(?:phone|smartphone|mobile phone|mobile device|cellphone)/u.test(text)) flaws++;
+  if (/(?:phone|smartphone|mobile phone|mobile device|cellphone|mobile app|bank(?:ing)? app)/u.test(text)) flaws++;
   if (/\b(?:racing thoughts?|floating .*scribbles|shadow growing)\b/u.test(text)) flaws++;
   if (/\bfloating (?:pastel )?(?:shapes?|symbols?|icons?)\b/u.test(text)) flaws++;
   if (/\bfloating .*\b(?:handwritten|letters?|characters?)\b/u.test(text)) flaws++;
@@ -818,7 +818,9 @@ export function concreteVisualFallback(narration: string): string {
     return "Close-up of one pair of hands unfolding a small paper list beside a wooden repair counter, realistic paper texture, natural indoor light";
   if (/(sách|đọc|học|viết|ghi chép|trang giấy|bút)/u.test(said))
     return "Visible hands write one line in an open notebook on a wooden desk, close-up shot, natural window light, realistic paper and pen details";
-  if (/(điện thoại|tin nhắn|gọi|màn hình|xác minh|điện thoại)/u.test(said))
+  if (/(gọi|cuộc gọi|bắt máy)/u.test(said))
+    return "A Vietnamese young man speaks with a trusted friend across a small desk, relieved expression, medium shot, natural practical light, plain clean wall, uncluttered background, no visible device, screen, interface, text, glyphs or numbers";
+  if (/(điện thoại|tin nhắn|ứng dụng|màn hình|xác minh|điện thoại)/u.test(said))
     return "A Vietnamese young man pauses beside a quiet desk, one hand resting next to a sealed envelope, medium close-up, natural practical light, plain clean wall, uncluttered background, no posters, papers, phone, screen, interface, text, glyphs or numbers";
   if (/(đèn|ngọn đèn|căn nhà|cửa sổ|ổ điện|hẹn giờ)/u.test(said))
     return "An empty room with one warm lamp and a visible wall timer beside a window, wide shot, realistic evening light, no people";
