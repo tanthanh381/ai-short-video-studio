@@ -169,21 +169,43 @@ export const PAPER_PROMPT_RULES =
   "character or boy (he is added automatically); at most one small second figure, and only when the narration is about another person. " +
   `${PAPER_DAILY_ACTIONS} NEVER write a place, room, street, sky, weather, light, time of day, camera, shot size or background, and no text.`;
 
+/** A small local model can lose the action while compressing a paper-stage prompt. Keep the picture tied to the
+ * spoken line with a deterministic, safe fallback rather than exporting a static portrait. */
+export function paperActionFromNarration(narration: string): string {
+  const text = narration.toLocaleLowerCase("vi-VN");
+  if (/(tưới|cây|hoa|chậu)/u.test(text)) return "watering a small potted plant";
+  if (/(trà|chén|ly|cốc|uống)/u.test(text)) return "holding a small ceramic tea cup";
+  if (/(sách|đọc|trang|chữ)/u.test(text)) return "opening a small book and reading";
+  if (/(giấy|gấp|viết|thư|lời định nói)/u.test(text)) return "folding a small piece of paper";
+  if (/(đi|bước|rời|quay về)/u.test(text)) return "taking one small thoughtful step";
+  if (/(đáp trả|tranh cãi|chê bai|giận|bực)/u.test(text)) return "looking aside with gently clenched hands";
+  if (/(im lặng|bình tâm|suy nghĩ|ngẫm|nhớ)/u.test(text)) return "sitting quietly with one hand on the chin";
+  return "holding a small everyday prop and looking thoughtful";
+}
+
+const PAPER_WEAK_ACTION = /\b(?:standing(?: calmly)?|reflecting|showing tension|looking(?: at)?|resting|feet|legs|empty|without movement|quietly)\b/iu;
+const PAPER_STRONG_ACTION = /\b(?:hold(?:ing)?|carry(?:ing)?|sit(?:ting)?|walk(?:ing)?|fold(?:ing)?|water(?:ing)?|open(?:ing)?|close(?:ing)?|read(?:ing)?|sweep(?:ing)?|drink(?:ing)?|offer(?:ing)?|stretch(?:ing)?|bow(?:ing)?|touch(?:ing)?|place|placing|pick(?:ing)?|write|writing)\b/iu;
+
 // Places, backdrops and camera words that turn the bare paper into a scene ("on dusty village road",
 // "against grey rain-swept street background", "low angle wide shot", "shallow depth of field").
 // "paper" and bare "rain…" are not here: a paper lantern or a raindrop is a prop, while "on kraft paper" and "rain-swept street"
 // are caught by "kraft", "street" and the weather words below.
-const SCENERY = /\b(?:road|street|alley|path|forest|woods|bamboo grove|village|town|city|market|room|indoors?|house|home|kitchen|temple|garden|park|field|mountains?|river|lake|sea|beach|sky|clouds?|rain|rainy|raining|rain-swept|snow|snowy|snowing|mist|misty|fog|foggy|storm\w*|sunset|sunrise|night|landscape|scenery|background|backdrop|wall|window|door|lighting|light|daylight|sunlight|moonlight|shadows?|depth of field|bokeh|shot|angle|view|perspective|composition|foreground|eye level|morning|evening|afternoon|dusk|dawn|close-?up|camera|lens|cinematic|textur\w*|kraft|beige)\b/iu;
+const SCENERY = /\b(?:road|street|alley|path|forest|woods|bamboo grove|village|town|city|market|room|indoors?|house|home|kitchen|temple|garden|park|field|mountains?|river|lake|sea|beach|sky|clouds?|rain|rainy|raining|rain-swept|snow|snowy|snowing|mist|misty|fog|foggy|storm\w*|sunset|sunrise|night|landscape|scenery|background|backdrop|wall|window|door|lighting|light|daylight|sunlight|moonlight|shadows?|depth of field|bokeh|shot|angle|view|perspective|composition|foreground|eye level|morning|evening|afternoon|dusk|dawn|close-?up|camera|lens|cinematic|textur\w*|kraft|beige|above|overhead|top-down)\b/iu;
 
 /**
  * The scene prompt for a paper-stage picture: the mascot first (every scene, so the character stays the same), then
  * only the clauses about the character, without places or camera words.
  */
-export function paperStagePrompt(prompt: string): string {
+export function paperStagePrompt(prompt: string, narration = ""): string {
   const withoutMascot = prompt.replace(new RegExp(PAPER_MASCOT.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu"), "")
     .replace(/clearly male little chibi boy, short dark-brown hair in a small topknot, thick eyebrows, olive headband, olive ancient robe\.?/giu, "")
     .replace(/a little chibi boy with a topknot hair bun and a long olive headband ribbon, wearing an olive green ancient robe\.?/giu, "")
     .replace(/\b(another|a second|two|other) chibis?\b/giu, "$1 small child")
+    // A small model may turn "two boys" or "two children" into a second mascot even when the narration names
+    // only the recurring boy. Keep one canonical subject; a real second person is permitted only when the prompt
+    // explicitly survives the story-level paper rules.
+    .replace(/\b(?:two|2)\s+(?:boys?|children|kids?|chibis?)\b/giu, "one boy")
+    .replace(/\b(?:teenage|young|old)\s+(?:boys?|children|kids?)\b/giu, "one boy")
     // The boy is put in front, so the writer's own subject ("Small chibi figure", "Tiny he") is dropped from the start of
     // each clause and the action is what remains; a "chibi rock" that slips through is just a rock.
     .replace(/(^|[,.;]\s*)(?:(?:a|an|the|tiny|small|little|cute|same|lone)\s+)*(?:(?:full[- ]body\s+)?chibi(?:\s+(?:figure|character|boy|girl|kid))?|figure|character|boy|kid|child|he)\b(?:\s+in (?:an? )?olive green robe)?[\s,]*/giu, "$1")
@@ -198,7 +220,10 @@ export function paperStagePrompt(prompt: string): string {
     before = action;
     action = action.replace(/[\s,;]+(?:a|an|the|beside|next to|with|and|while|of|on|in|at|to|by|near)\s*$/iu, "");
   }
-  return `${PAPER_MASCOT}, ${action || "standing calmly"}`;
+  const safeAction = action && action !== "standing calmly" && (!PAPER_WEAK_ACTION.test(action) || PAPER_STRONG_ACTION.test(action))
+    ? action
+    : paperActionFromNarration(narration);
+  return `${PAPER_MASCOT}, ${safeAction}`;
 }
 
 export function usesPaperStage(settings: { layoutTemplate?: string; aspectRatio: string }): boolean {

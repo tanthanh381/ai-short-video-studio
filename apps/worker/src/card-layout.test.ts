@@ -167,7 +167,7 @@ describe("paper stage (Đạo lý cổ phong)", () => {
       "Full body chibi in olive green robe walking alone through misty forest path carrying heavy bamboo shoulder pole with two baskets, low angle wide shot",
       "Close-up of a chibi figure in olive green robe smiling softly, holding out a small warm cup against grey rain-swept street background, shallow depth of field",
     ];
-    const prompts = written.map(paperStagePrompt);
+    const prompts = written.map((prompt) => paperStagePrompt(prompt));
     for (const prompt of prompts) {
       expect(prompt.startsWith(`${PAPER_MASCOT}, `)).toBe(true);
       expect(prompt.split(PAPER_MASCOT).length - 1).toBe(1);
@@ -242,7 +242,7 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     expect(action("walking through rain-swept street holding an umbrella")).toBe("walking holding an umbrella");
     // what a dropped place leaves behind is trimmed, and an empty answer falls back to a calm pose
     expect(action("sitting beside a wall")).toBe("sitting");
-    expect(action("in a misty forest, wide shot")).toBe("standing calmly");
+    expect(action("in a misty forest, wide shot")).toBe("holding a small everyday prop and looking thoughtful");
   });
 
   it("puts the captions under the character, small and without a box", async () => {
@@ -312,5 +312,19 @@ describe("progress bar position", () => {
     expect(bar).toBe(1471);
     expect(bar).toBeGreaterThan(1920 - Math.round(1920 * 0.24));
     expect(progressBarY({ layoutTemplate: "full-bleed", aspectRatio: "16:9" }, 1920, 1080)).toBe(1068);
+  });
+
+  it("removes a hallucinated second boy and camera framing from paper-stage prompts", async () => {
+    const { paperStagePrompt } = await import("./card-layout");
+    const prompt = paperStagePrompt("showing two boys standing, seen from above beside a cup");
+    expect(prompt).not.toMatch(/two boys|above/iu);
+    expect(prompt).toContain("clearly male little chibi boy");
+  });
+
+  it("uses the narration to avoid a static paper-stage portrait when the model loses its action", async () => {
+    const { paperStagePrompt } = await import("./card-layout");
+    expect(paperStagePrompt("standing calmly", "Cậu đặt chén trà xuống rồi suy nghĩ.")).toContain("holding a small ceramic tea cup");
+    expect(paperStagePrompt("standing calmly", "Cậu bước ra tưới cây.")).toContain("watering a small potted plant");
+    expect(paperStagePrompt("reflecting", "Cậu giữ im lặng và bình tâm.")).toContain("sitting quietly with one hand on the chin");
   });
 });

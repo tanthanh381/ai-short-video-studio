@@ -620,7 +620,7 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     scene.imagePrompt = english;
     await updateScene(scene.id, { image_prompt: english });
   }
-  const prompt = buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project), visualPresetPrompt(project.settings.visualPreset));
+  const prompt = buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project, scene.narration), visualPresetPrompt(project.settings.visualPreset));
   const options = {
     ...project.settings.localModels,
     seed: sceneSeed(project, scene),
@@ -1141,8 +1141,8 @@ function sceneSeed(project: Project, scene: Scene): number {
 }
 
 /** The scene's picture prompt; a hand-drawn video must not get a second hand inside the picture. */
-function scenePicturePrompt(prompt: string, project: Project): string {
-  if (usesPaperStage(project.settings)) return paperStagePrompt(prompt);
+function scenePicturePrompt(prompt: string, project: Project, narration = ""): string {
+  if (usesPaperStage(project.settings)) return paperStagePrompt(prompt, narration);
   return drawsByHand(project.settings) ? withoutDrawingHand(prompt) : prompt;
 }
 

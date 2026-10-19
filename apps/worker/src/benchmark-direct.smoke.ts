@@ -12,7 +12,7 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { DEFAULT_PROJECT_SETTINGS, type Project, type ProjectSettings, type Scene, visualPresetPrompt } from "@studio/shared";
-import { castForScript, storyNationality, usesStoryCard } from "./card-layout";
+import { castForScript, paperStagePrompt, PAPER_STORYBOARD_STYLE, storyNationality, usesPaperStage, usesStoryCard } from "./card-layout";
 import { LocalMediaAdapter } from "./local-media";
 import { OllamaStoryboardAdapter } from "./ollama";
 import {
@@ -32,6 +32,7 @@ const benchmarkPreset: ProjectSettings["generationPreset"] = process.env.BENCHMA
 
 // One look per topic, chosen the way a channel owner would: the same retention aids everywhere.
 const LOOK: Record<string, Partial<ProjectSettings>> = {
+  "Đạo lý cổ phong": { layoutTemplate: "paper-stage", visualPreset: "chibi-co-phong", voice: "doc-truyen", targetDurationSec: 30, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: false, sceneSfx: false, outroText: "" },
   "Triết lý": { layoutTemplate: "story-card", cardTheme: "sepia", visualPreset: "thuy-mac-sepia", voice: "triet-ly" },
   "Motivation": { visualPreset: "cinematic-color", voice: "doc-truyen" },
   "Storytelling": { layoutTemplate: "story-card", cardTheme: "blue", visualPreset: "cartoon", voice: "doc-truyen" },
@@ -79,7 +80,8 @@ for (const item of cases) {
     const storyboard = await mark("storyboard", () => createFaithfulStoryboard(ollama, {
       title: item.hook, sourceText, inputMode: "full-script", rewrite: false, audience: settings.targetAudience, style: settings.style,
       duration: settings.targetDurationSec, voice: settings.voice, voiceSpeed: settings.voiceSpeed,
-      visualStyle: `${settings.visualStyle}; ${visualPresetPrompt(settings.visualPreset)}`, model: null, cast,
+      visualStyle: usesPaperStage(settings) ? PAPER_STORYBOARD_STYLE : `${settings.visualStyle}; ${visualPresetPrompt(settings.visualPreset)}`, model: null, cast,
+      paperStage: usesPaperStage(settings),
     } as never));
     const title = cardMode ? (await ollama.writeCardTitle?.({ sourceText })?.catch(() => "")) || item.hook : "";
     // Mirror the production worker: Qwen is only needed for storyboard authoring.
@@ -89,7 +91,9 @@ for (const item of cases) {
     const projectId = crypto.randomUUID();
     const scenes: Scene[] = storyboard.scenes.map((scene, order) => ({
       id: crypto.randomUUID(), order, narration: scene.narration,
-      imagePrompt: withCast(cast, vietnameseByDefault(youthfulSiblings(scene.imagePrompt), nationality), scene.narration, cardMode),
+      imagePrompt: usesPaperStage(settings)
+        ? paperStagePrompt(scene.imagePrompt, scene.narration)
+        : withCast(cast, vietnameseByDefault(youthfulSiblings(scene.imagePrompt), nationality), scene.narration, cardMode),
       description: "",
       estimatedDurationMs: 3000, actualDurationMs: null, imagePath: null, videoPath: null, audioPath: null, thumbnailUrl: null,
       mediaStatus: "pending", errorMessage: null, annotationJson: null, subtitles: [],
