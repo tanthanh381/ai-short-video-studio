@@ -780,8 +780,11 @@ export function visualPromptFlaws(narration: string, prompt: string, cast = ""):
   // Diffusion models routinely turn an "urgent message" or bank request into
   // convincing-looking pseudo-writing. Keep the story beat, but force the
   // device to be a non-readable prop unless real text rendering is supported.
-  if (/(?:phone|smartphone|screen|display|mobile)/u.test(text)
-    && /(?:display(?:ing)?|message|request|notification|bank application|interface|text)/u.test(text)) flaws++;
+  // A phone is itself a high-risk text surface: even "back of phone" prompts
+  // are often flipped by SDXL into a front-facing screen. The only safe output
+  // is a prompt that explicitly removes the device from the frame (our fallback
+  // does that), so force repair for every phone/mobile mention.
+  if (/(?:phone|smartphone|mobile phone|mobile device|cellphone)/u.test(text)) flaws++;
   if (/\b(?:racing thoughts?|floating .*scribbles|shadow growing)\b/u.test(text)) flaws++;
   if (/\bfloating (?:pastel )?(?:shapes?|symbols?|icons?)\b/u.test(text)) flaws++;
   if (/\bfloating .*\b(?:handwritten|letters?|characters?)\b/u.test(text)) flaws++;
@@ -816,7 +819,7 @@ export function concreteVisualFallback(narration: string): string {
   if (/(sách|đọc|học|viết|ghi chép|trang giấy|bút)/u.test(said))
     return "Visible hands write one line in an open notebook on a wooden desk, close-up shot, natural window light, realistic paper and pen details";
   if (/(điện thoại|tin nhắn|gọi|màn hình|xác minh|điện thoại)/u.test(said))
-    return "Close-up of one pair of hands holding a smartphone with its back and plain dark glass facing the camera, quiet desk, natural practical light, no screen interface, text, glyphs or numbers";
+    return "A Vietnamese young man pauses beside a quiet desk, one hand resting next to a sealed envelope, medium close-up, natural practical light, no phone, screen, interface, text, glyphs or numbers";
   if (/(đèn|ngọn đèn|căn nhà|cửa sổ|ổ điện|hẹn giờ)/u.test(said))
     return "An empty room with one warm lamp and a visible wall timer beside a window, wide shot, realistic evening light, no people";
   if (/(thở|hơi thở|bình tĩnh|thiền)/u.test(said))

@@ -197,9 +197,12 @@ describe("diffusion prompt quality", () => {
     expect(visualPromptFlaws("Tờ giấy trong túi áo làm anh bật khóc. Minh mang chiếc áo cũ đến tiệm sửa.", "A tailor repairs an old skirt at a wooden counter")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Tờ giấy trong túi áo làm anh bật khóc. Minh mang chiếc áo cũ đến tiệm sửa.", "One pair of hands unfolds a handwritten paper note beside an old shirt at a repair counter")).toBe(0);
     expect(visualPromptFlaws("Cô ấy đọc tin nhắn trên điện thoại.", "A woman stands beside a window holding a notebook")).toBeGreaterThan(0);
-    expect(visualPromptFlaws("Cô ấy đọc tin nhắn trên điện thoại.", "A woman checks a smartphone screen beside a window")).toBe(0);
+    // Do not ask SDXL to render a readable phone screen: it produces pseudo-text.
+    expect(visualPromptFlaws("Cô ấy đọc tin nhắn trên điện thoại.", "A woman checks a smartphone screen beside a window")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Anh nhận được yêu cầu chuyển tiền.", "Close-up of a smartphone with a banking app open")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother stands beside floating handwritten characters")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother checks a phone beside a desk")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Minh gọi cho mẹ.", "A Vietnamese mother holds a phone beside a quiet table")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Trên đó là danh sách mua hàng.", "A little girl looks at blurry text written on a paper")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Một câu trả lời trôi chảy vẫn có thể sai.", "Close-up of a laptop displaying polished text on screen")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Tôi chia công việc thành hai bước.", "A desk with two stacks labeled Draft and Verify")).toBeGreaterThan(0);
@@ -213,7 +216,7 @@ describe("diffusion prompt quality", () => {
       "Minh gọi cho mẹ.",
       "A Vietnamese mother holds a phone beside a quiet table",
       "a Vietnamese mother with a black bun, and her little girl with two pigtails",
-    )).toBe(0);
+    )).toBeGreaterThan(0);
     expect(concreteVisualFallback("Hãy gọi tên cảm xúc và viết lại điều đang nghĩ.")).toContain("open notebook");
     expect(concreteVisualFallback("Người thợ tìm thấy một mảnh giấy gấp tư.")).toContain("paper list");
     expect(concreteVisualFallback("Một hơi thở chậm đưa bạn về hiện tại.")).toContain("one slow breath");

@@ -585,7 +585,14 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
  * fails the scene is rejected so the user can regenerate only that scene instead of exporting a bad frame.
  */
 async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project, job: JobRow): Promise<ImageQualityAudit | null> {
-  if (project.settings.generationPreset !== "quality" || process.env.VISION_QUALITY_GATE === "false") return null;
+  const sceneText = `${scene.narration}\n${scene.imagePrompt}`;
+  // Diffusion models frequently hallucinate pseudo-writing on phones, screens,
+  // documents and signs. These scenes need a semantic check even in Balanced;
+  // the normal Quality preset remains the strict gate for every scene.
+  const textRisk = /(?:phone|smartphone|screen|display|mobile|document|paper|sign|bank(?:ing)? app|message|notification|màn hình|điện thoại|tin nhắn|tờ giấy|tài liệu)/iu.test(sceneText);
+  const visionEnabled = process.env.VISION_QUALITY_GATE !== "false"
+    && (project.settings.generationPreset === "quality" || (textRisk && process.env.VISION_TEXT_GATE !== "false"));
+  if (!visionEnabled) return null;
   try {
     return await pool.runOne("llm", (node) => ollamaOn(node.id).auditImage({
       image,
