@@ -66,6 +66,22 @@ describe("channel presets", () => {
     });
   });
 
+  it("the Đạo lý cổ phong preset matches the 30-second reference format", () => {
+    const settings = CHANNEL_PRESETS.find((preset) => preset.id === "dao-ly-co-phong")!.apply(DEFAULT_PROJECT_SETTINGS);
+    expect(settings).toMatchObject({
+      layoutTemplate: "paper-stage",
+      visualPreset: "chibi-co-phong",
+      aspectRatio: "9:16",
+      targetDurationSec: 30,
+      autoMusic: true,
+      captionHighlight: false,
+      hookTitle: false,
+      progressBar: false,
+      sceneSfx: false,
+      outroText: "",
+    });
+  });
+
   it("the illustrated video preset matches its realistic thumbnail and blurred renderer", () => {
     const settings = CHANNEL_PRESETS.find((preset) => preset.id === "video-minh-hoa")!.apply(DEFAULT_PROJECT_SETTINGS);
     expect(settings).toMatchObject({ layoutTemplate: "story-card", cardTheme: "blurred", visualPreset: "cinematic-color", aspectRatio: "9:16" });

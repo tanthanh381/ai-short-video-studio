@@ -34,7 +34,7 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     hint: "Nhân vật chibi cổ trang trên nền giấy kraft, giọng nam trầm, phụ đề nhỏ dưới nhân vật",
     // Đức Trí: median 107 Hz at 3.7 words/s, the closest to the reference short (99 Hz, 3.6 w/s); "triet-ly" measured
     // 145 Hz and read 14% slower.
-    apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1 }),
+    apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, targetDurationSec: 30, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: false, sceneSfx: false, outroText: "" }),
   },
   {
     id: "truyen-chibi-kraft",
