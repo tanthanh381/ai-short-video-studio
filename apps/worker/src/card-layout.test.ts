@@ -150,6 +150,8 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     expect(paperStageFilter(1)).not.toBe(paperStageFilter(0));
     expect(paperStageFilter(0)).toContain("0.024*sin");
     expect(paperStageFilter(0)).toContain("12*sin");
+    expect(paperStageFilter(1, "Cậu bước ra khỏi hiên nhà.")).toContain("22*sin");
+    expect(paperStageFilter(2, "Cậu đặt chén trà xuống.")).toContain("7*sin");
     expect(paperFeatherFilter()).toContain(`scale=${PAPER.stage}:${PAPER.stage}`);
     // the sheet is flat: a vignette (smaller angle = stronger) once darkened its corners by 11%
     const { paperGrainArgs, PAPER_HEX } = await import("./card-layout");

@@ -273,12 +273,26 @@ export function paperShift(corners: Array<[number, number, number]>): [number, n
  * grainy paper; only the luma plane changes, so the sheet keeps its colour exactly. It is the same still in every scene:
  * the paper stays put while the character moves.
  */
-export function paperStageFilter(index: number): string {
+/** Give the same still illustration a small, purposeful rhythm that follows the narrated action. */
+export function paperStageFilter(index: number, narration = ""): string {
   const phase = (index % 4) * 0.8;
   const cycles = ["2.8", "3.2", "2.5", "3.6"] as const;
   const cycle = cycles[index % cycles.length];
-  const x = [`12*sin(2*PI*(t+${phase})/2.8)`, `16*sin(2*PI*(t+${phase})/3.2)`, `10*sin(2*PI*(t+${phase})/2.5)`, `14*sin(2*PI*(t+${phase})/3.6)`][index % 4];
-  const y = [`4*cos(2*PI*(t+${phase})/2.8)`, `6*sin(2*PI*(t+${phase})/3.2)`, `5*cos(2*PI*(t+${phase})/2.5)`, `4*sin(2*PI*(t+${phase})/3.6)`][index % 4];
+  const text = narration.toLocaleLowerCase("vi-VN");
+  const walking = /(?:bước|đi|rời|quay về)/u.test(text);
+  const handling = /(?:trà|chén|sách|đọc|giấy|gấp|tưới|cây|nến|đèn|bàn tay)/u.test(text);
+  // Walking gets a restrained lateral drift; object-based actions get a closer, calmer rhythm.
+  // The motion is intentionally sub-pixel-ish at output scale: it adds life without warping anatomy.
+  const x = walking
+    ? `${index % 2 ? -22 : 22}*sin(2*PI*(t+${phase})/${cycle})`
+    : handling
+      ? [`8*sin(2*PI*(t+${phase})/2.8)`, `10*sin(2*PI*(t+${phase})/3.2)`, `7*sin(2*PI*(t+${phase})/2.5)`, `9*sin(2*PI*(t+${phase})/3.6)`][index % 4]
+      : [`12*sin(2*PI*(t+${phase})/2.8)`, `16*sin(2*PI*(t+${phase})/3.2)`, `10*sin(2*PI*(t+${phase})/2.5)`, `14*sin(2*PI*(t+${phase})/3.6)`][index % 4];
+  const y = walking
+    ? `5*cos(2*PI*(t+${phase})/${cycle})`
+    : handling
+      ? [`3*cos(2*PI*(t+${phase})/2.8)`, `4*sin(2*PI*(t+${phase})/3.2)`, `3*cos(2*PI*(t+${phase})/2.5)`, `3*sin(2*PI*(t+${phase})/3.6)`][index % 4]
+      : [`4*cos(2*PI*(t+${phase})/2.8)`, `6*sin(2*PI*(t+${phase})/3.2)`, `5*cos(2*PI*(t+${phase})/2.5)`, `4*sin(2*PI*(t+${phase})/3.6)`][index % 4];
   return `[0:v]format=rgba,scale=w='trunc(${PAPER.stage}*(1+0.024*sin(2*PI*(t+${phase})/${cycle}))/2)*2':h=-2:eval=frame,` +
     `rotate=a='0.015*sin(2*PI*(t+${phase})/${cycle})':c=none:ow=iw:oh=ih[character];` +
     `color=c=0x${PAPER_HEX}:s=${PAPER.width}x${PAPER.height}:r=30,format=yuv444p[flat];[2:v]format=yuv444p[grain];` +

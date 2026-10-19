@@ -474,7 +474,7 @@ export async function renderProject(
       // which made slow pans stutter (frame-to-frame motion stdev 1.39 -> 0.87); then a light sharpen for the upscale.
       const sharpen = ",unsharp=5:5:0.5:5:5:0.0";
       const filter = paperCanvas
-        ? paperStageFilter(scene.order)
+        ? paperStageFilter(scene.order, scene.narration)
         : blurredStoryCard
         // Illustrated story: mirror the scene into a blurred canvas, then place the sharp 16:10 illustration on top.
         ? `[0:v]split=2[main][back];[back]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},boxblur=luma_radius=${BLURRED_CARD.backgroundBlur}:luma_power=2:chroma_radius=12:chroma_power=2,eq=saturation=1.08:brightness=0.02[bg];[main]scale=${CARD.width * 2}:${CARD.bandH * 2}:force_original_aspect_ratio=increase,crop=${CARD.width * 2}:${CARD.bandH * 2}${monochrome},${clip ? `${clipFrames},scale=${CARD.width}:${CARD.bandH}:flags=lanczos` : `${motionFilter}:s=${CARD.width}x${CARD.bandH}:fps=30${sharpen}`}[band];[bg][band]overlay=0:${CARD.bandY},format=yuv420p[v]`
