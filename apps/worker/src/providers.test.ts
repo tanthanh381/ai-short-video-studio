@@ -181,6 +181,7 @@ describe("diffusion prompt quality", () => {
       "cinematic natural illustration, realistic lighting",
     );
     expect(prompt).toContain("concrete story beat");
+    expect(prompt).toContain("pseudo-writing");
     expect(prompt).not.toContain("Không chữ");
     expect(prompt).not.toContain("lời đọc");
   });

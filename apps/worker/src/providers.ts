@@ -1097,7 +1097,7 @@ export function buildProductionImagePrompt(imagePrompt: string, presetPrompt: st
   // positive subject words to decide whether anatomy/face restoration is safe;
   // putting those words in a generic suffix made object-only scenes become
   // portraits (for example running shoes turned into a close-up face).
-  return `${imagePrompt.trim()}. ${presetPrompt.trim()}. Depict one concrete story beat with a clear subject, action, essential object and setting. Keep the same appearance and wardrobe when applicable. Do not add unrelated subjects, writing, brand marks or watermarks.`.slice(0, 3_000);
+  return `${imagePrompt.trim()}. ${presetPrompt.trim()}. Depict one concrete story beat with a clear subject, action, essential object and setting. Keep the same appearance and wardrobe when applicable. Do not add unrelated subjects, writing, brand marks or watermarks. If a phone, screen, document or sign appears, keep it blank or softly defocused: no readable text, pseudo-writing, glyphs, numbers or interface details.`.slice(0, 3_000);
 }
 
 export function parseStoryboard(value: unknown): StoryboardResult {
