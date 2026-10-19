@@ -758,7 +758,10 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         if reference_image_base64 and is_human:
             payload["referenceImage"] = reference_image_base64
             if reference_strength is not None:
-                payload["referenceStrength"] = max(0.15, min(0.65, float(reference_strength)))
+                # Keep the worker's low-strength identity anchors intact. Values
+                # below 0.15 are useful for paper-stage: preserve face/wardrobe
+                # cues without forcing every scene back into the anchor pose.
+                payload["referenceStrength"] = max(0.05, min(0.65, float(reference_strength)))
         request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps(payload).encode(),
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
