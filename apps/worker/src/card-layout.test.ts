@@ -329,6 +329,6 @@ describe("progress bar position", () => {
     const { paperStagePrompt } = await import("./card-layout");
     expect(paperStagePrompt("standing calmly", "Cậu đặt chén trà xuống rồi suy nghĩ.")).toContain("holding a small ceramic tea cup");
     expect(paperStagePrompt("standing calmly", "Cậu bước ra tưới cây.")).toContain("watering a small potted plant");
-    expect(paperStagePrompt("reflecting", "Cậu giữ im lặng và bình tâm.")).toContain("sitting quietly with one hand on the chin");
+    expect(paperStagePrompt("reflecting", "Cậu giữ im lặng và bình tâm.")).toContain("holding a folded paper clearly with both hands");
   });
 });
