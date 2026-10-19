@@ -220,8 +220,8 @@ describe("diffusion prompt quality", () => {
       "A Vietnamese mother holds a phone beside a quiet table",
       "a Vietnamese mother with a black bun, and her little girl with two pigtails",
     )).toBeGreaterThan(0);
-    expect(concreteVisualFallback("Hãy gọi tên cảm xúc và viết lại điều đang nghĩ.")).toContain("open blank notebook");
-    expect(concreteVisualFallback("Người thợ tìm thấy một mảnh giấy gấp tư.")).toContain("blank paper");
+    expect(concreteVisualFallback("Hãy gọi tên cảm xúc và viết lại điều đang nghĩ.")).toContain("closed unbranded notebook");
+    expect(concreteVisualFallback("Người thợ tìm thấy một mảnh giấy gấp tư.")).toContain("sealed envelope");
     expect(concreteVisualFallback("Một hơi thở chậm đưa bạn về hiện tại.")).toContain("one slow breath");
     expect(concreteVisualFallback("Anh gọi đến số điện thoại đã lưu.")).toContain("trusted friend");
   });
