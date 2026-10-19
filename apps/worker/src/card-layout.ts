@@ -138,14 +138,18 @@ export const PAPER = {
  * The one recurring character of a paper-stage video. Short on purpose: the image model reads 77 tokens, and the
  * bridge's style words come first; a 25-word description pushed the scene's action out of the prompt.
  */
-export const PAPER_MASCOT = "little chibi boy, topknot hair bun, long olive headband ribbon";
+export const PAPER_MASCOT = "clearly male little chibi boy, short dark-brown hair in a small topknot, thick eyebrows, olive headband, olive ancient robe";
+
+/** Everyday actions that make the paper-stage character feel alive instead of posing for a portrait. */
+export const PAPER_DAILY_ACTIONS =
+  "Use one visible everyday action when it fits the narration: sit and think, drink tea, sweep, carry a basket, open or close a book, water a plant, feed a cat, stretch, walk, bow, offer a cup, comfort someone or wave goodbye.";
 
 /** Told to the storyboard writer for paper-stage videos: one character on bare paper, never a place. */
 export const PAPER_STORYBOARD_STYLE =
   "one small chibi character on plain kraft paper with no scenery: no room, street, forest, sky or landscape. " +
-  "Build a visual story, not a portrait: every scene must show one readable action, one facial emotion and at most one simple prop or one small second figure. " +
+  "Build a visual story, not a portrait: every scene must show one readable everyday action, one facial emotion and at most one simple prop or one small second figure. " +
   "Progress the character from the opening tension or problem through a concrete change to a calm, satisfying final beat. " +
-  "Describe only the character's pose, facial expression, gesture and prop in under 20 words";
+  `${PAPER_DAILY_ACTIONS} Describe only the character's pose, facial expression, gesture and prop in under 20 words`;
 
 /**
  * How the paper-stage writer must describe each picture. The generic rules ("show the object, change the subject, add
@@ -156,14 +160,14 @@ export const PAPER_STORYBOARD_STYLE =
  */
 export const PAPER_PROMPT_RULES =
   "Every imagePrompt is ENGLISH, 6-14 words and describes only THE BOY of this story. Work in two steps: the beat says what this narration " +
-  "means; the imagePrompt is what the boy does to SHOW that exact beat: a clear pose, a clear face and ONE simple everyday prop he holds or sits " +
+  "means; the imagePrompt is what the boy does to SHOW that exact beat: one ordinary life action, a clear pose, a clear face and ONE simple everyday prop he holds or sits " +
   "beside, written so the prop is plainly visible (\"holding a ...\", \"sitting beside a ...\"). Choose the prop that fits this narration from " +
   "everyday objects such as cup, bowl, kettle, lantern, candle, book, scroll, basket, umbrella, broom, rope, fan, mirror, flower pot, small plant, " +
   "bird, cat or big grey stone; if the narration names an object use that one, and for an abstract sentence pick the object a storyteller would use " +
   "to show it. Never copy the wording of an earlier scene: every scene has its own pose and its own prop. The boy is in EVERY picture and is the " +
   "only subject: never describe an object, animal, place or another person on its own, and never write the words chibi, kid, child, figure, " +
   "character or boy (he is added automatically); at most one small second figure, and only when the narration is about another person. " +
-  "NEVER write a place, room, street, sky, weather, light, time of day, camera, shot size or background, and no text.";
+  `${PAPER_DAILY_ACTIONS} NEVER write a place, room, street, sky, weather, light, time of day, camera, shot size or background, and no text.`;
 
 // Places, backdrops and camera words that turn the bare paper into a scene ("on dusty village road",
 // "against grey rain-swept street background", "low angle wide shot", "shallow depth of field").
@@ -177,6 +181,7 @@ const SCENERY = /\b(?:road|street|alley|path|forest|woods|bamboo grove|village|t
  */
 export function paperStagePrompt(prompt: string): string {
   const withoutMascot = prompt.replace(new RegExp(PAPER_MASCOT.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu"), "")
+    .replace(/clearly male little chibi boy, short dark-brown hair in a small topknot, thick eyebrows, olive headband, olive ancient robe\.?/giu, "")
     .replace(/a little chibi boy with a topknot hair bun and a long olive headband ribbon, wearing an olive green ancient robe\.?/giu, "")
     .replace(/\b(another|a second|two|other) chibis?\b/giu, "$1 small child")
     // The boy is put in front, so the writer's own subject ("Small chibi figure", "Tiny he") is dropped from the start of
