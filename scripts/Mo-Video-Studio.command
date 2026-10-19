@@ -19,7 +19,9 @@ COMFYUI_ROOT=${COMFYUI_ROOT:-"$LOCAL_AI_ROOT/ComfyUI"}
 # PyTorch MPS can stall during ComfyUI startup on some macOS builds. CPU is the
 # reliable default; override with COMFYUI_ARGS="--force-fp16" (or another
 # supported ComfyUI argument list) when the local MPS runtime is known-good.
-COMFYUI_ARGS=${COMFYUI_ARGS:---cpu --lowvram --cpu-vae}
+# `--lowvram` is a GPU-only mode and ComfyUI rejects it together with `--cpu`.
+# Keep the CPU launcher valid; SDXL Base remains serialized by the media bridge.
+COMFYUI_ARGS=${COMFYUI_ARGS:---cpu --cpu-vae}
 COMFYUI_AUTOSTART=${COMFYUI_AUTOSTART:-false}
 export IMAGE_STEPS=${IMAGE_STEPS:-4}
 export VIENEU_STEPS=${VIENEU_STEPS:-16}

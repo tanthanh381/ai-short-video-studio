@@ -26,7 +26,8 @@ tailscale_ip=$("$tailscale_cmd" ip -4 2>/dev/null | head -n1 || true)
 
 LOCAL_AI_ROOT=${LOCAL_AI_ROOT:-"$HOME/Developer/local-ai"}
 COMFYUI_ROOT=${COMFYUI_ROOT:-"$LOCAL_AI_ROOT/ComfyUI"}
-COMFYUI_ARGS=${COMFYUI_ARGS:---cpu --lowvram --cpu-vae}
+# `--lowvram` is a GPU-only mode and ComfyUI rejects it together with `--cpu`.
+COMFYUI_ARGS=${COMFYUI_ARGS:---cpu --cpu-vae}
 COMFYUI_AUTOSTART=${COMFYUI_AUTOSTART:-true}
 [[ -d "$LOCAL_AI_ROOT" ]] || { print "Thiếu thư mục $LOCAL_AI_ROOT (model và môi trường Python). Xem docs/TU-HOST.md, mục \"Thêm máy phụ\"."; exit 1; }
 
