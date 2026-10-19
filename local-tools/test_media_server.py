@@ -425,6 +425,15 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(quality["steps"], 8)
         self.assertIn("melted face", quality["negativePrompt"])
 
+    def test_paper_stage_puts_the_fixed_male_identity_before_the_action(self):
+        paper = self._turbo_payload(
+            "a clearly male little chibi boy, short dark-brown hair in a small topknot bun, holding a folded paper",
+            preset="balanced", style="chibi",
+        )
+        self.assertLess(paper["prompt"].index("exactly one male chibi boy"), paper["prompt"].index("holding a folded paper"))
+        self.assertIn("female character", paper["negativePrompt"])
+        self.assertEqual(paper["prompt"].lower().count("chibi boy"), 1)
+
     def test_character_reference_is_forwarded_only_for_human_scenes(self):
         class ImageResponse:
             def __enter__(self):

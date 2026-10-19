@@ -693,15 +693,31 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     # checking a document into a repeated headshot. Portrait-specific detail belongs only to portrait beats.
     human_detail = ", natural skin, detailed face" if is_human and not stylized and face_focus else ""
     nonhuman_focus = "" if (is_human or stylized) else ", the described object or environment is the main subject, no people, no human figures, no face"
-    flat_guard = ", only the described characters, no crowd" if is_flat and is_human else ""
+    flat_guard = ", only the described characters, no crowd" if (is_flat or style == "chibi") and is_human else ""
     action_guard = ", hands and essential object in the foreground, face outside the frame, action shot" if action_first else ""
     stylized_action_guard = (
         ", clear readable everyday action and expressive pose, show the described prop clearly, show the action rather than a generic portrait"
-        if is_flat and STYLIZED_ACTION_RE.search(clean) and not face_focus else ""
+        if (is_flat or style == "chibi") and STYLIZED_ACTION_RE.search(clean) and not face_focus else ""
     )
+    # Paper-stage uses SDXL-Turbo without an identity adapter. Put the short, fixed
+    # character contract before the scene action so CLIP sees it before the 77-token
+    # cutoff. This keeps the boy's gender, hair and robe stable without using a
+    # high-strength img2img reference that would erase the narrated action.
+    paper_identity = (
+        ", exactly one male chibi boy, short dark-brown topknot bun, small olive ribbon, thick eyebrows, olive ancient robe, visible ears"
+        if "clearly male little chibi boy" in clean.lower() else ""
+    )
+    paper_scene = re.sub(
+        r"a clearly male little chibi boy,.*?(?=(?:holding|turning|placing|slowly|watering|opening|folding|taking|shielding)\b)",
+        "",
+        clean,
+        flags=re.IGNORECASE,
+    ) if paper_identity else clean
     # Keep the requested action and essential object near the front of the CLIP context. Safety/style clauses are
     # deliberately appended so the 77-token limit does not silently discard the actual scene.
-    styled = f"{IMAGE_STYLES[style]}, {clean}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
+    # Keep the fixed identity immediately after the style; putting the action first
+    # makes Turbo switch gender/headwear on this preset even when the negative pass is enabled.
+    styled = f"{IMAGE_STYLES[style]}{paper_identity}, {paper_scene}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     if selected_model in OPTIONAL_IMAGE_MODELS:
         return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64, reference_strength)
     if selected_model == COMFYUI_IMAGE_MODEL:
@@ -730,12 +746,12 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     turbo_negative = ""
     if selected_preset == "quality":
         turbo_negative = IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else ""
-    elif is_flat and ("chibi" in clean.lower() or "ancient robe" in clean.lower()):
+    elif (is_flat or style == "chibi") and ("chibi" in clean.lower() or "ancient robe" in clean.lower()):
         # Paper-stage illustrations occasionally hallucinate a few glyphs on the blank sheet.
         # Keep the fast 4-step path, but enable the small negative CFG pass for this preset only.
         # The paper mascot is a single bare-headed boy; Turbo otherwise invents tiny pets,
         # extra figures and hood-like headwear around the requested prop.
-        turbo_negative = "text, letters, words, writing, watermark, logo, gibberish, hat, cap, bonnet, turban, hood, hooded robe, veil, headscarf, head covering"
+        turbo_negative = "text, letters, words, writing, watermark, logo, gibberish, hat, cap, bonnet, turban, hood, hooded robe, veil, headscarf, head covering, female character, woman, girl, long hair"
         if not re.search(r"\b(?:cat|kitten|dog|rabbit|bird|animal|pet)\b", clean, re.IGNORECASE):
             turbo_negative += ", animal, rabbit, cat, dog, bird, pet, extra figure, extra character"
     elif is_human and not stylized and selected_preset == "balanced":
