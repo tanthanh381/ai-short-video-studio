@@ -319,8 +319,10 @@ def generate(payload):
             # 576x1024 / 41-frame profile creates a large transient VAE tensor
             # and was the cause of the bridge disconnecting under swap. Keep
             # real motion, but use the compact profile and cap the first pass
-            # at 17 frames; the final renderer upscales to the requested video.
-            attempts = [(safe_width, safe_height, min(safe_frames, 17), True, "compact-cpu")]
+            # at 9 frames; the final renderer upscales and loops the motion to
+            # the requested scene duration. This is the smallest useful LTX
+            # temporal window (8n+1) and avoids filling Air's swap during VAE.
+            attempts = [(safe_width, safe_height, min(safe_frames, 9), True, "compact-cpu")]
         last_error = None
         with GENERATION_LOCK:
             for render_width, render_height, render_frames, force_cpu, label in attempts:
