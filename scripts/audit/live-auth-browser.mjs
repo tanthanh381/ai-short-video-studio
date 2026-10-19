@@ -113,20 +113,20 @@ try {
     );
     if (process.env.STUDIO_QA_SUBMIT === "1") {
       await page.getByLabel("Ý tưởng hoặc chủ đề").fill("Một thói quen nhỏ giúp bạn bớt suy nghĩ quá nhiều mỗi ngày.");
-      for (let step = 0; step < 5; step += 1) {
-        const templateHeading = page.getByRole("heading", { name: "Chọn mẫu video", exact: true });
-        if (await templateHeading.count()) {
-          const templateOptions = page.getByRole("radio");
-          if (await templateOptions.count()) {
-            await waitUntilEnabled(templateOptions.first());
-            await templateOptions.first().click();
-          }
-        }
+      const continueTo = async (heading) => {
         const nextButton = page.getByRole("button", { name: "Tiếp tục", exact: true });
         await waitUntilEnabled(nextButton);
         await nextButton.click();
-        await page.waitForTimeout(250);
-      }
+        await page.getByRole("heading", { name: heading, exact: true }).waitFor({ timeout: 120_000 });
+      };
+      await continueTo("Chọn mẫu video");
+      const templateOptions = page.getByRole("radio");
+      await waitUntilEnabled(templateOptions.first());
+      await templateOptions.first().click();
+      await continueTo("AI Models");
+      await continueTo("Giọng đọc & nhạc nền");
+      await continueTo("Logo & bố cục");
+      await continueTo("Xem lại & tạo video");
       await page.getByRole("button", { name: "Tạo video hoàn chỉnh", exact: true }).click();
       await page.waitForURL((url) => /\/studio\//.test(url.pathname), { timeout: 30_000 });
       await page.getByRole("button", { name: "Tải MP4", exact: true }).waitFor({ timeout: 25 * 60_000 });
