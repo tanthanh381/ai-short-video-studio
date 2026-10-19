@@ -777,6 +777,11 @@ export function visualPromptFlaws(narration: string, prompt: string, cast = ""):
   if (/\b(?:thought bubble|label appears|written words?|text appears|text overlay|icon)\b/u.test(text)) flaws++;
   if (/\b(?:blurry|faded|visible|readable) text\b|\btext written\b/u.test(text)) flaws++;
   if (/\b(?:labeled|labelled|displaying text|displaying polished text|screen showing|screen displays?|showing text|text summary|bullet points?|suggestions?|readable screen|written on|words on|numbers on|ai interface|branded interface|rows of .*text)\b/iu.test(text)) flaws++;
+  // Diffusion models routinely turn an "urgent message" or bank request into
+  // convincing-looking pseudo-writing. Keep the story beat, but force the
+  // device to be a non-readable prop unless real text rendering is supported.
+  if (/(?:phone|smartphone|screen|display|mobile)/u.test(text)
+    && /(?:display(?:ing)?|message|request|notification|bank application|interface|text)/u.test(text)) flaws++;
   if (/\b(?:racing thoughts?|floating .*scribbles|shadow growing)\b/u.test(text)) flaws++;
   if (/\bfloating (?:pastel )?(?:shapes?|symbols?|icons?)\b/u.test(text)) flaws++;
   if (/\bfloating .*\b(?:handwritten|letters?|characters?)\b/u.test(text)) flaws++;
@@ -811,7 +816,7 @@ export function concreteVisualFallback(narration: string): string {
   if (/(sách|đọc|học|viết|ghi chép|trang giấy|bút)/u.test(said))
     return "Visible hands write one line in an open notebook on a wooden desk, close-up shot, natural window light, realistic paper and pen details";
   if (/(điện thoại|tin nhắn|gọi|màn hình|xác minh|điện thoại)/u.test(said))
-    return "Close-up of one pair of hands checking a smartphone beside a quiet desk, realistic screen glow, natural practical light, no readable text";
+    return "Close-up of one pair of hands holding a smartphone with its back and plain dark glass facing the camera, quiet desk, natural practical light, no screen interface, text, glyphs or numbers";
   if (/(đèn|ngọn đèn|căn nhà|cửa sổ|ổ điện|hẹn giờ)/u.test(said))
     return "An empty room with one warm lamp and a visible wall timer beside a window, wide shot, realistic evening light, no people";
   if (/(thở|hơi thở|bình tĩnh|thiền)/u.test(said))
@@ -1066,7 +1071,7 @@ export function visualActionPrompt(narration: string, prompt: string) {
   const anchors: Array<[RegExp, string]> = [
     [new RegExp(`(?<![\\p{L}])(?:tưới)(?![\\p{L}])(?=.*(?:cây|hoa|chậu))`, "u"), "water visibly pouring from a small watering can onto a potted plant, droplets in the air"],
     [word("đọc sách|đọc quyển sách|mở sách"), "an open book with visible pages held open as the main foreground object, person reading beside a warm lamp"],
-    [word("điện thoại|tin nhắn|gọi điện|smartphone"), "a smartphone held in the foreground with a visible message interface but no readable text, over-the-shoulder shot"],
+    [word("điện thoại|tin nhắn|gọi điện|smartphone"), "a smartphone held in the foreground with its back and plain dark glass facing the camera, over-the-shoulder shot, no screen interface, text, glyphs or numbers"],
     [word("máy tính|laptop|bàn phím"), "an open laptop on a desk as the main foreground object, hands using the keyboard, screen without readable text"],
     [word("nấu ăn|nấu|chiên|xào|bếp"), "a pot, pan and ingredients clearly visible on a kitchen counter, hands stirring the food"],
     // Only the verb: "tỉnh táo hơn cả một ly cà phê" is a comparison, not someone drinking.
