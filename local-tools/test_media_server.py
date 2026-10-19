@@ -438,10 +438,11 @@ class LocalSpeechCaptionTests(unittest.TestCase):
 
         with patch.object(self.media, "image_server_state", return_value="ready"), \
              patch.object(self.media.urllib.request, "urlopen", return_value=ImageResponse()) as request:
-            self.media.local_image("Young woman reading a book", "9:16", reference_image_base64="aW1hZ2U=")
+            self.media.local_image("Young woman reading a book", "9:16", reference_image_base64="aW1hZ2U=", reference_strength=0.20)
         image_request = next(call.args[0] for call in reversed(request.call_args_list) if hasattr(call.args[0], "data"))
         payload = json.loads(image_request.data)
         self.assertEqual(payload["referenceImage"], "aW1hZ2U=")
+        self.assertEqual(payload["referenceStrength"], 0.20)
 
     def test_image_quality_guard_handles_vietnamese_human_prompts(self):
         with patch.object(self.media, "image_server_state", return_value="down"), \

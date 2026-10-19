@@ -478,11 +478,13 @@ def image_default_model(models=None):
     return configured if configured in models else "sdxl-turbo" if "sdxl-turbo" in models else next(iter(models), None)
 
 
-def proxy_image_model(base_url, prompt, aspect_ratio, seed, preset, reference_image_base64=None):
+def proxy_image_model(base_url, prompt, aspect_ratio, seed, preset, reference_image_base64=None, reference_strength=None):
     """Call an optional Z-Image/FLUX bridge using the local image contract."""
     payload = {"prompt": prompt, "aspectRatio": aspect_ratio, "seed": seed, "preset": preset}
     if reference_image_base64:
         payload["referenceImage"] = reference_image_base64
+    if reference_strength is not None:
+        payload["referenceStrength"] = float(reference_strength)
     request = urllib.request.Request(f"{base_url.rstrip('/')}/generate", data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
@@ -658,7 +660,7 @@ def detail_faces(image, style_words, prompt, seed):
     return image
 
 
-def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo", preset=None, reference_image_base64=None):
+def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo", preset=None, reference_image_base64=None, reference_strength=None):
     """Generate at the video's native aspect, selecting SDXL Base for healthy Quality exports."""
     if aspect_ratio not in IMAGE_SIZES:
         raise ValueError("Tỷ lệ ảnh không hợp lệ")
@@ -701,7 +703,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     # deliberately appended so the 77-token limit does not silently discard the actual scene.
     styled = f"{IMAGE_STYLES[style]}, {clean}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     if selected_model in OPTIONAL_IMAGE_MODELS:
-        return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64)
+        return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64, reference_strength)
     if selected_model == COMFYUI_IMAGE_MODEL:
         if reference_image_base64:
             raise ValueError("SDXL Base qua ComfyUI hiện hỗ trợ text-to-image; hãy bỏ ảnh tham chiếu hoặc chọn SDXL-Turbo")
@@ -751,6 +753,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
                    "width": width, "height": height, "negativePrompt": turbo_negative}
         if reference_image_base64 and is_human:
             payload["referenceImage"] = reference_image_base64
+            if reference_strength is not None:
+                payload["referenceStrength"] = max(0.15, min(0.65, float(reference_strength)))
         request = urllib.request.Request(f"{IMAGE_SERVER_URL}/generate", data=json.dumps(payload).encode(),
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_S) as response:
@@ -1763,7 +1767,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Mô tả ảnh trống hoặc quá dài")
                 binary_response(self, "image/png", local_image(prompt, payload.get("aspectRatio", "9:16"), payload.get("model"),
                                                               payload.get("seed"), payload.get("style") or "photo", payload.get("preset"),
-                                                              payload.get("referenceImage")))
+                                                              payload.get("referenceImage"), payload.get("referenceStrength")))
             elif self.path.split("?")[0] == "/video":
                 payload = json.loads(body)
                 strict = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("strict", ["0"])[0] == "1"
