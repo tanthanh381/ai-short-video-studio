@@ -633,6 +633,7 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
   const maxAttempts = 3;
   let lastAudit: ImageQualityAudit | null = null;
   let lastBlank = false;
+  let lastImage: Uint8Array | null = null;
   let correction = "";
   const strictQualityGate = project.settings.generationPreset === "quality" && process.env.VISION_QUALITY_GATE !== "false";
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -640,6 +641,7 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
       ...options,
       seed: (options.seed ?? 0) + attempt * 7919,
     });
+    lastImage = image;
     lastBlank = await imageLooksBlank(image, config.FFMPEG_PATH);
     lastAudit = lastBlank ? null : await auditSceneImage(image, scene, project, job);
     // Balanced/fast may continue during a temporary Vision outage. Quality is
@@ -660,6 +662,15 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     throw new Error(`Ảnh cảnh ${scene.order + 1} vẫn là khung trống sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
   if (strictQualityGate && !lastAudit)
     throw new Error(`Cổng kiểm tra chất lượng hình ảnh chưa sẵn sàng ở cảnh ${scene.order + 1}; hãy bật Ollama Vision rồi thử lại`);
+  // Balanced/fast should not discard an otherwise usable scene solely because
+  // a local vision model interpreted the action too narrowly. Anatomy and
+  // unintended text remain hard blockers; semantic mismatch is surfaced as a
+  // warning so the creator can regenerate that scene instead of losing the
+  // entire video. Quality remains fail-closed above.
+  if (!strictQualityGate && lastImage && lastAudit?.anatomy !== "bad" && lastAudit?.textArtifacts !== "bad") {
+    log.warn({ jobId: job.id, sceneId: scene.id, audit: lastAudit }, "scene_picture_semantic_warning");
+    return lastImage;
+  }
   throw new Error(`Ảnh cảnh ${scene.order + 1} chưa đạt kiểm tra nội dung, anatomy hoặc chữ rác sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
 }
 
