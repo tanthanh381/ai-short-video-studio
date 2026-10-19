@@ -267,7 +267,7 @@ export function paperShift(corners: Array<[number, number, number]>): [number, n
 }
 
 /**
- * One scene: the feathered character (input 0) breathing (1.2% scale, 3.4 s) and swaying (0.4°, 4.6 s) from the feet over the
+ * One scene: the feathered character (input 0) breathing (2.4% scale, 2.5-3.6 s), bobbing and swaying (0.6-0.9°) from the feet over the
  * flat kraft sheet, so it reads as alive without a video model. Phase differs per scene. The paper's grain (input 2, see
  * paperGrainArgs) is added to the finished frame, character included, so the square picture never shows as a smooth patch on
  * grainy paper; only the luma plane changes, so the sheet keeps its colour exactly. It is the same still in every scene:
@@ -277,10 +277,10 @@ export function paperStageFilter(index: number): string {
   const phase = (index % 4) * 0.8;
   const cycles = ["2.8", "3.2", "2.5", "3.6"] as const;
   const cycle = cycles[index % cycles.length];
-  const x = [`7*sin(2*PI*(t+${phase})/2.8)`, `10*sin(2*PI*(t+${phase})/3.2)`, `6*sin(2*PI*(t+${phase})/2.5)`, `8*sin(2*PI*(t+${phase})/3.6)`][index % 4];
-  const y = [`2*cos(2*PI*(t+${phase})/2.8)`, `3*sin(2*PI*(t+${phase})/3.2)`, `4*cos(2*PI*(t+${phase})/2.5)`, `2*sin(2*PI*(t+${phase})/3.6)`][index % 4];
-  return `[0:v]format=rgba,scale=w='trunc(${PAPER.stage}*(1+0.018*sin(2*PI*(t+${phase})/${cycle}))/2)*2':h=-2:eval=frame,` +
-    `rotate=a='0.010*sin(2*PI*(t+${phase})/${cycle})':c=none:ow=iw:oh=ih[character];` +
+  const x = [`12*sin(2*PI*(t+${phase})/2.8)`, `16*sin(2*PI*(t+${phase})/3.2)`, `10*sin(2*PI*(t+${phase})/2.5)`, `14*sin(2*PI*(t+${phase})/3.6)`][index % 4];
+  const y = [`4*cos(2*PI*(t+${phase})/2.8)`, `6*sin(2*PI*(t+${phase})/3.2)`, `5*cos(2*PI*(t+${phase})/2.5)`, `4*sin(2*PI*(t+${phase})/3.6)`][index % 4];
+  return `[0:v]format=rgba,scale=w='trunc(${PAPER.stage}*(1+0.024*sin(2*PI*(t+${phase})/${cycle}))/2)*2':h=-2:eval=frame,` +
+    `rotate=a='0.015*sin(2*PI*(t+${phase})/${cycle})':c=none:ow=iw:oh=ih[character];` +
     `color=c=0x${PAPER_HEX}:s=${PAPER.width}x${PAPER.height}:r=30,format=yuv444p[flat];[2:v]format=yuv444p[grain];` +
     `[flat][character]overlay=x='(W-w)/2+${x}':y='${PAPER.stageBottom}-h+${y}':eval=frame:format=yuv444[comp];` +
     `[comp][grain]blend=c0_expr='A+(B-${PAPER_GRAIN.neutral})*${PAPER_GRAIN.strength}':c1_mode=normal:c1_opacity=1:c2_mode=normal:c2_opacity=1,` +
