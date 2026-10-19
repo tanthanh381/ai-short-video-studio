@@ -605,7 +605,7 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
  * One scene's picture. A flat or semantically unusable frame is drawn once more with another seed; if the retry still
  * fails the scene is rejected so the user can regenerate only that scene instead of exporting a bad frame.
  */
-async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project, job: JobRow): Promise<ImageQualityAudit | null> {
+async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project, job: JobRow, referenceImageBase64?: string | null): Promise<ImageQualityAudit | null> {
   const sceneText = `${scene.narration}\n${scene.imagePrompt}`;
   // Diffusion models frequently hallucinate pseudo-writing on phones, screens,
   // documents and signs. These scenes need a semantic check even in Balanced;
@@ -621,6 +621,7 @@ async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project
   try {
     return await pool.runOne("llm", (node) => ollamaOn(node.id).auditImage({
       image,
+      ...(referenceImageBase64 ? { referenceImage: Buffer.from(referenceImageBase64, "base64") } : {}),
       sceneBrief: `${scene.narration}\nVisual brief: ${scene.imagePrompt}`,
       model: config.OLLAMA_VISION_MODEL,
     }), { llmModel: config.OLLAMA_VISION_MODEL });
@@ -678,13 +679,15 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     });
     lastImage = image;
     lastBlank = await imageLooksBlank(image, config.FFMPEG_PATH);
-    lastAudit = lastBlank ? null : await auditSceneImage(image, scene, project, job);
+    lastAudit = lastBlank ? null : await auditSceneImage(image, scene, project, job, referenceImageBase64);
     // Balanced/fast may continue during a temporary Vision outage. Quality is
     // deliberately fail-closed: it must never export an image that was not
     // semantically and anatomically checked.
-    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad") : !strictQualityGate)) return image;
+    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad" && lastAudit.identity !== "different") : !strictQualityGate)) return image;
     if (attempt === maxAttempts - 1) break;
-    correction = lastAudit?.anatomy === "bad"
+    correction = lastAudit?.identity === "different"
+      ? ", preserve the exact same male chibi boy as the reference: same face, short dark-brown topknot, olive ribbon, eyebrows, robe and proportions; change only the described everyday action"
+      : lastAudit?.anatomy === "bad"
       ? ", corrected anatomy, exactly five fingers per hand, natural hands and face, no extra fingers, no duplicated limbs"
       : lastAudit?.relevant === false
         ? ", follow the described action and important object exactly, make the main subject unmistakable"
@@ -702,11 +705,11 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
   // unintended text remain hard blockers; semantic mismatch is surfaced as a
   // warning so the creator can regenerate that scene instead of losing the
   // entire video. Quality remains fail-closed above.
-  if (!strictQualityGate && lastImage && lastAudit?.anatomy !== "bad" && lastAudit?.textArtifacts !== "bad") {
+  if (!strictQualityGate && lastImage && lastAudit?.anatomy !== "bad" && lastAudit?.textArtifacts !== "bad" && lastAudit?.identity !== "different") {
     log.warn({ jobId: job.id, sceneId: scene.id, audit: lastAudit }, "scene_picture_semantic_warning");
     return lastImage;
   }
-  throw new Error(`Ảnh cảnh ${scene.order + 1} chưa đạt kiểm tra nội dung, anatomy hoặc chữ rác sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
+  throw new Error(`Ảnh cảnh ${scene.order + 1} chưa đạt kiểm tra nội dung, identity, anatomy hoặc chữ rác sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
 }
 
 async function generateMedia(job: JobRow, project: Project) {

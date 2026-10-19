@@ -16,6 +16,7 @@ export type ImageQualityAudit = {
   relevant: boolean;
   anatomy: "good" | "minor" | "bad";
   textArtifacts: "none" | "minor" | "bad";
+  identity: "same" | "different" | "unknown";
   reason: string;
 };
 
@@ -29,7 +30,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
   ) {}
 
   /** Optional semantic check for Quality preset; failures are deliberately fail-open. */
-  async auditImage(input: { image: Uint8Array; sceneBrief: string; model?: string | null }): Promise<ImageQualityAudit | null> {
+  async auditImage(input: { image: Uint8Array; referenceImage?: Uint8Array; sceneBrief: string; model?: string | null }): Promise<ImageQualityAudit | null> {
     try {
       const response = await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
         method: "POST",
@@ -43,25 +44,26 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
           format: {
             type: "object",
             additionalProperties: false,
-            required: ["relevant", "anatomy", "textArtifacts", "reason"],
+            required: ["relevant", "anatomy", "textArtifacts", "identity", "reason"],
             properties: {
               relevant: { type: "boolean" },
               anatomy: { type: "string", enum: ["good", "minor", "bad"] },
               textArtifacts: { type: "string", enum: ["none", "minor", "bad"] },
+              identity: { type: "string", enum: ["same", "different", "unknown"] },
               reason: { type: "string" },
             },
           },
           options: { temperature: 0, num_ctx: Math.min(this.tuning.numCtx ?? 4096, 4096), num_predict: 120 },
-          system: "You are a strict visual QA reviewer. Compare the image with the scene brief. Return JSON only. relevant is true only when the main action and important object match. anatomy is bad for obvious deformed faces, hands, limbs or duplicated body parts; minor for small imperfections; good when usable. textArtifacts is bad when the image contains unintended readable words, letters, subtitles, logos or watermarks; minor for tiny ambiguous marks; none when the image is clean.",
+          system: "You are a strict visual QA reviewer. Image 1 is the current scene; image 2, when present, is the recurring-character reference. Compare the current image with the scene brief and reference. Return JSON only. relevant is true only when the main action and important object match. anatomy is bad for obvious deformed faces, hands, limbs or duplicated body parts; minor for small imperfections; good when usable. textArtifacts is bad when the image contains unintended readable words, letters, subtitles, logos or watermarks; minor for tiny ambiguous marks; none when the image is clean. identity is same only when the recurring character keeps the same gender, face shape, hair/topknot, ribbon, robe and proportions as the reference; different when those visibly change; unknown when no reference image is supplied or the comparison is inconclusive.",
           prompt: JSON.stringify({ sceneBrief: input.sceneBrief }),
-          images: [Buffer.from(input.image).toString("base64")],
+          images: [Buffer.from(input.image).toString("base64"), ...(input.referenceImage ? [Buffer.from(input.referenceImage).toString("base64")] : [])],
         }),
       });
       if (!response.ok) return null;
       const body = (await response.json().catch(() => ({}))) as OllamaResponse;
       const parsed = JSON.parse(body.response ?? "{}") as Partial<ImageQualityAudit>;
-      if (typeof parsed.relevant !== "boolean" || !["good", "minor", "bad"].includes(parsed.anatomy ?? "") || !["none", "minor", "bad"].includes(parsed.textArtifacts ?? "") || typeof parsed.reason !== "string") return null;
-      return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], textArtifacts: parsed.textArtifacts as ImageQualityAudit["textArtifacts"], reason: parsed.reason.slice(0, 400) };
+      if (typeof parsed.relevant !== "boolean" || !["good", "minor", "bad"].includes(parsed.anatomy ?? "") || !["none", "minor", "bad"].includes(parsed.textArtifacts ?? "") || (parsed.identity !== undefined && !["same", "different", "unknown"].includes(parsed.identity)) || typeof parsed.reason !== "string") return null;
+      return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], textArtifacts: parsed.textArtifacts as ImageQualityAudit["textArtifacts"], identity: (parsed.identity as ImageQualityAudit["identity"]) ?? "unknown", reason: parsed.reason.slice(0, 400) };
     } catch {
       return null;
     }
