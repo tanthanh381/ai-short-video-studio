@@ -733,7 +733,11 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     elif is_flat and ("chibi" in clean.lower() or "ancient robe" in clean.lower()):
         # Paper-stage illustrations occasionally hallucinate a few glyphs on the blank sheet.
         # Keep the fast 4-step path, but enable the small negative CFG pass for this preset only.
-        turbo_negative = "text, letters, words, writing, watermark, logo, gibberish, hat, cap, bonnet, turban, head covering"
+        # The paper mascot is a single bare-headed boy; Turbo otherwise invents tiny pets,
+        # extra figures and hood-like headwear around the requested prop.
+        turbo_negative = "text, letters, words, writing, watermark, logo, gibberish, hat, cap, bonnet, turban, hood, hooded robe, veil, headscarf, head covering"
+        if not re.search(r"\b(?:cat|kitten|dog|rabbit|bird|animal|pet)\b", clean, re.IGNORECASE):
+            turbo_negative += ", animal, rabbit, cat, dog, bird, pet, extra figure, extra character"
     elif is_human and not stylized and selected_preset == "balanced":
         steps = IMAGE_PERSON_STEPS
     # The server may still be importing/loading the model (minutes). Wait for it rather than loading a

@@ -174,16 +174,16 @@ export const PAPER_PROMPT_RULES =
 export function paperActionFromNarration(narration: string): string {
   const text = narration.toLocaleLowerCase("vi-VN");
   if (/(trà|chén|ly|cốc|uống)/u.test(text)) return /(đọc|lời|sách|trang)/u.test(text)
-    ? "placing a small tea cup beside an open book"
-    : "holding a small ceramic tea cup";
-  if (/(tưới|cây|hoa|chậu)/u.test(text)) return "watering a small potted plant";
-  if (/(gấp|giấy|thư)/u.test(text) && /(bước|đi|ngày mai)/u.test(text)) return "folding a small piece of paper beside a potted plant";
-  if (/(bàn tay|run|giận)/u.test(text)) return "slowly unclenching both hands beside a small grey stone";
-  if (/(bảo vệ|giữ được)/u.test(text) && !/im lặng/u.test(text)) return "shielding a small candle with both hands";
-  if (/(im lặng|câu trả lời|sáng suốt)/u.test(text)) return "sitting quietly with one hand on the chin beside a folded paper";
-  if (/(đáp trả|chê bai|tranh cãi|lời mình định nói)/u.test(text)) return "turning away while slowly lowering one clenched hand beside a small scroll";
-  if (/(sách|đọc|trang|chữ)/u.test(text)) return "opening a small book and reading";
-  if (/(giấy|gấp|viết|thư|lời định nói)/u.test(text)) return "folding a small piece of paper";
+    ? "placing a small tea cup beside an open book, one hand visibly touching the cup, book pages clearly visible"
+    : "holding a small ceramic tea cup with both hands, cup clearly visible";
+  if (/(tưới|cây|hoa|chậu)/u.test(text)) return "watering a small potted plant with a tilted watering can and a visible stream of water";
+  if (/(gấp|giấy|thư)/u.test(text) && /(bước|đi|ngày mai)/u.test(text)) return "folding a small piece of paper beside a potted plant, both hands clearly visible";
+  if (/(bàn tay|run|giận)/u.test(text)) return "slowly unclenching both hands beside a small grey stone, fingers visibly separated and relaxed";
+  if (/(bảo vệ|giữ được)/u.test(text) && !/im lặng/u.test(text)) return "shielding a small lit candle with both hands, flame clearly visible between the palms";
+  if (/(im lặng|câu trả lời|sáng suốt)/u.test(text)) return "sitting quietly with one hand on the chin beside a folded paper, fingertips visibly touching the chin";
+  if (/(đáp trả|chê bai|tranh cãi|lời mình định nói)/u.test(text)) return "turning away while slowly lowering one clenched hand beside a small scroll, hand and scroll clearly visible";
+  if (/(sách|đọc|trang|chữ)/u.test(text)) return "opening a small book and reading, both hands and open pages clearly visible";
+  if (/(giấy|gấp|viết|thư|lời định nói)/u.test(text)) return "folding a small piece of paper with both hands clearly visible";
   if (/(đi|bước|rời|quay về)/u.test(text)) return "taking one small thoughtful step";
   if (/(đáp trả|tranh cãi|chê bai|giận|bực)/u.test(text)) return "looking aside with gently clenched hands";
   if (/(im lặng|bình tâm|suy nghĩ|ngẫm|nhớ)/u.test(text)) return "sitting quietly with one hand on the chin";
