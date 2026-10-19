@@ -8,6 +8,7 @@ import hashlib
 import json
 import array
 import base64
+import binascii
 import io
 import math
 import os
@@ -179,6 +180,7 @@ COMFYUI_TIMEOUT_S = int(os.getenv("COMFYUI_TIMEOUT_S", "900"))
 # SDXL Base/ComfyUI is unsafe beside the rest of the local stack on a 16 GB Mac.
 # Larger nodes such as the 24 GB Air may still use it for Quality.
 COMFYUI_MIN_RAM_GB = max(8.0, float(os.getenv("COMFYUI_MIN_RAM_GB", "24")))
+COMFYUI_REFERENCE_AUTO = os.getenv("COMFYUI_REFERENCE_AUTO", "true").lower() not in {"0", "false", "no"}
 # Voice presets selectable on the website. Keep ids in sync with packages/shared/src/voices.ts and duration.ts.
 # (VieNeu preset voice, mood, native words/second at speed 1.0).
 #
@@ -521,23 +523,83 @@ def release_comfy_model():
         pass
 
 
-def comfyui_image(prompt, negative_prompt, width, height, seed, preset):
-    """Run a small, deterministic SDXL txt2img workflow through ComfyUI's local API."""
+def comfyui_upload_reference(reference_image_base64):
+    """Upload one stable reference image to ComfyUI's input folder.
+
+    ComfyUI's LoadImage node consumes an input filename rather than raw bytes. Reusing one
+    deterministic filename prevents a long video batch from filling the input directory with
+    duplicate reference files.
+    """
+    try:
+        raw = base64.b64decode(reference_image_base64, validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise ValueError("Ảnh tham chiếu không hợp lệ") from error
+    if len(raw) > 8_000_000:
+        raise ValueError("Ảnh tham chiếu quá lớn")
+    boundary = f"----studio-{uuid.uuid4().hex}"
+    chunks = [
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"paper-stage-reference.png\"\r\nContent-Type: image/png\r\n\r\n".encode(),
+        raw,
+        f"\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"type\"\r\n\r\ninput\r\n--{boundary}--\r\n".encode(),
+    ]
+    request = urllib.request.Request(
+        f"{COMFYUI_URL.rstrip('/')}/upload/image",
+        data=b"".join(chunks),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.load(response)
+    name = result.get("name") if isinstance(result, dict) else None
+    if not isinstance(name, str) or not name:
+        raise RuntimeError("ComfyUI không nhận ảnh tham chiếu")
+    return name
+
+
+def comfyui_image(prompt, negative_prompt, width, height, seed, preset, reference_image_base64=None, reference_strength=None):
+    """Run SDXL Base through ComfyUI, optionally preserving a character with IP-Adapter."""
     selected = preset if preset in COMFYUI_IMAGE_PRESETS else "balanced"
     options = COMFYUI_IMAGE_PRESETS[selected]
-    workflow = {
-        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": COMFYUI_CHECKPOINT}},
-        "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
-        "3": {"class_type": "CLIPTextEncode", "inputs": {"text": negative_prompt, "clip": ["1", 1]}},
-        "4": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
-        "5": {"class_type": "KSampler", "inputs": {
-            "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0],
-            "seed": int(seed if seed is not None else uuid.uuid4().int % (2**32)),
-            "steps": options["steps"], "cfg": options["cfg"], "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0,
-        }},
-        "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
-        "7": {"class_type": "SaveImage", "inputs": {"filename_prefix": "ai-short-video-studio", "images": ["6", 0]}},
-    }
+    reference_name = comfyui_upload_reference(reference_image_base64) if reference_image_base64 else None
+    model_input = ["1", 0]
+    if reference_name:
+        # The Plus SDXL adapter needs enough weight to preserve the mascot, but not so much that
+        # it turns every narrated action into the anchor pose. Worker strengths are intentionally
+        # mapped from the existing 0.05-0.65 img2img range to a conservative IP-Adapter range.
+        adapter_weight = max(0.35, min(0.85, float(reference_strength or 0.20) * 2.2))
+        workflow = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": COMFYUI_CHECKPOINT}},
+            "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
+            "3": {"class_type": "CLIPTextEncode", "inputs": {"text": negative_prompt, "clip": ["1", 1]}},
+            "4": {"class_type": "LoadImage", "inputs": {"image": reference_name}},
+            "5": {"class_type": "IPAdapterUnifiedLoader", "inputs": {"model": ["1", 0], "preset": "PLUS (high strength)"}},
+            "6": {"class_type": "IPAdapterAdvanced", "inputs": {
+                "model": ["5", 0], "ipadapter": ["5", 1], "image": ["4", 0],
+                "weight": adapter_weight, "weight_type": "linear", "combine_embeds": "average",
+                "start_at": 0.0, "end_at": 0.85, "embeds_scaling": "V only",
+            }},
+            "7": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+            "8": {"class_type": "KSampler", "inputs": {
+                "model": ["6", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["7", 0],
+                "seed": int(seed if seed is not None else uuid.uuid4().int % (2**32)),
+                "steps": options["steps"], "cfg": options["cfg"], "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0,
+            }},
+            "9": {"class_type": "VAEDecode", "inputs": {"samples": ["8", 0], "vae": ["1", 2]}},
+            "10": {"class_type": "SaveImage", "inputs": {"filename_prefix": "ai-short-video-studio", "images": ["9", 0]}},
+        }
+    else:
+        workflow = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": COMFYUI_CHECKPOINT}},
+            "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
+            "3": {"class_type": "CLIPTextEncode", "inputs": {"text": negative_prompt, "clip": ["1", 1]}},
+            "4": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+            "5": {"class_type": "KSampler", "inputs": {
+                "model": model_input, "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0],
+                "seed": int(seed if seed is not None else uuid.uuid4().int % (2**32)),
+                "steps": options["steps"], "cfg": options["cfg"], "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0,
+            }},
+            "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
+            "7": {"class_type": "SaveImage", "inputs": {"filename_prefix": "ai-short-video-studio", "images": ["6", 0]}},
+        }
     request = urllib.request.Request(
         f"{COMFYUI_URL.rstrip('/')}/prompt",
         data=json.dumps({"prompt": workflow, "client_id": "ai-short-video-studio"}).encode(),
@@ -667,9 +729,21 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     image_models = available_image_models()
     selected_preset = preset if preset in IMAGE_PRESETS else IMAGE_PRESET
     selected_model = choose_image_model(model, selected_preset, COMFYUI_IMAGE_MODEL in image_models)
-    check_choice("ảnh", selected_model, image_models)
+    auto_reference_model = False
     if style not in IMAGE_STYLES:
         raise ValueError("Phong cách ảnh không hợp lệ")
+    # On a sufficiently large node, use the real SDXL/IP-Adapter path automatically for a
+    # paper-stage reference. The 16 GB Mini remains on SDXL-Turbo, because loading SDXL Base
+    # plus CLIP Vision there would create memory pressure; the feature becomes active on Air/24 GB
+    # nodes without changing the user's project configuration.
+    if (
+        COMFYUI_REFERENCE_AUTO and reference_image_base64 and style == "chibi"
+        and selected_model == "sdxl-turbo" and COMFYUI_IMAGE_MODEL in image_models
+        and comfyui_memory_safe()
+    ):
+        selected_model = COMFYUI_IMAGE_MODEL
+        auto_reference_model = True
+    check_choice("ảnh", selected_model, image_models)
     if seed is not None:
         seed = int(seed) % (2**31)
     width, height = image_size(aspect_ratio, selected_model)
@@ -721,8 +795,6 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     if selected_model in OPTIONAL_IMAGE_MODELS:
         return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64, reference_strength)
     if selected_model == COMFYUI_IMAGE_MODEL:
-        if reference_image_base64:
-            raise ValueError("SDXL Base qua ComfyUI hiện hỗ trợ text-to-image; hãy bỏ ảnh tham chiếu hoặc chọn SDXL-Turbo")
         negative = IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else "text, logo, watermark"
         if is_human:  # SDXL Base honours a negative prompt (real CFG), unlike Turbo: keep scenes to their cast
             negative += ", crowd, group of people, extra people, duplicate person, clones"
@@ -730,7 +802,14 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
             release_turbo_model()
             IMAGE_ENGINE["comfy_used"] = True
             try:
-                return comfyui_image(styled, negative, width, height, seed, preset)
+                return comfyui_image(styled, negative, width, height, seed, preset, reference_image_base64, reference_strength)
+            except Exception as error:
+                if not auto_reference_model:
+                    raise
+                # The automatic Air/24 GB route is an enhancement, not a hard dependency. If
+                # ComfyUI/adapter cannot load a particular checkpoint, keep the video usable via
+                # the existing Turbo img2img path instead of failing the whole job.
+                print(f"[image] IP-Adapter fallback to SDXL-Turbo: {error}", flush=True)
             finally:
                 # ComfyUI can retain the SDXL graph on MPS after a successful
                 # request. Free it between scenes so a long export does not

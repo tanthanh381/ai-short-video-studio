@@ -384,6 +384,45 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             self.media.local_image("A young woman sits on a bench", "9:16", model=self.media.COMFYUI_IMAGE_MODEL)
         release.assert_called_once_with()
 
+    def test_paper_reference_auto_routes_to_comfyui_only_when_memory_is_safe(self):
+        with patch.object(self.media, "available_image_models", return_value={"sdxl-turbo": "t", self.media.COMFYUI_IMAGE_MODEL: "b"}), \
+             patch.object(self.media, "comfyui_memory_safe", return_value=True), \
+             patch.object(self.media, "comfyui_image", return_value=b"PNG") as comfy, \
+             patch.object(self.media, "release_turbo_model"), \
+             patch.object(self.media, "release_comfy_model"):
+            self.media.local_image(
+                "a clearly male little chibi boy holding a tea cup", "9:16",
+                model="sdxl-turbo", style="chibi", reference_image_base64="aW1hZ2U=", reference_strength=0.20,
+            )
+        self.assertEqual(comfy.call_args.args[-2:], ("aW1hZ2U=", 0.20))
+
+    def test_comfyui_reference_workflow_applies_ipadapter_to_sdxl_model(self):
+        class Response:
+            def __init__(self, payload=b"", status=200):
+                self.payload, self.status = payload, status
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self): return self.payload
+
+        requests = []
+        responses = [
+            Response(json.dumps({"prompt_id": "p1"}).encode()),
+            Response(json.dumps({"p1": {"status": {"completed": True}, "outputs": {"10": {"images": [{"filename": "x.png", "subfolder": "", "type": "output"}]}}}}).encode()),
+            Response(b"\x89PNG\r\n"),
+        ]
+        def fake_urlopen(request, timeout=None):
+            requests.append(request)
+            return responses.pop(0)
+
+        with patch.object(self.media, "comfyui_upload_reference", return_value="paper-stage-reference.png"), \
+             patch.object(self.media.urllib.request, "urlopen", side_effect=fake_urlopen):
+            self.assertTrue(self.media.comfyui_image("boy holding a cup", "text", 704, 1216, 7, "balanced", "aW1hZ2U=", 0.20))
+        workflow = json.loads(requests[0].data)["prompt"]
+        self.assertEqual(workflow["5"]["class_type"], "IPAdapterUnifiedLoader")
+        self.assertEqual(workflow["6"]["class_type"], "IPAdapterAdvanced")
+        self.assertEqual(workflow["4"]["inputs"]["image"], "paper-stage-reference.png")
+        self.assertGreater(workflow["6"]["inputs"]["weight"], 0.35)
+
     def test_trims_only_oversized_service_logs_to_their_recent_tail(self):
         import tempfile
         with tempfile.TemporaryDirectory() as folder:
