@@ -601,6 +601,10 @@ ACTION_FIRST_RE = re.compile(
     r"\b(?:hands?|typing|keyboard|laptop|document|paper|tablet|desk|pen|writing|monitor|screen)\b",
     re.I,
 )
+STYLIZED_ACTION_RE = re.compile(
+    r"\b(?:holding|placing|watering|turning|opening|closing|folding|reading|sweeping|drinking|offering|stretching|bowing|walking|waving|unclenching|shielding|taking)\b",
+    re.I,
+)
 NATIONALITY_RE = re.compile(r"\b(Vietnamese|Japanese|Korean|Chinese|Thai|Asian|Indian|African|European|American)\b", re.I)
 
 
@@ -689,9 +693,13 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     nonhuman_focus = "" if (is_human or stylized) else ", the described object or environment is the main subject, no people, no human figures, no face"
     flat_guard = ", only the described characters, no crowd" if is_flat and is_human else ""
     action_guard = ", hands and essential object in the foreground, face outside the frame, action shot" if action_first else ""
+    stylized_action_guard = (
+        ", clear readable everyday action and expressive pose, show the described prop clearly, show the action rather than a generic portrait"
+        if is_flat and STYLIZED_ACTION_RE.search(clean) and not face_focus else ""
+    )
     # Keep the requested action and essential object near the front of the CLIP context. Safety/style clauses are
     # deliberately appended so the 77-token limit does not silently discard the actual scene.
-    styled = f"{IMAGE_STYLES[style]}, {clean}{action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
+    styled = f"{IMAGE_STYLES[style]}, {clean}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     if selected_model in OPTIONAL_IMAGE_MODELS:
         return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64)
     if selected_model == COMFYUI_IMAGE_MODEL:

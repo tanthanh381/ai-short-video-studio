@@ -419,6 +419,7 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual((drawn["steps"], drawn["negativePrompt"]), (4, ""))
         paper = self._turbo_payload("A chibi boy in an ancient robe holding a cup", preset="balanced", style="flat")
         self.assertIn("writing", paper["negativePrompt"])
+        self.assertIn("show the action rather than a generic portrait", paper["prompt"])
         # Choosing "quality" on the website buys the slower 8-step render with the anatomy negative.
         quality = self._turbo_payload("Portrait close-up of a young woman", preset="quality")
         self.assertEqual(quality["steps"], 8)
