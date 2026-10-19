@@ -206,6 +206,7 @@ describe("diffusion prompt quality", () => {
     expect(visualPromptFlaws("Việc quan trọng vẫn chưa xong.", "Close-up of a notepad filled with handwritten tasks")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Tôi chia việc thành một bước nhỏ.", "A woman writes a single small task on a sticky note")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Cuộc họp kéo dài.", "An open laptop displaying multiple meeting icons on the screen")).toBeGreaterThan(0);
+    expect(visualPromptFlaws("Việc quan trọng vẫn chưa xong.", "A woman taps at an unfinished document on a laptop screen")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother stands beside floating handwritten characters")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Anh nhớ ra hôm ấy mình đã tắt máy.", "A Vietnamese mother checks a phone beside a desk")).toBeGreaterThan(0);
     expect(visualPromptFlaws("Minh gọi cho mẹ.", "A Vietnamese mother holds a phone beside a quiet table")).toBeGreaterThan(0);
