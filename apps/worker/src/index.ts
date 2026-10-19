@@ -31,13 +31,17 @@ import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE,
 const PAPER_REFERENCE_MODE = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "")
   ? process.env.PAPER_REFERENCE_MODE!
   : "first";
+const parsedPaperReferenceStrength = Number(process.env.PAPER_REFERENCE_STRENGTH ?? "0.20");
+const PAPER_REFERENCE_STRENGTH = Number.isFinite(parsedPaperReferenceStrength)
+  ? Math.max(0.05, Math.min(0.65, parsedPaperReferenceStrength))
+  : 0.20;
 
 function paperReferenceOptions(referenceImageBase64: string | null | undefined, sceneOrder: number): { referenceImageBase64?: string; referenceStrength?: number } {
   if (!referenceImageBase64 || PAPER_REFERENCE_MODE === "none") return {};
   const useReference = PAPER_REFERENCE_MODE === "all"
     || (PAPER_REFERENCE_MODE === "first" && sceneOrder === 0)
     || (PAPER_REFERENCE_MODE === "alternate" && sceneOrder % 2 === 0);
-  return useReference ? { referenceImageBase64, referenceStrength: 0.20 } : {};
+  return useReference ? { referenceImageBase64, referenceStrength: PAPER_REFERENCE_STRENGTH } : {};
 }
 import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
 import { alignSpeechToScript, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, fallbackImagePrompt, imageAspectFor, isEnglishPrompt, vietnameseByDefault, visualGlossary, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
@@ -627,6 +631,7 @@ async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project
 }
 
 async function drawScenePicture(provider: MediaProvider, scene: Scene, project: Project, job: JobRow, referenceImageBase64?: string | null): Promise<Uint8Array> {
+  const paperStage = usesPaperStage(project.settings);
   // The studio edits the Vietnamese `description`; on a description edit the web copies that text into
   // `imagePrompt`, so a non-English imagePrompt here means "re-derive the English prompt from the edit".
   // A fresh storyboard (already English) and an advanced English override both skip this, so the image
@@ -649,7 +654,7 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     preset: project.settings.generationPreset,
     // SDXL-Turbo can use the first paper-stage frame as a light identity anchor. ComfyUI/SDXL Base
     // intentionally remains text-to-image because the local bridge does not support img2img there.
-    ...(usesPaperStage(project.settings)
+    ...(paperStage
       ? paperReferenceOptions(referenceImageBase64, scene.order)
       : referenceImageBase64 && project.settings.generationPreset !== "quality"
         ? { referenceImageBase64 }
@@ -660,7 +665,12 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
   let lastBlank = false;
   let lastImage: Uint8Array | null = null;
   let correction = "";
-  const strictQualityGate = project.settings.generationPreset === "quality" && process.env.VISION_QUALITY_GATE !== "false";
+  // Paper-stage is a highly art-directed preset: a generic portrait is a failed
+  // scene even when the anatomy is technically clean. Keep its semantic gate
+  // fail-closed by default; operators can temporarily disable it while bringing
+  // the local vision service online, just like the broader quality gate.
+  const strictQualityGate = process.env.VISION_QUALITY_GATE !== "false"
+    && (project.settings.generationPreset === "quality" || (paperStage && process.env.PAPER_SEMANTIC_GATE !== "false"));
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const image = await provider.createImage(`${prompt}${correction}`, imageAspectFor(project.settings), {
       ...options,
