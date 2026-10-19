@@ -417,6 +417,8 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         # A drawn look keeps Turbo's native 4 steps.
         drawn = self._turbo_payload("A young woman reading by a window", preset="balanced", style="flat")
         self.assertEqual((drawn["steps"], drawn["negativePrompt"]), (4, ""))
+        paper = self._turbo_payload("A chibi boy in an ancient robe holding a cup", preset="balanced", style="flat")
+        self.assertIn("writing", paper["negativePrompt"])
         # Choosing "quality" on the website buys the slower 8-step render with the anatomy negative.
         quality = self._turbo_payload("Portrait close-up of a young woman", preset="quality")
         self.assertEqual(quality["steps"], 8)

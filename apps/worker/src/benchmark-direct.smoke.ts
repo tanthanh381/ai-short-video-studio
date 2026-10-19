@@ -29,6 +29,7 @@ type Case = { id: string; topic: string; hook: string; sourceText: string };
 const corpus = JSON.parse(await readFile(corpusPath, "utf8")) as { cases?: Case[] } & Record<string, unknown>;
 const cases: Case[] = (corpus.cases ?? (Object.values(corpus).find(Array.isArray) as Case[])).filter((item) => !only.length || only.includes(item.id));
 const benchmarkPreset: ProjectSettings["generationPreset"] = process.env.BENCHMARK_PRESET === "quality" ? "quality" : "balanced";
+const paperReferenceMode = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "") ? process.env.PAPER_REFERENCE_MODE : "first";
 
 // One look per topic, chosen the way a channel owner would: the same retention aids everywhere.
 const LOOK: Record<string, Partial<ProjectSettings>> = {
@@ -115,7 +116,8 @@ for (const item of cases) {
           buildProductionImagePrompt(scene.imagePrompt, visualPresetPrompt(settings.visualPreset)), imageAspectFor(settings),
           {
             seed: imageSeedFor(`${projectId}:${scene.id}`), style: imageStyleFor(settings.visualStyle, settings.visualPreset), preset: settings.generationPreset,
-            ...(usesPaperStage(settings) && referenceImageBase64 ? { referenceImageBase64, referenceStrength: 0.20 } : {}),
+            ...(usesPaperStage(settings) && referenceImageBase64 && (paperReferenceMode === "all" || (paperReferenceMode === "first" && scene.order === 0) || (paperReferenceMode === "alternate" && scene.order % 2 === 0))
+              ? { referenceImageBase64, referenceStrength: 0.20 } : {}),
           },
         );
         if (usesPaperStage(settings) && !referenceImageBase64) referenceImageBase64 = Buffer.from(png).toString("base64");

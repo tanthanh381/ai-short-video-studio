@@ -143,7 +143,7 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     expect(PAPER_MASCOT).toMatch(/chibi/);
     // the character stands on the same line in every scene and the captions start below it
     expect(PAPER.stageBottom).toBeLessThan(PAPER.captionTop);
-    expect(paperStageFilter(0)).toContain(`y='${PAPER.stageBottom}-h'`);
+    expect(paperStageFilter(0)).toContain(`y='${PAPER.stageBottom}-h+`);
     // breathing and swaying differ in phase from scene to scene
     expect(paperStageFilter(1)).not.toBe(paperStageFilter(0));
     expect(paperFeatherFilter()).toContain(`scale=${PAPER.stage}:${PAPER.stage}`);

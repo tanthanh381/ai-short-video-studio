@@ -22,6 +22,23 @@ import { createProbe, NodePool, parseNodeSpecs, type Outcome } from "./node-pool
 import { PooledMediaAdapter } from "./pooled-media";
 import { groupWords, OpenAIAdapter } from "./openai";
 import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE, paperStagePrompt, storyNationality, usesPaperStage, usesStoryCard, withNationality } from "./card-layout";
+
+/**
+ * A full-frame img2img anchor is excellent for identity but collapses SDXL-Turbo's pose into
+ * the anchor. Paper-stage therefore anchors only the opening frame by default; operators can
+ * opt into the older all-scene behavior for a deliberately static character card.
+ */
+const PAPER_REFERENCE_MODE = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "")
+  ? process.env.PAPER_REFERENCE_MODE!
+  : "first";
+
+function paperReferenceOptions(referenceImageBase64: string | null | undefined, sceneOrder: number): { referenceImageBase64?: string; referenceStrength?: number } {
+  if (!referenceImageBase64 || PAPER_REFERENCE_MODE === "none") return {};
+  const useReference = PAPER_REFERENCE_MODE === "all"
+    || (PAPER_REFERENCE_MODE === "first" && sceneOrder === 0)
+    || (PAPER_REFERENCE_MODE === "alternate" && sceneOrder % 2 === 0);
+  return useReference ? { referenceImageBase64, referenceStrength: 0.20 } : {};
+}
 import { cleanHashtags, fallbackPostCaption, formatPostCaption } from "./post-caption";
 import { alignSpeechToScript, buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, eraAppropriateCast, fallbackImagePrompt, imageAspectFor, isEnglishPrompt, vietnameseByDefault, visualGlossary, youthfulSiblings, imageSeedFor, imageStyleFor, withCast, type MediaProvider, type StoryboardProvider } from "./providers";
 import { assertDiskSpace } from "./disk-space";
@@ -628,8 +645,8 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     preset: project.settings.generationPreset,
     // SDXL-Turbo can use the first paper-stage frame as a light identity anchor. ComfyUI/SDXL Base
     // intentionally remains text-to-image because the local bridge does not support img2img there.
-    ...(referenceImageBase64 && usesPaperStage(project.settings)
-      ? { referenceImageBase64, referenceStrength: 0.20 }
+    ...(usesPaperStage(project.settings)
+      ? paperReferenceOptions(referenceImageBase64, scene.order)
       : referenceImageBase64 && project.settings.generationPreset !== "quality"
         ? { referenceImageBase64 }
         : {}),

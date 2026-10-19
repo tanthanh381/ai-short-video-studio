@@ -173,8 +173,15 @@ export const PAPER_PROMPT_RULES =
  * spoken line with a deterministic, safe fallback rather than exporting a static portrait. */
 export function paperActionFromNarration(narration: string): string {
   const text = narration.toLocaleLowerCase("vi-VN");
+  if (/(trà|chén|ly|cốc|uống)/u.test(text)) return /(đọc|lời|sách|trang)/u.test(text)
+    ? "placing a small tea cup beside an open book"
+    : "holding a small ceramic tea cup";
   if (/(tưới|cây|hoa|chậu)/u.test(text)) return "watering a small potted plant";
-  if (/(trà|chén|ly|cốc|uống)/u.test(text)) return "holding a small ceramic tea cup";
+  if (/(gấp|giấy|thư)/u.test(text) && /(bước|đi|ngày mai)/u.test(text)) return "folding a small piece of paper beside a potted plant";
+  if (/(bàn tay|run|giận)/u.test(text)) return "slowly unclenching both hands beside a small grey stone";
+  if (/(bảo vệ|giữ được)/u.test(text) && !/im lặng/u.test(text)) return "shielding a small candle with both hands";
+  if (/(im lặng|câu trả lời|sáng suốt)/u.test(text)) return "sitting quietly with one hand on the chin beside a folded paper";
+  if (/(đáp trả|chê bai|tranh cãi|lời mình định nói)/u.test(text)) return "turning away while slowly lowering one clenched hand beside a small scroll";
   if (/(sách|đọc|trang|chữ)/u.test(text)) return "opening a small book and reading";
   if (/(giấy|gấp|viết|thư|lời định nói)/u.test(text)) return "folding a small piece of paper";
   if (/(đi|bước|rời|quay về)/u.test(text)) return "taking one small thoughtful step";
@@ -197,6 +204,10 @@ const SCENERY = /\b(?:road|street|alley|path|forest|woods|bamboo grove|village|t
  * only the clauses about the character, without places or camera words.
  */
 export function paperStagePrompt(prompt: string, narration = ""): string {
+  // For this art-directed preset the narration is the source of truth. The local storyboard
+  // model often invents a second child or compresses distinct beats into the same seated pose;
+  // derive one safe, scene-specific everyday action before accepting any model wording.
+  if (narration.trim()) return `${PAPER_MASCOT}, ${paperActionFromNarration(narration)}`;
   const withoutMascot = prompt.replace(new RegExp(PAPER_MASCOT.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu"), "")
     .replace(/clearly male little chibi boy, short dark-brown hair in a small topknot, thick eyebrows, olive headband, olive ancient robe\.?/giu, "")
     .replace(/a little chibi boy with a topknot hair bun and a long olive headband ribbon, wearing an olive green ancient robe\.?/giu, "")
@@ -260,10 +271,14 @@ export function paperShift(corners: Array<[number, number, number]>): [number, n
  */
 export function paperStageFilter(index: number): string {
   const phase = (index % 4) * 0.8;
-  return `[0:v]format=rgba,scale=w='trunc(${PAPER.stage}*(1+0.012*sin(2*PI*(t+${phase})/3.4))/2)*2':h=-2:eval=frame,` +
-    `rotate=a='0.007*sin(2*PI*(t+${phase})/4.6)':c=none:ow=iw:oh=ih[character];` +
+  const cycles = ["2.8", "3.2", "2.5", "3.6"] as const;
+  const cycle = cycles[index % cycles.length];
+  const x = [`7*sin(2*PI*(t+${phase})/2.8)`, `10*sin(2*PI*(t+${phase})/3.2)`, `6*sin(2*PI*(t+${phase})/2.5)`, `8*sin(2*PI*(t+${phase})/3.6)`][index % 4];
+  const y = [`2*cos(2*PI*(t+${phase})/2.8)`, `3*sin(2*PI*(t+${phase})/3.2)`, `4*cos(2*PI*(t+${phase})/2.5)`, `2*sin(2*PI*(t+${phase})/3.6)`][index % 4];
+  return `[0:v]format=rgba,scale=w='trunc(${PAPER.stage}*(1+0.018*sin(2*PI*(t+${phase})/${cycle}))/2)*2':h=-2:eval=frame,` +
+    `rotate=a='0.010*sin(2*PI*(t+${phase})/${cycle})':c=none:ow=iw:oh=ih[character];` +
     `color=c=0x${PAPER_HEX}:s=${PAPER.width}x${PAPER.height}:r=30,format=yuv444p[flat];[2:v]format=yuv444p[grain];` +
-    `[flat][character]overlay=x='(W-w)/2':y='${PAPER.stageBottom}-h':eval=frame:format=yuv444[comp];` +
+    `[flat][character]overlay=x='(W-w)/2+${x}':y='${PAPER.stageBottom}-h+${y}':eval=frame:format=yuv444[comp];` +
     `[comp][grain]blend=c0_expr='A+(B-${PAPER_GRAIN.neutral})*${PAPER_GRAIN.strength}':c1_mode=normal:c1_opacity=1:c2_mode=normal:c2_opacity=1,` +
     `fps=30,format=yuv420p[v]`;
 }
