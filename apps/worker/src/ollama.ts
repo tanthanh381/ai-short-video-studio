@@ -152,7 +152,7 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
 
   async writeScript(input: {
     title: string; sourceText: string; duration: number; audience: string; style: string; model?: string | null; attempt?: number;
-    plan?: ContentPlan; previousWords?: number; draft?: string; feedback?: string;
+    plan?: ContentPlan; previousWords?: number; paperStage?: boolean; draft?: string; feedback?: string;
   }): Promise<string> {
     const plan = input.plan ?? contentPlan(input.duration, input.style, "", 1);
     const { target, min, max } = plan.words;
@@ -194,6 +194,9 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
           retry +
           (input.feedback
             ? `Biên tập viên nhận xét bản trước: ${input.feedback} Sửa đúng các điểm này trong lần viết mới, nhưng vẫn giữ chủ đề và thời lượng. `
+            : "") +
+          (input.paperStage
+            ? "Đây là mẫu Đạo lý cổ phong: kể bằng một nhân vật nam nhỏ tuổi nhất quán. Mỗi đoạn phải có một hành động đời thường nhìn thấy được và nhiều nhất một đạo cụ đơn giản (chén trà, sách, mảnh giấy, cây, đèn, giỏ hoặc chổi); biến ý trừu tượng thành việc cậu bé thực sự làm. Mỗi đoạn phải tiến câu chuyện sang một trạng thái mới, không lặp lại việc đứng yên suy nghĩ. Giữ giọng cổ phong nhưng câu chữ gần gũi, dễ nghe và kết thúc bằng một thay đổi cụ thể. "
             : "") +
           "Mỗi câu một ý, dài 8-18 từ, dễ đọc thành tiếng: không nối nhiều vế bằng dấu phẩy thành một câu dài; viết mỗi câu trên một dòng riêng. " +
           "Trước khi trả lời, hãy tự nghĩ thầm 5 hook khác nhau rồi chọn hook mạnh nhất, cụ thể nhất và trung thực nhất. " +

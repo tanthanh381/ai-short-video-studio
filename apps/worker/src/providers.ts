@@ -72,6 +72,8 @@ export interface StoryboardProvider {
       title: string; sourceText: string; duration: number; audience: string; style: string; model?: string | null; attempt?: number;
       /** Word budget and outline for the chosen length; `previousWords` tells a retry how long the last draft was. */
       plan?: ContentPlan; previousWords?: number;
+      /** The paper-stage preset needs concrete everyday actions so each illustration can act out the narration. */
+      paperStage?: boolean;
       /** A draft that came out too short: the writer expands it (keeps its opening and order) instead of starting over. */
       draft?: string;
       /** Concrete editorial feedback from the previous draft; used only on a bounded retry. */
@@ -898,6 +900,7 @@ export async function writeIdeaScript(provider: StoryboardProvider, input: Story
   const request = (attempt: number, extra: { draft?: string; feedback?: string } = {}) => provider.writeScript!({
     title: input.title, sourceText: input.sourceText, duration: input.duration,
     audience: input.audience, style: input.style, model: input.model ?? null, attempt, plan,
+    ...(input.paperStage ? { paperStage: true } : {}),
     ...(previousWords !== undefined ? { previousWords } : {}),
     ...(best.feedback.length && !draftQualityPasses(best.draft) ? { feedback: best.feedback.join(" ") } : {}),
     ...extra,

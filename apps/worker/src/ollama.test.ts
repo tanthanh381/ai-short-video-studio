@@ -291,6 +291,18 @@ describe("OllamaStoryboardAdapter.writeScript", () => {
     expect(retry!.system).toContain("Bản trước chỉ có 180 từ, quá ngắn");
   });
 
+  it("gives paper-stage idea scripts concrete actions instead of static reflection", async () => {
+    const bodies: Array<{ system: string }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ response: "Một lời đọc đủ dài để kiểm thử." }));
+    }));
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b");
+    await adapter.writeScript({ title: "Đạo lý cổ phong", sourceText: "Vì sao bình tâm?", duration: 30, audience: "a", style: "truyen-cam-hung", paperStage: true });
+    expect(bodies[0]!.system).toContain("một hành động đời thường nhìn thấy được");
+    expect(bodies[0]!.system).toContain("không lặp lại việc đứng yên suy nghĩ");
+  });
+
   it("condenses a long source and widens the context for it", async () => {
     const bodies: Array<{ system: string; options: { num_ctx: number } }> = [];
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
