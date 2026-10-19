@@ -109,11 +109,16 @@ for (const item of cases) {
       }
     });
     await mark("images", async () => {
+      let referenceImageBase64: string | null = null;
       for (const scene of scenes) {
         const png = await media.createImage(
           buildProductionImagePrompt(scene.imagePrompt, visualPresetPrompt(settings.visualPreset)), imageAspectFor(settings),
-          { seed: imageSeedFor(`${projectId}:${scene.id}`), style: imageStyleFor(settings.visualStyle, settings.visualPreset), preset: settings.generationPreset },
+          {
+            seed: imageSeedFor(`${projectId}:${scene.id}`), style: imageStyleFor(settings.visualStyle, settings.visualPreset), preset: settings.generationPreset,
+            ...(usesPaperStage(settings) && referenceImageBase64 ? { referenceImageBase64, referenceStrength: 0.20 } : {}),
+          },
         );
+        if (usesPaperStage(settings) && !referenceImageBase64) referenceImageBase64 = Buffer.from(png).toString("base64");
         const file = `${scene.id}.png`;
         await writeFile(join(work, file), png);
         Object.assign(scene, { imagePath: file, mediaStatus: "ready" });

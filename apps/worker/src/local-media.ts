@@ -49,6 +49,7 @@ export class LocalMediaAdapter implements MediaProvider {
           style: models.style,
           preset: models.preset,
           referenceImage: models.referenceImageBase64 ?? undefined,
+          referenceStrength: models.referenceStrength,
         }),
       }),
     );

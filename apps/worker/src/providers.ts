@@ -103,6 +103,8 @@ export type MediaModelOptions = {
   seed?: number | null;
   /** Base64 PNG reference from the first character scene for local img2img consistency. */
   referenceImageBase64?: string | null;
+  /** Strength for the local img2img identity anchor; paper-stage uses a bounded middle value. */
+  referenceStrength?: number;
   style?: ImageStyle;
   /** Tốc độ đọc (1 = bình thường). */
   speed?: number | null;

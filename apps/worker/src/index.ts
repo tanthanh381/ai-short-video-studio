@@ -628,7 +628,11 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     preset: project.settings.generationPreset,
     // SDXL-Turbo can use the first paper-stage frame as a light identity anchor. ComfyUI/SDXL Base
     // intentionally remains text-to-image because the local bridge does not support img2img there.
-    ...(referenceImageBase64 && project.settings.generationPreset !== "quality" ? { referenceImageBase64 } : {}),
+    ...(referenceImageBase64 && usesPaperStage(project.settings)
+      ? { referenceImageBase64, referenceStrength: 0.20 }
+      : referenceImageBase64 && project.settings.generationPreset !== "quality"
+        ? { referenceImageBase64 }
+        : {}),
   };
   const maxAttempts = 3;
   let lastAudit: ImageQualityAudit | null = null;
