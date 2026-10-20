@@ -15,6 +15,7 @@ import { DEFAULT_PROJECT_SETTINGS, type Project, type ProjectSettings, type Scen
 import { castForScript, paperStagePrompt, PAPER_STORYBOARD_STYLE, storyNationality, usesPaperStage, usesStoryCard } from "./card-layout";
 import { LocalMediaAdapter } from "./local-media";
 import { OllamaStoryboardAdapter } from "./ollama";
+import { sceneMotionPrompt } from "./motion-prompts";
 import {
   buildProductionImagePrompt, cleanScriptForNarration, createFaithfulStoryboard, imageAspectFor, imageSeedFor, imageStyleFor,
   vietnameseByDefault, withCast, youthfulSiblings,
@@ -36,6 +37,8 @@ const paperReferenceStrength = Number.isFinite(parsedPaperReferenceStrength)
   : 0.08;
 const benchmarkImageModel = process.env.BENCHMARK_IMAGE_MODEL
   || (benchmarkPreset === "quality" ? "sdxl-base-1.0-comfyui" : undefined);
+const benchmarkMotion = process.env.BENCHMARK_MOTION === "true";
+const benchmarkMotionPreset = process.env.BENCHMARK_MOTION_PRESET === "quality" ? "quality" : "balanced";
 
 // One look per topic, chosen the way a channel owner would: the same retention aids everywhere.
 const LOOK: Record<string, Partial<ProjectSettings>> = {
@@ -139,6 +142,25 @@ for (const item of cases) {
         Object.assign(scene, { imagePath: file, mediaStatus: "ready" });
       }
     });
+    if (benchmarkMotion && media.createVideo) {
+      await mark("motion", async () => {
+        for (const scene of scenes) {
+          const image = await readFile(join(work, scene.imagePath!));
+          const motion = await media.createVideo!({
+            image,
+            prompt: `${scene.imagePrompt}. ${sceneMotionPrompt(settings.visualPreset, scene.order, scene.narration)}`,
+            aspectRatio: settings.aspectRatio,
+          }, {
+            video: "ltxv-2b-0.9.8-distilled",
+            seed: imageSeedFor(projectId),
+            preset: benchmarkMotionPreset,
+          });
+          const file = `${scene.id}.mp4`;
+          await writeFile(join(work, file), motion);
+          scene.videoPath = file;
+        }
+      });
+    }
     const project = {
       id: projectId, userId: crypto.randomUUID(), title: item.hook, sourceText, inputMode: "full-script", hook: item.hook, suggestedTitle: title,
       suggestedDescription: "", status: "rendering", settings: { ...settings, cardTitle: title }, scenes,
