@@ -745,6 +745,11 @@ async function generateMedia(job: JobRow, project: Project) {
     throw new Error(
       "Chưa có khóa API OpenAI để tạo ảnh, giọng đọc và đồng bộ phụ đề. Hãy dán khóa của bạn ở Cài đặt (mục Dịch vụ trả phí), hoặc chọn media trên máy trong Tùy chọn.",
     );
+  // The web picker can be unavailable during its first health probe, and older projects may have
+  // saved `localModels.video` as null. If a video lane is healthy, prefer the installed LTX model
+  // automatically instead of silently exporting a static-image video.
+  const motionModel = project.settings.localModels.video
+    ?? (media.videoAvailable?.() ? "ltxv-2b-0.9.8-distilled" : null);
   const targetId =
     job.job_type === "regenerate_scene"
       ? String(job.payload.sceneId ?? "")
@@ -920,7 +925,7 @@ async function generateMedia(job: JobRow, project: Project) {
       const regenerateImage = plan.image;
       const regenerateAudio = plan.audio;
       if (!regenerateImage && !regenerateAudio && !plan.subtitles &&
-        (!project.settings.localModels.video || Boolean(scene.videoPath)) &&
+        (!motionModel || Boolean(scene.videoPath)) &&
         sceneMediaReady(scene, project.settings.subtitle.enabled)) {
         await updateScene(scene.id, { media_status: "ready", error_message: null });
         finished++;
@@ -954,7 +959,7 @@ async function generateMedia(job: JobRow, project: Project) {
       // intended visual identity). Other templates keep the normal video path.
       const paperStage = usesPaperStage(project.settings);
       const motionAvailable = !paperStage && (media.videoAvailable ? media.videoAvailable() : true);
-      if (!videoPath && project.settings.localModels.video && media.createVideo && motionAvailable) {
+      if (!videoPath && motionModel && media.createVideo && motionAvailable) {
         await progress(
           job,
           mediaProgress(finished) + 2,
@@ -969,6 +974,7 @@ async function generateMedia(job: JobRow, project: Project) {
             },
             {
               ...project.settings.localModels,
+              video: motionModel,
               seed: imageSeedFor(project.id),
               preset: project.settings.generationPreset,
             },

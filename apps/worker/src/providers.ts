@@ -1009,13 +1009,10 @@ export async function createFaithfulStoryboard(
   notes?: StoryboardNotes,
 ): Promise<StoryboardResult> {
   if (input.inputMode !== "full-script") {
-    // Text that already reads at the chosen length is kept word for word; anything shorter or longer (a topic, a
-    // few points, a whole story) is written to the length, so a 30-second idea never becomes a 68-second video.
-    const { min, max } = ideaPlan(input).words;
-    const sourceWords = contentWords(cleanScriptForNarration(input.sourceText)).length;
-    if (sourceWords >= min && sourceWords <= max)
-      return createFaithfulStoryboard(provider, { ...input, inputMode: "full-script", rewrite: false }, notes);
-    // Let the model write plain narration first, then split it like any pasted script.
+    // The creator explicitly chose "idea". Even when the text happens to fit the selected duration,
+    // it is still a brief and must become a real narration with a hook, progression and ending.
+    // Only "full-script" means keep the author's wording verbatim; otherwise a long one-line idea
+    // was incorrectly treated as one finished scene.
     if (provider.writeScript) {
       const script = await writeIdeaScript(provider, input);
       return createFaithfulStoryboard(provider, { ...input, inputMode: "full-script", rewrite: false, sourceText: script }, notes);

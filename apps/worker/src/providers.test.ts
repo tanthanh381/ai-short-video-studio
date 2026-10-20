@@ -588,10 +588,10 @@ describe("idea mode becomes plain narration then faithful scenes", () => {
     expect(provider.writeScript.mock.calls[0]![0]).toMatchObject({ plan: { words: { target: 186 } } }); // 3.1 words a second for the reflective voice
   });
 
-  it("keeps text that already reads at the chosen length word for word", async () => {
-    const provider = { writeScript: vi.fn(async () => "không dùng"), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
+  it("still expands an idea that happens to fit the chosen duration", async () => {
+    const provider = { writeScript: vi.fn(async () => script), createStoryboard: vi.fn(async (value: StoryboardInput) => promptsFor(value)) };
     const result = await createFaithfulStoryboard(provider, { ...ideaInput, sourceText: script });
-    expect(provider.writeScript).not.toHaveBeenCalled();
+    expect(provider.writeScript).toHaveBeenCalledTimes(1);
     expect(result.scenes.map((scene) => scene.narration).join("")).toBe(script);
   });
 
