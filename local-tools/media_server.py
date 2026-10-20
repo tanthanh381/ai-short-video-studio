@@ -325,6 +325,10 @@ def choose_image_model(model=None, preset=None, comfy_ready=False):
     unavailable ComfyUI must never make a video job fail just because the user
     chose Quality, so it falls back to the persistent Turbo server.
     """
+    if model == COMFYUI_IMAGE_MODEL and not comfy_ready:
+        # A long export can push Air into active paging after an earlier scene.
+        # The remaining scenes should fall back to Turbo rather than fail the job.
+        return "sdxl-turbo"
     if model in (None, "") and preset == "quality" and comfy_ready and comfyui_memory_safe():
         return COMFYUI_IMAGE_MODEL
     return model

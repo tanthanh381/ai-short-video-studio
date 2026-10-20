@@ -376,6 +376,10 @@ class LocalSpeechCaptionTests(unittest.TestCase):
             self.media.local_image("A quiet street at dusk", "9:16", model="sdxl-turbo")
             self.assertFalse(any(url.endswith("/free") for url in calls))  # only once after a Base run
 
+    def test_quality_falls_back_to_turbo_when_base_becomes_unavailable(self):
+        with patch.object(self.media, "available_image_models", return_value={"sdxl-turbo": "t"}):
+            self.assertEqual(self.media.choose_image_model(self.media.COMFYUI_IMAGE_MODEL, "quality", False), "sdxl-turbo")
+
     def test_sdxl_base_releases_comfyui_after_each_render(self):
         with patch.object(self.media, "available_image_models", return_value={self.media.COMFYUI_IMAGE_MODEL: "b"}), \
              patch.object(self.media, "comfyui_image", return_value=b"PNG"), \
