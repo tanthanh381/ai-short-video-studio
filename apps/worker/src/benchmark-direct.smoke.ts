@@ -29,7 +29,7 @@ type Case = { id: string; topic: string; hook: string; sourceText: string };
 const corpus = JSON.parse(await readFile(corpusPath, "utf8")) as { cases?: Case[] } & Record<string, unknown>;
 const cases: Case[] = (corpus.cases ?? (Object.values(corpus).find(Array.isArray) as Case[])).filter((item) => !only.length || only.includes(item.id));
 const benchmarkPreset: ProjectSettings["generationPreset"] = process.env.BENCHMARK_PRESET === "quality" ? "quality" : "balanced";
-const paperReferenceMode = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "") ? process.env.PAPER_REFERENCE_MODE : "first";
+const paperReferenceMode = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "") ? process.env.PAPER_REFERENCE_MODE : "alternate";
 const parsedPaperReferenceStrength = Number(process.env.PAPER_REFERENCE_STRENGTH ?? "0.08");
 const paperReferenceStrength = Number.isFinite(parsedPaperReferenceStrength)
   ? Math.max(0.05, Math.min(0.65, parsedPaperReferenceStrength))

@@ -44,6 +44,9 @@ export NODE_NAME=${NODE_NAME:-air}
 # ảnh (cả ảnh có người, vốn cần nhiều bước hơn) xuống 4 bước và làm máy chính loại máy này khỏi việc vẽ ảnh và đọc giọng.
 unset IMAGE_STEPS VIENEU_STEPS TTS_BREAK_WORDS
 export FACE_DETAIL=${FACE_DETAIL:-true}
+# SDXL Base + IP-Adapter is memory intensive on the 24 GB Air. Sixteen steps and
+# alternating reference frames preserve the mascot while leaving room for audio/LTX.
+export COMFYUI_QUALITY_STEPS=${COMFYUI_QUALITY_STEPS:-16}
 
 # Chỉ mở ra mạng Tailscale (không phải 0.0.0.0). Các dịch vụ còn lại chỉ nghe trên chính máy này.
 export LOCAL_MEDIA_HOST="$tailscale_ip"
