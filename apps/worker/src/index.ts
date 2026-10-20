@@ -570,7 +570,8 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
   // Best-effort and capped at 4 in flight so it never dominates the storyboard step; "" on any failure
   // (and "" when no local Ollama node is available), which the UI shows as an empty, editable field.
   const descriptions: string[] = new Array(result.scenes.length).fill("");
-  if (ollama) {
+  // Fast mode skips editor-only Vietnamese prompt descriptions: they add LLM calls but do not affect the rendered video.
+  if (ollama && project.settings.generationPreset !== "fast") {
     let cursor = 0;
     await Promise.all(Array.from({ length: Math.min(4, result.scenes.length) }, async () => {
       for (let index = cursor++; index < result.scenes.length; index = cursor++) {
@@ -599,11 +600,15 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
   if (saveError) throw saveError;
   // Explainer theme: Claude writes one on-screen key point per scene, stored in settings (no scene-table change) and
   // drawn at the top of each scene by the renderer. A failure here must never fail the storyboard.
-  if (project.settings.showKeyPoints && provider.writeKeyPoints) {
-    const keyPoints = await provider
-      .writeKeyPoints({ narrations: result.scenes.map((scene) => scene.narration), title: project.title })
-      .catch(() => null);
-    if (keyPoints && keyPoints.some((point) => point.trim())) {
+  if (project.settings.showKeyPoints) {
+    const modelKeyPoints = provider.writeKeyPoints
+      ? await provider.writeKeyPoints({ narrations: result.scenes.map((scene) => scene.narration), title: project.title }).catch(() => null)
+      : null;
+    // Keep Explainer usable when the optional second LLM call times out; derive a short label from approved narration.
+    const keyPoints = modelKeyPoints?.some((point) => point.trim())
+      ? modelKeyPoints
+      : result.scenes.map((scene) => scene.narration.replace(/[^\p{L}\p{N}\s-]/gu, " ").trim().split(/\s+/u).slice(0, 6).join(" "));
+    if (keyPoints.some((point) => point.trim())) {
       const { error: keyPointError } = await db
         .from("projects")
         .update({ settings: { ...project.settings, keyPoints } })
@@ -836,7 +841,7 @@ async function generateMedia(job: JobRow, project: Project) {
       // voiced total and, when it misses by more than 8%, read every scene again at a corrected speed (still on the
       // CPU while the GPU draws), so "1 phút" comes out near a minute.
       const voicedMs = scenes.reduce((total, scene) => total + (scene.actualDurationMs ?? 0), 0);
-      const factor = project.inputMode === "idea" && scenes.every((scene) => scene.audioPath)
+      const factor = project.settings.generationPreset !== "fast" && project.inputMode === "idea" && scenes.every((scene) => scene.audioPath)
         ? paceCorrection(voicedMs, project.settings.targetDurationSec) : null;
       if (!factor) return;
       log.info({ jobId: job.id, voicedMs, targetSec: project.settings.targetDurationSec, factor }, "voice_pace_corrected");
