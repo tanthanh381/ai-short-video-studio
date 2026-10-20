@@ -407,8 +407,9 @@ IMAGE_STYLES = {
     # Drawn by the hand renderer: it inks the dark outlines first, then washes in the flat colours. Photos have no
     # outlines to follow (sparse specks, then white holes where the background matched the paper), so this look only.
     "whiteboard": "whiteboard doodle illustration, bold black marker outlines, flat pastel colors, plain white background",
-    # "Đạo lý cổ phong": one small character on plain kraft paper; the website places the square picture on paper.
-    "chibi": "cute chibi illustration, plain beige kraft paper background, olive green ancient robe, clean ink outlines, full body, empty background",
+    # "Đạo lý cổ phong": the character is a flat hand-drawn storybook figure on bare kraft paper;
+    # keeping this contract explicit also prevents SDXL Base from drifting into a 3D room or landscape.
+    "chibi": "flat 2D hand-drawn chibi storybook illustration, plain warm beige kraft paper, clean dark ink outlines, muted olive palette, full body, no scenery, no photorealism, no 3D render",
 }
 # Drawn looks: photo skin/anatomy wording would pull them back towards photographs.
 STYLIZED_IMAGE_STYLES = {"flat", "ink", "ink-wash", "watercolor", "paper-cut", "whiteboard", "chibi"}
@@ -579,7 +580,10 @@ def comfyui_image(prompt, negative_prompt, width, height, seed, preset, referenc
         # The Plus SDXL adapter needs enough weight to preserve the mascot, but not so much that
         # it turns every narrated action into the anchor pose. Worker strengths are intentionally
         # mapped from the existing 0.05-0.65 img2img range to a conservative IP-Adapter range.
-        adapter_weight = max(0.35, min(0.85, float(reference_strength or 0.20) * 2.2))
+        # The old 0.35 floor preserved the anchor pose too strongly: watering, reading and
+        # sweeping scenes collapsed back into the bundled thinking pose. Keep the identity
+        # signal, but let the scene prompt control the new everyday gesture.
+        adapter_weight = max(0.22, min(0.60, float(reference_strength or 0.20) * 1.5))
         workflow = {
             "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": COMFYUI_CHECKPOINT}},
             "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
@@ -589,7 +593,7 @@ def comfyui_image(prompt, negative_prompt, width, height, seed, preset, referenc
             "6": {"class_type": "IPAdapterAdvanced", "inputs": {
                 "model": ["5", 0], "ipadapter": ["5", 1], "image": ["4", 0],
                 "weight": adapter_weight, "weight_type": "linear", "combine_embeds": "average",
-                "start_at": 0.0, "end_at": 0.85, "embeds_scaling": "V only",
+                "start_at": 0.0, "end_at": 0.68, "embeds_scaling": "V only",
             }},
             "7": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
             "8": {"class_type": "KSampler", "inputs": {
@@ -815,6 +819,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64, reference_strength)
     if selected_model == COMFYUI_IMAGE_MODEL:
         negative = IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else "text, logo, watermark"
+        if style == "chibi":
+            negative += ", photorealistic, realistic 3d render, interior room, landscape, detailed scenery, city, sky, horizon, background characters"
         if is_human:  # SDXL Base honours a negative prompt (real CFG), unlike Turbo: keep scenes to their cast
             negative += ", crowd, group of people, extra people, duplicate person, clones"
         with COMFYUI_LOCK:

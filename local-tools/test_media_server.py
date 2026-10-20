@@ -425,7 +425,9 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(workflow["5"]["class_type"], "IPAdapterUnifiedLoader")
         self.assertEqual(workflow["6"]["class_type"], "IPAdapterAdvanced")
         self.assertEqual(workflow["4"]["inputs"]["image"], "paper-stage-reference.png")
-        self.assertGreater(workflow["6"]["inputs"]["weight"], 0.35)
+        self.assertGreater(workflow["6"]["inputs"]["weight"], 0.20)
+        self.assertLessEqual(workflow["6"]["inputs"]["weight"], 0.60)
+        self.assertEqual(workflow["6"]["inputs"]["end_at"], 0.68)
 
     def test_sdxl_base_retries_without_reference_when_ipadapter_is_unavailable(self):
         with patch.object(self.media, "available_image_models", return_value={self.media.COMFYUI_IMAGE_MODEL: "b"}), \
