@@ -25,9 +25,9 @@ import { groupWords, OpenAIAdapter } from "./openai";
 import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE, paperStagePrompt, storyNationality, usesPaperStage, usesStoryCard, withNationality } from "./card-layout";
 
 /**
- * A full-frame img2img anchor is excellent for identity but collapses SDXL-Turbo's pose into
- * the anchor. Paper-stage therefore leaves reference images off by default on the 16 GB Mini;
- * operators on a 24 GB+ node can opt into the ComfyUI/IP-Adapter path with PAPER_REFERENCE_MODE.
+ * A full-frame img2img anchor is excellent for identity but can collapse SDXL-Turbo's pose into
+ * the anchor. Paper-stage uses the bundled character reference at a low strength by default;
+ * operators can disable or tune it with PAPER_REFERENCE_MODE/PAPER_REFERENCE_STRENGTH.
  */
 const PAPER_REFERENCE_MODE = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "")
   ? process.env.PAPER_REFERENCE_MODE!
@@ -36,6 +36,18 @@ const parsedPaperReferenceStrength = Number(process.env.PAPER_REFERENCE_STRENGTH
 const PAPER_REFERENCE_STRENGTH = Number.isFinite(parsedPaperReferenceStrength)
   ? Math.max(0.05, Math.min(0.65, parsedPaperReferenceStrength))
   : 0.08;
+const DEFAULT_PAPER_REFERENCE_PATH = process.env.PAPER_REFERENCE_ASSET
+  || join(process.cwd(), "assets/paper-stage-character-reference.png");
+
+async function defaultPaperReference(): Promise<string | null> {
+  if (PAPER_REFERENCE_MODE === "none") return null;
+  try {
+    return (await readFile(DEFAULT_PAPER_REFERENCE_PATH)).toString("base64");
+  } catch (error) {
+    log.warn({ path: DEFAULT_PAPER_REFERENCE_PATH, err: error instanceof Error ? error.message : String(error) }, "paper_default_reference_unavailable");
+    return null;
+  }
+}
 
 function paperReferenceOptions(referenceImageBase64: string | null | undefined, sceneOrder: number): { referenceImageBase64?: string; referenceStrength?: number } {
   if (!referenceImageBase64 || PAPER_REFERENCE_MODE === "none") return {};
@@ -883,7 +895,9 @@ async function generateMedia(job: JobRow, project: Project) {
     })().catch((error: unknown) => log.warn({ jobId: job.id, err: error instanceof Error ? error.message : String(error) }, "voice_prepass_aborted"))
     : Promise.resolve();
   let imagesDone = 0;
-  let paperReferenceImageBase64: string | null = null;
+  let paperReferenceImageBase64: string | null = usesPaperStage(project.settings)
+    ? await defaultPaperReference()
+    : null;
   if (usesPaperStage(project.settings) && targetId) {
     const anchor = project.scenes.find((scene) => scene.id !== targetId && scene.imagePath);
     if (anchor?.imagePath) {
