@@ -99,7 +99,11 @@ function breakPenalty(cores: string[], trailing: string[], i: number, sinceClaus
   } else if (ellipsis) penalty = 4;
   else if (/[;；—–]$/u.test(current)) penalty = 3;
   else if (CLAUSE_END.test(current)) {
-    penalty = CLAUSE_STARTERS.has(lower(next)) ? 2 : 5;
+    // A comma normally continues the same spoken thought. Keep it in one
+    // scene; the dynamic splitter can still use a conjunction or a sentence
+    // boundary when a very long passage must be divided.
+    const comma = /[,，]["'”’)\]]*$/u.test(current);
+    penalty = comma ? 32 : (CLAUSE_STARTERS.has(lower(next)) ? 2 : 5);
     if (sinceClause <= 2) penalty += 30; // "Lạ thay," / "Thế nhưng,": a lead-in word stays with its sentence
   } else {
     penalty = CLAUSE_STARTERS.has(lower(next)) ? 12 : 40;

@@ -134,14 +134,22 @@ describe("splitScript cuts a long sentence where a thought ends", () => {
     const slices = splitScript(text).map((slice) => slice.trim());
     expect(slices.length).toBeGreaterThanOrEqual(2);
     expect(slices[0]).not.toMatch(/^Thế nhưng,$/u);
-    expect(slices.slice(0, -1).every((slice) => /[,:]$/u.test(slice))).toBe(true);
+    expect(slices.join(" ")).toBe(text);
+    expect(slices.slice(1).every((slice) => !/^(?:nhưng|mà|còn|và|nên),?\b/iu.test(slice))).toBe(true);
   });
 
   it("leaves a sentence of a normal length whole", () => {
     expect(splitScript("Người em mừng rỡ, hy vọng bán khế đổi lấy ít gạo.")).toHaveLength(1);
     expect(splitScript("Việc nói quá nhiều dễ làm loãng chí hướng của mình và phô trương sớm dễ tiêu hao hết năng lượng quý giá chỉ trong thoáng chốc.")).toHaveLength(1);
-    // a sentence that is long (28 words) with a natural break ("…, còn …") is cut there: two short pictures read better than one long one
-    expect(splitScript("Việc nói quá nhiều dễ làm loãng chí hướng của mình, còn phô trương sớm thì dễ tiêu hao hết năng lượng quý giá chỉ trong thoáng chốc.")).toHaveLength(2);
+    // A comma in a normal-length sentence continues the same spoken beat.
+    expect(splitScript("Việc nói quá nhiều dễ làm loãng chí hướng của mình, còn phô trương sớm thì dễ tiêu hao hết năng lượng quý giá chỉ trong thoáng chốc.")).toHaveLength(1);
+  });
+
+  it("does not split a continuation after a comma into a new scene", () => {
+    const text = "Một câu chuyện dài cần giữ nguyên mạch ý trong phần đầu, nhưng sau đó vẫn phải chia thành một nhịp mới vì có quá nhiều thông tin nối tiếp nhau khiến người xem khó theo dõi và hình minh họa bị giữ quá lâu trên màn hình điện thoại.";
+    const slices = splitScript(text).map((slice) => slice.trim());
+    expect(slices.join(" ")).toBe(text);
+    expect(slices[0]).not.toMatch(/,$/u);
   });
 });
 
