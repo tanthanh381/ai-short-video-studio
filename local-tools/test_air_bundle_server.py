@@ -232,7 +232,7 @@ class Installer(Fixture):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         config = json.loads((home / ".studio-sync.json").read_text())
         self.assertEqual(config, {
-            "source": "http://mini:8898", "node": "air", "image": True, "repo": str(home / "Developer/ai-short-video-studio"),
+            "source": "http://mini:8898", "node": "air", "image": True, "syncModels": False, "syncOllama": False, "repo": str(home / "Developer/ai-short-video-studio"),
             "localAi": str(home / "Developer/local-ai"), "ollama": "http://100.64.0.9:11434", "bridge": "http://100.64.0.9:8765", "whiteboard": "http://100.64.0.9:8766",
         })
         plist = (home / "Library/LaunchAgents/com.ai-short-video.sync.plist").read_text()
