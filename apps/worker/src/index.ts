@@ -1009,7 +1009,10 @@ async function generateMedia(job: JobRow, project: Project) {
             {
               ...project.settings.localModels,
               video: motionModel,
-              seed: imageSeedFor(project.id),
+              // The reference image carries character identity. A scene-specific
+              // seed is still required so a tea, paper, garden or candle scene
+              // does not collapse into the exact same frame across the project.
+              seed: imageSeedFor(`${project.id}:${scene.id}`),
               preset: project.settings.generationPreset,
             },
           );
@@ -1246,9 +1249,9 @@ async function renderDub(job: JobRow, project: Project) {
   }
 }
 
-/** One seed per scene; a paper-stage video uses one seed for all, which keeps its mascot the same from scene to scene. */
+/** One deterministic seed per scene; the shared reference image keeps the paper mascot consistent. */
 function sceneSeed(project: Project, scene: Scene): number {
-  return imageSeedFor(usesPaperStage(project.settings) ? project.id : `${project.id}:${scene.id}`);
+  return imageSeedFor(`${project.id}:${scene.id}`);
 }
 
 /** The scene's picture prompt; a hand-drawn video must not get a second hand inside the picture. */

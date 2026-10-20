@@ -125,10 +125,9 @@ for (const item of cases) {
         : null;
       for (const scene of scenes) {
         const imageOptions = {
-          // Keep the direct benchmark identical to production: paper-stage uses one
-          // project seed for the recurring mascot, while other layouts remain
-          // independently deterministic per scene.
-          seed: imageSeedFor(usesPaperStage(settings) ? projectId : `${projectId}:${scene.id}`),
+          // The shared reference image preserves identity; a stable per-scene
+          // seed preserves reproducibility without cloning the same frame.
+          seed: imageSeedFor(`${projectId}:${scene.id}`),
           style: imageStyleFor(settings.visualStyle, settings.visualPreset), preset: settings.generationPreset,
           ...(benchmarkImageModel ? { image: benchmarkImageModel } : {}),
           ...(usesPaperStage(settings) && referenceImageBase64 && (paperReferenceMode === "all" || paperReferenceMode === "first" || (paperReferenceMode === "alternate" && scene.order % 2 === 0))
@@ -172,7 +171,7 @@ for (const item of cases) {
               aspectRatio: settings.aspectRatio,
             }, {
               video: "ltxv-2b-0.9.8-distilled",
-              seed: imageSeedFor(projectId),
+              seed: imageSeedFor(`${projectId}:${scene.id}`),
               preset: benchmarkMotionPreset,
             });
             const file = `${scene.id}.mp4`;
