@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateContentQuality, passesIdeaQuality, voiceDirectionForScript } from "./content-quality";
+import { applyDirectContentRecommendation, contentQualityRecommendations, evaluateContentQuality, passesIdeaQuality, voiceDirectionForScript } from "./content-quality";
 
 describe("content quality gate", () => {
   it("flags generic openings before media generation", () => {
@@ -63,5 +63,13 @@ describe("content quality gate", () => {
   it("derives a bounded prosody direction from the narration", () => {
     expect(voiceDirectionForScript("Đừng bấm vào đường link lạ, bạn có thể mất tiền.")).toMatch(/cảnh báo/u);
     expect(voiceDirectionForScript("Hãy giữ hy vọng và bắt đầu lại.")).toMatch(/sáng/u);
+  });
+
+  it("turns feedback into creator actions and safely shortens long beats", () => {
+    const report = evaluateContentQuality("Vì sao bạn vẫn mệt dù đã ngủ đủ 8 giờ? Khi buổi chiều đến, hãy tắt thông báo trong 10 phút, vì não cần một khoảng nghỉ để phục hồi.");
+    const recommendations = contentQualityRecommendations(report);
+    expect(recommendations.some((item) => item.id === "pacing" && item.direct)).toBe(true);
+    const pacing = recommendations.find((item) => item.id === "pacing");
+    expect(applyDirectContentRecommendation("Một câu dài, nhưng vẫn giữ nguyên ý.", pacing?.id ?? "pacing")).toBe("Một câu dài,\nnhưng vẫn giữ nguyên ý.");
   });
 });

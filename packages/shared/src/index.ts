@@ -66,6 +66,7 @@ export const DEFAULT_PROJECT_SETTINGS = {
   logoX: 0.06,
   logoY: 0.12,
   rewriteFullScript: false,
+  contentQualityHints: [] as string[],
   layoutTemplate: "full-bleed" as const,
   cardTheme: "blue" as const,
   cardTitle: "",

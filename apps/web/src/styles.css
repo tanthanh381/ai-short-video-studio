@@ -3880,6 +3880,12 @@ input[type="radio"] {
 .content-quality-card details { margin-top: 9px; color: var(--text-muted); font-size: var(--text-sm); }
 .content-quality-card summary { cursor: pointer; color: var(--accent); font-weight: 700; }
 .content-quality-card ul { margin: 8px 0 0; padding-left: 20px; }
+.content-quality-recommendations { display: grid; gap: 8px; }
+.content-quality-recommendations li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.content-quality-recommendations li > span { flex: 1; }
+.recommendation-apply { flex: 0 0 auto; padding: 4px 8px; font-size: 12px; }
+.recommendation-note { display: block; margin-top: 10px; color: var(--text-muted); }
+@media (max-width: 720px) { .content-quality-recommendations li { align-items: flex-start; flex-direction: column; gap: 6px; } }
 .batch-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr); gap: 18px; align-items: start; }
 .batch-form, .batch-results { display: grid; gap: 14px; }
 .batch-section-title { display: flex; align-items: center; gap: 8px; color: var(--text-strong); font-size: var(--text-lg); }

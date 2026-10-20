@@ -33,6 +33,54 @@ export type ContentQualityReport = {
   };
 };
 
+export type ContentQualityRecommendationId =
+  | "hook"
+  | "structure"
+  | "specificity"
+  | "ending"
+  | "visualAction"
+  | "emotion"
+  | "pacing"
+  | "retention"
+  | "repetition";
+
+export type ContentQualityRecommendation = {
+  id: ContentQualityRecommendationId;
+  message: string;
+  /** Safe to apply locally without changing the meaning of the script. */
+  direct: boolean;
+  actionLabel: string;
+};
+
+/** Turns the deterministic feedback strings into actions the creator can apply. */
+export function contentQualityRecommendations(report: ContentQualityReport): ContentQualityRecommendation[] {
+  return report.feedback.map((message): ContentQualityRecommendation => {
+    if (message.startsWith("Rút ngắn câu")) return { id: "pacing", message, direct: true, actionLabel: "Rút gọn câu" };
+    if (message.startsWith("Mở đầu") || message.startsWith("Tăng lực hút")) return { id: "hook", message, direct: false, actionLabel: "Tối ưu bằng AI" };
+    if (message.startsWith("Cần đủ nhịp")) return { id: "structure", message, direct: false, actionLabel: "Tối ưu bằng AI" };
+    if (message.startsWith("Thêm một tình huống")) return { id: "specificity", message, direct: false, actionLabel: "Tối ưu bằng AI" };
+    if (message.startsWith("Kết thúc")) return { id: "ending", message, direct: false, actionLabel: "Tối ưu bằng AI" };
+    if (message.startsWith("Thêm hành động")) return { id: "visualAction", message, direct: false, actionLabel: "Tối ưu bằng AI" };
+    if (message.startsWith("Thêm một sắc thái")) return { id: "emotion", message, direct: false, actionLabel: "Tối ưu bằng AI" };
+    if (message.startsWith("Thêm một chuyển ý")) return { id: "retention", message, direct: false, actionLabel: "Tối ưu bằng AI" };
+    return { id: "repetition", message, direct: false, actionLabel: "Tối ưu bằng AI" };
+  });
+}
+
+/**
+ * Makes only a safe, meaning-preserving pacing edit. The other recommendations
+ * stay as prompts for the selected writer model instead of being guessed by UI code.
+ */
+export function applyDirectContentRecommendation(script: string, id: ContentQualityRecommendationId): string {
+  if (id !== "pacing") return script;
+  return script
+    .split(/\n+/u)
+    .flatMap((line) => line.split(/(?<=[.!?…])\s+|(?<=[,;:])\s+(?=(?:nhưng|vì|nên|mà|để|khi|nếu)\b)/iu))
+    .map((line) => line.replace(/\s+/gu, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** A short, provider-neutral direction for TTS engines that support prosody hints. */
 export function voiceDirectionForScript(script: string): string {
   const text = script.normalize("NFC");

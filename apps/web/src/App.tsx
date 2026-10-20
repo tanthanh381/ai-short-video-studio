@@ -65,6 +65,8 @@ import {
   type KeyProvider,
   contentPlan,
   evaluateContentQuality,
+  contentQualityRecommendations,
+  applyDirectContentRecommendation,
   evaluatePublishReadiness,
   durationLabel,
   formatDuration,
@@ -1655,6 +1657,8 @@ function WizardPage() {
   }, [readsAsWritten, spokenText]);
   const plan = contentPlan(settings.targetDurationSec, settings.style, settings.voice, settings.voiceSpeed);
   const contentQuality = useMemo(() => evaluateContentQuality(spokenText), [spokenText]);
+  const contentRecommendations = useMemo(() => contentQualityRecommendations(contentQuality), [contentQuality]);
+  const [appliedRecommendations, setAppliedRecommendations] = useState<string[]>([]);
   const groups = modelGroups(settings, statuses, localModels);
   const canContinue = sourceText.trim().length >= 10;
   const draftTitle = () => spokenText.trim().split(/[\n.!?]/u)[0]?.slice(0, 120) || "Video mới";
@@ -1705,6 +1709,18 @@ function WizardPage() {
     focusStep();
   }
   function goTo(id: WizardStepId) { patch({ step: id }); setError(null); focusStep(); }
+
+  function applyContentRecommendation(id: Parameters<typeof applyDirectContentRecommendation>[1], message: string, direct: boolean) {
+    if (appliedRecommendations.includes(id)) return;
+    if (direct) {
+      const next = applyDirectContentRecommendation(sourceText, id);
+      if (next !== sourceText) patch({ sourceText: next, inputMode: "full-script" });
+    } else {
+      const hints = [...new Set([...settings.contentQualityHints, message])].slice(0, 12);
+      setSettings({ ...settings, contentQualityHints: hints, rewriteFullScript: true });
+    }
+    setAppliedRecommendations((items) => [...items, id]);
+  }
 
   async function applyTemplate(id: string) {
     const preset = CHANNEL_PRESETS.find((p) => p.id === id);
@@ -2087,7 +2103,23 @@ function WizardPage() {
               {contentQuality.feedback.length > 0 && (
                 <details>
                   <summary>{contentQuality.feedback.length} gợi ý cải thiện</summary>
-                  <ul>{contentQuality.feedback.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul>
+                  <ul className="content-quality-recommendations">
+                    {contentRecommendations.slice(0, 5).map((item) => (
+                      <li key={item.id}>
+                        <span>{item.message}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="recommendation-apply"
+                          disabled={appliedRecommendations.includes(item.id)}
+                          onClick={() => applyContentRecommendation(item.id, item.message, item.direct)}
+                        >
+                          {appliedRecommendations.includes(item.id) ? <><Check size={14} /> Đã áp dụng</> : <><WandSparkles size={14} /> {item.actionLabel}</>}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                  {appliedRecommendations.length > 0 && <small className="recommendation-note">Đề xuất đã lưu. Khi bạn tạo storyboard, AI sẽ áp dụng các chỉnh sửa đã chọn.</small>}
                 </details>
               )}
             </div>

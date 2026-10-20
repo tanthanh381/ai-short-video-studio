@@ -200,6 +200,8 @@ export const projectSettingsSchema = z.object({
   logoX: z.number().min(0).max(1).default(0.06),
   logoY: z.number().min(0).max(1).default(0.12),
   rewriteFullScript: z.boolean().default(false),
+  /** Editorial instructions selected from Content check; applied by the storyboard writer. */
+  contentQualityHints: z.array(z.string().trim().min(1).max(240)).max(12).default([]),
   layoutTemplate: layoutTemplateSchema.default("full-bleed"),
   cardTheme: cardThemeSchema.default("blue"),
   /** Tiêu đề in hoa trên đầu thẻ truyện; để trống để tự viết từ kịch bản. */
