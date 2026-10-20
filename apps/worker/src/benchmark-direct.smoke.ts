@@ -29,11 +29,13 @@ type Case = { id: string; topic: string; hook: string; sourceText: string };
 const corpus = JSON.parse(await readFile(corpusPath, "utf8")) as { cases?: Case[] } & Record<string, unknown>;
 const cases: Case[] = (corpus.cases ?? (Object.values(corpus).find(Array.isArray) as Case[])).filter((item) => !only.length || only.includes(item.id));
 const benchmarkPreset: ProjectSettings["generationPreset"] = process.env.BENCHMARK_PRESET === "quality" ? "quality" : "balanced";
-const paperReferenceMode = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "") ? process.env.PAPER_REFERENCE_MODE : "none";
+const paperReferenceMode = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "") ? process.env.PAPER_REFERENCE_MODE : "first";
 const parsedPaperReferenceStrength = Number(process.env.PAPER_REFERENCE_STRENGTH ?? "0.08");
 const paperReferenceStrength = Number.isFinite(parsedPaperReferenceStrength)
   ? Math.max(0.05, Math.min(0.65, parsedPaperReferenceStrength))
   : 0.08;
+const benchmarkImageModel = process.env.BENCHMARK_IMAGE_MODEL
+  || (benchmarkPreset === "quality" ? "sdxl-base-1.0-comfyui" : undefined);
 
 // One look per topic, chosen the way a channel owner would: the same retention aids everywhere.
 const LOOK: Record<string, Partial<ProjectSettings>> = {
@@ -114,7 +116,9 @@ for (const item of cases) {
       }
     });
     await mark("images", async () => {
-      let referenceImageBase64: string | null = null;
+      let referenceImageBase64: string | null = usesPaperStage(settings)
+        ? (await readFile(join(process.cwd(), "assets/paper-stage-character-reference.png"))).toString("base64")
+        : null;
       for (const scene of scenes) {
         const png = await media.createImage(
           buildProductionImagePrompt(scene.imagePrompt, visualPresetPrompt(settings.visualPreset)), imageAspectFor(settings),
@@ -124,7 +128,8 @@ for (const item of cases) {
             // independently deterministic per scene.
             seed: imageSeedFor(usesPaperStage(settings) ? projectId : `${projectId}:${scene.id}`),
             style: imageStyleFor(settings.visualStyle, settings.visualPreset), preset: settings.generationPreset,
-            ...(usesPaperStage(settings) && referenceImageBase64 && (paperReferenceMode === "all" || (paperReferenceMode === "first" && scene.order > 0) || (paperReferenceMode === "alternate" && scene.order % 2 === 0))
+            ...(benchmarkImageModel ? { image: benchmarkImageModel } : {}),
+            ...(usesPaperStage(settings) && referenceImageBase64 && (paperReferenceMode === "all" || paperReferenceMode === "first" || (paperReferenceMode === "alternate" && scene.order % 2 === 0))
               ? { referenceImageBase64, referenceStrength: paperReferenceStrength } : {}),
           },
         );
