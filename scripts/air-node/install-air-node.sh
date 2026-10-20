@@ -153,14 +153,16 @@ main() {
     [ "${READY:-0}" = "1" ] || fail "Media bridge chưa trả lời. Xem $REPO/tmp/local-services/media.log"
   fi
 
-  # From now on this Mac keeps itself identical to the Mac mini (programs, voice toolkit, model files, Ollama models) by itself.
+  # From now on this Mac keeps code/toolkit compatible with the Mac mini, while models remain local by default.
   step sync "8/8 Đồng bộ tự động với Mac mini" "Cài tiến trình nền giữ máy này giống Mac mini"
   SYNC_PORT="${AIR_NODE_SYNC_PORT:-8898}"
   SYNC_URL="$(printf '%s' "$BUNDLE" | sed -E 's#^(https?://[^:/]+).*#\1#'):$SYNC_PORT"
   NODE_HOST="${NODE_HOST:-${AIR_NODE_HOST:-127.0.0.1}}"
   IMAGE_JSON=false; [ "$WITH_IMAGE" = "yes" ] && IMAGE_JSON=true
-  printf '{"source":"%s","node":"%s","image":%s,"repo":"%s","localAi":"%s","ollama":"http://%s:11434","bridge":"http://%s:8765","whiteboard":"http://%s:8766"}\n' \
-    "$SYNC_URL" "$NAME" "$IMAGE_JSON" "$REPO" "$LOCAL_AI" "$NODE_HOST" "$NODE_HOST" "$NODE_HOST" > "$HOME_DIR/.studio-sync.json"
+  SYNC_MODELS_JSON=false; [ "${NODE_SYNC_MODELS:-false}" = "true" ] && SYNC_MODELS_JSON=true
+  SYNC_OLLAMA_JSON=false; [ "${NODE_SYNC_OLLAMA:-false}" = "true" ] && SYNC_OLLAMA_JSON=true
+  printf '{"source":"%s","node":"%s","image":%s,"syncModels":%s,"syncOllama":%s,"repo":"%s","localAi":"%s","ollama":"http://%s:11434","bridge":"http://%s:8765","whiteboard":"http://%s:8766"}\n' \
+    "$SYNC_URL" "$NAME" "$IMAGE_JSON" "$SYNC_MODELS_JSON" "$SYNC_OLLAMA_JSON" "$REPO" "$LOCAL_AI" "$NODE_HOST" "$NODE_HOST" "$NODE_HOST" > "$HOME_DIR/.studio-sync.json"
   PLIST="$HOME_DIR/Library/LaunchAgents/com.ai-short-video.sync.plist"
   mkdir -p "$HOME_DIR/Library/LaunchAgents" "$REPO/tmp/local-services"
   SYNC_PY="/opt/homebrew/bin/python3.12"; [ -x "$SYNC_PY" ] || SYNC_PY="$(command -v python3.12 || command -v python3)"

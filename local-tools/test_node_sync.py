@@ -125,7 +125,7 @@ class Fixture(unittest.TestCase):
         request = urllib.request.Request(self.url + path, headers={**({"Authorization": f"Bearer {token}"} if token else {}), **(headers or {})})
         return urllib.request.urlopen(request, timeout=10)
 
-    def new_agent(self, *, image=True, idle=True, power=("ac", None), air_ollama=None, **over):
+    def new_agent(self, *, image=True, idle=True, power=("ac", None), air_ollama=None, sync_models=True, sync_ollama=True, **over):
         self.down = {"value": []}
         self.started = []
         air_dir = self.base / "air"
@@ -135,7 +135,7 @@ class Fixture(unittest.TestCase):
         Path(roots["local_ai"]).mkdir(parents=True, exist_ok=True)
         self.air_ollama = FakeOllama(air_ollama if air_ollama is not None else {"qwen3.5:4b": "sha-q35", "qwen2.5:3b": "sha-q25"})
         self.addCleanup(self.air_ollama.close)
-        config = {"source": self.url, "node": "air", "image": image, "repo": roots["repo"], "localAi": roots["local_ai"], "ollama": self.air_ollama.url}
+        config = {"source": self.url, "node": "air", "image": image, "syncModels": sync_models, "syncOllama": sync_ollama, "repo": roots["repo"], "localAi": roots["local_ai"], "ollama": self.air_ollama.url}
         self.restarts = []
         self.idle = {"value": idle}
         self.pulls = []
@@ -446,6 +446,13 @@ class Agent(Fixture):
         self.pulls.clear()
         agent.config["ollama"] = "http://127.0.0.1:9"  # nothing there
         agent.cycle()
+        self.assertEqual(self.pulls, [])
+
+    def test_heterogeneous_node_can_keep_model_weights_and_ollama_local(self):
+        agent = self.new_agent(sync_models=False, sync_ollama=False, air_ollama={"qwen3:8b": "sha-air"})
+        state = agent.cycle()
+        self.assertEqual(state["state"], "in-sync")
+        self.assertEqual(state["behind"], {"code": 0, "toolkit": 0, "models": 0, "ollama": 0})
         self.assertEqual(self.pulls, [])
 
     def test_files_that_only_this_machine_has_are_never_deleted(self):

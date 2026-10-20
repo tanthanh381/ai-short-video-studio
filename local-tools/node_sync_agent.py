@@ -1,5 +1,5 @@
-"""Keeps this Mac (the second machine) identical to the main one: the studio's programs, the voice toolkit, the model files and the
-Ollama models. Runs in the background under launchd (a LaunchAgent the installer sets up) and does this every minute:
+"""Keeps this Mac (the second machine) compatible with the main one: the studio's programs and toolkit are shared, while
+model files and Ollama models may remain machine-specific. Runs in the background under launchd (a LaunchAgent the installer sets up) and does this every minute:
 
   1. asks the main Mac (node_sync_server.py) for its manifest and compares it with what is here;
   2. downloads what is missing or different, a file at a time, with a sha256 check, so a cut download goes on where it stopped;
@@ -78,6 +78,9 @@ class Agent:
         self.log = log
         self.roots = {"repo": config["repo"], "local_ai": config["localAi"]}
         self.with_image = bool(config.get("image", False))
+        # Heterogeneous nodes are intentional: share code/toolkit, choose models per node.
+        self.sync_models = bool(config.get("syncModels", False))
+        self.sync_ollama = bool(config.get("syncOllama", False))
         self.cache = sync_manifest.HashCache(self.paths.cache)
         self.restart = restart or self._restart_services
         self.is_idle = is_idle or self._bridge_idle
@@ -280,10 +283,13 @@ class Agent:
             return self.write_state("error", error=str(error))
         expected = manifest["entries"]
         local = sync_manifest.scan(self.roots, self.with_image, self.cache)
-        gaps = sync_manifest.diff(expected, local, self.with_image)
+        if not self.sync_models:
+            expected = {key: entry for key, entry in expected.items() if sync_manifest.group_of(key) != "models"}
+            local = sync_manifest.scan(self.roots, False, self.cache)
+        gaps = sync_manifest.diff(expected, local, self.sync_models and self.with_image)
         todo = gaps["missing"] + gaps["changed"]
-        wanted = {k: v for k, v in expected.items() if self.with_image or not k.startswith(f"models/{sync_manifest.IMAGE_DIR}/")}
-        pulls = self.ollama_gaps(manifest.get("ollama", []))
+        wanted = {k: v for k, v in expected.items() if self.sync_models and (self.with_image or not k.startswith(f"models/{sync_manifest.IMAGE_DIR}/")) or not self.sync_models}
+        pulls = self.ollama_gaps(manifest.get("ollama", [])) if self.sync_ollama else []
         # compared like with like: the main machine's files that belong on this one (a Mac without the picture model never has those)
         source_version = sync_manifest.version_of(wanted)
         notes = []
@@ -361,13 +367,13 @@ class Agent:
             else:
                 notes.append("Chờ máy rảnh để khởi động lại dịch vụ đã cập nhật")
 
-        after = sync_manifest.scan(self.roots, self.with_image, self.cache)
-        left = sync_manifest.diff(expected, after, self.with_image)
+        after = sync_manifest.scan(self.roots, self.sync_models and self.with_image, self.cache)
+        left = sync_manifest.diff(expected, after, self.sync_models and self.with_image)
         left_keys = left["missing"] + left["changed"]
-        gaps_after = self._behind(left_keys, self.ollama_gaps(manifest.get("ollama", [])) if not defer_models else [])
+        gaps_after = self._behind(left_keys, self.ollama_gaps(manifest.get("ollama", [])) if self.sync_ollama and not defer_models else [])
         version_here = sync_manifest.version_of({k: after[k] for k in wanted if k in after})
         in_sync = not left_keys and not gaps_after["ollama"] and not errors and not (defer_models and models_todo)
-        descriptions = [sync_manifest.describe_key(k) for k in left_keys[:8]] + [f"Model Ollama {name}" for name in self.ollama_gaps(manifest.get("ollama", []))[:4]]
+        descriptions = [sync_manifest.describe_key(k) for k in left_keys[:8]] + [f"Model Ollama {name}" for name in (self.ollama_gaps(manifest.get("ollama", [])) if self.sync_ollama else [])[:4]]
         state = self.write_state(
             "in-sync" if in_sync else "behind",
             sourceVersion=source_version, localVersion=version_here, behind=gaps_after, differences=(notes + descriptions)[:10],
