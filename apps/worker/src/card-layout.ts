@@ -138,11 +138,27 @@ export const PAPER = {
  * The one recurring character of a paper-stage video. Short on purpose: the image model reads 77 tokens, and the
  * bridge's style words come first; a 25-word description pushed the scene's action out of the prompt.
  */
-export const PAPER_MASCOT = "a clearly male little chibi boy, short dark-brown hair in a small topknot bun, small olive ribbon tied to the bun, thick eyebrows, olive ancient robe, bare head, visible ears";
+export const PAPER_MASCOT = "a clearly male little chibi boy, short dark-brown hair in a small topknot bun, small olive ribbon tied to the bun, thick eyebrows, olive ancient robe, bare head, no hat, no hood, no head covering, visible ears";
 
 /** Everyday actions that make the paper-stage character feel alive instead of posing for a portrait. */
 export const PAPER_DAILY_ACTIONS =
   "Use one visible everyday action when it fits the narration: sit and think, drink tea, sweep, carry a basket, open or close a book, water a plant, feed a cat, stretch, walk, bow, offer a cup, comfort someone or wave goodbye.";
+
+/** Make the illustration carry the emotional turn, not only the prop named in the sentence. */
+export function paperEmotionFromNarration(narration: string): string {
+  const text = narration.toLocaleLowerCase("vi-VN");
+  if (/(chê bai|đáp trả|tranh cãi|cơn giận|giận|bực|tức)/u.test(text))
+    return "restrained hurt expression, brows gently tense, holding back anger";
+  if (/(bình tâm|bình tĩnh|im lặng|sáng suốt|nhẹ lòng|thanh thản)/u.test(text))
+    return "calm thoughtful expression, softened eyes and a slow peaceful breath";
+  if (/(buồn|đau|mất mát|cô đơn|nhớ)/u.test(text))
+    return "quiet sadness, lowered eyes and a tender reflective expression";
+  if (/(hy vọng|vui|mỉm cười|ấm áp|an ủi|thương)/u.test(text))
+    return "warm relieved smile with gentle hopeful eyes";
+  if (/(bất ngờ|ngạc nhiên|hóa ra)/u.test(text))
+    return "small believable surprise, raised brows and attentive eyes";
+  return "natural attentive expression matching the narration";
+}
 
 /** Told to the storyboard writer for paper-stage videos: one character on bare paper, never a place. */
 export const PAPER_STORYBOARD_STYLE =
@@ -173,10 +189,15 @@ export const PAPER_PROMPT_RULES =
  * spoken line with a deterministic, safe fallback rather than exporting a static portrait. */
 export function paperActionFromNarration(narration: string): string {
   const text = narration.toLocaleLowerCase("vi-VN");
+  if (/(đặt[^.]{0,30}trà|trà[^.]{0,30}đọc lại|lời mình định nói)/u.test(text))
+    return "placing a small tea cup beside a folded paper, one hand hovering above the paper, looking down thoughtfully";
+  if (/(gấp[^.]{0,30}(mảnh )?giấy|gấp mảnh giấy)/u.test(text))
+    return "folding a small piece of paper carefully with both hands clearly visible";
+  if (/(tưới[^.]{0,30}(cây|hoa)|tưới cây)/u.test(text))
+    return "watering a small potted plant with a tilted watering can and a visible stream of water";
   if (/(trà|chén|ly|cốc|uống)/u.test(text)) return /(đọc|lời|sách|trang)/u.test(text)
-    ? "placing a small tea cup beside an open book, one hand visibly touching the cup, book pages clearly visible"
+    ? "placing a small tea cup beside a folded paper, one hand visibly touching the paper, cup clearly visible"
     : "holding a small ceramic tea cup with both hands, cup clearly visible";
-  if (/(tưới|cây|hoa|chậu)/u.test(text)) return "watering a small potted plant with a tilted watering can and a visible stream of water";
   if (/(gấp|giấy|thư)/u.test(text) && /(bước|đi|ngày mai)/u.test(text)) return "folding a small piece of paper beside a potted plant, both hands clearly visible";
   if (/(bàn tay|run|giận)/u.test(text)) return "slowly unclenching both hands beside a small grey stone, fingers visibly separated and relaxed";
   if (/(bảo vệ|giữ được)/u.test(text) && !/im lặng/u.test(text)) return "shielding a small lit candle with both hands, flame clearly visible between the palms";
@@ -207,7 +228,7 @@ export function paperStagePrompt(prompt: string, narration = ""): string {
   // For this art-directed preset the narration is the source of truth. The local storyboard
   // model often invents a second child or compresses distinct beats into the same seated pose;
   // derive one safe, scene-specific everyday action before accepting any model wording.
-  if (narration.trim()) return `${PAPER_MASCOT}, ${paperActionFromNarration(narration)}`;
+  if (narration.trim()) return `${PAPER_MASCOT}, ${paperActionFromNarration(narration)}, ${paperEmotionFromNarration(narration)}`;
   const withoutMascot = prompt.replace(new RegExp(PAPER_MASCOT.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu"), "")
     .replace(/clearly male little chibi boy, short dark-brown hair in a small topknot, thick eyebrows, olive headband, olive ancient robe\.?/giu, "")
     .replace(/clearly male little chibi boy, visible short dark-brown topknot bun, thick eyebrows, olive-green headband ribbon with long tails, olive-green ancient robe\.?/giu, "")

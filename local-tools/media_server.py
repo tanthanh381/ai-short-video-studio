@@ -783,7 +783,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     # cutoff. This keeps the boy's gender, hair and robe stable without using a
     # high-strength img2img reference that would erase the narrated action.
     paper_identity = (
-        ", exactly one male chibi boy, short dark-brown topknot bun, small olive ribbon, thick eyebrows, olive ancient robe, visible ears"
+        ", exactly one male chibi boy, short dark-brown topknot bun, small olive ribbon, thick eyebrows, olive ancient robe, bare head, no hat, no hood, no head covering, visible ears"
         if "clearly male little chibi boy" in clean.lower() else ""
     )
     paper_scene = re.sub(
@@ -798,7 +798,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     # changing gender while giving the concrete prop/gesture more weight than a long character description.
     if paper_identity:
         paper_action = paper_scene.lstrip(" ,")
-        paper_prompt = f"exactly one male chibi boy {paper_action}, short dark-brown topknot bun, small olive ribbon, thick eyebrows, olive ancient robe, visible ears"
+        paper_prompt = f"exactly one male chibi boy {paper_action}, short dark-brown topknot bun, small olive ribbon, thick eyebrows, olive ancient robe, bare head, no hat, no hood, no head covering, visible ears"
         styled = f"{IMAGE_STYLES[style]}, {paper_prompt}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     else:
         styled = f"{IMAGE_STYLES[style]}{paper_identity}, {paper_scene}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"

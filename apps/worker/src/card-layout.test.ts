@@ -251,6 +251,16 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     expect(action("in a misty forest, wide shot")).toBe("holding a small everyday prop and looking thoughtful");
   });
 
+  it("maps the reference story's turning points to concrete actions and emotions", async () => {
+    const { paperActionFromNarration, paperEmotionFromNarration, paperStagePrompt, PAPER_MASCOT } = await import("./card-layout");
+    const tea = "Cậu đặt chén trà xuống và đọc lại lời mình định nói.";
+    expect(paperActionFromNarration(tea)).toContain("folded paper");
+    expect(paperEmotionFromNarration("Cơn giận vẫn còn, nhưng bàn tay đã thôi run.")).toMatch(/holding back anger/u);
+    expect(paperActionFromNarration("Cậu chọn gấp mảnh giấy lại, bước ra tưới cây.")).toContain("folding");
+    expect(paperActionFromNarration("Cậu bước ra tưới cây.")).toContain("watering");
+    expect(paperStagePrompt(tea, tea)).toBe(`${PAPER_MASCOT}, ${paperActionFromNarration(tea)}, ${paperEmotionFromNarration(tea)}`);
+  });
+
   it("puts the captions under the character, small and without a box", async () => {
     const { createAss } = await import("./render");
     const { PAPER } = await import("./card-layout");
@@ -329,7 +339,7 @@ describe("progress bar position", () => {
 
   it("uses the narration to avoid a static paper-stage portrait when the model loses its action", async () => {
     const { paperStagePrompt } = await import("./card-layout");
-    expect(paperStagePrompt("standing calmly", "Cậu đặt chén trà xuống rồi suy nghĩ.")).toContain("holding a small ceramic tea cup");
+    expect(paperStagePrompt("standing calmly", "Cậu đặt chén trà xuống rồi suy nghĩ.")).toContain("placing a small tea cup");
     expect(paperStagePrompt("standing calmly", "Cậu bước ra tưới cây.")).toContain("watering a small potted plant");
     expect(paperStagePrompt("reflecting", "Cậu giữ im lặng và bình tâm.")).toContain("holding a folded paper clearly with both hands");
   });
