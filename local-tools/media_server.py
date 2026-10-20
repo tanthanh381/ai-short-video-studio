@@ -577,13 +577,11 @@ def comfyui_image(prompt, negative_prompt, width, height, seed, preset, referenc
     reference_name = comfyui_upload_reference(reference_image_base64) if reference_image_base64 else None
     model_input = ["1", 0]
     if reference_name:
-        # The Plus SDXL adapter needs enough weight to preserve the mascot, but not so much that
-        # it turns every narrated action into the anchor pose. Worker strengths are intentionally
-        # mapped from the existing 0.05-0.65 img2img range to a conservative IP-Adapter range.
-        # The old 0.35 floor preserved the anchor pose too strongly: watering, reading and
-        # sweeping scenes collapsed back into the bundled thinking pose. Keep the identity
-        # signal, but let the scene prompt control the new everyday gesture.
-        adapter_weight = max(0.22, min(0.60, float(reference_strength or 0.20) * 1.5))
+        # The Plus SDXL adapter must only whisper the mascot identity. Even the previous 0.22
+        # floor still froze Air's paper scenes in the bundled thinking pose, so ordinary props
+        # disappeared. A lower floor and earlier cutoff leave the later denoise steps to the
+        # action prompt while retaining hair/robe/color cues.
+        adapter_weight = max(0.10, min(0.42, float(reference_strength or 0.12) * 1.2))
         workflow = {
             "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": COMFYUI_CHECKPOINT}},
             "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
@@ -593,7 +591,7 @@ def comfyui_image(prompt, negative_prompt, width, height, seed, preset, referenc
             "6": {"class_type": "IPAdapterAdvanced", "inputs": {
                 "model": ["5", 0], "ipadapter": ["5", 1], "image": ["4", 0],
                 "weight": adapter_weight, "weight_type": "linear", "combine_embeds": "average",
-                "start_at": 0.0, "end_at": 0.68, "embeds_scaling": "V only",
+                "start_at": 0.0, "end_at": 0.52, "embeds_scaling": "V only",
             }},
             "7": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
             "8": {"class_type": "KSampler", "inputs": {
@@ -805,13 +803,12 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         clean,
         flags=re.IGNORECASE,
     ) if paper_identity else clean
-    # Keep the requested action and essential object near the front of the CLIP context. Safety/style clauses are
-    # deliberately appended so the 77-token limit does not silently discard the actual scene. For paper-stage,
-    # put a compact identity token before the action, then the clothing details after it: this keeps Turbo from
-    # changing gender while giving the concrete prop/gesture more weight than a long character description.
+    # Keep the requested action and essential object at the very front of the CLIP context. The previous prompt
+    # put a long identity contract before the action, so SDXL spent its token budget on a generic thinking pose and
+    # silently dropped the paper/cup/plant. The compact identity follows the action and still locks the recurring boy.
     if paper_identity:
         paper_action = paper_scene.lstrip(" ,")
-        paper_prompt = f"exactly one male chibi boy, visible dark-brown hair gathered into a small round topknot bun above the crown, olive cloth ribbon tied around the bun with two loose ribbon tails hanging beside the head, exposed forehead and scalp, bare uncovered head, visible ears, absolutely not a cap or hat, thick eyebrows, olive ancient robe, clear full-body everyday action, prop large and unmistakable, both hands visibly interacting with the prop, blank clean kraft paper with no writing or symbols, {paper_action}"
+        paper_prompt = f"{paper_action}, clear full-body everyday action, prop large and unmistakable, both hands visibly interacting with the prop, exactly one male chibi boy, short dark-brown topknot bun, small olive ribbon, thick eyebrows, olive ancient robe, bare head, visible ears, blank clean kraft paper, no writing or symbols"
         styled = f"{IMAGE_STYLES[style]}, {paper_prompt}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     else:
         styled = f"{IMAGE_STYLES[style]}{paper_identity}, {paper_scene}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"

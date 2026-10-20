@@ -425,9 +425,9 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(workflow["5"]["class_type"], "IPAdapterUnifiedLoader")
         self.assertEqual(workflow["6"]["class_type"], "IPAdapterAdvanced")
         self.assertEqual(workflow["4"]["inputs"]["image"], "paper-stage-reference.png")
-        self.assertGreater(workflow["6"]["inputs"]["weight"], 0.20)
-        self.assertLessEqual(workflow["6"]["inputs"]["weight"], 0.60)
-        self.assertEqual(workflow["6"]["inputs"]["end_at"], 0.68)
+        self.assertGreaterEqual(workflow["6"]["inputs"]["weight"], 0.10)
+        self.assertLessEqual(workflow["6"]["inputs"]["weight"], 0.42)
+        self.assertEqual(workflow["6"]["inputs"]["end_at"], 0.52)
 
     def test_sdxl_base_retries_without_reference_when_ipadapter_is_unavailable(self):
         with patch.object(self.media, "available_image_models", return_value={self.media.COMFYUI_IMAGE_MODEL: "b"}), \
@@ -484,12 +484,12 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(quality["steps"], 8)
         self.assertIn("melted face", quality["negativePrompt"])
 
-    def test_paper_stage_puts_the_fixed_male_identity_before_the_action(self):
+    def test_paper_stage_puts_the_concrete_action_before_the_fixed_identity(self):
         paper = self._turbo_payload(
             "a clearly male little chibi boy, short dark-brown hair in a small topknot bun, holding a folded paper",
             preset="balanced", style="chibi",
         )
-        self.assertLess(paper["prompt"].index("exactly one male chibi boy"), paper["prompt"].index("holding a folded paper"))
+        self.assertLess(paper["prompt"].index("holding a folded paper"), paper["prompt"].index("exactly one male chibi boy"))
         self.assertIn("female character", paper["negativePrompt"])
         self.assertEqual(paper["prompt"].lower().count("chibi boy"), 1)
 
