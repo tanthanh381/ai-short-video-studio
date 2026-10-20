@@ -124,20 +124,9 @@ import { applyChannelKit, readChannelKit, saveChannelKit } from "./lib/channel-k
 import { previewImageForSettings } from "./lib/preview";
 
 const CHANNEL_PRESET_VISUALS: Record<string, { tone: string; badge: string }> = {
-  "co-tich": { tone: "storybook", badge: "Story" },
-  "video-minh-hoa": { tone: "illustrated", badge: "Illustrated" },
-  "quy-tac-co-nhan": { tone: "sepia", badge: "Wisdom" },
   "dao-ly-co-phong": { tone: "paper", badge: "Paper" },
-  "tien-hiep-chibi": { tone: "fantasy", badge: "Fantasy" },
-  "dan-gian-viet-chibi": { tone: "folk", badge: "Folk" },
-  "co-trang-hai-chibi": { tone: "comedy", badge: "Comedy" },
-  "huyen-bi-co-phong": { tone: "mystery", badge: "Mystery" },
-  "chua-lanh": { tone: "calm", badge: "Calm" },
-  "co-trang": { tone: "historical", badge: "Epic" },
-  "tam-su": { tone: "emotion", badge: "Emotion" },
-  "kien-thuc": { tone: "knowledge", badge: "Learn" },
-  "giai-thich": { tone: "knowledge", badge: "Explainer" },
   "ve-tay": { tone: "whiteboard", badge: "Sketch" },
+  "quy-tac-co-nhan": { tone: "sepia", badge: "Wisdom" },
 };
 
 function channelPresetVisual(id: string) {
@@ -2165,7 +2154,7 @@ function BatchPage() {
   const navigate = useNavigate();
   const { isDemo } = useAuth();
   const [source, setSource] = useState("");
-  const [templateId, setTemplateId] = useState("kien-thuc");
+  const [templateId, setTemplateId] = useState("dao-ly-co-phong");
   const [preset, setPreset] = useState<ProjectSettings["generationPreset"]>("balanced");
   const [running, setRunning] = useState(false);
   const [items, setItems] = useState<BatchItem[]>([]);

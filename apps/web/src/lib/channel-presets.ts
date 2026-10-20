@@ -8,27 +8,6 @@ import { withLayoutTemplate, withVisualPreset } from "./visual-preset";
  */
 export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; apply: (settings: ProjectSettings) => ProjectSettings }> = [
   {
-    id: "co-tich",
-    label: "Truyện cổ tích",
-    hint: "Thẻ truyện, tranh hoạt hình, giọng đọc truyện, nhạc nền",
-    apply: (s) => ({ ...withLayoutTemplate(s, "story-card"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
-  },
-  {
-    id: "video-minh-hoa",
-    label: "Video minh họa",
-    hint: "Ảnh hoạt hình ở giữa, nền mờ, tiêu đề glow và phụ đề lớn",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "story-card"), "cinematic-color"), cardTheme: "blurred", style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: true, sceneSfx: true, subtitle: { ...s.subtitle, preset: "focus", position: "bottom", fontColor: "#FFFFFF", outlineColor: "#101010", backgroundOpacity: 0 } }),
-  },
-  {
-    id: "quy-tac-co-nhan",
-    label: "Quy tắc cổ nhân",
-    hint: "Thẻ truyện nền be, tiêu đề đỏ + trắng, tranh thủy mặc nâu, phụ đề xanh lá chạy theo lời, giọng nam trầm",
-    // Measured on the reference short: beige canvas, red kicker + white title, sepia ink pictures, green karaoke captions.
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "story-card"), "thuy-mac-sepia"), cardTheme: "sepia", style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: false,
-      // Short-form retention: under a minute, a bar that shows the end is near, a soft tick at each cut, a call to action at the close.
-      targetDurationSec: 45, progressBar: true, sceneSfx: true, outroText: "Theo dõi để xem thêm quy tắc cổ nhân" }),
-  },
-  {
     id: "dao-ly-co-phong",
     label: "Đạo lý cổ phong",
     hint: "Nhân vật chibi cổ trang trên nền giấy kraft, giọng nam trầm, phụ đề nhỏ dưới nhân vật",
@@ -37,72 +16,18 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, targetDurationSec: 30, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: false, sceneSfx: false, outroText: "" }),
   },
   {
-    id: "truyen-chibi-kraft",
-    label: "Truyện chibi giấy kraft",
-    hint: "Video 30 giây: một nhân vật, hành động theo từng câu, cảm xúc chuyển từ căng thẳng sang nhẹ nhõm",
-    // Reference-like short: a single recurring mascot acts out each beat on a quiet kraft-paper stage.
-    // Keep the layout deliberately simple so the action and caption remain the focus.
-    apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, targetDurationSec: 30, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: false, sceneSfx: false, outroText: "" }),
-  },
-  {
-    id: "tien-hiep-chibi",
-    label: "Chibi tiên hiệp",
-    hint: "Tu tiên, linh thú, mây núi và pháp bảo chuyển động nhẹ",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "chibi-tien-hiep"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true }),
-  },
-  {
-    id: "dan-gian-viet-chibi",
-    label: "Chibi dân gian Việt",
-    hint: "Cổ tích, ca dao, làng quê Việt và nhân vật chibi thân thiện",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "chibi-dan-gian-viet"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true }),
-  },
-  {
-    id: "co-trang-hai-chibi",
-    label: "Chibi cổ trang hài",
-    hint: "Biểu cảm lớn, tình huống cung đình và cú twist cuối cảnh",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "chibi-co-trang-hai"), style: "ke-chuyen", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
-  },
-  {
-    id: "huyen-bi-co-phong",
-    label: "Chibi huyền bí cổ phong",
-    hint: "Hồ ly, miếu cổ, đèn lồng, khói và cú twist huyền bí",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "chibi-huyen-bi"), style: "ke-chuyen", voice: "co-trang", voiceSpeed: 1, autoMusic: true }),
-  },
-  {
-    id: "chua-lanh",
-    label: "Triết lý · chữa lành",
-    hint: "Tranh màu nước, giọng trầm, nhịp vừa, nhạc nền",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "watercolor"), style: "truyen-cam-hung", voice: "triet-ly", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
-  },
-  {
-    id: "co-trang",
-    label: "Cổ trang · kiếm hiệp",
-    hint: "Bối cảnh cổ trang điện ảnh, giọng cổ trang, nhạc nền",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "historical"), style: "ke-chuyen", voice: "co-trang", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
-  },
-  {
-    id: "tam-su",
-    label: "Tâm sự · cảm xúc",
-    hint: "Tranh cắt giấy, giọng nữ ấm, nhạc nền",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "paper-cut"), style: "truyen-cam-hung", voice: "tam-su", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
-  },
-  {
-    id: "kien-thuc",
-    label: "Kiến thức · mẹo hay",
-    hint: "Ảnh chân thực, giọng thuyết minh nhanh, nhạc nền",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "cinematic-color"), style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
-  },
-  {
-    id: "giai-thich",
-    label: "Video giải thích",
-    hint: "Ảnh thực tế, chữ ý chính hiện to trên màn hình, giọng thuyết minh, nhạc nền",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "cinematic-color"), style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: false, progressBar: true, showKeyPoints: true }),
-  },
-  {
     id: "ve-tay",
     label: "Giải thích vẽ tay",
     hint: "Bàn tay vẽ từng cảnh trên nền trắng, giọng thuyết minh, nhạc nền",
     apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "whiteboard"), style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
+  },
+  {
+    id: "quy-tac-co-nhan",
+    label: "Quy tắc cổ nhân",
+    hint: "Thẻ truyện nền be, tranh thủy mặc nâu, phụ đề chạy theo lời, giọng nam trầm",
+    // Beige canvas, red kicker + white title, sepia ink pictures and green karaoke captions.
+    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "story-card"), "thuy-mac-sepia"), cardTheme: "sepia", style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: false,
+      targetDurationSec: 45, progressBar: true, sceneSfx: true, outroText: "Theo dõi để xem thêm quy tắc cổ nhân" }),
   },
 ];
 

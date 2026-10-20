@@ -48,22 +48,12 @@ describe("channel presets", () => {
     }
   });
 
-  it("the folk-tale preset uses the illustrated story card", () => {
-    const settings = CHANNEL_PRESETS.find((preset) => preset.id === "co-tich")!.apply(DEFAULT_PROJECT_SETTINGS);
-    expect(settings).toMatchObject({ layoutTemplate: "story-card", visualPreset: "cartoon", voice: "doc-truyen" });
-  });
-
-  it("the kraft chibi story preset is a short action-led paper-stage video", () => {
-    const settings = CHANNEL_PRESETS.find((preset) => preset.id === "truyen-chibi-kraft")!.apply(DEFAULT_PROJECT_SETTINGS);
-    expect(settings).toMatchObject({
-      layoutTemplate: "paper-stage",
-      visualPreset: "chibi-co-phong",
-      aspectRatio: "9:16",
-      targetDurationSec: 30,
-      autoMusic: true,
-      captionHighlight: false,
-      hookTitle: false,
-    });
+  it("exposes only the three supported production templates", () => {
+    expect(CHANNEL_PRESETS.map((preset) => preset.id)).toEqual([
+      "dao-ly-co-phong",
+      "ve-tay",
+      "quy-tac-co-nhan",
+    ]);
   });
 
   it("the Đạo lý cổ phong preset matches the 30-second reference format", () => {
@@ -82,11 +72,6 @@ describe("channel presets", () => {
     });
   });
 
-  it("the illustrated video preset matches its realistic thumbnail and blurred renderer", () => {
-    const settings = CHANNEL_PRESETS.find((preset) => preset.id === "video-minh-hoa")!.apply(DEFAULT_PROJECT_SETTINGS);
-    expect(settings).toMatchObject({ layoutTemplate: "story-card", cardTheme: "blurred", visualPreset: "cinematic-color", aspectRatio: "9:16" });
-  });
-
   it("the cổ nhân preset is the sepia story card with sepia ink pictures and green karaoke captions", () => {
     const settings = CHANNEL_PRESETS.find((preset) => preset.id === "quy-tac-co-nhan")!.apply(DEFAULT_PROJECT_SETTINGS);
     expect(settings).toMatchObject({ layoutTemplate: "story-card", cardTheme: "sepia", visualPreset: "thuy-mac-sepia", captionHighlight: true, aspectRatio: "9:16", progressBar: true, sceneSfx: true, targetDurationSec: 45 });
@@ -96,23 +81,23 @@ describe("channel presets", () => {
     expect(withLayoutTemplate(settings, "full-bleed").layoutTemplate).toBe("full-bleed");
   });
 
-  it("a later preset fully replaces the frame chosen by an earlier one", () => {
-    const tale = CHANNEL_PRESETS[0]!.apply(DEFAULT_PROJECT_SETTINGS);
-    const knowledge = CHANNEL_PRESETS.find((preset) => preset.id === "kien-thuc")!.apply(tale);
-    expect(knowledge).toMatchObject({ layoutTemplate: "full-bleed", visualPreset: "cinematic-color" });
+  it("a later supported preset fully replaces the frame chosen by an earlier one", () => {
+    const paper = CHANNEL_PRESETS.find((preset) => preset.id === "dao-ly-co-phong")!.apply(DEFAULT_PROJECT_SETTINGS);
+    const whiteboard = CHANNEL_PRESETS.find((preset) => preset.id === "ve-tay")!.apply(paper);
+    expect(whiteboard).toMatchObject({ layoutTemplate: "full-bleed", visualPreset: "whiteboard" });
   });
 
   it("leaving the paper stage gives readable captions back on a full-frame picture", () => {
     const paper = CHANNEL_PRESETS.find((preset) => preset.id === "dao-ly-co-phong")!.apply(DEFAULT_PROJECT_SETTINGS);
     expect(paper).toMatchObject({ layoutTemplate: "paper-stage", visualPreset: "chibi-co-phong", aspectRatio: "9:16", hookTitle: false, captionHighlight: false });
     expect(paper.subtitle.backgroundOpacity).toBe(0);
-    for (const preset of CHANNEL_PRESETS.filter((item) => !["dao-ly-co-phong", "truyen-chibi-kraft", "co-tich", "quy-tac-co-nhan", "video-minh-hoa"].includes(item.id))) {
+    for (const preset of CHANNEL_PRESETS.filter((item) => item.id === "ve-tay")) {
       const next = preset.apply(paper);
       expect(next.layoutTemplate, preset.id).toBe("full-bleed");
       expect(next.subtitle.fontColor, preset.id).toBe(DEFAULT_PROJECT_SETTINGS.subtitle.fontColor);
       expect(next.subtitle.backgroundOpacity, preset.id).toBe(DEFAULT_PROJECT_SETTINGS.subtitle.backgroundOpacity);
     }
-    for (const id of ["co-tich", "quy-tac-co-nhan"]) expect(CHANNEL_PRESETS.find((item) => item.id === id)!.apply(paper).subtitle.fontColor).toBe(DEFAULT_PROJECT_SETTINGS.subtitle.fontColor);
+    expect(CHANNEL_PRESETS.find((item) => item.id === "quy-tac-co-nhan")!.apply(paper).subtitle.fontColor).toBe(DEFAULT_PROJECT_SETTINGS.subtitle.fontColor);
   });
 
   it("estimates narration length from words, the voice's pace and reading speed", () => {
