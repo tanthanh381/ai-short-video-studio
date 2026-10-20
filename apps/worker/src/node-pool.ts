@@ -324,6 +324,13 @@ export class NodePool {
     return [...this.entries.values()].some((entry) => entry.snapshot.up && entry.snapshot.llmInstalled.includes(model));
   }
 
+  /** Snapshot of models confirmed by a live Ollama probe; used for preset routing only. */
+  installedModels(): string[] {
+    return [...new Set([...this.entries.values()]
+      .filter((entry) => entry.snapshot.up)
+      .flatMap((entry) => entry.snapshot.llmInstalled))];
+  }
+
   get mode(): BalanceMode {
     return this.modeOverride ?? this.options.mode;
   }

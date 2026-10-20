@@ -9,6 +9,7 @@ import pino from "pino";
 import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt, voiceDirectionForScript } from "@studio/shared";
 import { sceneMotionPrompt } from "./motion-prompts";
 import { getConfig } from "./config";
+import { writerModelForSettings } from "./model-policy";
 import { imageLooksBlank } from "./image-check";
 import { JobCancelled, ensureNotCancelled, isCancelled } from "./job-cancel";
 import { fetchAirSetup } from "./air-setup";
@@ -440,10 +441,11 @@ async function storyboard(job: JobRow, project: Project) {
   // if that machine goes away (nothing is saved before the very end of the stage).
   if (project.settings.textProvider === "ollama")
     {
-      const selectedModel = project.settings.localModels.storyboard ||
-        (project.settings.generationPreset === "quality" && pool.hasInstalledModel(config.OLLAMA_QUALITY_MODEL)
-          ? config.OLLAMA_QUALITY_MODEL
-          : null);
+      const selectedModel = writerModelForSettings(project.settings, pool.installedModels(), {
+        defaultModel: config.OLLAMA_MODEL,
+        fastModel: config.OLLAMA_FAST_MODEL,
+        qualityModel: config.OLLAMA_QUALITY_MODEL,
+      });
       const effectiveProject = selectedModel
         ? { ...project, settings: { ...project.settings, localModels: { ...project.settings.localModels, storyboard: selectedModel } } }
         : project;
