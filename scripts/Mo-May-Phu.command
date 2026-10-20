@@ -82,6 +82,17 @@ fi
 start_if_down http://127.0.0.1:5002/health image "$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
 if [[ "$COMFYUI_AUTOSTART" == "true" && -x "$LOCAL_AI_ROOT/comfy-venv/bin/python" && -f "$COMFYUI_ROOT/main.py" && -f "$COMFYUI_ROOT/models/checkpoints/${COMFYUI_CHECKPOINT:-sd_xl_base_1.0_0.9vae.safetensors}" ]]; then
   start_if_down http://127.0.0.1:8188/system_stats comfyui "$LOCAL_AI_ROOT/comfy-venv/bin/python" "$COMFYUI_ROOT/main.py" ${=COMFYUI_ARGS} --listen 127.0.0.1 --port 8188
+  # A ComfyUI process that was started before IP-Adapter was installed still answers
+  # /system_stats, but rejects the identity workflow with missing_node_type. Detect
+  # that stale process and reload it once so paper-stage identity works after setup.
+  if [[ -d "$COMFYUI_ROOT/custom_nodes/ComfyUI_IPAdapter_plus" ]] && ! curl -fsS -m 5 http://127.0.0.1:8188/object_info/IPAdapterUnifiedLoader >/dev/null 2>&1; then
+    comfy_pid=$(lsof -tiTCP:8188 -sTCP:LISTEN | head -n1 || true)
+    if [[ -n "$comfy_pid" ]]; then
+      kill -TERM "$comfy_pid" 2>/dev/null || true
+      sleep 3
+      start_if_down http://127.0.0.1:8188/system_stats comfyui "$LOCAL_AI_ROOT/comfy-venv/bin/python" "$COMFYUI_ROOT/main.py" ${=COMFYUI_ARGS} --listen 127.0.0.1 --port 8188
+    fi
+  fi
 fi
 start_if_down "http://$tailscale_ip:8765/health" media env NODE_START_SCRIPT="$studio_root/scripts/Mo-May-Phu.command" /opt/homebrew/bin/python3.12 local-tools/media_server.py
 start_if_down "http://$tailscale_ip:8766/health" whiteboard "$LOCAL_AI_ROOT/wb-venv/bin/python" local-tools/whiteboard_server.py

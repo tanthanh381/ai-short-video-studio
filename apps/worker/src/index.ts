@@ -27,11 +27,12 @@ import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE,
 /**
  * A full-frame img2img anchor is excellent for identity but can collapse SDXL-Turbo's pose into
  * the anchor. Paper-stage uses the bundled character reference at a low strength by default;
+ * every scene receives the anchor so the fixed mascot does not drift into a different character;
  * operators can disable or tune it with PAPER_REFERENCE_MODE/PAPER_REFERENCE_STRENGTH.
  */
 const PAPER_REFERENCE_MODE = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "")
   ? process.env.PAPER_REFERENCE_MODE!
-  : "alternate";
+  : "all";
 const parsedPaperReferenceStrength = Number(process.env.PAPER_REFERENCE_STRENGTH ?? "0.08");
 const PAPER_REFERENCE_STRENGTH = Number.isFinite(parsedPaperReferenceStrength)
   ? Math.max(0.05, Math.min(0.65, parsedPaperReferenceStrength))
