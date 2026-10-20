@@ -172,6 +172,8 @@ def stop_ltx_runtime(reason):
         print(f"[video] could not stop LTX: {error}", flush=True)
 NODE_START_SCRIPT = os.getenv("NODE_START_SCRIPT", "")
 COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+COMFYUI_ROOT = Path(os.getenv("COMFYUI_ROOT", str(LOCAL_AI_ROOT / "ComfyUI")))
+COMFYUI_ARGS = os.getenv("COMFYUI_ARGS", "--cpu --cpu-vae")
 COMFYUI_CHECKPOINT = os.getenv("COMFYUI_CHECKPOINT", "sd_xl_base_1.0_0.9vae.safetensors")
 COMFYUI_MODEL_DIR = Path(os.getenv(
     "COMFYUI_MODEL_DIR",
@@ -1483,7 +1485,18 @@ SLEEPER = idle_sleep.Sleeper([
                        process=_by_script("omnivoice", 5010, "/bin/zsh", LOCAL_AI_ROOT / "bin/start-omnivoice.sh")),
     idle_sleep.Service("whisper", "com.ai-short-video.whisper", lambda: service_up(WHISPER_URL, "/"), wake_timeout_s=180,
                        process=_by_script("whisper", 8080, "/bin/zsh", LOCAL_AI_ROOT / "bin/start-whisper.sh")),
-    idle_sleep.Service("comfyui", "com.ai-short-video.comfyui", _comfy_up, wake_timeout_s=300, idle_cap_s=180),
+    # Air runs ComfyUI from the node script rather than launchd. Register its
+    # real process command so the video lane can release SDXL's resident memory
+    # before LTX starts; otherwise both heavy models swap and the bridge drops
+    # the LTX connection after several minutes.
+    idle_sleep.Service(
+        "comfyui", "com.ai-short-video.comfyui", _comfy_up, wake_timeout_s=300, idle_cap_s=180,
+        process=_by_script(
+            "comfyui", 8188,
+            LOCAL_AI_ROOT / "comfy-venv/bin/python", COMFYUI_ROOT / "main.py",
+            *COMFYUI_ARGS.split(), "--listen", "127.0.0.1", "--port", "8188",
+        ),
+    ),
     idle_sleep.Service("ltx", "com.ai-short-video-studio.ltx", _ltx_up, wake_timeout_s=300, idle_cap_s=180),
 ], idle_sleep.configured_idle_seconds())
 
