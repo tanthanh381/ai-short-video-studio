@@ -56,6 +56,7 @@ import { trimWavSilence } from "./silence";
 import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, whiteboardReady, withoutDrawingHand, type WhiteboardRunner } from "./whiteboard";
 
 const config = getConfig();
+const SDXL_BASE_COMFY_MODEL = "sdxl-base-1.0-comfyui";
 const log = pino({
   level: "info",
   redact: [
@@ -129,6 +130,15 @@ function ollamaOn(id: string): OllamaStoryboardAdapter {
     ollamaAdapters.set(id, adapter);
   }
   return adapter;
+}
+
+/** Quality images may be delegated to Air when it is the only node with SDXL Base. */
+function imageModelForProject(project: Project): string | null {
+  const explicit = project.settings.localModels.image?.trim();
+  if (explicit) return explicit;
+  return project.settings.generationPreset === "quality" && pool.hasImageModel(SDXL_BASE_COMFY_MODEL, true)
+    ? SDXL_BASE_COMFY_MODEL
+    : null;
 }
 const localMedia = new PooledMediaAdapter(pool);
 /** Hand-drawing runs on whichever machine the balancer picks for each scene. */
@@ -652,8 +662,10 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     await updateScene(scene.id, { image_prompt: english });
   }
   const prompt = buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project, scene.narration), visualPresetPrompt(project.settings.visualPreset));
+  const imageModel = imageModelForProject(project);
   const options = {
     ...project.settings.localModels,
+    image: imageModel,
     seed: sceneSeed(project, scene),
     style: imageStyleFor(project.settings.visualStyle, project.settings.visualPreset),
     preset: project.settings.generationPreset,
@@ -876,7 +888,7 @@ async function generateMedia(job: JobRow, project: Project) {
       }
       return outcomes;
     })()
-    : await batch("image", pendingImages, imageWork, { imageModel: project.settings.localModels.image ?? null }, true);
+    : await batch("image", pendingImages, imageWork, { imageModel: imageModelForProject(project) }, true);
   images.forEach((image, index) => {
     // Not fatal: the per-scene pass below retries this image once more and records a clear failure.
     if (!image.ok) log.warn({ jobId: job.id, sceneId: pendingImages[index]!.id, err: image.error.message }, "image_prepass_failed");

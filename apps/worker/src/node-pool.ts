@@ -331,6 +331,13 @@ export class NodePool {
       .flatMap((entry) => entry.snapshot.llmInstalled))];
   }
 
+  /** True only when a live node advertises the exact image runtime. */
+  hasImageModel(model: string, secondaryOnly = false): boolean {
+    return [...this.entries.values()].some((entry) => entry.snapshot.up
+      && (!secondaryOnly || !entry.spec.local)
+      && (entry.snapshot.status?.image?.models ?? []).includes(model));
+  }
+
   get mode(): BalanceMode {
     return this.modeOverride ?? this.options.mode;
   }

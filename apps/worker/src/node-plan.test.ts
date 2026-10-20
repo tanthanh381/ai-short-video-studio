@@ -96,6 +96,15 @@ describe("assessNode", () => {
     expect(assess(node("air"), "image", { request: { imageModel: "sdxl-base-1.0-comfyui" } }).reasons[0]).toMatch(/thiếu model/);
   });
 
+  it("allows a specialized SDXL Base image node on Air when Mini does not have it", () => {
+    const primary = node("mini", { local: true });
+    const air = node("air", {
+      status: status({ fingerprint: "air-comfy", image: { state: "ready", models: ["sdxl-base-1.0-comfyui"], defaultModel: "sdxl-base-1.0-comfyui" } }),
+    });
+    const result = assessNode(air, "image", context([primary, air], { request: { imageModel: "sdxl-base-1.0-comfyui" } }));
+    expect(result.eligible).toBe(true);
+  });
+
   it("protects a laptop on a low battery and slows its estimate on a higher one", () => {
     const low = node("air", { status: status({ resources: resources({ power: "battery", batteryPercent: 22 }) }) });
     expect(assess(low, "image")).toMatchObject({ eligible: false, reasons: ["pin còn 22%"] });

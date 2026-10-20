@@ -185,7 +185,15 @@ export function assessNode(node: NodeSnapshot, lane: Lane, ctx: AssessContext): 
       return out(false);
     }
     if ((lane === "image" || lane === "tts") && !node.local) {
-      if (ctx.strict) {
+      // A secondary node may intentionally host a heavier image runtime (for example
+      // SDXL Base/ComfyUI on a 24 GB Air) that cannot exist on the 16 GB primary.
+      // It is safe to bypass the shared-fingerprint rule only when the requested
+      // model is explicitly advertised by that node; voices and default image work
+      // remain strict so a project cannot change identity halfway through.
+      const specializedImage = lane === "image"
+        && Boolean(request.imageModel)
+        && !(primary?.status?.image?.models ?? []).includes(request.imageModel!);
+      if (ctx.strict && !specializedImage) {
         if (!status.fingerprint || !primary?.status?.fingerprint) {
           reasons.push("chưa kiểm chứng được cấu hình giống máy chính (cần cập nhật mã ở cả hai máy)");
           return out(false);
