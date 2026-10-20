@@ -463,7 +463,10 @@ def comfyui_memory_safe():
     if isinstance(swap_out, (int, float)) and swap_out >= VIDEO_MAX_SWAP_OUT_MBPS:
         return False
     swap_used, swap_total = resources.get("swapUsedGb"), resources.get("swapTotalGb")
-    if isinstance(swap_used, (int, float)) and isinstance(swap_total, (int, float)) and swap_total > 0 and swap_used / swap_total >= VIDEO_MAX_SWAP_RATIO:
+    # swapUsedGb is historical allocation on macOS and can remain high after
+    # pressure has gone. Do not disable SDXL Base solely for that stale value;
+    # block only when the kernel is still paging or memory pressure is elevated.
+    if isinstance(swap_used, (int, float)) and isinstance(swap_total, (int, float)) and swap_total > 0 and swap_used / swap_total >= VIDEO_MAX_SWAP_RATIO and (resources.get("memPressure") != "normal" or swap_out is None or swap_out >= VIDEO_MAX_SWAP_OUT_MBPS):
         return False
     return True
 
