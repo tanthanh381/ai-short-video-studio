@@ -987,13 +987,12 @@ async function generateMedia(job: JobRow, project: Project) {
         await upload(imagePath, image.bytes, image.contentType);
         await updateScene(scene.id, { image_path: imagePath });
       }
-      // Paper stage has its own art-directed renderer: it keeps the kraft sheet static and
-      // animates the isolated character layer. Do not attach the generic LTX/zoompan clip
-      // here, otherwise render.ts treats it as a full-frame video and bypasses the paper
-      // compositing (the character can drift into the caption area and the scene loses its
-      // intended visual identity). Other templates keep the normal video path.
+      // Paper stage has its own art direction, but it still benefits from a restrained LTX
+      // image-to-video pass when the video lane is genuinely ready. The motion prompt is
+      // grounded in the narrated everyday action and the reference image is preserved; if
+      // LTX fails, render.ts keeps the safe paper composition and falls back to camera motion.
       const paperStage = usesPaperStage(project.settings);
-      const motionAvailable = !paperStage && (media.videoAvailable ? media.videoAvailable() : true);
+      const motionAvailable = media.videoAvailable ? media.videoAvailable() : true;
       if (!videoPath && motionModel && media.createVideo && motionAvailable) {
         await progress(
           job,
