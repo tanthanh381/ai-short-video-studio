@@ -1581,14 +1581,6 @@ def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None
             print(f"[video] LTX state={state}; using FFmpeg still fallback: {detail}", flush=True)
             return still_video_fallback(image_base64, aspect_ratio)
         raise RuntimeError(detail)
-    resource_ok, resource_detail = video_resources_available()
-    if not resource_ok:
-        if strict:
-            raise RuntimeError(resource_detail)
-        if VIDEO_FALLBACK_ENABLED:
-            print(f"[video] LTX skipped: {resource_detail}; using FFmpeg still fallback", flush=True)
-            return still_video_fallback(image_base64, aspect_ratio)
-        raise RuntimeError(resource_detail)
     if not image_base64 or len(image_base64) > 8 * 1024 * 1024:
         raise ValueError("Ảnh tham chiếu LTX trống hoặc vượt giới hạn 8 MB")
     # LTX peaks after the still image and voice have already been produced. Park
@@ -1599,6 +1591,17 @@ def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None
     parked = SLEEPER.park(("image", "vieneu", "comfyui"), keep=("ltx",))
     if parked:
         print(f"[video] parked competing model services: {', '.join(parked)}", flush=True)
+    # Re-check memory after parking. The first sample can still reflect the
+    # previous SDXL paging burst for a short moment, so resource gating must
+    # happen after the heavy competitor has actually been released.
+    resource_ok, resource_detail = video_resources_available()
+    if not resource_ok:
+        if strict:
+            raise RuntimeError(resource_detail)
+        if VIDEO_FALLBACK_ENABLED:
+            print(f"[video] LTX skipped after parking: {resource_detail}; using FFmpeg still fallback", flush=True)
+            return still_video_fallback(image_base64, aspect_ratio)
+        raise RuntimeError(resource_detail)
     payload = json.dumps({"model": model, "prompt": prompt[:3000], "aspectRatio": aspect_ratio,
                           "seed": seed, "preset": preset, "imageBase64": image_base64}).encode()
     request = urllib.request.Request(f"{LTX_VIDEO_URL.rstrip('/')}/video", data=payload,
