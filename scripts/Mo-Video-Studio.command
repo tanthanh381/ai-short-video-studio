@@ -34,7 +34,7 @@ start_if_down() { # url name command...
 start_if_down http://127.0.0.1:8080/ whisper zsh "$LOCAL_AI_ROOT/bin/start-whisper.sh"
 start_if_down http://127.0.0.1:5001/health vieneu zsh "$LOCAL_AI_ROOT/bin/start-vieneu.sh"
 if [[ "${TTS_ENGINES:-vieneu,omnivoice}" == *omnivoice* && -x "$LOCAL_AI_ROOT/omnivoice-venv312/bin/python" && -f "$LOCAL_AI_ROOT/models/omnivoice/config.json" ]]; then
-  start_if_down http://127.0.0.1:5010/health omnivoice env LOCAL_AI_ROOT="$LOCAL_AI_ROOT" zsh "$LOCAL_AI_ROOT/bin/start-omnivoice.sh"
+  start_if_down http://127.0.0.1:5010/health omnivoice env LOCAL_AI_ROOT="$LOCAL_AI_ROOT" zsh "$studio_root/local-tools/toolkit/bin/start-omnivoice.sh"
 fi
 start_if_down http://127.0.0.1:5002/health image "$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
 if [[ "$COMFYUI_AUTOSTART" == "true" && -x "$LOCAL_AI_ROOT/comfy-venv/bin/python" && -f "$COMFYUI_ROOT/main.py" && -f "$COMFYUI_ROOT/models/checkpoints/${COMFYUI_CHECKPOINT:-sd_xl_base_1.0_0.9vae.safetensors}" ]]; then
