@@ -8,9 +8,9 @@ import { SWAP_HURTS_MBPS, formatGb, syncView, type SyncView } from "./system";
 export type Mode = BalancerSummary["mode"];
 
 export const MODE_CHOICES: Array<{ id: Mode; label: string; hint: string }> = [
-  { id: "auto", label: "Tự động", hint: "Tự chọn một máy hay nhiều máy tùy lúc bận hay rảnh." },
-  { id: "single", label: "Một máy", hint: "Mỗi lần chỉ dùng một máy; máy còn lại để dự phòng." },
-  { id: "parallel", label: "Song song", hint: "Dùng mọi máy đang sẵn sàng để video xong nhanh hơn." },
+  { id: "parallel", label: "Active-active", hint: "Mini và Air cùng nhận việc phù hợp; máy lỗi tự được loại ra." },
+  { id: "auto", label: "Tự cân tải", hint: "Chỉ bật thêm máy khi dự kiến nhanh hơn đủ mức." },
+  { id: "single", label: "Một máy", hint: "Chỉ dùng một máy; máy còn lại để bảo trì hoặc dự phòng." },
 ];
 
 export type MachineChoice = {

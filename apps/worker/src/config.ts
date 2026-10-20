@@ -44,8 +44,8 @@ const schema = z.object({
   // The one-time bundle server that installs the second machine (scripts/air-node/serve-bundle.sh): its progress shows in Settings.
   AIR_SETUP_URL: z.preprocess((value) => (typeof value === "string" && value.trim() === "" ? undefined : value), z.string().url().optional()),
   AI_PRIMARY_NODE: z.string().regex(/^[a-z0-9][a-z0-9-]{0,23}$/u, "chữ thường, số và dấu gạch ngang").default("mini"),
-  // auto: the worker decides per batch whether a second machine pays off; single: only the main machine (others stand by); parallel: always all.
-  AI_BALANCE_MODE: z.enum(["auto", "single", "parallel"]).default("auto"),
+  // parallel is the active-active default: every healthy node can receive work. single keeps the secondary nodes on standby.
+  AI_BALANCE_MODE: z.enum(["auto", "single", "parallel"]).default("parallel"),
   // A second machine must match the main one's image/voice settings and code before it makes pictures or voices.
   AI_NODES_STRICT: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   // A laptop on battery below this percentage takes no work.

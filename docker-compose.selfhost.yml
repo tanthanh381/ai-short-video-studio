@@ -83,7 +83,7 @@ services:
       # While the second machine is being installed (scripts/air-node/serve-bundle.sh): where its progress can be read for Settings
       AIR_SETUP_URL: ${AIR_SETUP_URL:-}
       AI_PRIMARY_NODE: ${AI_PRIMARY_NODE:-mini}
-      AI_BALANCE_MODE: ${AI_BALANCE_MODE:-auto}
+      AI_BALANCE_MODE: ${AI_BALANCE_MODE:-parallel}
       AI_NODES_STRICT: ${AI_NODES_STRICT:-true}
       AI_NODE_MIN_BATTERY: ${AI_NODE_MIN_BATTERY:-30}
       WORKER_POLL_MS: ${WORKER_POLL_MS:-750}

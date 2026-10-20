@@ -204,7 +204,8 @@ Mac mini là **nguồn**; máy phụ tự giữ giống nó. Hai máy dùng chun
 ### Điều khiển
 
 - Tạm dừng khi cần dùng máy Air: `scripts/Mo-May-Phu.command pause`; nhận việc lại: `scripts/Mo-May-Phu.command resume`.
-- `AI_BALANCE_MODE=auto` (mặc định) để hệ thống tự quyết định; `single` chỉ dùng máy chính và giữ máy phụ làm dự phòng; `parallel` luôn dùng mọi máy khả dụng.
+- `AI_BALANCE_MODE=parallel` (mặc định, **active-active**) để Mini và Air cùng nhận các việc phù hợp; máy mất kết nối được loại ra và việc được giao lại. `auto` chỉ bật máy thứ hai khi dự kiến tiết kiệm đủ thời gian; `single` chỉ dùng một máy trong lúc bảo trì.
+- Active-active ở đây áp dụng cho tầng AI/media: chỉ một worker điều phối job và ghi checkpoint vào Supabase, còn Mini và Air cùng xử lý ảnh, giọng, Whisper, video hoặc Ollama. Cách này tránh hai worker cùng sửa một job, nhưng vẫn tận dụng được cả hai máy.
 - Máy Air nên cắm sạc, không gập màn hình khi đang phục vụ. Script dùng `caffeinate` để máy không ngủ, nhưng không ngăn được việc gập màn hình khi không có màn hình ngoài.
 - Bỏ dòng `AI_NODES` rồi dựng lại worker để quay về một máy: worker khi đó không thăm dò và không gọi máy nào ngoài máy chính.
 

@@ -20,5 +20,6 @@ describe("worker config", () => {
     const config = getConfig();
     expect(config.OPENAI_API_KEY).toBeUndefined();
     expect(config.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(config.AI_BALANCE_MODE).toBe("parallel");
   });
 });
