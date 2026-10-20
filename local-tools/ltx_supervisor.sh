@@ -21,6 +21,14 @@ while true; do
     LTX_VIDEO_DEVICE="$device" "$ltx_env/bin/python" "$studio_root/local-tools/ltx_server.py"
   exit_code=$?
   print "[ltx-supervisor] LTX exited with code=$exit_code" >&2
+  # A media request can terminate the HTTP process while the kernel still
+  # holds port 8770 briefly. Waiting here prevents the fallback restart from
+  # racing the old process and entering an Address already in use loop.
+  port=${LTX_VIDEO_PORT:-8770}
+  for _ in {1..30}; do
+    lsof -tiTCP:$port -sTCP:LISTEN >/dev/null 2>&1 || break
+    sleep 1
+  done
   if [[ "$device" == "mps" ]]; then
     device=cpu
     print "[ltx-supervisor] retrying with CPU fallback" >&2
