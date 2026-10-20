@@ -798,7 +798,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     # changing gender while giving the concrete prop/gesture more weight than a long character description.
     if paper_identity:
         paper_action = paper_scene.lstrip(" ,")
-        paper_prompt = f"exactly one male chibi boy, visible short dark-brown topknot bun above the head, small olive ribbon tied to the bun, bare uncovered head, no hat, no hood, no head covering, thick eyebrows, olive ancient robe, {paper_action}"
+        paper_prompt = f"exactly one male chibi boy, visible dark-brown hair gathered into a small round topknot bun above the crown, olive cloth ribbon tied around the bun with two loose ribbon tails hanging beside the head, exposed forehead and scalp, bare uncovered head, visible ears, absolutely not a cap or hat, thick eyebrows, olive ancient robe, clear full-body everyday action, prop large and unmistakable, both hands visibly interacting with the prop, {paper_action}"
         styled = f"{IMAGE_STYLES[style]}, {paper_prompt}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     else:
         styled = f"{IMAGE_STYLES[style]}{paper_identity}, {paper_scene}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
@@ -840,7 +840,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         # Keep the fast 4-step path, but enable the small negative CFG pass for this preset only.
         # The paper mascot is a single bare-headed boy; Turbo otherwise invents tiny pets,
         # extra figures and hood-like headwear around the requested prop.
-        turbo_negative = "text, letters, words, writing, watermark, logo, gibberish, hat, cap, bonnet, turban, hood, hooded robe, veil, headscarf, head covering, female character, woman, girl, long hair"
+        turbo_negative = "text, letters, words, writing, watermark, logo, gibberish, cap, baseball cap, helmet, hat, bonnet, turban, hood, hooded robe, veil, headscarf, head covering, bald head, hair covering the entire scalp, female character, woman, girl, long hair"
         if not re.search(r"\b(?:cat|kitten|dog|rabbit|bird|animal|pet)\b", clean, re.IGNORECASE):
             turbo_negative += ", animal, rabbit, cat, dog, bird, pet, extra figure, extra character"
     elif is_human and not stylized and selected_preset == "balanced":
