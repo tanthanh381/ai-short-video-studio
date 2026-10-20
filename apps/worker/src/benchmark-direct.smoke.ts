@@ -138,7 +138,10 @@ for (const item of cases) {
         for (let attempt = 0; attempt < 2 && !png; attempt++) {
           try {
             png = await media.createImage(
-              buildProductionImagePrompt(scene.imagePrompt, visualPresetPrompt(settings.visualPreset)), imageAspectFor(settings), imageOptions,
+              buildProductionImagePrompt(
+                usesPaperStage(settings) ? paperStagePrompt(scene.imagePrompt, scene.narration) : scene.imagePrompt,
+                visualPresetPrompt(settings.visualPreset),
+              ), imageAspectFor(settings), imageOptions,
             );
           } catch (error) {
             lastImageError = error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240);
