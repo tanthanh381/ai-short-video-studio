@@ -598,6 +598,11 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
     p_status: job.job_type === "create_video" ? "queued" : "draft",
   });
   if (saveError) throw saveError;
+  // An idea is expanded into the narration stored in the scenes above. Keep the project-level
+  // script in sync as well: the Studio's "Kịch bản đầy đủ" editor reads source_text, and leaving
+  // the one-line idea there made a successful AI rewrite look as if nothing had happened.
+  // Pasted full scripts remain untouched so the author's wording is never replaced.
+  if (!fromScript) await updateProject(project.id, { source_text: script, input_mode: "full-script" });
   // Explainer theme: Claude writes one on-screen key point per scene, stored in settings (no scene-table change) and
   // drawn at the top of each scene by the renderer. A failure here must never fail the storyboard.
   if (project.settings.showKeyPoints) {
