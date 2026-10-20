@@ -798,7 +798,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     # changing gender while giving the concrete prop/gesture more weight than a long character description.
     if paper_identity:
         paper_action = paper_scene.lstrip(" ,")
-        paper_prompt = f"exactly one male chibi boy, visible dark-brown hair gathered into a small round topknot bun above the crown, olive cloth ribbon tied around the bun with two loose ribbon tails hanging beside the head, exposed forehead and scalp, bare uncovered head, visible ears, absolutely not a cap or hat, thick eyebrows, olive ancient robe, clear full-body everyday action, prop large and unmistakable, both hands visibly interacting with the prop, {paper_action}"
+        paper_prompt = f"exactly one male chibi boy, visible dark-brown hair gathered into a small round topknot bun above the crown, olive cloth ribbon tied around the bun with two loose ribbon tails hanging beside the head, exposed forehead and scalp, bare uncovered head, visible ears, absolutely not a cap or hat, thick eyebrows, olive ancient robe, clear full-body everyday action, prop large and unmistakable, both hands visibly interacting with the prop, blank clean kraft paper with no writing or symbols, {paper_action}"
         styled = f"{IMAGE_STYLES[style]}, {paper_prompt}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     else:
         styled = f"{IMAGE_STYLES[style]}{paper_identity}, {paper_scene}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
@@ -864,7 +864,11 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         # copies the anchor pose and removes the narrated prop/action. Only pass the
         # paper reference to the real ComfyUI/IP-Adapter route on a memory-safe node;
         # an explicit reference setting must not silently degrade Mini output.
-        turbo_reference_allowed = not (style == "chibi" and reference_image_base64 and not comfyui_memory_safe())
+        # A very low-strength anchor is safe on 16 GB nodes and materially improves the
+        # paper-stage mascot's hair/robe continuity. Stronger references remain disabled
+        # on Mini because they tend to freeze the pose and erase the narrated prop/action.
+        low_strength_paper_anchor = style == "chibi" and (reference_strength or 1) <= 0.12
+        turbo_reference_allowed = not (style == "chibi" and reference_image_base64 and not comfyui_memory_safe()) or low_strength_paper_anchor
         if reference_image_base64 and is_human and turbo_reference_allowed:
             payload["referenceImage"] = reference_image_base64
             if reference_strength is not None:

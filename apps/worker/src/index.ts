@@ -31,7 +31,7 @@ import { castForScript, fallbackCardTitle, PAPER_MASCOT, PAPER_STORYBOARD_STYLE,
  */
 const PAPER_REFERENCE_MODE = ["none", "first", "alternate", "all"].includes(process.env.PAPER_REFERENCE_MODE ?? "")
   ? process.env.PAPER_REFERENCE_MODE!
-  : "none";
+  : "first";
 const parsedPaperReferenceStrength = Number(process.env.PAPER_REFERENCE_STRENGTH ?? "0.08");
 const PAPER_REFERENCE_STRENGTH = Number.isFinite(parsedPaperReferenceStrength)
   ? Math.max(0.05, Math.min(0.65, parsedPaperReferenceStrength))
