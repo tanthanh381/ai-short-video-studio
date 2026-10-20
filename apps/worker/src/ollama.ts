@@ -9,6 +9,7 @@ import {
   type StoryboardProvider,
   type StoryboardResult,
 } from "./providers";
+import { NodeHttpError } from "./node-errors";
 
 type OllamaResponse = { response?: string; error?: string };
 
@@ -29,9 +30,8 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
     private readonly send: typeof fetch = (input, init) => fetch(input, init),
   ) {}
 
-  /** Optional semantic check for Quality preset; failures are deliberately fail-open. */
+  /** Optional semantic check for Quality preset. Transport/response failures must reach the node pool so it can fail over. */
   async auditImage(input: { image: Uint8Array; referenceImage?: Uint8Array; sceneBrief: string; model?: string | null }): Promise<ImageQualityAudit | null> {
-    try {
       const response = await this.send(`${this.baseUrl.replace(/\/$/, "")}/api/generate`, {
         method: "POST",
         signal: AbortSignal.timeout(90_000),
@@ -59,14 +59,16 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
           images: [Buffer.from(input.image).toString("base64"), ...(input.referenceImage ? [Buffer.from(input.referenceImage).toString("base64")] : [])],
         }),
       });
-      if (!response.ok) return null;
+      if (!response.ok) throw new NodeHttpError(`Ollama Vision trả lỗi HTTP ${response.status}`, response.status);
       const body = (await response.json().catch(() => ({}))) as OllamaResponse;
-      const parsed = JSON.parse(body.response ?? "{}") as Partial<ImageQualityAudit>;
-      if (typeof parsed.relevant !== "boolean" || !["good", "minor", "bad"].includes(parsed.anatomy ?? "") || !["none", "minor", "bad"].includes(parsed.textArtifacts ?? "") || (parsed.identity !== undefined && !["same", "different", "unknown"].includes(parsed.identity)) || typeof parsed.reason !== "string") return null;
-      return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], textArtifacts: parsed.textArtifacts as ImageQualityAudit["textArtifacts"], identity: (parsed.identity as ImageQualityAudit["identity"]) ?? "unknown", reason: parsed.reason.slice(0, 400) };
-    } catch {
-      return null;
-    }
+      let parsed: Partial<ImageQualityAudit>;
+      try {
+        parsed = JSON.parse(body.response ?? "{}") as Partial<ImageQualityAudit>;
+      } catch {
+        throw new NodeHttpError("Ollama Vision trả JSON không hợp lệ", 502);
+      }
+      if (typeof parsed.relevant !== "boolean" || !["good", "minor", "bad"].includes(parsed.anatomy ?? "") || !["none", "minor", "bad"].includes(parsed.textArtifacts ?? "") || (parsed.identity !== undefined && !["same", "different", "unknown"].includes(parsed.identity)) || typeof parsed.reason !== "string") throw new NodeHttpError("Ollama Vision trả thiếu trường đánh giá hình ảnh", 502);
+    return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], textArtifacts: parsed.textArtifacts as ImageQualityAudit["textArtifacts"], identity: (parsed.identity as ImageQualityAudit["identity"]) ?? "unknown", reason: parsed.reason.slice(0, 400) };
   }
 
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {

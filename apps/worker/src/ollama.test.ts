@@ -56,6 +56,18 @@ describe("OllamaStoryboardAdapter", () => {
     expect(payload.options.temperature).toBe(0);
     expect(payload.system).toContain("recurring-character contract");
   });
+
+  it("đẩy lỗi Vision lên node pool để có thể failover", async () => {
+    const request = vi.fn().mockResolvedValue(new Response("Ollama unavailable", { status: 503 }));
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b", {}, request);
+    await expect(adapter.auditImage({ image: new Uint8Array([1]), sceneBrief: "A scene" })).rejects.toMatchObject({ name: "NodeHttpError", status: 503 });
+  });
+
+  it("coi JSON Vision thiếu trường là lỗi retryable thay vì báo node đã sẵn sàng", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ response: "{}" }), { status: 200 }));
+    const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b", {}, request);
+    await expect(adapter.auditImage({ image: new Uint8Array([1]), sceneBrief: "A scene" })).rejects.toMatchObject({ name: "NodeHttpError", status: 502 });
+  });
 });
 
 const lockedInput: StoryboardInput = {
