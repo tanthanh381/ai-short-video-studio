@@ -1390,6 +1390,13 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
             {VISUAL_PRESET_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </Field>
+        <Field label="Image source" hint="AI local giữ nhân vật và phong cách; Pexels phù hợp cảnh đời thường; Auto thử Pexels trước rồi fallback về AI nếu không có ảnh hoặc API.">
+          <select value={settings.imageSource ?? "ai"} onChange={(e) => set({ imageSource: e.target.value as ProjectSettings["imageSource"] })}>
+            <option value="ai">AI local — tạo ảnh theo prompt</option>
+            <option value="hybrid">Auto — Pexels trước, AI fallback</option>
+            <option value="stock">Pexels — ảnh stock theo nội dung</option>
+          </select>
+        </Field>
         <Field label="Custom visual direction (optional)" hint="Tuỳ chỉnh thêm nhân vật, chất liệu và ánh sáng. Nếu để trống, Studio dùng mô tả mặc định của Visual style.">
           <input value={settings.visualStyle} onChange={(e) => set({ visualStyle: e.target.value })} />
         </Field>
@@ -1902,6 +1909,11 @@ function WizardPage() {
                 <Field label="Visual style" hint={VISUAL_PRESET_OPTIONS.find((o) => o.id === settings.visualPreset)?.description ?? ""}>
                   <select value={settings.visualPreset} onChange={(e) => editSettings(withVisualPreset(settings, e.target.value as ProjectSettings["visualPreset"]))}>
                     {VISUAL_PRESET_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Nguồn hình ảnh" hint="Auto dùng ảnh stock trước; nếu không tìm thấy hoặc chưa cấu hình Pexels thì dùng AI local.">
+                  <select value={settings.imageSource ?? "ai"} onChange={(e) => editSettings({ ...settings, imageSource: e.target.value as ProjectSettings["imageSource"] })}>
+                    <option value="ai">AI local</option><option value="hybrid">Auto: Pexels + AI</option><option value="stock">Pexels stock</option>
                   </select>
                 </Field>
                 <Field label="Chất lượng ảnh" hint="Fast ưu tiên tốc độ · Quality giảm lỗi khuôn mặt, bàn tay.">

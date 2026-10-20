@@ -21,6 +21,12 @@ const schema = z.object({
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   ANTHROPIC_BASE_URL: z.string().url().default("https://api.anthropic.com"),
   ANTHROPIC_TEXT_MODEL: z.string().default("claude-haiku-4-5-20251001"),
+  /** Optional Pexels key. It stays on the worker and is never sent to the browser. */
+  PEXELS_API_KEY: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().min(10).optional(),
+  ),
+  PEXELS_API_BASE_URL: z.string().url().default("https://api.pexels.com/v1"),
   OLLAMA_BASE_URL: z.string().url().default("http://host.docker.internal:11434"),
   OLLAMA_MODEL: z.string().default("qwen3.5:4b"),
   /** Optional smaller writer for Fast projects; falls back to OLLAMA_MODEL when it is not installed. */

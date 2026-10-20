@@ -54,6 +54,7 @@ import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
 import { trimWavSilence } from "./silence";
 import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, whiteboardReady, withoutDrawingHand, type WhiteboardRunner } from "./whiteboard";
+import { fetchPexelsImage } from "./stock-images";
 
 const config = getConfig();
 const SDXL_BASE_COMFY_MODEL = "sdxl-base-1.0-comfyui";
@@ -656,7 +657,9 @@ async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project
   }
 }
 
-async function drawScenePicture(provider: MediaProvider, scene: Scene, project: Project, job: JobRow, referenceImageBase64?: string | null): Promise<Uint8Array> {
+type SceneImage = { bytes: Uint8Array; contentType: "image/png" | "image/jpeg" | "image/webp" };
+
+async function drawScenePicture(provider: MediaProvider, scene: Scene, project: Project, job: JobRow, referenceImageBase64?: string | null): Promise<SceneImage> {
   const paperStage = usesPaperStage(project.settings);
   // The studio edits the Vietnamese `description`; on a description edit the web copies that text into
   // `imagePrompt`, so a non-English imagePrompt here means "re-derive the English prompt from the edit".
@@ -673,6 +676,21 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     await updateScene(scene.id, { image_prompt: english });
   }
   const prompt = buildProductionImagePrompt(scenePicturePrompt(scene.imagePrompt, project, scene.narration), visualPresetPrompt(project.settings.visualPreset));
+  const stockPreferred = !paperStage && project.settings.imageSource !== "ai";
+  if (stockPreferred) {
+    try {
+      const stock = await fetchPexelsImage(prompt, { ...(config.PEXELS_API_KEY ? { apiKey: config.PEXELS_API_KEY } : {}), baseUrl: config.PEXELS_API_BASE_URL, aspectRatio: project.settings.aspectRatio });
+      if (!(await imageLooksBlank(stock.bytes, config.FFMPEG_PATH))) {
+        log.info({ jobId: job.id, sceneId: scene.id, photographer: stock.photographer, sourceUrl: stock.sourceUrl }, "scene_stock_image_selected");
+        const contentType = stock.contentType === "image/webp" ? "image/webp" : stock.contentType === "image/png" ? "image/png" : "image/jpeg";
+        return { bytes: stock.bytes, contentType };
+      }
+      throw new Error("Pexels trả về ảnh trống");
+    } catch (error) {
+      if (project.settings.imageSource === "stock") throw error;
+      log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "stock_image_fallback_to_ai");
+    }
+  }
   const imageModel = imageModelForProject(project);
   const options = {
     ...project.settings.localModels,
@@ -710,7 +728,7 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     // Balanced/fast may continue during a temporary Vision outage. Quality is
     // deliberately fail-closed: it must never export an image that was not
     // semantically and anatomically checked.
-    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad" && lastAudit.identity !== "different") : !strictQualityGate)) return image;
+    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad" && lastAudit.identity !== "different") : !strictQualityGate)) return { bytes: image, contentType: "image/png" };
     if (attempt === maxAttempts - 1) break;
     correction = lastAudit?.identity === "different"
       ? ", preserve the exact same male chibi boy as the reference: same face, short dark-brown topknot, olive ribbon, eyebrows, robe and proportions; change only the described everyday action"
@@ -734,7 +752,7 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
   // entire video. Quality remains fail-closed above.
   if (!strictQualityGate && lastImage && lastAudit?.anatomy !== "bad" && lastAudit?.textArtifacts !== "bad" && lastAudit?.identity !== "different") {
     log.warn({ jobId: job.id, sceneId: scene.id, audit: lastAudit }, "scene_picture_semantic_warning");
-    return lastImage;
+  return { bytes: lastImage, contentType: "image/png" };
   }
   throw new Error(`Ảnh cảnh ${scene.order + 1} chưa đạt kiểm tra nội dung, identity, anatomy hoặc chữ rác sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
 }
@@ -880,10 +898,11 @@ async function generateMedia(job: JobRow, project: Project) {
     });
     const image = await drawScenePicture(provider, scene, project, job, paperReferenceImageBase64);
     if (usesPaperStage(project.settings) && !paperReferenceImageBase64 && project.settings.generationPreset !== "quality")
-      paperReferenceImageBase64 = Buffer.from(image).toString("base64");
+      paperReferenceImageBase64 = Buffer.from(image.bytes).toString("base64");
     await local(async () => {
-      const imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
-      await upload(imagePath, image, "image/png");
+      const extension = image.contentType === "image/jpeg" ? "jpg" : image.contentType === "image/webp" ? "webp" : "png";
+      const imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.${extension}`;
+      await upload(imagePath, image.bytes, image.contentType);
       await updateScene(scene.id, { image_path: imagePath });
       (scene as { imagePath: string | null }).imagePath = imagePath;
       imagesDone += 1;
@@ -947,9 +966,10 @@ async function generateMedia(job: JobRow, project: Project) {
         );
         const image = await drawScenePicture(media, scene, project, job, paperReferenceImageBase64);
         if (usesPaperStage(project.settings) && !paperReferenceImageBase64 && project.settings.generationPreset !== "quality")
-          paperReferenceImageBase64 = Buffer.from(image).toString("base64");
-        imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.png`;
-        await upload(imagePath, image, "image/png");
+        paperReferenceImageBase64 = Buffer.from(image.bytes).toString("base64");
+        const extension = image.contentType === "image/jpeg" ? "jpg" : image.contentType === "image/webp" ? "webp" : "png";
+        imagePath = `${project.userId}/${project.id}/generated/${scene.id}-${Date.now()}.${extension}`;
+        await upload(imagePath, image.bytes, image.contentType);
         await updateScene(scene.id, { image_path: imagePath });
       }
       // Paper stage has its own art-directed renderer: it keeps the kraft sheet static and

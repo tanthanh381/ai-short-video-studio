@@ -9,6 +9,9 @@ export const videoStyleSchema = z.enum([
 
 export const aspectRatioSchema = z.enum(["9:16", "1:1", "16:9"]);
 export const generationPresetSchema = z.enum(["fast", "balanced", "quality"]);
+/** How scene visuals are sourced. AI remains the backwards-compatible default. */
+export const imageSourceSchema = z.enum(["ai", "stock", "hybrid"]);
+export type ImageSource = z.infer<typeof imageSourceSchema>;
 export const visualPresetSchema = z.enum([
   "cinematic-color",
   "ink-monochrome",
@@ -184,6 +187,9 @@ export const projectSettingsSchema = z.object({
     .default(60),
   aspectRatio: aspectRatioSchema.default("9:16"),
   generationPreset: generationPresetSchema.default("balanced"),
+  // Optional in the TypeScript output so fixtures and projects created before this option remain compatible;
+  // Zod still materializes "ai" whenever a project is parsed.
+  imageSource: imageSourceSchema.default("ai").optional(),
   visualPreset: visualPresetSchema.default("cinematic-color"),
   voice: z.string().default("alloy"),
   localModels: localModelsSchema.default(DEFAULT_LOCAL_MODELS),

@@ -64,6 +64,16 @@ Trong màn hình tạo video, preset ảnh local có ba mức: **Fast** (2 bư�
 
 Cầu nối chỉ bind localhost; worker Docker truy cập qua `host.docker.internal`, không công khai endpoint media.
 
+### Ảnh stock theo nội dung (Pexels)
+
+Studio có thể lấy ảnh thật tương ứng với từng scene từ Pexels. Tại bước **Tùy chọn → Hình ảnh và khung video**, chọn:
+
+- **AI local**: giữ hành vi hiện tại, phù hợp nhân vật nhất quán và các mẫu minh họa.
+- **Auto: Pexels + AI**: thử ảnh Pexels trước, tự fallback về AI nếu chưa cấu hình key hoặc không tìm thấy ảnh.
+- **Pexels stock**: bắt buộc dùng Pexels; nếu dịch vụ không sẵn sàng, scene báo lỗi rõ ràng.
+
+Đặt `PEXELS_API_KEY` trong `.env.selfhost` của worker rồi rebuild/restart Docker. Key chỉ nằm ở worker, không gửi xuống frontend và không được commit. Ảnh Pexels được tải về private storage của project để render offline; worker ghi URL nguồn và photographer vào log để đối soát attribution.
+
 ### Giảm một nửa dung lượng model ảnh SDXL-Turbo
 
 Lần tạo ảnh đầu tiên tải SDXL-Turbo dạng fp32 (13,9 GB), nhưng image server luôn nạp nó dưới dạng fp16, nên một nửa dung lượng đó không bao giờ được dùng. Chạy một lần sau khi model đã tải xong (và gỡ model khỏi bộ nhớ trước: `curl -X POST localhost:5002/unload`):
