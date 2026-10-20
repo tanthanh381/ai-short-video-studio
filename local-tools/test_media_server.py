@@ -423,6 +423,20 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(workflow["4"]["inputs"]["image"], "paper-stage-reference.png")
         self.assertGreater(workflow["6"]["inputs"]["weight"], 0.35)
 
+    def test_sdxl_base_retries_without_reference_when_ipadapter_is_unavailable(self):
+        with patch.object(self.media, "available_image_models", return_value={self.media.COMFYUI_IMAGE_MODEL: "b"}), \
+             patch.object(self.media, "comfyui_image", side_effect=[RuntimeError("missing IPAdapterUnifiedLoader"), b"PNG"]) as comfy, \
+             patch.object(self.media, "release_turbo_model"), \
+             patch.object(self.media, "release_comfy_model"):
+            result = self.media.local_image(
+                "a clearly male little chibi boy holding a tea cup", "9:16",
+                model=self.media.COMFYUI_IMAGE_MODEL, style="chibi",
+                reference_image_base64="aW1hZ2U=", reference_strength=0.08,
+            )
+        self.assertEqual(result, b"PNG")
+        self.assertEqual(comfy.call_count, 2)
+        self.assertEqual(comfy.call_args_list[1].args[-2:], (None, None))
+
     def test_trims_only_oversized_service_logs_to_their_recent_tail(self):
         import tempfile
         with tempfile.TemporaryDirectory() as folder:

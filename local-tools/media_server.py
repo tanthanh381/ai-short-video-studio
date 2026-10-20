@@ -817,6 +817,15 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
             try:
                 return comfyui_image(styled, negative, width, height, seed, preset, reference_image_base64, reference_strength)
             except Exception as error:
+                # Air may have SDXL Base but not the optional IP-Adapter custom node.
+                # Keep Quality usable with a text-only SDXL render instead of turning
+                # an unavailable identity adapter into a whole-job failure.
+                if reference_image_base64:
+                    try:
+                        print(f"[image] ComfyUI identity adapter unavailable; retrying SDXL Base without reference: {error}", flush=True)
+                        return comfyui_image(styled, negative, width, height, seed, preset)
+                    except Exception as fallback_error:
+                        error = fallback_error
                 if not auto_reference_model:
                     raise
                 # The automatic Air/24 GB route is an enhancement, not a hard dependency. If
