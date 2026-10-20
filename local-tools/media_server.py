@@ -538,6 +538,28 @@ def release_comfy_model():
         pass
 
 
+def comfyui_identity_reference(reference_image_base64):
+    """Return a head/ribbon crop so IP-Adapter learns identity without copying the anchor pose."""
+    try:
+        raw = base64.b64decode(reference_image_base64, validate=True)
+        ffmpeg = require_ffmpeg()
+        with tempfile.TemporaryDirectory(prefix="studio-ipadapter-ref-") as workdir:
+            source, target = Path(workdir) / "reference.png", Path(workdir) / "identity.png"
+            source.write_bytes(raw)
+            # The bundled mascot is a tall full-body drawing with a thinking hand pose. Keep a
+            # square crop from the top (face, hair and ribbon) so ComfyUI's CLIP Vision does not
+            # center-crop the ribbon away; the scene prompt must generate the new gesture.
+            subprocess.run([
+                ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(source),
+                "-vf", "crop=trunc(ih*0.52/2)*2:trunc(ih*0.52/2)*2:(iw-trunc(ih*0.52/2)*2)/2:0", "-frames:v", "1", str(target),
+            ], check=True, timeout=30)
+            cropped = target.read_bytes()
+        return base64.b64encode(cropped).decode()
+    except Exception as error:  # keep old reference path available if ffmpeg/crop is unavailable
+        print(f"[image] identity reference crop skipped: {error}", flush=True)
+        return reference_image_base64
+
+
 def comfyui_upload_reference(reference_image_base64):
     """Upload one stable reference image to ComfyUI's input folder.
 
@@ -574,7 +596,8 @@ def comfyui_image(prompt, negative_prompt, width, height, seed, preset, referenc
     """Run SDXL Base through ComfyUI, optionally preserving a character with IP-Adapter."""
     selected = preset if preset in COMFYUI_IMAGE_PRESETS else "balanced"
     options = COMFYUI_IMAGE_PRESETS[selected]
-    reference_name = comfyui_upload_reference(reference_image_base64) if reference_image_base64 else None
+    identity_reference = comfyui_identity_reference(reference_image_base64) if reference_image_base64 else None
+    reference_name = comfyui_upload_reference(identity_reference) if identity_reference else None
     model_input = ["1", 0]
     if reference_name:
         # The Plus SDXL adapter must only whisper the mascot identity. Even the previous 0.22
@@ -818,6 +841,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         negative = IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else "text, logo, watermark"
         if style == "chibi":
             negative += ", photorealistic, realistic 3d render, interior room, landscape, detailed scenery, city, sky, horizon, background characters"
+        if re.search(r"\b(?:folded|single) (?:sheet of )?paper\b", clean, re.IGNORECASE):
+            negative += ", book, books, novel, notebook, open book, stack of books"
         if is_human:  # SDXL Base honours a negative prompt (real CFG), unlike Turbo: keep scenes to their cast
             negative += ", crowd, group of people, extra people, duplicate person, clones"
         with COMFYUI_LOCK:
