@@ -23,6 +23,7 @@ DRY="${AIR_NODE_DRY_RUN:-0}"
 REPO="$HOME_DIR/Developer/ai-short-video-studio"
 LOCAL_AI="$HOME_DIR/Developer/local-ai"
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3.5:4b}"
+OLLAMA_VISION_MODEL="${OLLAMA_VISION_MODEL:-qwen2.5vl:3b}"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 run() { if [ "$DRY" = "1" ]; then echo "[dry-run] $*"; else "$@"; fi; }
@@ -116,12 +117,13 @@ main() {
     : > "$MODELS_DONE"
   fi
 
-  step token "6/8 Mã truy cập và model Ollama" "Lưu mã truy cập và kéo model $OLLAMA_MODEL"
+  step token "6/8 Mã truy cập và model Ollama" "Lưu mã truy cập và kéo model $OLLAMA_MODEL và $OLLAMA_VISION_MODEL"
   TOKEN_FILE="$HOME_DIR/.studio-node-token"
   ( umask 077; printf '%s' "$TOKEN" > "$TOKEN_FILE" )
   echo "Đã lưu mã truy cập vào ~/.studio-node-token (chỉ bạn đọc được); Mac mini đã có cùng mã."
   if [ "$DRY" = "1" ]; then
     echo "[dry-run] ollama pull $OLLAMA_MODEL"
+    echo "[dry-run] ollama pull $OLLAMA_VISION_MODEL"
   else
     if ! curl -fsS -m 3 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
       nohup ollama serve >/dev/null 2>&1 &
@@ -129,6 +131,7 @@ main() {
       for _ in $(seq 1 30); do curl -fsS -m 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && break; sleep 1; done
     fi
     ollama pull "$OLLAMA_MODEL"
+    [ "$OLLAMA_VISION_MODEL" = "$OLLAMA_MODEL" ] || ollama pull "$OLLAMA_VISION_MODEL"
     # Mo-May-Phu.command starts its own Ollama on the Tailscale address, so the temporary one must be gone.
     if [ -n "${OLLAMA_PID:-}" ]; then
       kill "$OLLAMA_PID" 2>/dev/null || true
