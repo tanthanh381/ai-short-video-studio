@@ -99,6 +99,7 @@ for (const item of cases) {
     // causes ComfyUI to be killed by memory pressure halfway through a batch.
     await ollama.unload(config.OLLAMA_MODEL);
     const projectId = crypto.randomUUID();
+    const imageErrors: Array<{ order: number; error: string }> = [];
     const scenes: Scene[] = storyboard.scenes.map((scene, order) => ({
       id: crypto.randomUUID(), order, narration: scene.narration,
       imagePrompt: usesPaperStage(settings)
@@ -123,43 +124,70 @@ for (const item of cases) {
         ? (await readFile(join(process.cwd(), "assets/paper-stage-character-reference.png"))).toString("base64")
         : null;
       for (const scene of scenes) {
-        const png = await media.createImage(
-          buildProductionImagePrompt(scene.imagePrompt, visualPresetPrompt(settings.visualPreset)), imageAspectFor(settings),
-          {
-            // Keep the direct benchmark identical to production: paper-stage uses one
-            // project seed for the recurring mascot, while other layouts remain
-            // independently deterministic per scene.
-            seed: imageSeedFor(usesPaperStage(settings) ? projectId : `${projectId}:${scene.id}`),
-            style: imageStyleFor(settings.visualStyle, settings.visualPreset), preset: settings.generationPreset,
-            ...(benchmarkImageModel ? { image: benchmarkImageModel } : {}),
-            ...(usesPaperStage(settings) && referenceImageBase64 && (paperReferenceMode === "all" || paperReferenceMode === "first" || (paperReferenceMode === "alternate" && scene.order % 2 === 0))
-              ? { referenceImageBase64, referenceStrength: paperReferenceStrength } : {}),
-          },
-        );
+        const imageOptions = {
+          // Keep the direct benchmark identical to production: paper-stage uses one
+          // project seed for the recurring mascot, while other layouts remain
+          // independently deterministic per scene.
+          seed: imageSeedFor(usesPaperStage(settings) ? projectId : `${projectId}:${scene.id}`),
+          style: imageStyleFor(settings.visualStyle, settings.visualPreset), preset: settings.generationPreset,
+          ...(benchmarkImageModel ? { image: benchmarkImageModel } : {}),
+          ...(usesPaperStage(settings) && referenceImageBase64 && (paperReferenceMode === "all" || paperReferenceMode === "first" || (paperReferenceMode === "alternate" && scene.order % 2 === 0))
+            ? { referenceImageBase64, referenceStrength: paperReferenceStrength } : {}),
+        };
+        let png: Uint8Array | null = null;
+        let lastImageError = "";
+        for (let attempt = 0; attempt < 2 && !png; attempt++) {
+          try {
+            png = await media.createImage(
+              buildProductionImagePrompt(scene.imagePrompt, visualPresetPrompt(settings.visualPreset)), imageAspectFor(settings), imageOptions,
+            );
+          } catch (error) {
+            lastImageError = error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240);
+            if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+          }
+        }
+        if (!png) {
+          imageErrors.push({ order: scene.order, error: lastImageError || "image generation failed" });
+          const previous = scenes[scene.order - 1]?.imagePath;
+          if (!previous) throw new Error(`image scene ${scene.order + 1} failed: ${lastImageError}`);
+          png = await readFile(join(work, previous));
+          scene.mediaStatus = "failed";
+        }
         if (usesPaperStage(settings) && !referenceImageBase64) referenceImageBase64 = Buffer.from(png).toString("base64");
         const file = `${scene.id}.png`;
         await writeFile(join(work, file), png);
-        Object.assign(scene, { imagePath: file, mediaStatus: "ready" });
+        Object.assign(scene, { imagePath: file, mediaStatus: scene.mediaStatus === "failed" ? "failed" : "ready" });
       }
     });
+    outcome.imageErrors = imageErrors;
     if (benchmarkMotion && media.createVideo) {
+      const motionErrors: Array<{ order: number; error: string }> = [];
       await mark("motion", async () => {
         for (const scene of scenes) {
-          const image = await readFile(join(work, scene.imagePath!));
-          const motion = await media.createVideo!({
-            image,
-            prompt: `${scene.imagePrompt}. ${sceneMotionPrompt(settings.visualPreset, scene.order, scene.narration)}`,
-            aspectRatio: settings.aspectRatio,
-          }, {
-            video: "ltxv-2b-0.9.8-distilled",
-            seed: imageSeedFor(projectId),
-            preset: benchmarkMotionPreset,
-          });
-          const file = `${scene.id}.mp4`;
-          await writeFile(join(work, file), motion);
-          scene.videoPath = file;
+          try {
+            const image = await readFile(join(work, scene.imagePath!));
+            const motion = await media.createVideo!({
+              image,
+              prompt: `${scene.imagePrompt}. ${sceneMotionPrompt(settings.visualPreset, scene.order, scene.narration)}`,
+              aspectRatio: settings.aspectRatio,
+            }, {
+              video: "ltxv-2b-0.9.8-distilled",
+              seed: imageSeedFor(projectId),
+              preset: benchmarkMotionPreset,
+            });
+            const file = `${scene.id}.mp4`;
+            await writeFile(join(work, file), motion);
+            scene.videoPath = file;
+          } catch (error) {
+            // Keep the benchmark artifact renderable when one optional motion
+            // runtime is unavailable, but report the exact scene failures so a
+            // still-image result can never be mistaken for a motion pass.
+            motionErrors.push({ order: scene.order, error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240) });
+          }
         }
       });
+      outcome.motionErrors = motionErrors;
+      outcome.motionScenes = scenes.filter((scene) => Boolean(scene.videoPath)).length;
     }
     const project = {
       id: projectId, userId: crypto.randomUUID(), title: item.hook, sourceText, inputMode: "full-script", hook: item.hook, suggestedTitle: title,
