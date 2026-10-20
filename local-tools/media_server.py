@@ -124,6 +124,7 @@ IMAGE_SERVER_URL = os.getenv("IMAGE_SERVER_URL", "http://127.0.0.1:5002")
 IMAGE_TIMEOUT_S = int(os.getenv("IMAGE_TIMEOUT_S", "900"))
 WHISPER_URL = os.getenv("WHISPER_URL", "http://127.0.0.1:8080")
 VIENEU_URL = os.getenv("VIENEU_URL", "http://127.0.0.1:5001")
+OMNIVOICE_URL = os.getenv("OMNIVOICE_URL", "http://127.0.0.1:5010")
 VIENEU_VOICE = os.getenv("VIENEU_VOICE", "Đức Trí")
 LTX_VIDEO_URL = os.getenv("LTX_VIDEO_URL", "http://127.0.0.1:8770")
 # Official multi-scale inference can exceed three minutes on a 24 GB Apple
@@ -217,10 +218,10 @@ PACE_TARGET_WPS = float(os.getenv("PACE_TARGET_WPS", "3.7"))
 PACE_VIDEO_FACTOR = 0.84
 PACE_TEMPO_RANGE = (0.85, 1.18)
 # Ordered preference for local Vietnamese engines.
-TTS_ENGINES = [e for e in os.getenv("TTS_ENGINES", "vieneu").split(",") if e == "vieneu"] or ["vieneu"]
+TTS_ENGINES = [e.strip() for e in os.getenv("TTS_ENGINES", "vieneu,omnivoice").split(",") if e.strip() in {"vieneu", "omnivoice"}] or ["vieneu"]
 # Bumped when a media-process migration changes the active engine contract. It is part of the node fingerprint so
 # a long-lived Air bridge cannot keep accepting work with an older process after the files sync.
-MEDIA_RUNTIME_VERSION = "vieneu-only-1"
+MEDIA_RUNTIME_VERSION = "tts-omnivoice-optional-1"
 TTS_CONCURRENCY = max(1, min(int(os.getenv("TTS_CONCURRENCY", "2")), 4))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/ggml-base.bin"))
@@ -237,7 +238,10 @@ OPTIONAL_IMAGE_MODELS = {
 }
 COMFYUI_IMAGE_MODEL = "sdxl-base-1.0-comfyui"
 COMFYUI_IMAGE_LABEL = "SDXL Base 1.0 — đẹp hơn, ít người thừa, chậm (~1–1,5 phút/ảnh)"
-TTS_ENGINE_LABELS = {"vieneu": "VieNeu-TTS v3 Turbo (ONNX/CPU)"}
+TTS_ENGINE_LABELS = {
+    "vieneu": "VieNeu-TTS v3 Turbo (ONNX/CPU)",
+    "omnivoice": "OmniVoice 0.6B (experimental)",
+}
 LLM_LABELS = {
     "qwen3:8b": "Qwen3 8B — Quality script (chậm hơn)",
     "qwen3.5:4b": "Qwen3.5 4B — Balanced script",
@@ -248,6 +252,7 @@ IMAGE_LOCK = threading.Lock()  # one MLX/Metal job at a time on a 16 GB machine
 VIDEO_LOCK = threading.Lock()  # LTX is intentionally single-flight on shared Apple memory
 COMFYUI_LOCK = threading.Lock()
 VIENEU_LOCK = threading.Lock()  # VieNeu keeps one CPU inference state; parallel requests can corrupt it
+OMNIVOICE_LOCK = threading.Lock()
 
 
 def json_response(handler, status, value):
@@ -970,6 +975,7 @@ def expressive_text(text, voice=""):
 # every image takes minutes. Recycle them through launchd (KeepAlive restarts them clean) when they get bloated.
 SUPERVISED = {  # name -> (launchd label, port, health URL, limit in MB)
     "vieneu": ("com.ai-short-video.vieneu", 5001, None, int(os.getenv("VIENEU_MAX_MB", "3000"))),
+    "omnivoice": ("com.ai-short-video.omnivoice", 5010, "/health", int(os.getenv("OMNIVOICE_MAX_MB", "7000"))),
     "image": ("com.ai-short-video.image", 5002, None, int(os.getenv("IMAGE_MAX_MB", "9000"))),
 }
 RECYCLE_LOCK = threading.Lock()
@@ -1096,7 +1102,9 @@ def select_tts_engine(voice, engine=None):
         engine = "vieneu" if engine == "piper" else engine
         return check_choice("giọng đọc", engine, TTS_ENGINE_LABELS)
     for candidate in TTS_ENGINES:
-        if service_up(VIENEU_URL, "/health"):
+        if candidate == "vieneu" and service_up(VIENEU_URL, "/health"):
+            return candidate
+        if candidate == "omnivoice" and service_up(OMNIVOICE_URL, "/health"):
             return candidate
     raise RuntimeError("Không engine giọng đọc local nào sẵn sàng")
 
@@ -1115,7 +1123,7 @@ def pace_tempo(voice, engine, speed=1.0, emotion=1.0):
 
 def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0, emotion_ok=True):
     vieneu_voice = VOICE_PRESETS.get(voice, (VIENEU_VOICE, 1.0, None))[0]
-    profile = emotion_profile(phrase, voice) if engine == "vieneu" and emotion_ok else None
+    profile = emotion_profile(phrase, voice) if engine in ("vieneu", "omnivoice") and emotion_ok else None
     vieneu_speed = pace_tempo(voice, engine, speed, profile["speed"] if profile else 1.0)
     input_text = f"{profile['tag']} {phrase.lstrip()}" if profile else phrase
     source = Path(workdir) / f"phrase-{index}-{engine}.wav"
@@ -1123,6 +1131,10 @@ def synth_phrase(phrase, workdir, index, voice, engine, speed=1.0, emotion_ok=Tr
         payload = {"input": input_text, "voice": vieneu_voice, "speed": vieneu_speed, "steps": VIENEU_STEPS}
         with VIENEU_LOCK:
             source.write_bytes(_http_wav(VIENEU_URL, payload))
+    elif engine == "omnivoice":
+        payload = {"input": phrase, "voice": voice, "speed": max(0.5, min(2.0, float(speed))), "direction": profile["tag"] if profile else None}
+        with OMNIVOICE_LOCK:
+            source.write_bytes(_http_wav(OMNIVOICE_URL, payload))
     else:
         raise RuntimeError("Engine giọng đọc local không được hỗ trợ")
     # VieNeu v3 Turbo (and Piper) ignore the `speed` field, so pace — the voice preset, the emotion profile and the
@@ -1262,6 +1274,9 @@ def tts_aligned(text, voice, engine=None, speed=1.0):
     if selected_engine == "vieneu":
         with VIENEU_LOCK:
             recycle_if_bloated("vieneu", VIENEU_URL)
+    elif selected_engine == "omnivoice":
+        with OMNIVOICE_LOCK:
+            recycle_if_bloated("omnivoice", OMNIVOICE_URL)
     chunks, cues, frames_total = [], [], 0
     sample_rate = SAMPLE_RATE
     with tempfile.TemporaryDirectory(prefix="studio-aligned-") as workdir:
@@ -1271,7 +1286,7 @@ def tts_aligned(text, voice, engine=None, speed=1.0):
         # natural delivery while allowing a scene with genuinely changing sentiment to change expression with the words.
         cue_indexes = set()
         cue_emotions = set()
-        if selected_engine == "vieneu":
+        if selected_engine in ("vieneu", "omnivoice"):
             for index, phrase in enumerate(phrases):
                 profile = emotion_profile(phrase, voice)
                 if profile and profile["tag"] not in cue_emotions:
@@ -1319,6 +1334,9 @@ def tts(text, voice, engine=None, speed=1.0):
     if selected_engine == "vieneu":
         with VIENEU_LOCK:
             recycle_if_bloated("vieneu", VIENEU_URL)
+    elif selected_engine == "omnivoice":
+        with OMNIVOICE_LOCK:
+            recycle_if_bloated("omnivoice", OMNIVOICE_URL)
     with tempfile.TemporaryDirectory(prefix="studio-tts-") as workdir:
         source = synth_phrase(text, workdir, 0, voice, selected_engine, speed)
         target = Path(workdir) / "voice.mp3"
@@ -1441,6 +1459,8 @@ SLEEPER = idle_sleep.Sleeper([
                        process=_by_script("image", 5002, LOCAL_AI_ROOT / "venv/bin/python", _REPO_ROOT / "local-tools/image_server.py")),
     idle_sleep.Service("vieneu", "com.ai-short-video.vieneu", lambda: service_up(VIENEU_URL), wake_timeout_s=300,
                        process=_by_script("vieneu", 5001, "/bin/zsh", LOCAL_AI_ROOT / "bin/start-vieneu.sh")),
+    idle_sleep.Service("omnivoice", "com.ai-short-video.omnivoice", lambda: service_up(OMNIVOICE_URL, "/health"), wake_timeout_s=900,
+                       process=_by_script("omnivoice", 5010, "/bin/zsh", LOCAL_AI_ROOT / "bin/start-omnivoice.sh")),
     idle_sleep.Service("whisper", "com.ai-short-video.whisper", lambda: service_up(WHISPER_URL, "/"), wake_timeout_s=180,
                        process=_by_script("whisper", 8080, "/bin/zsh", LOCAL_AI_ROOT / "bin/start-whisper.sh")),
     idle_sleep.Service("comfyui", "com.ai-short-video.comfyui", _comfy_up, wake_timeout_s=300, idle_cap_s=180),
@@ -1465,7 +1485,11 @@ def services_for(path, body):
         wants_base = (model == COMFYUI_IMAGE_MODEL or (model in (None, "") and preset == "quality")) and comfyui_memory_safe()
         return ["image", "comfyui"] if wants_base else ["image"]
     if route in ("/tts", "/tts-aligned"):
-        return ["vieneu"]
+        try:
+            engine = json.loads(body).get("engine")
+        except (ValueError, AttributeError):
+            engine = None
+        return [engine] if engine in ("vieneu", "omnivoice") else ["vieneu"]
     if route == "/transcribe":
         return ["whisper"]
     if route == "/video":
@@ -1585,7 +1609,7 @@ def model_catalog():
     whisper_runtime = whisper_runtime_info()
     whisper_id = whisper_runtime["id"]
     whisper_ready = whisper_runtime["ready"]
-    available_engines = {"vieneu": service_up(VIENEU_URL)}
+    available_engines = {"vieneu": service_up(VIENEU_URL), "omnivoice": service_up(OMNIVOICE_URL, "/health")}
     ltx_ready, _ = ltx_state()
     return {
         "available": True,
@@ -1690,7 +1714,7 @@ def remembered_image_config(config):
 
 
 def tts_engines_up():
-    return [e for e in TTS_ENGINES if service_up(VIENEU_URL, "/health") or SLEEPER.asleep(e)]
+    return [e for e in TTS_ENGINES if (e == "vieneu" and service_up(VIENEU_URL, "/health")) or (e == "omnivoice" and service_up(OMNIVOICE_URL, "/health")) or SLEEPER.asleep(e)]
 
 
 # Everything whose change would make this Mac's pictures or voices come out differently. Two Macs with different files here must not
@@ -1792,7 +1816,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             comfy_ready, _ = comfyui_state()
             image_ready = image_server_state() != "down" or SLEEPER.asleep("image") or comfy_ready == "ready" or (IMAGE_SCRIPT.is_file() and (LOCAL_AI_ROOT / "models/image").is_dir())
-            engines = {"vieneu": service_up(VIENEU_URL) or SLEEPER.asleep("vieneu")}
+            engines = {
+                "vieneu": service_up(VIENEU_URL) or SLEEPER.asleep("vieneu"),
+                "omnivoice": service_up(OMNIVOICE_URL, "/health") or SLEEPER.asleep("omnivoice"),
+            }
             ffmpeg_ready = find_binary("ffmpeg", "FFMPEG_PATH") is not None
             tts_ready = ffmpeg_ready and any(engines.get(e) for e in TTS_ENGINES)
             transcribe_ready = service_up(WHISPER_URL, "/") or SLEEPER.asleep("whisper")

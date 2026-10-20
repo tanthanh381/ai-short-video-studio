@@ -20,7 +20,7 @@ CODE_SKIP_DIRS = {"__pycache__", "tests", ".pytest_cache", "node_modules", ".git
 # Programs that only the main machine runs (they serve the others) are not copied to them.
 CODE_SKIP_FILES = {"air_bundle_server.py", "node_sync_server.py", ".DS_Store"}
 CODE_EXTRA_FILES = ["scripts/Mo-May-Phu.command"]
-TOOLKIT_FILES = ["bin/env.sh", "bin/start-vieneu.sh", "bin/start-whisper.sh", "faster_whisper_server.py", "vieneu_api.py", "vieneu_tts.py"]
+TOOLKIT_FILES = ["bin/env.sh", "bin/start-vieneu.sh", "bin/start-whisper.sh", "bin/start-omnivoice.sh", "faster_whisper_server.py", "vieneu_api.py", "vieneu_tts.py", "omnivoice_api.py"]
 MODEL_DIRS = ["whisper", "vieneu-v3-turbo", "moss-audio-tokenizer-onnx", "face"]
 IMAGE_DIR = "image"
 # Runtime leftovers inside the model folders: logs, lock files, markers. Not part of a model.
@@ -194,6 +194,7 @@ SERVICE_PATTERNS = {
     "image": "local-tools/image_server.py",
     "whiteboard": "local-tools/whiteboard_server.py",
     "vieneu": "vieneu_api:app",
+    "omnivoice": "omnivoice_api:app",
     "whisper": "whisper-server",
 }
 
@@ -216,6 +217,8 @@ def services_for(keys):
         elif key.startswith("toolkit/"):
             if name in ("vieneu_api.py", "vieneu_tts.py", "start-vieneu.sh"):
                 services.add("vieneu")
+            elif name in ("omnivoice_api.py", "start-omnivoice.sh"):
+                services.add("omnivoice")
             elif name == "start-whisper.sh":
                 services.add("whisper")
             elif name == "env.sh":
