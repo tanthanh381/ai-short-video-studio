@@ -788,13 +788,10 @@ async function generateMedia(job: JobRow, project: Project) {
     throw new Error(
       "Chưa có khóa API OpenAI để tạo ảnh, giọng đọc và đồng bộ phụ đề. Hãy dán khóa của bạn ở Cài đặt (mục Dịch vụ trả phí), hoặc chọn media trên máy trong Tùy chọn.",
     );
-  // The web picker can be unavailable during its first health probe, and older projects may have
-  // saved `localModels.video` as null. If a video lane is healthy, prefer the installed LTX model
-  // automatically instead of silently exporting a static-image video.
-  const motionModel = drawsByHand(project.settings)
-    ? null
-    : project.settings.localModels.video
-      ?? (media.videoAvailable?.() ? "ltxv-2b-0.9.8-distilled" : null);
+  // Motion (LTX image→video) is opt-in: it runs only when the creator explicitly turned it on for this
+  // project (settings.localModels.video). LTX diffusion is slow — minutes per scene — so a still image with
+  // a camera move stays the fast default. Do NOT auto-enable it just because a video lane is healthy.
+  const motionModel = drawsByHand(project.settings) ? null : project.settings.localModels.video;
   const targetId =
     job.job_type === "regenerate_scene"
       ? String(job.payload.sceneId ?? "")
@@ -844,13 +841,17 @@ async function generateMedia(job: JobRow, project: Project) {
     return outcomes;
   };
   const onMachine = (machine: string) => (pooled?.distributed ? ` · máy ${machine}` : "");
+  // Pin one TTS engine for the whole video. Scenes are spread across machines, and each machine would
+  // otherwise pick its own engine (e.g. omnivoice on one node, vieneu on another), which changes the voice
+  // mid-video. vieneu runs on every node and matches the voice presets, so it is the consistent default.
+  const ttsEngine = project.settings.localModels.tts ?? "vieneu";
   const speak = async (scene: Scene, speedFactor = 1, provider: MediaProvider = media) => {
     const speed = project.settings.voiceSpeed * speedFactor;
     const voiceDirection = voiceDirectionForScript(scene.narration);
     const aligned = provider.createSpeechAligned
-      ? await provider.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, speed, voiceDirection })
+      ? await provider.createSpeechAligned(scene.narration, project.settings.voice, { ...project.settings.localModels, tts: ttsEngine, speed, voiceDirection })
       : null;
-    let audio = aligned?.audio ?? await provider.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, speed, voiceDirection });
+    let audio = aligned?.audio ?? await provider.createSpeech(scene.narration, project.settings.voice, { ...project.settings.localModels, tts: ttsEngine, speed, voiceDirection });
     // From here on the machine has answered: a failure saving it is not the machine's.
     return local(async () => {
       let subtitles = aligned?.cues ?? [];
