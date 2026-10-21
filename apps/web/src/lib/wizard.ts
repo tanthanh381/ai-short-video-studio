@@ -8,6 +8,7 @@ import {
   type LocalModelCatalog,
   type Project,
   type ProjectSettings,
+  drawsByHand,
   looksLikeFinishedScript,
   looksLikeSubtitles,
 } from "@studio/shared";
@@ -127,7 +128,7 @@ export function modelGroups(settings: ProjectSettings, statuses: Statuses | null
   const video = localModel("video", "Ảnh tĩnh (không chuyển động)");
   const transcribe = localModel("transcribe", "Whisper");
 
-  return [
+  const groups: ModelGroup[] = [
     { key: "script", label: "Kịch bản / Storyboard", current: settings.textProvider, options: scriptOptions, health: scriptCurrent.health },
     { key: "image", label: "Hình ảnh", current: settings.mediaProvider, options: imageOptions, health: imageCurrent.health },
     {
@@ -163,6 +164,7 @@ export function modelGroups(settings: ProjectSettings, statuses: Statuses | null
       health: settings.subtitle.enabled ? localHealth : "disabled",
     },
   ];
+  return drawsByHand(settings) ? groups.filter((group) => group.key !== "video") : groups;
 }
 
 /** A short one-line summary of the chosen models, e.g. "Ollama · SDXL · LTX-Video · VieNeu-TTS · Whisper". */
@@ -174,6 +176,8 @@ export function modelSummary(settings: ProjectSettings, catalog: LocalModelCatal
   };
   const script = settings.textProvider === "ollama" ? "Ollama" : settings.textProvider === "anthropic" ? "Claude" : "OpenAI";
   if (settings.mediaProvider === "openai") return `${script} · OpenAI Image · OpenAI TTS`;
+  if (drawsByHand(settings))
+    return [script, "SDXL", "Vẽ tay bảng trắng", name("tts", "VieNeu-TTS"), settings.subtitle.enabled ? name("transcribe", "Whisper") : "Không phụ đề"].join(" · ");
   return [script, "SDXL", name("video", "Ảnh tĩnh"), name("tts", "VieNeu-TTS"), settings.subtitle.enabled ? name("transcribe", "Whisper") : "Không phụ đề"].join(" · ");
 }
 

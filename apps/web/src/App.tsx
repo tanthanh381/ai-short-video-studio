@@ -126,6 +126,7 @@ import { previewImageForSettings } from "./lib/preview";
 const CHANNEL_PRESET_VISUALS: Record<string, { tone: string; badge: string }> = {
   "dao-ly-co-phong": { tone: "paper", badge: "Paper" },
   "ve-tay": { tone: "whiteboard", badge: "Sketch" },
+  "video-anh-dong-ai": { tone: "default", badge: "Motion AI" },
   "quy-tac-co-nhan": { tone: "sepia", badge: "Wisdom" },
 };
 
@@ -1459,7 +1460,7 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
         {local && (
           <>
             <VoicePreview voice={settings.voice} engine={settings.localModels.tts} disabled={isDemo} />
-            <LocalModelPicker catalog={localModels} value={settings.localModels} onChange={(next) => set({ localModels: next })} />
+            <LocalModelPicker catalog={localModels} value={settings.localModels} hideVideo={settings.visualPreset === "whiteboard"} onChange={(next) => set({ localModels: next })} />
           </>
         )}
         <Field label="Tốc độ đọc">
@@ -1513,14 +1514,15 @@ function VideoOptions({ settings, onChange, scriptMode, isDemo, capabilities, lo
   );
 }
 
-function LocalModelPicker({ value, onChange, catalog }: {
+function LocalModelPicker({ value, onChange, catalog, hideVideo = false }: {
   value: LocalModels;
   onChange(next: LocalModels): void;
   catalog: LocalModelCatalog | null;
+  hideVideo?: boolean;
 }) {
   return (
     <>
-      {LOCAL_MODEL_TASKS.map(({ key, label }) => {
+      {LOCAL_MODEL_TASKS.filter(({ key }) => !(hideVideo && key === "video")).map(({ key, label }) => {
         const entry = catalog?.[key];
         const models = entry?.models ?? [];
         const current = value[key];
@@ -1628,9 +1630,9 @@ function WizardPage() {
   // A ready LTX node is selected automatically, as on the old create page.
   useEffect(() => {
     const defaultVideo = localModels?.video.default;
-    if (!defaultVideo) return;
+    if (!defaultVideo || settings.visualPreset === "whiteboard") return;
     setState((s) => s.settings.localModels.video ? s : { ...s, settings: { ...s.settings, localModels: { ...s.settings.localModels, video: defaultVideo } } });
-  }, [localModels]);
+  }, [localModels, settings.visualPreset]);
   useEffect(() => {
     const path = settings.logoPath;
     if (!path) { setLogoPreviewUrl(null); return; }

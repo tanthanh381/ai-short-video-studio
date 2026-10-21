@@ -9,7 +9,7 @@ import { withLayoutTemplate, withVisualPreset } from "./visual-preset";
 export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; apply: (settings: ProjectSettings) => ProjectSettings }> = [
   {
     id: "dao-ly-co-phong",
-    label: "Đạo lý cổ phong",
+    label: "Chibi cổ trang",
     hint: "Nhân vật chibi cổ trang trên nền giấy kraft, giọng nam trầm, phụ đề nhỏ dưới nhân vật",
     // Đức Trí: median 107 Hz at 3.7 words/s, the closest to the reference short (99 Hz, 3.6 w/s); "triet-ly" measured
     // 145 Hz and read 14% slower.
@@ -20,6 +20,12 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     label: "Giải thích vẽ tay",
     hint: "Bàn tay vẽ từng cảnh trên nền trắng, giọng thuyết minh, nhạc nền",
     apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "whiteboard"), style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
+  },
+  {
+    id: "video-anh-dong-ai",
+    label: "Video ảnh động AI",
+    hint: "Ảnh minh họa toàn khung được tạo chuyển động bằng LTX khi máy sẵn sàng",
+    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "cinematic-color"), style: "ke-chuyen", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
   {
     id: "quy-tac-co-nhan",

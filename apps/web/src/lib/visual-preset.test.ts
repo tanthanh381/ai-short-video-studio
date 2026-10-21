@@ -3,6 +3,11 @@ import { DEFAULT_PROJECT_SETTINGS, VISUAL_PRESET_OPTIONS } from "@studio/shared"
 import { withLayoutTemplate, withVisualPreset } from "./visual-preset";
 
 describe("withVisualPreset", () => {
+  it("clears a motion model when switching to whiteboard", () => {
+    const settings = { ...DEFAULT_PROJECT_SETTINGS, localModels: { ...DEFAULT_PROJECT_SETTINGS.localModels, video: "ltx" } };
+    expect(withVisualPreset(settings, "whiteboard").localModels.video).toBeNull();
+  });
+
   it("copies the preset description for every preset", () => {
     for (const option of VISUAL_PRESET_OPTIONS) {
       const next = withVisualPreset(DEFAULT_PROJECT_SETTINGS, option.id);

@@ -66,7 +66,7 @@ import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
 import { trimWavSilence } from "./silence";
-import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, whiteboardReady, withoutDrawingHand, type WhiteboardRunner } from "./whiteboard";
+import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, autoAnnotation, whiteboardReady, withoutDrawingHand, type WhiteboardRunner } from "./whiteboard";
 import { fetchPexelsImage } from "./stock-images";
 
 const config = getConfig();
@@ -782,8 +782,10 @@ async function generateMedia(job: JobRow, project: Project) {
   // The web picker can be unavailable during its first health probe, and older projects may have
   // saved `localModels.video` as null. If a video lane is healthy, prefer the installed LTX model
   // automatically instead of silently exporting a static-image video.
-  const motionModel = project.settings.localModels.video
-    ?? (media.videoAvailable?.() ? "ltxv-2b-0.9.8-distilled" : null);
+  const motionModel = drawsByHand(project.settings)
+    ? null
+    : project.settings.localModels.video
+      ?? (media.videoAvailable?.() ? "ltxv-2b-0.9.8-distilled" : null);
   const targetId =
     job.job_type === "regenerate_scene"
       ? String(job.payload.sceneId ?? "")
@@ -1154,6 +1156,26 @@ async function render(job: JobRow, project: Project) {
     return;
   }
   await updateProject(project.id, { status: "rendering" });
+  if (drawsByHand(project.settings)) {
+    const size = project.settings.aspectRatio === "16:9"
+      ? { width: 1920, height: 1080 }
+      : project.settings.aspectRatio === "1:1"
+        ? { width: 1080, height: 1080 }
+        : { width: 1080, height: 1920 };
+    for (const scene of project.scenes) {
+      if (scene.annotationJson !== null) continue;
+      const annotation = autoAnnotation(
+        scene.id,
+        size.width,
+        size.height,
+        scene.actualDurationMs ?? scene.estimatedDurationMs,
+        scene.narration,
+        scene.subtitles,
+      );
+      scene.annotationJson = annotation;
+      await updateScene(scene.id, { annotation_json: annotation });
+    }
+  }
   const result = await renderProject(
     config,
     project,

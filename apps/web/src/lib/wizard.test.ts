@@ -53,6 +53,12 @@ describe("modelGroups health", () => {
     expect(voice.current).toBe("openai");
     expect(voice.health).toBe("ready");
   });
+  it("does not show LTX controls in whiteboard mode", () => {
+    const whiteboard = { ...base, visualPreset: "whiteboard" as const };
+    expect(modelGroups(whiteboard, statuses(), catalog).some((group) => group.key === "video")).toBe(false);
+    expect(modelSummary(whiteboard, catalog)).toContain("Vẽ tay bảng trắng");
+    expect(modelSummary(whiteboard, catalog)).not.toContain("LTX");
+  });
 });
 
 describe("modelSummary", () => {

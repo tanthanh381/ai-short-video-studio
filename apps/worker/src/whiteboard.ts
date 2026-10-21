@@ -11,7 +11,7 @@ export const WHITEBOARD_DOWN =
  * put a hand holding a marker into the picture, and the renderer's own hand then drew a second one over it.
  */
 export const WHITEBOARD_STORYBOARD_STYLE =
-  "simple whiteboard doodle illustration, bold black outlines, flat colors, plain white background; the drawing hand is added later, so never put hands, pens or markers in the picture";
+  "simple whiteboard doodle illustration, bold black outlines, flat colors, plain white background; arrange 3 or 4 separate visual groups in narration order with clear empty gutters between them, left-to-right for landscape or top-to-bottom for portrait; no overlapping groups; the drawing hand is added later, so never put hands, pens or markers in the picture";
 
 const DRAWING_HAND = /\b(?:hands?|fingers?)\b[^,.;]*\b(?:markers?|pens?|pencils?|draw(?:s|ing)?|sketch(?:es|ing)?)\b|\b(?:markers?|pens?|pencils?)\b[^,.;]*\bdraw/iu;
 
@@ -31,37 +31,63 @@ export function withoutDrawingHand(prompt: string): string {
 
 const HAND_HEIGHT_1080 = 493;
 
-/** Share of the scene spent drawing; the finished picture stays on screen for the rest. */
-const DRAW_SHARE = 0.7;
-
 /**
- * One region covering the whole picture. The renderer still follows the strokes inside it (outlines first, then the
- * flat colours), so a scene needs no hand-made annotation; one from the region editor replaces this when present.
+ * Automatic, deterministic regions for generated whiteboard art. The image prompt deliberately asks the image model
+ * for separated narrative groups, so these reading-order bands hide every later group until its turn. A hand-edited
+ * annotation still wins when present.
  */
-export function autoAnnotation(sceneId: string, width: number, height: number, sceneMs: number) {
+export function autoAnnotation(
+  sceneId: string,
+  width: number,
+  height: number,
+  sceneMs: number,
+  narration = "",
+  subtitles: Scene["subtitles"] = [],
+) {
+  const cueText = subtitles
+    .slice()
+    .sort((a, b) => a.startMs - b.startMs)
+    .map((cue) => cue.text.trim())
+    .filter(Boolean);
+  const clauses = narration.split(/(?<=[.!?…;:])\s+|\n+/u).map((part) => part.trim()).filter(Boolean);
+  const labels = cueText.length ? cueText : clauses;
+  const regionCount = Math.min(4, Math.max(2, labels.length || 3));
+  const vertical = height > width;
+  const drawMs = Math.max(600, Math.round(sceneMs * 0.78));
+  const eachMs = Math.max(250, Math.floor(drawMs / regionCount));
+  const elements = Array.from({ length: regionCount }, (_, index) => {
+    const first = vertical ? Math.round((height * index) / regionCount) : Math.round((width * index) / regionCount);
+    const last = vertical ? Math.round((height * (index + 1)) / regionCount) : Math.round((width * (index + 1)) / regionCount);
+    const region = vertical
+      ? { x: 0, y: first, width, height: Math.max(1, last - first) }
+      : { x: first, y: 0, width: Math.max(1, last - first), height };
+    const centerX = Math.round(region.x + region.width / 2);
+    const centerY = Math.round(region.y + region.height / 2);
+    return {
+      id: `auto-region-${index + 1}`,
+      label: labels[index] ?? `Ý ${index + 1}`,
+      sequence: index + 1,
+      narrativeRole: "narration-beat",
+      subtitle: labels[index] ?? "",
+      type: "scene",
+      region,
+      reveal: {
+        direction: vertical ? "top_to_bottom" as const : "left_to_right" as const,
+        startMs: index * eachMs,
+        durationMs: index === regionCount - 1 ? Math.max(250, drawMs - index * eachMs) : eachMs,
+        maskPaddingPx: 0,
+        protectedRegions: [],
+      },
+      handPath: vertical
+        ? { start: [centerX, region.y] as [number, number], end: [centerX, region.y + region.height] as [number, number], easing: "easeInOut" }
+        : { start: [region.x, centerY] as [number, number], end: [region.x + region.width, centerY] as [number, number], easing: "easeInOut" },
+    };
+  });
   return {
     sceneId,
     canvas: { width, height },
     sceneDurationMs: sceneMs,
-    elements: [
-      {
-        id: "auto-scene",
-        label: "Toàn cảnh",
-        sequence: 1,
-        narrativeRole: "scene",
-        subtitle: "",
-        type: "scene",
-        region: { x: 0, y: 0, width, height },
-        reveal: {
-          direction: "top_to_bottom",
-          startMs: 0,
-          durationMs: Math.round(sceneMs * DRAW_SHARE),
-          maskPaddingPx: 0,
-          protectedRegions: [],
-        },
-        handPath: { start: [Math.round(width / 2), 0], end: [Math.round(width / 2), height], easing: "easeInOut" },
-      },
-    ],
+    elements,
   };
 }
 
@@ -91,7 +117,8 @@ export async function drawSceneByHand(
   outputPath: string,
   run: WhiteboardRunner = (work) => work({ url: config.WHITEBOARD_SERVER_URL }),
 ): Promise<void> {
-  const annotation = (scene.annotationJson as object | null) ?? autoAnnotation(scene.id, size.width, size.height, sceneMs);
+  const annotation = (scene.annotationJson as object | null)
+    ?? autoAnnotation(scene.id, size.width, size.height, sceneMs, scene.narration, scene.subtitles);
   const body = JSON.stringify({
     image_b64: (await readFile(stillPath)).toString("base64"),
     annotation,
