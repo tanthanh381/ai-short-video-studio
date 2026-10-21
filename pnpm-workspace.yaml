@@ -10,5 +10,5 @@ onlyBuiltDependencies:
 
 overrides:
   ip-address: 10.7.1
-  vite: 7.3.5
+  vite: 7.3.7
   "vite>esbuild": 0.28.1
