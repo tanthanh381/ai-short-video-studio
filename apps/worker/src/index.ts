@@ -66,7 +66,7 @@ import { runVideoPipeline, sceneMediaReady } from "./pipeline";
 import { renderProject } from "./render";
 import { regenerationPlan, type RegenerationCheckpoint } from "./regeneration";
 import { trimWavSilence } from "./silence";
-import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, autoAnnotation, whiteboardReady, withoutDrawingHand, type WhiteboardRunner } from "./whiteboard";
+import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, autoAnnotation, whiteboardAuditClean, whiteboardReady, withoutDrawingHand, type WhiteboardRunner } from "./whiteboard";
 import { fetchPexelsImage } from "./stock-images";
 
 const config = getConfig();
@@ -726,6 +726,8 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
   let lastBlank = false;
   let lastImage: Uint8Array | null = null;
   let correction = "";
+  const whiteboardScene = drawsByHand(project.settings);
+  const hasWhiteboardDrawingTools = (audit: ImageQualityAudit | null) => whiteboardScene && !!audit && !whiteboardAuditClean({ ...audit, textArtifacts: "none" });
   // Paper-stage is a highly art-directed preset: a generic portrait is a failed
   // scene even when the anatomy is technically clean. Keep its semantic gate
   // fail-closed by default; operators can temporarily disable it while bringing
@@ -744,10 +746,15 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     // deliberately fail-closed: it must never export an image that was not
     // semantically and anatomically checked.
     const forbidsProps = /\bno prop(?: beyond the action described)?\b|\bno book\b/i.test(scene.imagePrompt);
-    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad" && lastAudit.identity !== "different" && !(forbidsProps && lastAudit.props.length > 0)) : !strictQualityGate)) return { bytes: image, contentType: "image/png" };
+    const whiteboardClean = !whiteboardScene || whiteboardAuditClean(lastAudit);
+    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad" && lastAudit.identity !== "different" && !(forbidsProps && lastAudit.props.length > 0) && whiteboardClean) : !strictQualityGate)) return { bytes: image, contentType: "image/png" };
     if (attempt === maxAttempts - 1) break;
     correction = lastAudit?.identity === "different"
       ? ", preserve the exact same male chibi boy as the reference: same face, short dark-brown topknot, olive ribbon, eyebrows, robe and proportions; change only the described everyday action"
+      : hasWhiteboardDrawingTools(lastAudit)
+      ? ", show only the story subject and objects; remove every artist, drawing hand, pen, pencil, marker, stylus and drawing tablet because a separate hand overlay is added later"
+      : whiteboardScene && lastAudit?.textArtifacts !== "none"
+      ? ", remove every letter, word, subtitle, logo, glyph-like scribble and pseudo-text; leave clean unlabeled illustrations only"
       : lastAudit?.anatomy === "bad"
       ? ", corrected anatomy, exactly five fingers per hand, natural hands and face, no extra fingers, no duplicated limbs"
       : lastAudit?.relevant === false
@@ -766,7 +773,7 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
   // unintended text remain hard blockers; semantic mismatch is surfaced as a
   // warning so the creator can regenerate that scene instead of losing the
   // entire video. Quality remains fail-closed above.
-  if (!strictQualityGate && lastImage && lastAudit?.anatomy !== "bad" && lastAudit?.textArtifacts !== "bad" && lastAudit?.identity !== "different") {
+  if (!strictQualityGate && lastImage && lastAudit?.anatomy !== "bad" && lastAudit?.textArtifacts !== "bad" && lastAudit?.identity !== "different" && (!whiteboardScene || whiteboardAuditClean(lastAudit))) {
     log.warn({ jobId: job.id, sceneId: scene.id, audit: lastAudit }, "scene_picture_semantic_warning");
   return { bytes: lastImage, contentType: "image/png" };
   }

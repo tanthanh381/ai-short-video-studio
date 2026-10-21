@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Scene } from "@studio/shared";
 import { drawsByHand } from "@studio/shared";
 import type { WorkerConfig } from "./config";
-import { WHITEBOARD_DOWN, autoAnnotation, drawSceneByHand, withoutDrawingHand } from "./whiteboard";
+import { WHITEBOARD_DOWN, WHITEBOARD_STORYBOARD_STYLE, autoAnnotation, drawSceneByHand, whiteboardAuditClean, withoutDrawingHand } from "./whiteboard";
 
 const config = { WHITEBOARD_SERVER_URL: "http://wb.test:8766/", RENDER_TIMEOUT_MS: 5_000 } as WorkerConfig;
 const scene = (annotationJson: unknown = null) => ({ id: "s1", order: 2, annotationJson }) as Scene;
@@ -25,6 +25,10 @@ describe("hand-drawn scenes", () => {
     expect(withoutDrawingHand("Elderly hands holding chopsticks over a bowl of rice, warm light"))
       .toBe("Elderly hands holding chopsticks over a bowl of rice, warm light");
     expect(withoutDrawingHand("A pen drawing a tree")).toBe("A pen drawing a tree");
+    expect(WHITEBOARD_STORYBOARD_STYLE).toContain("no drawing hand, pen, pencil, marker, stylus");
+    expect(whiteboardAuditClean({ relevant: true, anatomy: "good", textArtifacts: "none", identity: "unknown", props: [], reason: "Clean separated icons." })).toBe(true);
+    expect(whiteboardAuditClean({ relevant: true, anatomy: "good", textArtifacts: "none", identity: "unknown", props: ["drawing tablet", "marker"], reason: "Clean image." })).toBe(false);
+    expect(whiteboardAuditClean({ relevant: true, anatomy: "good", textArtifacts: "minor", identity: "unknown", props: [], reason: "Tiny pseudo-text." })).toBe(false);
   });
 
   it("creates narration-ordered regions, draws them in the first 78% and then holds", () => {

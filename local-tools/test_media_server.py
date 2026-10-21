@@ -484,6 +484,15 @@ class LocalSpeechCaptionTests(unittest.TestCase):
         self.assertEqual(quality["steps"], 8)
         self.assertIn("melted face", quality["negativePrompt"])
 
+    def test_whiteboard_source_rejects_artist_hand_tools_and_fake_text(self):
+        payload = self._turbo_payload(
+            "simple whiteboard doodle illustration of a secure bank transfer",
+            preset="balanced", style="flat",
+        )
+        self.assertIn("drawing hand", payload["negativePrompt"])
+        self.assertIn("stylus", payload["negativePrompt"])
+        self.assertIn("pseudo-text", payload["negativePrompt"])
+
     def test_paper_stage_puts_the_concrete_action_before_the_fixed_identity(self):
         paper = self._turbo_payload(
             "a clearly male little chibi boy, short dark-brown hair in a small topknot bun, holding a folded paper",

@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import type { Scene } from "@studio/shared";
 import type { WorkerConfig } from "./config";
 import { NodeHttpError } from "./node-errors";
+import type { ImageQualityAudit } from "./ollama";
 
 export const WHITEBOARD_DOWN =
   "Máy vẽ tay (cổng 8766) chưa chạy trên máy mini. Hãy mở lại máy tạo video, hoặc chọn phong cách hình ảnh khác rồi bấm Tiếp tục.";
@@ -11,9 +12,20 @@ export const WHITEBOARD_DOWN =
  * put a hand holding a marker into the picture, and the renderer's own hand then drew a second one over it.
  */
 export const WHITEBOARD_STORYBOARD_STYLE =
-  "simple whiteboard doodle illustration, bold black outlines, flat colors, plain white background; arrange 3 or 4 separate visual groups in narration order with clear empty gutters between them, left-to-right for landscape or top-to-bottom for portrait; no overlapping groups; the drawing hand is added later, so never put hands, pens or markers in the picture";
+  "simple whiteboard doodle illustration, bold black outlines, flat colors, plain white background; arrange 3 or 4 separate visual groups in narration order with clear empty gutters between them, left-to-right for landscape or top-to-bottom for portrait; no overlapping groups; illustrate only the story subjects and objects, never an artist or the act of drawing; the renderer adds its own drawing hand later, so no drawing hand, pen, pencil, marker, stylus, handwritten words, letters, logos or pseudo-text anywhere in the picture";
 
 const DRAWING_HAND = /\b(?:hands?|fingers?)\b[^,.;]*\b(?:markers?|pens?|pencils?|draw(?:s|ing)?|sketch(?:es|ing)?)\b|\b(?:markers?|pens?|pencils?)\b[^,.;]*\bdraw/iu;
+
+const DRAWING_TOOL = /\b(?:pen|pencil|marker|stylus|drawing tablet)\b/iu;
+const DRAWING_ACTION = /\b(?:drawing|writing|sketching)\s+(?:hand|pen|pencil|marker|stylus)\b|\bhand\s+(?:holding|using)\s+(?:a\s+)?(?:pen|pencil|marker|stylus)\b/iu;
+
+/** A whiteboard source picture must not contain the artist layer that the renderer adds later. */
+export function whiteboardAuditClean(audit: ImageQualityAudit | null): boolean {
+  return !!audit
+    && audit.textArtifacts === "none"
+    && !audit.props.some((prop) => DRAWING_TOOL.test(prop))
+    && !DRAWING_ACTION.test(audit.reason);
+}
 
 /**
  * Drops the part of an image prompt that describes a hand drawing the picture (see WHITEBOARD_STORYBOARD_STYLE): from
