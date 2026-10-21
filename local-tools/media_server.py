@@ -841,6 +841,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         styled = f"{IMAGE_STYLES[style]}, {paper_prompt}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     else:
         styled = f"{IMAGE_STYLES[style]}{paper_identity}, {paper_scene}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
+    is_whiteboard = bool(re.search(r"\bwhiteboard\b|\bwhite board\b", clean, re.IGNORECASE))
+    whiteboard_negative = ", artist, drawing hand, hand holding pen, hand holding pencil, hand holding marker, pen, pencil, marker, stylus, drawing tablet, writing, words, letters, logo, watermark, gibberish, pseudo-text, calligraphy, glyphs"
     if selected_model in OPTIONAL_IMAGE_MODELS:
         return proxy_image_model(OPTIONAL_IMAGE_MODELS[selected_model][1], styled, aspect_ratio, seed, selected_preset, reference_image_base64, reference_strength)
     if selected_model == COMFYUI_IMAGE_MODEL:
@@ -851,6 +853,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
             negative += ", book, books, novel, notebook, open book, stack of books, writing, words, letters, Chinese characters, calligraphy, symbols, glyphs, drawing on paper"
         if is_human:  # SDXL Base honours a negative prompt (real CFG), unlike Turbo: keep scenes to their cast
             negative += ", crowd, group of people, extra people, duplicate person, clones"
+        if is_whiteboard:
+            negative += whiteboard_negative
         with COMFYUI_LOCK:
             release_turbo_model()
             IMAGE_ENGINE["comfy_used"] = True
@@ -887,6 +891,13 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     turbo_negative = ""
     if selected_preset == "quality":
         turbo_negative = IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else ""
+        if is_whiteboard:
+            turbo_negative += whiteboard_negative
+    elif is_whiteboard:
+        # Whiteboard footage adds the real drawing hand during rendering. Paying
+        # the small CFG cost here avoids a second AI-generated hand and fake
+        # lettering baked into the source illustration.
+        turbo_negative = whiteboard_negative.lstrip(", ")
     elif (is_flat or style == "chibi") and ("chibi" in clean.lower() or "ancient robe" in clean.lower()):
         # Paper-stage illustrations occasionally hallucinate a few glyphs on the blank sheet.
         # Keep the fast 4-step path, but enable the small negative CFG pass for this preset only.
