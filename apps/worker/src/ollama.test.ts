@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OllamaStoryboardAdapter } from "./ollama";
+import { OllamaStoryboardAdapter, parseImageQualityAuditResponse } from "./ollama";
+
+describe("parseImageQualityAuditResponse", () => {
+  it("accepts fenced JSON and removes a Qwen think block", () => {
+    expect(parseImageQualityAuditResponse('<think>checking...</think>\n```json\n{"relevant":true,"anatomy":"good"}\n```')).toMatchObject({ relevant: true, anatomy: "good" });
+  });
+
+  it("extracts the first JSON object from a short natural-language wrapper", () => {
+    expect(parseImageQualityAuditResponse('Here is the result:\n{"relevant":false,"reason":"missing paper"}')).toMatchObject({ relevant: false, reason: "missing paper" });
+  });
+});
 import type { StoryboardInput } from "./providers";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -45,16 +55,16 @@ describe("OllamaStoryboardAdapter", () => {
 
   it("đánh giá ảnh bằng Qwen Vision khi được yêu cầu", async () => {
     const request = vi.fn().mockResolvedValue(new Response(
-        JSON.stringify({ response: JSON.stringify({ relevant: true, anatomy: "good", textArtifacts: "none", identity: "same", reason: "The action and identity match the brief." }) }),
+        JSON.stringify({ response: JSON.stringify({ relevant: true, anatomy: "good", textArtifacts: "none", identity: "same", props: [], reason: "The action and identity match the brief." }) }),
       { status: 200, headers: { "content-type": "application/json" } },
     ));
     const adapter = new OllamaStoryboardAdapter("http://localhost:11434", "qwen3.5:4b", {}, request);
     const result = await adapter.auditImage({ image: new Uint8Array([1, 2, 3]), referenceImage: new Uint8Array([4, 5, 6]), sceneBrief: "A person holds a phone." });
-    expect(result).toEqual({ relevant: true, anatomy: "good", textArtifacts: "none", identity: "same", reason: "The action and identity match the brief." });
+    expect(result).toEqual({ relevant: true, anatomy: "good", textArtifacts: "none", identity: "same", props: [], reason: "The action and identity match the brief." });
     const payload = JSON.parse((request.mock.calls[0]![1] as RequestInit).body as string);
     expect(payload.images).toHaveLength(2);
     expect(payload.options.temperature).toBe(0);
-    expect(payload.system).toContain("recurring-character contract");
+    expect(payload.system).toContain("recurring-character reference");
   });
 
   it("đẩy lỗi Vision lên node pool để có thể failover", async () => {

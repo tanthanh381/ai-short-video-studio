@@ -604,7 +604,7 @@ def comfyui_image(prompt, negative_prompt, width, height, seed, preset, referenc
         # floor still froze Air's paper scenes in the bundled thinking pose, so ordinary props
         # disappeared. A lower floor and earlier cutoff leave the later denoise steps to the
         # action prompt while retaining hair/robe/color cues.
-        adapter_weight = max(0.10, min(0.42, float(reference_strength or 0.12) * 1.2))
+        adapter_weight = max(0.06, min(0.32, float(reference_strength or 0.10) * 1.0))
         workflow = {
             "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": COMFYUI_CHECKPOINT}},
             "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
@@ -614,7 +614,7 @@ def comfyui_image(prompt, negative_prompt, width, height, seed, preset, referenc
             "6": {"class_type": "IPAdapterAdvanced", "inputs": {
                 "model": ["5", 0], "ipadapter": ["5", 1], "image": ["4", 0],
                 "weight": adapter_weight, "weight_type": "linear", "combine_embeds": "average",
-                "start_at": 0.0, "end_at": 0.52, "embeds_scaling": "V only",
+                "start_at": 0.0, "end_at": 0.36, "embeds_scaling": "V only",
             }},
             "7": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
             "8": {"class_type": "KSampler", "inputs": {
@@ -821,7 +821,7 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         if "clearly male little chibi boy" in clean.lower() else ""
     )
     paper_scene = re.sub(
-        r"a clearly male little chibi boy,.*?(?=(?:holding|turning|placing|slowly|watering|opening|folding|taking|shielding)\b)",
+        r"a clearly male little chibi boy,.*?(?=(?:holding|turning|placing|sitting|standing|slowly|watering|opening|folding|taking|shielding)\b)",
         "",
         clean,
         flags=re.IGNORECASE,
@@ -831,7 +831,13 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
     # silently dropped the paper/cup/plant. The compact identity follows the action and still locks the recurring boy.
     if paper_identity:
         paper_action = paper_scene.lstrip(" ,")
-        paper_prompt = f"{paper_action}, clear full-body everyday action, prop large and unmistakable, both hands visibly interacting with the prop, exactly one male chibi boy, short dark-brown topknot bun, small olive ribbon, thick eyebrows, olive ancient robe, bare head, visible ears, blank clean kraft paper, no writing or symbols"
+        has_paper_prop = bool(re.search(r"\b(?:paper|sheet|letter|folded|writing|document)\b", paper_action, re.IGNORECASE))
+        prop_contract = (
+            "ONLY one large blank cream paper rectangle centered in front of the torso, both hands visibly holding its left and right edges, no other prop, paper completely empty with no writing, letters, symbols or drawing"
+            if has_paper_prop else
+            "no extra prop beyond the action described"
+        )
+        paper_prompt = f"{paper_action}, clear full-body everyday action, {prop_contract}, exactly one male chibi boy, short dark-brown topknot bun, small olive ribbon, thick eyebrows, olive ancient robe, bare head, visible ears"
         styled = f"{IMAGE_STYLES[style]}, {paper_prompt}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
     else:
         styled = f"{IMAGE_STYLES[style]}{paper_identity}, {paper_scene}{action_guard}{stylized_action_guard}{flat_guard}{human_detail}{anatomy_prefix}{nonhuman_focus}, no text, no logo, no watermark"
@@ -841,8 +847,8 @@ def local_image(prompt, aspect_ratio="9:16", model=None, seed=None, style="photo
         negative = IMAGE_NEGATIVE_PROMPT if IMAGE_ANATOMY_GUARD else "text, logo, watermark"
         if style == "chibi":
             negative += ", photorealistic, realistic 3d render, interior room, landscape, detailed scenery, city, sky, horizon, background characters"
-        if re.search(r"\b(?:folded|single) (?:sheet of )?paper\b", clean, re.IGNORECASE):
-            negative += ", book, books, novel, notebook, open book, stack of books"
+        if re.search(r"\b(?:folded|single) (?:sheet of )?paper\b|\bsheet of paper\b|\bcream-colored rectangular sheet\b", clean, re.IGNORECASE):
+            negative += ", book, books, novel, notebook, open book, stack of books, writing, words, letters, Chinese characters, calligraphy, symbols, glyphs, drawing on paper"
         if is_human:  # SDXL Base honours a negative prompt (real CFG), unlike Turbo: keep scenes to their cast
             negative += ", crowd, group of people, extra people, duplicate person, clones"
         with COMFYUI_LOCK:

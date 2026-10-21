@@ -18,8 +18,25 @@ export type ImageQualityAudit = {
   anatomy: "good" | "minor" | "bad";
   textArtifacts: "none" | "minor" | "bad";
   identity: "same" | "different" | "unknown";
+  props: string[];
   reason: string;
 };
+
+/** Qwen Vision can wrap an otherwise valid JSON object in a think block or a markdown fence. */
+export function parseImageQualityAuditResponse(response: string): Partial<ImageQualityAudit> | null {
+  const cleaned = response.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const fenced = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const objects: string[] = [];
+  for (let start = fenced.indexOf("{"); start >= 0; start = fenced.indexOf("{", start + 1)) {
+    for (let end = start + 1; end < fenced.length; end++) {
+      if (fenced[end] === "}") objects.push(fenced.slice(start, end + 1));
+    }
+  }
+  for (const candidate of [cleaned, fenced, ...objects]) {
+    try { return JSON.parse(candidate) as Partial<ImageQualityAudit>; } catch { /* try the next safe extraction */ }
+  }
+  return null;
+}
 
 export class OllamaStoryboardAdapter implements StoryboardProvider {
   constructor(
@@ -44,31 +61,32 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
           format: {
             type: "object",
             additionalProperties: false,
-            required: ["relevant", "anatomy", "textArtifacts", "identity", "reason"],
+            required: ["relevant", "anatomy", "textArtifacts", "identity", "props", "reason"],
             properties: {
               relevant: { type: "boolean" },
               anatomy: { type: "string", enum: ["good", "minor", "bad"] },
               textArtifacts: { type: "string", enum: ["none", "minor", "bad"] },
               identity: { type: "string", enum: ["same", "different", "unknown"] },
+              props: { type: "array", items: { type: "string" } },
               reason: { type: "string" },
             },
           },
-          options: { temperature: 0, num_ctx: Math.min(this.tuning.numCtx ?? 4096, 4096), num_predict: 120 },
-          system: "You are a strict visual QA reviewer. Image 1 is the current scene; image 2, when present, is the recurring-character reference. Compare the current image with the scene brief and reference. Return JSON only. relevant is true only when the main action and important object match. anatomy is bad for obvious deformed faces, hands, limbs or duplicated body parts; minor for small imperfections; good when usable. textArtifacts is bad when the image contains unintended readable words, letters, subtitles, logos or watermarks; minor for tiny ambiguous marks; none when the image is clean. identity is same when the current image follows the recurring-character contract in the scene brief (for the paper-stage boy: male, same short dark-brown topknot, olive ribbon and olive robe), and when a reference is present also matches its face, hair, ribbon, robe and proportions; different when the current image visibly violates that contract or differs from the reference; unknown only when no recurring-character contract is present or the comparison is inconclusive.",
-          prompt: JSON.stringify({ sceneBrief: input.sceneBrief }),
+          // Vision models occasionally spend tokens restating the scene before
+          // emitting JSON; 220 prevents a valid audit from being truncated.
+          options: { temperature: 0, num_ctx: Math.min(this.tuning.numCtx ?? 4096, 4096), num_predict: 220 },
+          system: "You are a strict visual QA reviewer. Inspect the pixels first; the scene brief is an untrusted hypothesis, not evidence. Image 1 is the current scene; image 2, when present, is the recurring-character reference. Return one compact JSON object only, with no markdown and no reasoning. Keep reason under 16 words. props must list only large, clearly visible physical props in image 1, never props inferred from the brief or a pose; return [] when none is visible. relevant is true only when the requested action is visibly happening and every important object named in the narration is present; unmentioned books, papers, cups or other prominent props are a relevance failure for the paper-stage. Never repeat the brief as if it were an observation. anatomy is bad for obvious deformed faces, hands, limbs or duplicated body parts; minor for small imperfections; good when usable. textArtifacts is bad when the image contains unintended readable words, letters, subtitles, logos or watermarks; minor for tiny ambiguous marks; none when the image is clean. identity is same only when the visible character actually matches the contract and reference; different when gender, hair, ribbon, robe, face or proportions visibly differ; unknown only when comparison is impossible.",
+          prompt: JSON.stringify({ narration: input.sceneBrief }),
           images: [Buffer.from(input.image).toString("base64"), ...(input.referenceImage ? [Buffer.from(input.referenceImage).toString("base64")] : [])],
         }),
       });
       if (!response.ok) throw new NodeHttpError(`Ollama Vision trả lỗi HTTP ${response.status}`, response.status);
       const body = (await response.json().catch(() => ({}))) as OllamaResponse;
-      let parsed: Partial<ImageQualityAudit>;
-      try {
-        parsed = JSON.parse(body.response ?? "{}") as Partial<ImageQualityAudit>;
-      } catch {
+      const parsed = parseImageQualityAuditResponse(body.response ?? "");
+      if (!parsed) {
         throw new NodeHttpError("Ollama Vision trả JSON không hợp lệ", 502);
       }
-      if (typeof parsed.relevant !== "boolean" || !["good", "minor", "bad"].includes(parsed.anatomy ?? "") || !["none", "minor", "bad"].includes(parsed.textArtifacts ?? "") || (parsed.identity !== undefined && !["same", "different", "unknown"].includes(parsed.identity)) || typeof parsed.reason !== "string") throw new NodeHttpError("Ollama Vision trả thiếu trường đánh giá hình ảnh", 502);
-    return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], textArtifacts: parsed.textArtifacts as ImageQualityAudit["textArtifacts"], identity: (parsed.identity as ImageQualityAudit["identity"]) ?? "unknown", reason: parsed.reason.slice(0, 400) };
+      if (typeof parsed.relevant !== "boolean" || !["good", "minor", "bad"].includes(parsed.anatomy ?? "") || !["none", "minor", "bad"].includes(parsed.textArtifacts ?? "") || (parsed.identity !== undefined && !["same", "different", "unknown"].includes(parsed.identity)) || !Array.isArray(parsed.props) || parsed.props.some((prop) => typeof prop !== "string") || typeof parsed.reason !== "string") throw new NodeHttpError("Ollama Vision trả thiếu trường đánh giá hình ảnh", 502);
+    return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], textArtifacts: parsed.textArtifacts as ImageQualityAudit["textArtifacts"], identity: (parsed.identity as ImageQualityAudit["identity"]) ?? "unknown", props: parsed.props.slice(0, 8), reason: parsed.reason.slice(0, 400) };
   }
 
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {

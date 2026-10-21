@@ -661,7 +661,9 @@ async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project
     return await pool.runOne("llm", (node) => ollamaOn(node.id).auditImage({
       image,
       ...(referenceImageBase64 ? { referenceImage: Buffer.from(referenceImageBase64, "base64") } : {}),
-      sceneBrief: `${scene.narration}\nVisual brief: ${scene.imagePrompt}`,
+      // The generated prompt is not evidence: a vision model may repeat a desired prop
+      // even when the pixels contain a book, text, or a generic portrait.
+      sceneBrief: scene.narration,
       model: config.OLLAMA_VISION_MODEL,
     }), { llmModel: config.OLLAMA_VISION_MODEL });
   } catch (error) {
@@ -741,7 +743,8 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     // Balanced/fast may continue during a temporary Vision outage. Quality is
     // deliberately fail-closed: it must never export an image that was not
     // semantically and anatomically checked.
-    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad" && lastAudit.identity !== "different") : !strictQualityGate)) return { bytes: image, contentType: "image/png" };
+    const forbidsProps = /\bno prop(?: beyond the action described)?\b|\bno book\b/i.test(scene.imagePrompt);
+    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad" && lastAudit.identity !== "different" && !(forbidsProps && lastAudit.props.length > 0)) : !strictQualityGate)) return { bytes: image, contentType: "image/png" };
     if (attempt === maxAttempts - 1) break;
     correction = lastAudit?.identity === "different"
       ? ", preserve the exact same male chibi boy as the reference: same face, short dark-brown topknot, olive ribbon, eyebrows, robe and proportions; change only the described everyday action"

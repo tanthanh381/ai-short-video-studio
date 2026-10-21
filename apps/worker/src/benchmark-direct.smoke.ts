@@ -39,6 +39,9 @@ const benchmarkImageModel = process.env.BENCHMARK_IMAGE_MODEL
   || (benchmarkPreset === "quality" ? "sdxl-base-1.0-comfyui" : undefined);
 const benchmarkMotion = process.env.BENCHMARK_MOTION === "true";
 const benchmarkMotionPreset = process.env.BENCHMARK_MOTION_PRESET === "quality" ? "quality" : "balanced";
+const visionModel = process.env.OLLAMA_VISION_MODEL ?? "qwen2.5vl:3b";
+const sceneLimit = Number.isFinite(Number(process.env.BENCHMARK_SCENE_LIMIT)) && Number(process.env.BENCHMARK_SCENE_LIMIT) > 0
+  ? Math.floor(Number(process.env.BENCHMARK_SCENE_LIMIT)) : null;
 
 // One look per topic, chosen the way a channel owner would: the same retention aids everywhere.
 const LOOK: Record<string, Partial<ProjectSettings>> = {
@@ -67,6 +70,13 @@ const token = process.env.AI_NODES_TOKEN || undefined;
 const media = new LocalMediaAdapter(config.LOCAL_MEDIA_BASE_URL, token ? { token } : {});
 const ollama = new OllamaStoryboardAdapter(config.OLLAMA_BASE_URL, config.OLLAMA_MODEL, { numCtx: config.OLLAMA_NUM_CTX, keepAlive: config.OLLAMA_KEEP_ALIVE });
 await mkdir(outDir, { recursive: true });
+
+const auditImage = async (image: Uint8Array, scene: Scene, referenceImageBase64: string | null) => ollama.auditImage({
+  image,
+  ...(referenceImageBase64 ? { referenceImage: Buffer.from(referenceImageBase64, "base64") } : {}),
+  sceneBrief: `${scene.narration}\nVisual brief: ${scene.imagePrompt}`,
+  model: visionModel,
+});
 
 const clock = () => Date.now();
 const results: unknown[] = [];
@@ -100,7 +110,8 @@ for (const item of cases) {
     await ollama.unload(config.OLLAMA_MODEL);
     const projectId = crypto.randomUUID();
     const imageErrors: Array<{ order: number; error: string }> = [];
-    const scenes: Scene[] = storyboard.scenes.map((scene, order) => ({
+    const imageAudits: Array<{ order: number; attempt: number; relevant: boolean; anatomy: string; textArtifacts: string; identity: string; reason: string }> = [];
+    const scenes: Scene[] = storyboard.scenes.slice(0, sceneLimit ?? storyboard.scenes.length).map((scene, order) => ({
       id: crypto.randomUUID(), order, narration: scene.narration,
       imagePrompt: usesPaperStage(settings)
         ? paperStagePrompt(scene.imagePrompt, scene.narration)
@@ -135,25 +146,38 @@ for (const item of cases) {
         };
         let png: Uint8Array | null = null;
         let lastImageError = "";
-        for (let attempt = 0; attempt < 2 && !png; attempt++) {
+        let correction = "";
+        for (let attempt = 0; attempt < 3 && !png; attempt++) {
           try {
-            png = await media.createImage(
-              buildProductionImagePrompt(
+            const generated = await media.createImage(
+              `${buildProductionImagePrompt(
                 usesPaperStage(settings) ? paperStagePrompt(scene.imagePrompt, scene.narration) : scene.imagePrompt,
                 visualPresetPrompt(settings.visualPreset),
-              ), imageAspectFor(settings), imageOptions,
+              )}${correction}`,
+              imageAspectFor(settings),
+              { ...imageOptions, seed: (imageOptions.seed ?? 0) + attempt * 7919 },
             );
+            const audit = await auditImage(generated, scene, referenceImageBase64);
+            if (!audit) throw new Error("Vision quality gate không trả kết quả");
+            imageAudits.push({ order: scene.order, attempt: attempt + 1, ...audit });
+            const forbidsProps = /\bno prop(?: beyond the action described)?\b|\bno book\b/i.test(scene.imagePrompt);
+            if (!audit.relevant || audit.anatomy === "bad" || audit.textArtifacts === "bad" || audit.identity === "different" || (forbidsProps && audit.props.length > 0)) {
+              correction = audit.identity === "different"
+                ? ", preserve the exact same male chibi boy as the reference: same face, hair, olive ribbon, olive robe and proportions; change only the described everyday action"
+                : audit.anatomy === "bad"
+                  ? ", corrected anatomy, natural face and hands, no extra fingers, no duplicated limbs"
+                  : ", follow the described action and important object exactly; make the prop large and unmistakable"
+              throw new Error(`Vision rejected scene: ${audit.reason}`);
+            }
+            png = generated;
           } catch (error) {
             lastImageError = error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240);
-            if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+            if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1500));
           }
         }
         if (!png) {
           imageErrors.push({ order: scene.order, error: lastImageError || "image generation failed" });
-          const previous = scenes[scene.order - 1]?.imagePath;
-          if (!previous) throw new Error(`image scene ${scene.order + 1} failed: ${lastImageError}`);
-          png = await readFile(join(work, previous));
-          scene.mediaStatus = "failed";
+          throw new Error(`image scene ${scene.order + 1} failed quality gate: ${lastImageError}`);
         }
         if (usesPaperStage(settings) && !referenceImageBase64) referenceImageBase64 = Buffer.from(png).toString("base64");
         const file = `${scene.id}.png`;
@@ -162,6 +186,7 @@ for (const item of cases) {
       }
     });
     outcome.imageErrors = imageErrors;
+    outcome.imageAudits = imageAudits;
     if (benchmarkMotion && media.createVideo) {
       const motionErrors: Array<{ order: number; error: string }> = [];
       await mark("motion", async () => {
