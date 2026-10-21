@@ -56,7 +56,10 @@ export OLLAMA_HOST="$tailscale_ip:11434"
 
 start_if_down() { # url name command...
   local url=$1 name=$2; shift 2
-  curl -fsS "$url" >/dev/null 2>&1 || nohup "$@" >"tmp/local-services/$name.log" 2>&1 &
+  # `&` alone leaves zsh background jobs attached to the SSH/Terminal session;
+  # `&!` fully disowns them so ComfyUI and the bridges survive after this
+  # bootstrap script exits.
+  curl -fsS "$url" >/dev/null 2>&1 || nohup "$@" >"tmp/local-services/$name.log" 2>&1 &!
 }
 
 # Một Ollama chỉ nghe trên chính máy này (ứng dụng trên thanh menu, hoặc bản tạm của bộ cài chưa kịp tắt) chiếm cổng 11434 và
@@ -83,10 +86,30 @@ fi
 start_if_down http://127.0.0.1:5002/health image "$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
 if [[ "$COMFYUI_AUTOSTART" == "true" && -x "$LOCAL_AI_ROOT/comfy-venv/bin/python" && -f "$COMFYUI_ROOT/main.py" && -f "$COMFYUI_ROOT/models/checkpoints/${COMFYUI_CHECKPOINT:-sd_xl_base_1.0_0.9vae.safetensors}" ]]; then
   start_if_down http://127.0.0.1:8188/system_stats comfyui "$LOCAL_AI_ROOT/comfy-venv/bin/python" "$COMFYUI_ROOT/main.py" ${=COMFYUI_ARGS} --listen 127.0.0.1 --port 8188
+  # ComfyUI loads torch, SDXL and custom nodes asynchronously. Do not inspect or
+  # restart it while it is still booting: the old immediate probe killed the
+  # freshly started process and left Air's image lane offline after every reboot.
+  for _ in {1..30}; do
+    curl -fsS -m 2 http://127.0.0.1:8188/system_stats >/dev/null 2>&1 && break
+    sleep 2
+  done
   # A ComfyUI process that was started before IP-Adapter was installed still answers
   # /system_stats, but rejects the identity workflow with missing_node_type. Detect
   # that stale process and reload it once so paper-stage identity works after setup.
-  if [[ -d "$COMFYUI_ROOT/custom_nodes/ComfyUI_IPAdapter_plus" ]] && ! curl -fsS -m 5 http://127.0.0.1:8188/object_info/IPAdapterUnifiedLoader >/dev/null 2>&1; then
+  if [[ -d "$COMFYUI_ROOT/custom_nodes/ComfyUI_IPAdapter_plus" ]]; then
+    # /system_stats becomes available before custom nodes finish registering.
+    # Give IP-Adapter its own boot window; otherwise a healthy but still-loading
+    # server is mistaken for an old broken process and killed.
+    ipadapter_ready=false
+    for _ in {1..30}; do
+      if curl -fsS -m 2 http://127.0.0.1:8188/object_info/IPAdapterUnifiedLoader >/dev/null 2>&1; then
+        ipadapter_ready=true
+        break
+      fi
+      sleep 2
+    done
+  fi
+  if [[ -d "$COMFYUI_ROOT/custom_nodes/ComfyUI_IPAdapter_plus" && "${ipadapter_ready:-false}" != "true" ]]; then
     comfy_pid=$(lsof -tiTCP:8188 -sTCP:LISTEN | head -n1 || true)
     if [[ -n "$comfy_pid" ]]; then
       kill -TERM "$comfy_pid" 2>/dev/null || true

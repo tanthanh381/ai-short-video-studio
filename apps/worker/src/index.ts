@@ -747,7 +747,9 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     // semantically and anatomically checked.
     const forbidsProps = /\bno prop(?: beyond the action described)?\b|\bno book\b/i.test(scene.imagePrompt);
     const whiteboardClean = !whiteboardScene || whiteboardAuditClean(lastAudit);
-    if (!lastBlank && (lastAudit ? (lastAudit.relevant && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad" && lastAudit.identity !== "different" && !(forbidsProps && lastAudit.props.length > 0) && whiteboardClean) : !strictQualityGate)) return { bytes: image, contentType: "image/png" };
+    const identityPass = lastAudit?.identity !== "different";
+    const semanticPass = lastAudit ? (lastAudit.relevant || (forbidsProps && lastAudit.props.length === 0)) : false;
+    if (!lastBlank && (lastAudit ? (semanticPass && lastAudit.anatomy !== "bad" && lastAudit.textArtifacts !== "bad" && identityPass && !(forbidsProps && lastAudit.props.length > 0) && whiteboardClean) : !strictQualityGate)) return { bytes: image, contentType: "image/png" };
     if (attempt === maxAttempts - 1) break;
     correction = lastAudit?.identity === "different"
       ? ", preserve the exact same male chibi boy as the reference: same face, short dark-brown topknot, olive ribbon, eyebrows, robe and proportions; change only the described everyday action"

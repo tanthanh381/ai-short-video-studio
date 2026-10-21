@@ -201,7 +201,7 @@ export function paperActionFromNarration(narration: string): string {
   if (/(gấp|giấy|thư)/u.test(text) && /(bước|đi|ngày mai)/u.test(text)) return "folding a small piece of paper beside a potted plant, both hands clearly visible";
   if (/(bàn tay|run|giận)/u.test(text)) return "slowly unclenching both hands beside a small grey stone, fingers visibly separated and relaxed";
   if (/(bảo vệ|giữ được)/u.test(text) && !/im lặng/u.test(text)) return "shielding a small lit candle with both hands, flame clearly visible between the palms";
-  if (/(im lặng|câu trả lời|sáng suốt)/u.test(text)) return "sitting quietly with hands folded in the lap, eyes lowered for a moment, then gently looking up, no prop and no book";
+  if (/(im lặng|câu trả lời|sáng suốt)/u.test(text)) return "standing quietly with both hands folded over the robe, eyes lowered for a moment, then gently looking up, no prop and no book";
   if (/(đáp trả|chê bai|tranh cãi|lời mình định nói)/u.test(text)) return "turning away while slowly lowering one clenched hand beside a small scroll, hand and scroll clearly visible";
   if (/(sách|đọc|trang|chữ)/u.test(text)) return "opening a small book and reading, both hands and open pages clearly visible";
   if (/(giấy|gấp|viết|thư|lời định nói)/u.test(text)) return "folding a small piece of paper with both hands clearly visible";

@@ -157,11 +157,13 @@ for (const item of cases) {
               imageAspectFor(settings),
               { ...imageOptions, seed: (imageOptions.seed ?? 0) + attempt * 7919 },
             );
+            await writeFile(join(work, `${scene.order + 1}-attempt-${attempt + 1}.png`), generated);
             const audit = await auditImage(generated, scene, referenceImageBase64);
             if (!audit) throw new Error("Vision quality gate không trả kết quả");
             imageAudits.push({ order: scene.order, attempt: attempt + 1, ...audit });
             const forbidsProps = /\bno prop(?: beyond the action described)?\b|\bno book\b/i.test(scene.imagePrompt);
-            if (!audit.relevant || audit.anatomy === "bad" || audit.textArtifacts === "bad" || audit.identity === "different" || (forbidsProps && audit.props.length > 0)) {
+            const semanticPass = audit.relevant || (forbidsProps && audit.props.length === 0);
+            if (!semanticPass || audit.anatomy === "bad" || audit.textArtifacts === "bad" || audit.identity === "different" || (forbidsProps && audit.props.length > 0)) {
               correction = audit.identity === "different"
                 ? ", preserve the exact same male chibi boy as the reference: same face, hair, olive ribbon, olive robe and proportions; change only the described everyday action"
                 : audit.anatomy === "bad"
