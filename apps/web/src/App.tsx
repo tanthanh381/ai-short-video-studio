@@ -1663,19 +1663,25 @@ function WizardPage() {
 
   /** Creates the draft the first time we leave the input step, then keeps it in sync as the person moves on. */
   async function persist(): Promise<Project | null> {
+    // For an idea, the AI writes the script from scratch, so apply the content-quality suggestions
+    // automatically (feed them as hints) instead of making the creator click each one. A pasted full
+    // script keeps the creator's words, so its suggestions stay opt-in via the panel buttons.
+    const submitSettings = inputMode === "idea"
+      ? { ...settings, contentQualityHints: [...new Set([...settings.contentQualityHints, ...contentRecommendations.filter((item) => !item.direct).map((item) => item.message)])].slice(0, 12) }
+      : settings;
     if (!project) {
-      const created = await api.createProject({ title: draftTitle(), sourceText, inputMode, settings });
+      const created = await api.createProject({ title: draftTitle(), sourceText, inputMode, settings: submitSettings });
       patch({ project: created });
       return created;
     }
     try {
-      const saved = await api.updateProject({ ...project, title: draftTitle(), sourceText, inputMode, settings });
+      const saved = await api.updateProject({ ...project, title: draftTitle(), sourceText, inputMode, settings: submitSettings });
       patch({ project: saved });
       return saved;
     } catch (e) {
       if ((e as { status?: number }).status === 409) {
         const fresh = await api.getProject(project.id);
-        const saved = await api.updateProject({ ...fresh, title: draftTitle(), sourceText, inputMode, settings });
+        const saved = await api.updateProject({ ...fresh, title: draftTitle(), sourceText, inputMode, settings: submitSettings });
         patch({ project: saved });
         return saved;
       }
@@ -2091,7 +2097,9 @@ function WizardPage() {
                 <span><Sparkles size={16} /> Content check</span>
                 <strong>{contentQuality.score}/100</strong>
               </div>
-              <p>{contentQuality.score >= 80 ? "Hook và cấu trúc đã đạt ngưỡng khuyến nghị để bắt đầu tạo video." : "Video vẫn tạo được, nhưng nên tinh chỉnh nội dung để tăng khả năng giữ người xem."}</p>
+              <p>{inputMode === "idea"
+                ? "Đây là điểm cho ý tưởng bạn nhập. Khi tạo video, AI tự viết kịch bản chất lượng cao hơn (hook cuốn, ví dụ cụ thể, cảm xúc, kết thúc đọng lại) và tự áp dụng các gợi ý bên dưới — bạn không cần chỉnh tay."
+                : contentQuality.score >= 80 ? "Hook và cấu trúc đã đạt ngưỡng khuyến nghị để bắt đầu tạo video." : "Video vẫn tạo được, nhưng nên tinh chỉnh nội dung để tăng khả năng giữ người xem."}</p>
               <div className="quality-dimension-grid" aria-label="Các tín hiệu nội dung">
                 {Object.values(contentQuality.dimensions).map((dimension) => (
                   <span key={dimension.label} className={dimension.score >= 80 ? "quality-dimension is-good" : "quality-dimension is-review"}>
@@ -2106,19 +2114,23 @@ function WizardPage() {
                     {contentRecommendations.slice(0, 5).map((item) => (
                       <li key={item.id}>
                         <span>{item.message}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="recommendation-apply"
-                          disabled={appliedRecommendations.includes(item.id)}
-                          onClick={() => applyContentRecommendation(item.id, item.message, item.direct)}
-                        >
-                          {appliedRecommendations.includes(item.id) ? <><Check size={14} /> Đã áp dụng</> : <><WandSparkles size={14} /> {item.actionLabel}</>}
-                        </Button>
+                        {inputMode === "idea"
+                          ? <span className="recommendation-auto"><Check size={14} /> AI tự áp dụng</span>
+                          : <Button
+                              type="button"
+                              variant="ghost"
+                              className="recommendation-apply"
+                              disabled={appliedRecommendations.includes(item.id)}
+                              onClick={() => applyContentRecommendation(item.id, item.message, item.direct)}
+                            >
+                              {appliedRecommendations.includes(item.id) ? <><Check size={14} /> Đã áp dụng</> : <><WandSparkles size={14} /> {item.actionLabel}</>}
+                            </Button>}
                       </li>
                     ))}
                   </ul>
-                  {appliedRecommendations.length > 0 && <small className="recommendation-note">Đề xuất đã lưu. Khi bạn tạo storyboard, AI sẽ áp dụng các chỉnh sửa đã chọn.</small>}
+                  {inputMode === "idea"
+                    ? <small className="recommendation-note">AI tự áp dụng các gợi ý này khi viết kịch bản từ ý tưởng của bạn.</small>
+                    : appliedRecommendations.length > 0 && <small className="recommendation-note">Đề xuất đã lưu. Khi bạn tạo storyboard, AI sẽ áp dụng các chỉnh sửa đã chọn.</small>}
                 </details>
               )}
             </div>
