@@ -16,7 +16,7 @@ const MOTION_CUES = [
 const STYLE_MOTION: Partial<Record<VisualPreset, string>> = {
   // The ancient-wisdom paper stage uses the chibi-co-phong image preset. Keep the motion grounded in
   // ordinary gestures from the reference shorts instead of defaulting to atmospheric fantasy motion.
-  "chibi-co-phong": "the same little boy performs one gentle everyday gesture that matches the reference pose, such as a small nod, lifting a tea cup, turning a page, sweeping once or offering the prop, then settles",
+  "chibi-co-phong": "keep the flat 2D hand-drawn chibi look, the kraft-paper texture and the olive ink palette unchanged and animate only gentle idle motion: the same little boy makes one small everyday gesture matching the pose (a small nod, lifting a tea cup, tilting a held prop, turning a page or sweeping once) then settles, with a slow breathing shoulder bob, a soft sway of the robe hem and the hair-ribbon tails, one natural blink and a light drift of any held prop, loop-friendly and calm with no large, fast or jerky movement",
   "chibi-tien-hiep": "floating talismans and mountain mist drift slowly",
   "chibi-dan-gian-viet": "lotus petals, bamboo leaves or a rice-paper fleck moves gently",
   "chibi-co-trang-hai": "the sleeve bounces slightly with the comic reaction, then settles",
