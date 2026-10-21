@@ -22,12 +22,6 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "whiteboard"), style: "kien-thuc", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
   },
   {
-    id: "video-anh-dong-ai",
-    label: "Video ảnh động AI",
-    hint: "Ảnh minh họa toàn khung được tạo chuyển động bằng LTX khi máy sẵn sàng",
-    apply: (s) => ({ ...withVisualPreset(withLayoutTemplate(s, "full-bleed"), "cinematic-color"), style: "ke-chuyen", voice: "thuyet-minh", voiceSpeed: 1, autoMusic: true, captionHighlight: true, hookTitle: true }),
-  },
-  {
     id: "quy-tac-co-nhan",
     label: "Quy tắc cổ nhân",
     hint: "Thẻ truyện nền be, tranh thủy mặc nâu, phụ đề chạy theo lời, giọng nam trầm",

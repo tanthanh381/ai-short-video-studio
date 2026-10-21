@@ -52,13 +52,11 @@ describe("channel presets", () => {
     expect(CHANNEL_PRESETS.map((preset) => preset.id)).toEqual([
       "dao-ly-co-phong",
       "ve-tay",
-      "video-anh-dong-ai",
       "quy-tac-co-nhan",
     ]);
     expect(CHANNEL_PRESETS.map((preset) => preset.label)).toEqual(expect.arrayContaining([
       "Chibi cổ trang",
       "Giải thích vẽ tay",
-      "Video ảnh động AI",
     ]));
   });
 
