@@ -1627,12 +1627,8 @@ function WizardPage() {
     api.getSettings().then((account) => { if (active) setStatuses(Object.fromEntries(Object.entries(account.serviceStatuses).map(([id, status]) => [id, status.state])) as Partial<Record<ServiceId, ServiceState>>); }).catch(() => undefined);
     return () => { active = false; };
   }, [isDemo]);
-  // A ready LTX node is selected automatically, as on the old create page.
-  useEffect(() => {
-    const defaultVideo = localModels?.video.default;
-    if (!defaultVideo || settings.visualPreset === "whiteboard") return;
-    setState((s) => s.settings.localModels.video ? s : { ...s, settings: { ...s.settings, localModels: { ...s.settings.localModels, video: defaultVideo } } });
-  }, [localModels, settings.visualPreset]);
+  // Motion (LTX) is opt-in — it is slow, so it is NOT auto-selected. The creator turns it on per project in
+  // the AI-models picker ("Chuyển động video (LTX)"); the default export stays the fast still + camera move.
   useEffect(() => {
     const path = settings.logoPath;
     if (!path) { setLogoPreviewUrl(null); return; }
