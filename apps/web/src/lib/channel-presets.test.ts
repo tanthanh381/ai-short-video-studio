@@ -48,12 +48,25 @@ describe("channel presets", () => {
     }
   });
 
-  it("exposes only the three supported production templates", () => {
+  it("exposes the requested video modes without removing the existing cổ nhân template", () => {
     expect(CHANNEL_PRESETS.map((preset) => preset.id)).toEqual([
       "dao-ly-co-phong",
       "ve-tay",
+      "video-anh-dong-ai",
       "quy-tac-co-nhan",
     ]);
+    expect(CHANNEL_PRESETS.map((preset) => preset.label)).toEqual(expect.arrayContaining([
+      "Chibi cổ trang",
+      "Giải thích vẽ tay",
+      "Video ảnh động AI",
+    ]));
+  });
+
+  it("keeps LTX out of the whiteboard preset", () => {
+    const withLtx = { ...DEFAULT_PROJECT_SETTINGS, localModels: { ...DEFAULT_PROJECT_SETTINGS.localModels, video: "ltx" } };
+    const settings = CHANNEL_PRESETS.find((preset) => preset.id === "ve-tay")!.apply(withLtx);
+    expect(settings.visualPreset).toBe("whiteboard");
+    expect(settings.localModels.video).toBeNull();
   });
 
   it("the Đạo lý cổ phong preset matches the 30-second reference format", () => {

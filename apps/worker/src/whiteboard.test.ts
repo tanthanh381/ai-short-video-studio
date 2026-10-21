@@ -27,12 +27,28 @@ describe("hand-drawn scenes", () => {
     expect(withoutDrawingHand("A pen drawing a tree")).toBe("A pen drawing a tree");
   });
 
-  it("draws the whole picture in the first 70% of the scene, then holds it", () => {
-    const annotation = autoAnnotation("s1", 1080, 1920, 6000);
+  it("creates narration-ordered regions, draws them in the first 78% and then holds", () => {
+    const annotation = autoAnnotation("s1", 1080, 1920, 6000, "Ý đầu. Ý giữa. Ý cuối.");
     expect(annotation.canvas).toEqual({ width: 1080, height: 1920 });
-    expect(annotation.elements).toHaveLength(1);
-    expect(annotation.elements[0]!.region).toEqual({ x: 0, y: 0, width: 1080, height: 1920 });
-    expect(annotation.elements[0]!.reveal.durationMs).toBe(4200);
+    expect(annotation.elements).toHaveLength(3);
+    expect(annotation.elements.map((element) => element.label)).toEqual(["Ý đầu.", "Ý giữa.", "Ý cuối."]);
+    expect(annotation.elements.map((element) => element.region)).toEqual([
+      { x: 0, y: 0, width: 1080, height: 640 },
+      { x: 0, y: 640, width: 1080, height: 640 },
+      { x: 0, y: 1280, width: 1080, height: 640 },
+    ]);
+    const final = annotation.elements.at(-1)!;
+    expect(final.reveal.startMs + final.reveal.durationMs).toBe(4680);
+  });
+
+  it("uses subtitle text and left-to-right bands in landscape", () => {
+    const annotation = autoAnnotation("s1", 1920, 1080, 10_000, "fallback", [
+      { id: "00000000-0000-4000-8000-000000000001", startMs: 0, endMs: 3000, text: "Nguyên nhân" },
+      { id: "00000000-0000-4000-8000-000000000002", startMs: 3000, endMs: 6000, text: "Hậu quả" },
+    ]);
+    expect(annotation.elements.map((element) => element.label)).toEqual(["Nguyên nhân", "Hậu quả"]);
+    expect(annotation.elements[0]!.region).toEqual({ x: 0, y: 0, width: 960, height: 1080 });
+    expect(annotation.elements[1]!.region).toEqual({ x: 960, y: 0, width: 960, height: 1080 });
   });
 
   it("sends the still at output size with the scene's own regions when it has them", async () => {

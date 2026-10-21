@@ -11,7 +11,13 @@ const INK_SUBTITLE = {
 
 export function withVisualPreset(settings: ProjectSettings, visualPreset: ProjectSettings["visualPreset"]): ProjectSettings {
   const option = VISUAL_PRESET_OPTIONS.find((item) => item.id === visualPreset) ?? VISUAL_PRESET_OPTIONS[0]!;
-  const next = { ...settings, visualPreset, visualStyle: option.description };
+  const next = {
+    ...settings,
+    visualPreset,
+    visualStyle: option.description,
+    // The drawing renderer owns movement in whiteboard mode. Never carry an LTX override into this pipeline.
+    localModels: visualPreset === "whiteboard" ? { ...settings.localModels, video: null } : settings.localModels,
+  };
   if (visualPreset === "ink-monochrome") return { ...next, subtitle: { ...settings.subtitle, ...INK_SUBTITLE } };
   if (settings.visualPreset === "ink-monochrome") {
     const { preset, fontColor, outlineColor, backgroundColor, backgroundOpacity } = DEFAULT_PROJECT_SETTINGS.subtitle;

@@ -424,13 +424,14 @@ export async function renderProject(
     let paperGrain: Promise<unknown> | null = null;
     let done = 0;
     const renderSegment = async (scene: Scene) => {
-      if ((!scene.imagePath && !scene.videoPath) || !scene.audioPath)
+      const whiteboardScene = drawsByHand(project.settings);
+      if (((whiteboardScene && !scene.imagePath) || (!whiteboardScene && !scene.imagePath && !scene.videoPath)) || !scene.audioPath)
         throw new Error(`Cảnh ${scene.order + 1} chưa có đủ media và giọng đọc`);
       const imagePath = join(workdir, `scene-${scene.order}.png`);
       const motionPath = join(workdir, `scene-${scene.order}.mp4`);
       const audioPath = join(workdir, `scene-${scene.order}.mp3`);
       const segmentPath = join(workdir, `scene-${scene.order}.mkv`);
-      if (scene.videoPath) await writeFile(motionPath, await getFile(scene.videoPath));
+      if (scene.videoPath && !whiteboardScene) await writeFile(motionPath, await getFile(scene.videoPath));
       else await writeFile(imagePath, await getFile(scene.imagePath!));
       await writeFile(audioPath, await getFile(scene.audioPath));
       const ms = await durationMs(config, audioPath);
@@ -441,7 +442,9 @@ export async function renderProject(
       const monochrome = project.settings.visualPreset === "ink-monochrome" ? ",hue=s=0,eq=contrast=1.04:brightness=0.01" : "";
       // Whiteboard: the hand renderer draws the still at the segment's size; that clip replaces the camera move and is
       // then treated like an uploaded scene video (held on its last frame if it ends before the voice).
-      const handDrawn = drawsByHand(project.settings) && !scene.videoPath;
+      // Whiteboard is a separate renderer. Ignore a stale LTX clip left by an older project instead of silently
+      // switching this mode back to image-to-video.
+      const handDrawn = whiteboardScene;
       if (handDrawn) {
         const size = cardFrame ? { width: CARD.width, height: CARD.bandH } : { width, height };
         const stillPath = join(workdir, `scene-${scene.order}-still.png`);
@@ -486,7 +489,7 @@ export async function renderProject(
         : clip
           ? `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${clipFrames},format=yuv420p[v]`
           : `[0:v]scale=${width * 2}:${height * 2}:force_original_aspect_ratio=increase,crop=${width * 2}:${height * 2}${monochrome},${motionFilter}:s=${width}x${height}:fps=30${sharpen},format=yuv420p[v]`;
-      const videoInput = scene.videoPath ? ["-stream_loop", "-1", "-i", motionPath] : handDrawn ? ["-i", motionPath] : ["-loop", "1", "-framerate", "30", "-i", imagePath];
+      const videoInput = scene.videoPath && !handDrawn ? ["-stream_loop", "-1", "-i", motionPath] : handDrawn ? ["-i", motionPath] : ["-loop", "1", "-framerate", "30", "-i", imagePath];
       await exec(
         config.FFMPEG_PATH,
         [
