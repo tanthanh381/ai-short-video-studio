@@ -86,7 +86,9 @@ export class OllamaStoryboardAdapter implements StoryboardProvider {
         throw new NodeHttpError("Ollama Vision trả JSON không hợp lệ", 502);
       }
       if (typeof parsed.relevant !== "boolean" || !["good", "minor", "bad"].includes(parsed.anatomy ?? "") || !["none", "minor", "bad"].includes(parsed.textArtifacts ?? "") || (parsed.identity !== undefined && !["same", "different", "unknown"].includes(parsed.identity)) || !Array.isArray(parsed.props) || parsed.props.some((prop) => typeof prop !== "string") || typeof parsed.reason !== "string") throw new NodeHttpError("Ollama Vision trả thiếu trường đánh giá hình ảnh", 502);
-    return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], textArtifacts: parsed.textArtifacts as ImageQualityAudit["textArtifacts"], identity: (parsed.identity as ImageQualityAudit["identity"]) ?? "unknown", props: parsed.props.slice(0, 8), reason: parsed.reason.slice(0, 400) };
+    const wardrobeOrBody = /\b(?:robe|clothing|衣|hair|ribbon|sandals?|shoes?|feet|hands?|face|head|ears?|eyebrows?|eyes?)\b/iu;
+    const props = parsed.props.filter((prop) => !wardrobeOrBody.test(prop)).slice(0, 8);
+    return { relevant: parsed.relevant, anatomy: parsed.anatomy as ImageQualityAudit["anatomy"], textArtifacts: parsed.textArtifacts as ImageQualityAudit["textArtifacts"], identity: (parsed.identity as ImageQualityAudit["identity"]) ?? "unknown", props, reason: parsed.reason.slice(0, 400) };
   }
 
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {
