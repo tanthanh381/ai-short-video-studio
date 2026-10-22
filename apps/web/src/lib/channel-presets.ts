@@ -13,9 +13,10 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     hint: "Nhân vật chibi cổ trang trên nền giấy kraft, giọng nam trầm, phụ đề nhỏ dưới nhân vật",
     // Đức Trí: median 107 Hz at 3.7 words/s, the closest to the reference short (99 Hz, 3.6 w/s); "triet-ly" measured
     // 145 Hz and read 14% slower.
-    // Motion is on by default for this template: the chibi reference shorts live on gentle character
-    // movement, and the Air node (24GB) runs LTX. Other templates stay still+camera for speed.
-    apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), localModels: { ...s.localModels, video: "ltxv-2b-0.9.8-distilled" }, style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, targetDurationSec: 30, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: false, sceneSfx: false, outroText: "" }),
+    // Motion stays off (still frame + gentle paper-stage breathing): LTX image-to-video is not viable on the
+    // current hardware — MPS crashes for lack of RAM and CPU takes >15 min per clip and times out — so turning it
+    // on only made Chibi exports wait minutes per scene and then fall back to the same still anyway.
+    apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), localModels: { ...s.localModels, video: null }, style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, targetDurationSec: 30, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: false, sceneSfx: false, outroText: "" }),
   },
   {
     id: "ve-tay",
