@@ -779,6 +779,22 @@ async function drawScenePicture(provider: MediaProvider, scene: Scene, project: 
     log.warn({ jobId: job.id, sceneId: scene.id, audit: lastAudit }, "scene_picture_semantic_warning");
   return { bytes: lastImage, contentType: "image/png" };
   }
+  // Paper-stage (chibi) last resort: a literal illustration of an abstract line (money, time, "a sincere
+  // heart") keeps inducing text/garbage the gate rejects. An illustration need not depict the narration
+  // exactly, so render one clean, neutral chibi image and keep the video instead of failing the whole run.
+  // Quality preset stays fail-closed above.
+  if (paperStage && lastAudit) {
+    const safePrompt = buildProductionImagePrompt(
+      `${PAPER_MASCOT}, sitting calmly on the kraft-paper stage with a gentle, thoughtful expression, both hands resting naturally, no props, absolutely no text, no letters, no numbers, no coins, no signs, no logos`,
+      visualPresetPrompt(project.settings.visualPreset),
+    );
+    const safe = await provider.createImage(safePrompt, imageAspectFor(project.settings), { ...options, seed: (options.seed ?? 0) + 99_991 });
+    const safeAudit = await imageLooksBlank(safe, config.FFMPEG_PATH) ? null : await auditSceneImage(safe, scene, project, job, referenceImageBase64);
+    if (safeAudit && safeAudit.anatomy !== "bad" && safeAudit.textArtifacts !== "bad" && safeAudit.identity !== "different") {
+      log.warn({ jobId: job.id, sceneId: scene.id }, "scene_picture_safe_fallback");
+      return { bytes: safe, contentType: "image/png" };
+    }
+  }
   throw new Error(`Ảnh cảnh ${scene.order + 1} chưa đạt kiểm tra nội dung, identity, anatomy hoặc chữ rác sau ${maxAttempts} lần thử; hãy tạo lại cảnh này`);
 }
 
