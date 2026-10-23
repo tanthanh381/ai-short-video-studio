@@ -20,7 +20,7 @@ const schema = z.object({
   ),
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   ANTHROPIC_BASE_URL: z.string().url().default("https://api.anthropic.com"),
-  ANTHROPIC_TEXT_MODEL: z.string().default("claude-haiku-4-5-20251001"),
+  ANTHROPIC_TEXT_MODEL: z.string().default("claude-haiku-5-5"),
   /** Optional Pexels key. It stays on the worker and is never sent to the browser. */
   PEXELS_API_KEY: z.preprocess(
     (value) => typeof value === "string" && value.trim() === "" ? undefined : value,

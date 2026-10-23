@@ -29,10 +29,15 @@ while true; do
     lsof -tiTCP:$port -sTCP:LISTEN >/dev/null 2>&1 || break
     sleep 1
   done
-  if [[ "$device" == "mps" ]]; then
+  # SIGTERM (143) and SIGINT (130) are clean exits from a restart/update.
+  # Only fall back to CPU when MPS actually crashed with an unexpected error.
+  if [[ "$device" == "mps" && "$exit_code" != "143" && "$exit_code" != "130" && "$exit_code" != "0" ]]; then
     device=cpu
-    print "[ltx-supervisor] retrying with CPU fallback" >&2
+    print "[ltx-supervisor] retrying with CPU fallback (exit_code=$exit_code)" >&2
   else
-    sleep 30
+    if [[ "$exit_code" == "143" || "$exit_code" == "130" || "$exit_code" == "0" ]]; then
+      print "[ltx-supervisor] clean exit, restarting with device=$device" >&2
+    fi
+    sleep 2
   fi
 done
