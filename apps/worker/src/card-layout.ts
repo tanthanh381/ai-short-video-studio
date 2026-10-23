@@ -302,20 +302,20 @@ export function paperStageFilter(index: number, narration = ""): string {
   const text = narration.toLocaleLowerCase("vi-VN");
   const walking = /(?:bước|đi|rời|quay về)/u.test(text);
   const handling = /(?:trà|chén|sách|đọc|giấy|gấp|tưới|cây|nến|đèn|bàn tay)/u.test(text);
-  // Walking gets a restrained lateral drift; object-based actions get a closer, calmer rhythm.
-  // The motion is intentionally sub-pixel-ish at output scale: it adds life without warping anatomy.
+  // A calm "breathing", not a rocking cut-out. The earlier version tilted the whole character ±0.86° (rotate)
+  // and slid it up to ±22px, which read as the picture shaking rather than the character moving.
+  // Keeping only a soft vertical bob and a faint lateral drift with NO rotation so the drawing feels gently alive.
   const x = walking
-    ? `${index % 2 ? -22 : 22}*sin(2*PI*(t+${phase})/${cycle})`
+    ? `${index % 2 ? -8 : 8}*sin(2*PI*(t+${phase})/${cycle})`
     : handling
-      ? [`8*sin(2*PI*(t+${phase})/2.8)`, `10*sin(2*PI*(t+${phase})/3.2)`, `7*sin(2*PI*(t+${phase})/2.5)`, `9*sin(2*PI*(t+${phase})/3.6)`][index % 4]
-      : [`12*sin(2*PI*(t+${phase})/2.8)`, `16*sin(2*PI*(t+${phase})/3.2)`, `10*sin(2*PI*(t+${phase})/2.5)`, `14*sin(2*PI*(t+${phase})/3.6)`][index % 4];
+      ? [`3*sin(2*PI*(t+${phase})/2.8)`, `3*sin(2*PI*(t+${phase})/3.2)`, `3*sin(2*PI*(t+${phase})/2.5)`, `3*sin(2*PI*(t+${phase})/3.6)`][index % 4]
+      : [`4*sin(2*PI*(t+${phase})/2.8)`, `5*sin(2*PI*(t+${phase})/3.2)`, `4*sin(2*PI*(t+${phase})/2.5)`, `5*sin(2*PI*(t+${phase})/3.6)`][index % 4];
   const y = walking
-    ? `5*cos(2*PI*(t+${phase})/${cycle})`
+    ? `4*cos(2*PI*(t+${phase})/${cycle})`
     : handling
-      ? [`3*cos(2*PI*(t+${phase})/2.8)`, `4*sin(2*PI*(t+${phase})/3.2)`, `3*cos(2*PI*(t+${phase})/2.5)`, `3*sin(2*PI*(t+${phase})/3.6)`][index % 4]
-      : [`4*cos(2*PI*(t+${phase})/2.8)`, `6*sin(2*PI*(t+${phase})/3.2)`, `5*cos(2*PI*(t+${phase})/2.5)`, `4*sin(2*PI*(t+${phase})/3.6)`][index % 4];
-  return `[0:v]format=rgba,scale=w='trunc(${PAPER.stage}*(1+0.024*sin(2*PI*(t+${phase})/${cycle}))/2)*2':h=-2:eval=frame,` +
-    `rotate=a='0.015*sin(2*PI*(t+${phase})/${cycle})':c=none:ow=iw:oh=ih[character];` +
+      ? [`2*cos(2*PI*(t+${phase})/2.8)`, `3*sin(2*PI*(t+${phase})/3.2)`, `2*cos(2*PI*(t+${phase})/2.5)`, `2*sin(2*PI*(t+${phase})/3.6)`][index % 4]
+      : [`3*cos(2*PI*(t+${phase})/2.8)`, `4*sin(2*PI*(t+${phase})/3.2)`, `3*cos(2*PI*(t+${phase})/2.5)`, `3*sin(2*PI*(t+${phase})/3.6)`][index % 4];
+  return `[0:v]format=rgba,scale=w='trunc(${PAPER.stage}*(1+0.014*sin(2*PI*(t+${phase})/${cycle}))/2)*2':h=-2:eval=frame[character];` +
     `color=c=0x${PAPER_HEX}:s=${PAPER.width}x${PAPER.height}:r=30,format=yuv444p[flat];[2:v]format=yuv444p[grain];` +
     `[flat][character]overlay=x='(W-w)/2+${x}':y='${PAPER.stageBottom}-h+${y}':eval=frame:format=yuv444[comp];` +
     `[comp][grain]blend=c0_expr='A+(B-${PAPER_GRAIN.neutral})*${PAPER_GRAIN.strength}':c1_mode=normal:c1_opacity=1:c2_mode=normal:c2_opacity=1,` +
