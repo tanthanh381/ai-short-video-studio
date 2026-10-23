@@ -48,6 +48,8 @@ export FACE_DETAIL=${FACE_DETAIL:-true}
 # alternating reference frames preserve the mascot while leaving room for audio/LTX.
 export COMFYUI_QUALITY_STEPS=${COMFYUI_QUALITY_STEPS:-16}
 export LTX_VIDEO_IMAGE_COND_NOISE_SCALE=${LTX_VIDEO_IMAGE_COND_NOISE_SCALE:-0.22}
+# Attempt native 576×1024 first (higher quality); falls back to compact 256×448 if memory is tight.
+export LTX_VIDEO_TRY_NATIVE_FIRST=${LTX_VIDEO_TRY_NATIVE_FIRST:-1}
 
 # Chỉ mở ra mạng Tailscale (không phải 0.0.0.0). Các dịch vụ còn lại chỉ nghe trên chính máy này.
 export LOCAL_MEDIA_HOST="$tailscale_ip"
