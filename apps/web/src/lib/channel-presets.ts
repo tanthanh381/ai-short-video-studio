@@ -13,10 +13,11 @@ export const CHANNEL_PRESETS: Array<{ id: string; label: string; hint: string; a
     hint: "Nhân vật chibi cổ trang trên nền giấy kraft, giọng nam trầm, phụ đề nhỏ dưới nhân vật",
     // Đức Trí: median 107 Hz at 3.7 words/s, the closest to the reference short (99 Hz, 3.6 w/s); "triet-ly" measured
     // 145 Hz and read 14% slower.
-    // Motion stays off (still frame + gentle paper-stage breathing): LTX image-to-video is not viable on the
-    // current hardware — MPS crashes for lack of RAM and CPU takes >15 min per clip and times out — so turning it
-    // on only made Chibi exports wait minutes per scene and then fall back to the same still anyway.
-    apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), localModels: { ...s.localModels, video: null }, style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, targetDurationSec: 30, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: false, sceneSfx: false, outroText: "" }),
+    // Hybrid motion: the worker animates only the opening scene (real character motion via the Air's MLX
+    // Wan2.2 i2v server — ~7 min/clip, so one scene not every scene) and lets the rest use the calm paper-stage
+    // breathing. If the Air's motion server is not running, media_server falls back to the still automatically.
+    // (Plain LTX via PyTorch/MPS was dropped: it crashed for RAM or timed out; MLX is what made this viable.)
+    apply: (s) => ({ ...withLayoutTemplate(s, "paper-stage"), localModels: { ...s.localModels, video: "ltxv-2b-0.9.8-distilled" }, style: "truyen-cam-hung", voice: "doc-truyen", voiceSpeed: 1, targetDurationSec: 30, autoMusic: true, captionHighlight: false, hookTitle: false, progressBar: false, sceneSfx: false, outroText: "" }),
   },
   {
     id: "ve-tay",
