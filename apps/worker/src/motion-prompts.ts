@@ -51,11 +51,17 @@ export function sceneMotionPrompt(preset: VisualPreset, sceneIndex: number, narr
       ? MOTION_CUES[sceneIndex % MOTION_CUES.length]
       : STYLE_MOTION[preset] ?? MOTION_CUES[sceneIndex % MOTION_CUES.length];
   const storyCue = narrativeMotion(narration) ?? "make one visible but restrained action over the shot, then settle naturally";
+  // The chibi reference shorts hold a locked frame and let the little character move. A camera push-in on top of
+  // LTX's gentle idle motion reads as the whole picture shaking ("lắc ảnh") and hides the character movement, so
+  // keep the camera still for the hand-drawn chibi presets and let the body motion be the only thing that moves.
+  const cameraLine = preset.startsWith("chibi")
+    ? "Keep the camera locked and perfectly still: no push-in, no zoom, no pan, no drift and no shake, so the only motion the viewer sees is the character's own body movement, not the frame moving."
+    : "Add a visible but slow 9:16 camera push-in or gentle side drift with foreground/background parallax.";
   return [
     "Create a short image-to-video shot from this exact reference image.",
     storyCue + ".",
     cue + ".",
-    "Add a visible but slow 9:16 camera push-in or gentle side drift with foreground/background parallax.",
+    cameraLine,
     "Preserve the same face, costume, pose, proportions, text-free artwork and background layout.",
     "No morphing, no new limbs, no extra fingers, no lip-sync, no scene change, no flicker, no fast movement.",
   ].join(" ");

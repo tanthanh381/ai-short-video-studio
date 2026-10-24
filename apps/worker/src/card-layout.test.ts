@@ -146,12 +146,13 @@ describe("paper stage (Đạo lý cổ phong)", () => {
     // the character stands on the same line in every scene and the captions start below it
     expect(PAPER.stageBottom).toBeLessThan(PAPER.captionTop);
     expect(paperStageFilter(0)).toContain(`y='${PAPER.stageBottom}-h+`);
-    // breathing and swaying differ in phase from scene to scene
+    // gentle breathing + bob differ in phase from scene to scene; no rotation (the old "lắc")
     expect(paperStageFilter(1)).not.toBe(paperStageFilter(0));
-    expect(paperStageFilter(0)).toContain("0.024*sin");
-    expect(paperStageFilter(0)).toContain("12*sin");
-    expect(paperStageFilter(1, "Cậu bước ra khỏi hiên nhà.")).toContain("22*sin");
-    expect(paperStageFilter(2, "Cậu đặt chén trà xuống.")).toContain("7*sin");
+    expect(paperStageFilter(0)).toContain("0.014*sin");
+    expect(paperStageFilter(0)).toContain("4*sin");
+    expect(paperStageFilter(0)).not.toContain("rotate=");
+    expect(paperStageFilter(1, "Cậu bước ra khỏi hiên nhà.")).toContain("8*sin");
+    expect(paperStageFilter(2, "Cậu đặt chén trà xuống.")).toContain("3*sin");
     expect(paperFeatherFilter()).toContain(`scale=${PAPER.stage}:${PAPER.stage}`);
     // the sheet is flat: a vignette (smaller angle = stronger) once darkened its corners by 11%
     const { paperGrainArgs, PAPER_HEX } = await import("./card-layout");

@@ -1024,11 +1024,16 @@ async function generateMedia(job: JobRow, project: Project) {
       // LTX fails, render.ts keeps the safe paper composition and falls back to camera motion.
       const paperStage = usesPaperStage(project.settings);
       const motionAvailable = media.videoAvailable ? media.videoAvailable() : true;
-      if (!videoPath && motionModel && media.createVideo && motionAvailable) {
+      // Hybrid motion: real image→video (the Air's MLX Wan2.2 server) is ~minutes per clip — far too slow to run
+      // on every scene of a one-minute video. For the paper-stage chibi template, animate only the opening scene
+      // (the hook) and let the rest keep the calm still "breathing"; any other preset that explicitly turns motion
+      // on keeps it on every scene (the creator's own choice).
+      const wantsMotion = Boolean(motionModel) && (!paperStage || scene.order === 0);
+      if (!videoPath && wantsMotion && media.createVideo && motionAvailable) {
         await progress(
           job,
           mediaProgress(finished) + 2,
-          `Đang tạo chuyển động LTX cảnh ${scene.order + 1}`,
+          `Đang tạo chuyển động nhân vật cảnh ${scene.order + 1}`,
         );
         try {
           const motion = await media.createVideo(
