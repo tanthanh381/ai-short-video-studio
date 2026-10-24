@@ -25,6 +25,14 @@ describe("scene motion prompts", () => {
     expect(sceneMotionPrompt("thuy-mac-co-phong", 0)).toContain("ink-wash mist");
   });
 
+  it("locks the camera for chibi presets so the character moves, not the frame", () => {
+    const chibi = sceneMotionPrompt("chibi-co-phong", 0, "Cậu bé khẽ nâng chén trà.");
+    expect(chibi).toContain("camera locked");
+    expect(chibi).not.toContain("camera push-in"); // chibi's line only mentions push-in to forbid it
+    // non-chibi presets keep the cinematic camera move
+    expect(sceneMotionPrompt("cinematic-color", 0)).toContain("camera push-in");
+  });
+
   it("grounds motion in the narrated action instead of inventing a generic gesture", () => {
     expect(sceneMotionPrompt("cinematic-color", 0, "Cô mở cánh cổng cũ.")).toContain("mentioned door, gate or key");
     expect(sceneMotionPrompt("cinematic-color", 1, "Anh nâng chiếc điện thoại lên.")).toContain("mentioned object");
