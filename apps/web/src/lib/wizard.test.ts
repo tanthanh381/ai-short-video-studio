@@ -71,8 +71,12 @@ describe("modelSummary", () => {
 });
 
 describe("autoModelPatch", () => {
-  it("prefers the local pipeline when ready", () => {
+  it("uses free local text when no cloud key is saved", () => {
     expect(autoModelPatch(statuses())).toMatchObject({ textProvider: "ollama", mediaProvider: "local" });
+  });
+  it("prefers a saved Claude key for the script, keeping media local", () => {
+    expect(autoModelPatch(statuses({ anthropic: "healthy" })))
+      .toMatchObject({ textProvider: "anthropic", mediaProvider: "local" });
   });
   it("falls back to a ready paid provider when local is down", () => {
     expect(autoModelPatch({ ollama: "offline", localMedia: "offline", openai: "healthy", anthropic: "healthy" }))
