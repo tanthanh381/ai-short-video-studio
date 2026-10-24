@@ -188,7 +188,10 @@ export function modelSummary(settings: ProjectSettings, catalog: LocalModelCatal
 export function autoModelPatch(statuses: Statuses | null): Partial<ProjectSettings> {
   const s = statuses ?? {};
   const ready = (id: ServiceId) => s[id] === "healthy";
-  const textProvider: ProjectSettings["textProvider"] = ready("ollama") ? "ollama" : ready("anthropic") ? "anthropic" : ready("openai") ? "openai" : "ollama";
+  // Script first: prefer a saved cloud key (Claude writes trend-aware, stronger copy than the small local model);
+  // fall back to free local Ollama only when no cloud key is saved. Media still goes local-first below, so turning
+  // on a Claude key upgrades the writing without making images/voice paid.
+  const textProvider: ProjectSettings["textProvider"] = ready("anthropic") ? "anthropic" : ready("openai") ? "openai" : ready("ollama") ? "ollama" : "ollama";
   const mediaProvider: ProjectSettings["mediaProvider"] = ready("localMedia") ? "local" : ready("openai") ? "openai" : "local";
   // Clear per-model overrides so the bridge's own defaults (best available) are used.
   return { textProvider, mediaProvider, localModels: { storyboard: null, image: null, video: null, tts: null, transcribe: null } };

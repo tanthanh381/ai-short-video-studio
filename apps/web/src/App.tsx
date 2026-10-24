@@ -2193,7 +2193,7 @@ function BatchPage() {
           const project = await api.createVideo({
             sourceText: idea,
             inputMode: "idea",
-            settings: { ...template.apply({ ...DEFAULT_PROJECT_SETTINGS, textProvider: "ollama", mediaProvider: "local" }), generationPreset: preset },
+            settings: { ...template.apply({ ...DEFAULT_PROJECT_SETTINGS, textProvider: "anthropic", mediaProvider: "local" }), generationPreset: preset },
           });
           setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, projectId: project.id } : item));
         } catch (error) {
