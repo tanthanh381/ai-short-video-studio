@@ -15,7 +15,7 @@
     "@studio/shared": "workspace:*",
     "@supabase/supabase-js": "2.86.0",
     "pino": "10.1.0",
-    "zod": "4.1.13"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "tsx": "4.20.6"
