@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { directorStoryboardResult, estimateSceneMs, sceneWantsMotion } from "./director";
+import { directorStoryboardResult, estimateSceneMs, platformDefaults, sceneWantsMotion } from "./director";
 import type { ProductionPlan } from "@studio/shared";
 
 const plan: ProductionPlan = {
@@ -54,5 +54,35 @@ describe("sceneWantsMotion", () => {
   });
   it("never animates without a motion model", () => {
     expect(sceneWantsMotion({ hasMotionModel: false, motionScenes: [0], paperStage: false, sceneOrder: 0 })).toBe(false);
+  });
+});
+
+describe("platformDefaults", () => {
+  it("returns TikTok defaults with fast duration and progress bar", () => {
+    const d = platformDefaults("tiktok");
+    expect(d.targetDurationSec).toBe(30);
+    expect(d.captionHighlight).toBe(true);
+    expect(d.hookTitle).toBe(true);
+    expect(d.progressBar).toBe(true);
+  });
+  it("returns Reels defaults without progress bar", () => {
+    const d = platformDefaults("reels");
+    expect(d.targetDurationSec).toBe(45);
+    expect(d.progressBar).toBe(false);
+  });
+  it("returns Shorts defaults", () => {
+    const d = platformDefaults("shorts");
+    expect(d.targetDurationSec).toBe(45);
+    expect(d.hookTitle).toBe(true);
+  });
+  it("returns Facebook defaults without hook title", () => {
+    const d = platformDefaults("facebook");
+    expect(d.targetDurationSec).toBe(60);
+    expect(d.hookTitle).toBe(false);
+    expect(d.progressBar).toBe(true);
+  });
+  it("returns empty for null platform", () => {
+    expect(platformDefaults(null)).toEqual({});
+    expect(platformDefaults(undefined)).toEqual({});
   });
 });

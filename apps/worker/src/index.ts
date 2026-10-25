@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
-import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type ProductionPlan, type Scene, visualPresetPrompt, voiceDirectionForScript } from "@studio/shared";
+import { DEFAULT_PROJECT_SETTINGS, drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type ProductionPlan, type Scene, visualPresetPrompt, voiceDirectionForScript } from "@studio/shared";
 import { sceneMotionPrompt } from "./motion-prompts";
-import { directorStoryboardResult, sceneWantsMotion } from "./director";
+import { directorStoryboardResult, platformDefaults, sceneWantsMotion } from "./director";
 import { getConfig } from "./config";
 import { writerModelForSettings } from "./model-policy";
 import { imageLooksBlank } from "./image-check";
@@ -512,6 +512,12 @@ async function maybeDirectorPlan(job: JobRow, project: Project, idea: string, vi
     });
     if (!plan) { log.warn({ jobId: job.id, projectId: project.id }, "director_plan_unparsed_fallback"); return null; }
     project.settings.productionPlan = plan; // in-memory: the per-scene motion gate reads plan.motionScenes later this run
+    const defaults = platformDefaults(plan.platform);
+    for (const [key, value] of Object.entries(defaults) as Array<[keyof typeof defaults, unknown]>) {
+      if ((project.settings as Record<string, unknown>)[key] === (DEFAULT_PROJECT_SETTINGS as Record<string, unknown>)[key]) {
+        (project.settings as Record<string, unknown>)[key] = value;
+      }
+    }
     const { error } = await db.from("projects").update({ settings: { ...project.settings } }).eq("id", project.id).eq("user_id", project.userId);
     if (error) log.warn({ jobId: job.id, projectId: project.id }, "director_plan_save_failed");
     log.info({ jobId: job.id, projectId: project.id, scenes: plan.scenes.length, motionScenes: plan.motionScenes }, "director_plan_ready");
