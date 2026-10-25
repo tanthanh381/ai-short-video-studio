@@ -28,6 +28,10 @@ const schema = z.object({
   AI_QA_PROVIDER: z.enum(["auto", "claude", "local"]).default("auto"),
   /** Hard cap on Claude vision QA calls per video so a bad run cannot run up the bill; over it falls back to local. */
   AI_QA_MAX_CLAUDE_CALLS: z.coerce.number().int().min(0).max(200).default(40),
+  /** Global kill-switch for the Director Agent (Phase 2b). false => projects with orchestrator="director" fall back to
+   *  the normal pipeline (budget / cost guard). Director planning also needs the owner's Claude key; without it, it
+   *  falls back too. */
+  AI_DIRECTOR_ENABLED: z.preprocess((v) => v === true || v === "true" || v === "1" || v === undefined || v === "", z.boolean()).default(true),
   /** Optional Pexels key. It stays on the worker and is never sent to the browser. */
   PEXELS_API_KEY: z.preprocess(
     (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
