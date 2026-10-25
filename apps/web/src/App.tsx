@@ -1938,7 +1938,7 @@ function WizardPage() {
             <p className="wizard-lead">Chọn máy hoặc dịch vụ cho từng khâu. Trạng thái bên phải là kết quả kiểm tra thật.</p>
             <div className="wizard-models-head">
               <span className="model-summary">{modelSummary(settings, localModels)}</span>
-              <Button type="button" variant="secondary" onClick={() => editSettings({ ...settings, ...autoModelPatch(statuses) })}><WandSparkles size={16} /> Auto</Button>
+              <Button type="button" variant="secondary" onClick={() => { const patch = autoModelPatch(statuses); editSettings({ ...settings, ...patch, localModels: { ...settings.localModels, ...patch.localModels } }); }}><WandSparkles size={16} /> Auto</Button>
             </div>
             <ul className="model-rows">
               {groups.map((group) => (

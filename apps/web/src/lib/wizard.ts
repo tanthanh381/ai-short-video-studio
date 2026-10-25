@@ -193,8 +193,11 @@ export function autoModelPatch(statuses: Statuses | null): Partial<ProjectSettin
   // on a Claude key upgrades the writing without making images/voice paid.
   const textProvider: ProjectSettings["textProvider"] = ready("anthropic") ? "anthropic" : ready("openai") ? "openai" : ready("ollama") ? "ollama" : "ollama";
   const mediaProvider: ProjectSettings["mediaProvider"] = ready("localMedia") ? "local" : ready("openai") ? "openai" : "local";
-  // Clear per-model overrides so the bridge's own defaults (best available) are used.
-  return { textProvider, mediaProvider, localModels: { storyboard: null, image: null, video: null, tts: null, transcribe: null } };
+  // Clear per-model overrides so the bridge's own defaults (best available) are used — but DO NOT touch `video`:
+  // that field is the motion on/off CHOICE (a model id = motion on, null = still), not a "best model" pick, and a
+  // template (e.g. Chibi cổ trang) turns it on deliberately. The caller merges this onto the existing localModels,
+  // so leaving `video` out preserves the template's motion setting instead of silently disabling it.
+  return { textProvider, mediaProvider, localModels: { storyboard: null, image: null, tts: null, transcribe: null } };
 }
 
 /** Whether every model the project will use is at least configured (so "Tạo video" will not fail at a dead service). */
