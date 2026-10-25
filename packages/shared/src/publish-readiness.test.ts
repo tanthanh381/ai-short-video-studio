@@ -12,6 +12,11 @@ describe("publish readiness", () => {
     expect(result.ready).toBe(false);
     expect(result.blockers).toContain("Content check dưới 80/100");
   });
+  it("blocks a technically complete video whose opening hook is below 8/10", () => {
+    const result = evaluatePublishReadiness({ completed: true, hasResult: true, width: 1080, height: 1920, aspectRatio: "9:16", contentScore: 86, hookScore: 79, subtitlesEnabled: true, scenes: [scene] });
+    expect(result.ready).toBe(false);
+    expect(result.blockers).toContain("Hook 3 giây đầu dưới 8/10");
+  });
   it("reports missing scene assets and wrong aspect ratio without blocking download itself", () => {
     const result = evaluatePublishReadiness({ completed: true, hasResult: true, width: 1920, height: 1080, aspectRatio: "9:16", contentScore: 90, subtitlesEnabled: true, scenes: [{ imagePath: null, audioPath: "voice.wav", subtitles: [] }] });
     expect(result.blockers).toEqual(expect.arrayContaining(["Thiếu ảnh hoặc giọng đọc", "Thiếu phụ đề ở một hoặc nhiều scene", "Tỷ lệ khung hình không khớp"]));
