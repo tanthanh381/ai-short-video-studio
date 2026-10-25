@@ -6,8 +6,9 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
-import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt, voiceDirectionForScript } from "@studio/shared";
+import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type ProductionPlan, type Scene, visualPresetPrompt, voiceDirectionForScript } from "@studio/shared";
 import { sceneMotionPrompt } from "./motion-prompts";
+import { directorStoryboardResult, sceneWantsMotion } from "./director";
 import { getConfig } from "./config";
 import { writerModelForSettings } from "./model-policy";
 import { imageLooksBlank } from "./image-check";
@@ -490,6 +491,37 @@ async function storyboard(job: JobRow, project: Project) {
   return writeStoryboard(job, project, null);
 }
 
+/**
+ * Director-Agent Phase 2b: run the planner when the project opts in (orchestrator="director"), the global kill-switch
+ * is on, and the owner has a Claude key. Persists the plan to settings.productionPlan (jsonb — no migration) and
+ * mutates the in-memory project so the later motion gate can read plan.motionScenes. Returns null to fall back to the
+ * normal storyboard writer (no key, disabled, unparsed, or any error) — the fixed pipeline stays the safety net.
+ */
+async function maybeDirectorPlan(job: JobRow, project: Project, idea: string, visualStyle: string): Promise<ProductionPlan | null> {
+  if (project.settings.orchestrator !== "director") return null;
+  if (!config.AI_DIRECTOR_ENABLED) { log.info({ jobId: job.id, projectId: project.id }, "director_disabled_fallback"); return null; }
+  const adapter = await anthropicFor(project.userId);
+  if (!adapter) { log.warn({ jobId: job.id, projectId: project.id }, "director_no_claude_key_fallback"); return null; }
+  try {
+    const plan = await adapter.planProduction({
+      idea,
+      platform: project.settings.platform ?? null,
+      goal: project.settings.goal ?? "",
+      durationSec: project.settings.targetDurationSec,
+      visualStyle,
+    });
+    if (!plan) { log.warn({ jobId: job.id, projectId: project.id }, "director_plan_unparsed_fallback"); return null; }
+    project.settings.productionPlan = plan; // in-memory: the per-scene motion gate reads plan.motionScenes later this run
+    const { error } = await db.from("projects").update({ settings: { ...project.settings } }).eq("id", project.id).eq("user_id", project.userId);
+    if (error) log.warn({ jobId: job.id, projectId: project.id }, "director_plan_save_failed");
+    log.info({ jobId: job.id, projectId: project.id, scenes: plan.scenes.length, motionScenes: plan.motionScenes }, "director_plan_ready");
+    return plan;
+  } catch (error) {
+    log.warn({ jobId: job.id, projectId: project.id, err: error instanceof Error ? error.message : String(error) }, "director_plan_failed_fallback");
+    return null;
+  }
+}
+
 async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStoryboardAdapter | null) {
   const providerName = project.settings.textProvider;
   const provider: StoryboardProvider | null =
@@ -547,7 +579,14 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
   const notes = { realigned: (event: { misaligned: number[]; repaired: number[] }) => log.warn({ jobId: job.id, projectId: project.id, ...event }, "storyboard_prompts_realigned") };
   let cast = "";
   let result;
-  if (cardMode) {
+  // Director-Agent Phase 2b: when the project opts into director mode, Claude plans the whole short (platform-aware,
+  // picking which scenes earn motion) and that plan becomes the storyboard. Any miss falls back to the normal writer.
+  const directorPlan = await maybeDirectorPlan(job, project, sourceText, storyboardInput.visualStyle);
+  if (directorPlan) {
+    result = directorStoryboardResult(directorPlan);
+    const scriptCast = castForScript(sourceText, describedPeople);
+    cast = scriptCast || await describeCast();
+  } else if (cardMode) {
     // The prompt writer must know the family up front so every scene shows the same two characters.
     cast = castForScript(sourceText, describedPeople) || await describeCast();
     result = await createFaithfulStoryboard(provider, { ...storyboardInput, cast }, notes);
@@ -837,6 +876,9 @@ async function generateMedia(job: JobRow, project: Project) {
   // Motion (LTX image→video) is opt-in: it runs only when the creator explicitly turned it on for this
   // project (settings.localModels.video). LTX diffusion is slow — minutes per scene — so a still image with
   // a camera move stays the fast default. Do NOT auto-enable it just because a video lane is healthy.
+  // Local image→video (MLX/LTX) stays OPT-IN only: it runs when the creator picks a motion model
+  // (settings.localModels.video). Free single-image I2V on this hardware morphs the art, so it is NOT on by default
+  // even in director mode — the plan still decides WHICH scenes animate (motionScenes), but only if a model is set.
   const motionModel = drawsByHand(project.settings) ? null : project.settings.localModels.video;
   const targetId =
     job.job_type === "regenerate_scene"
@@ -1058,7 +1100,13 @@ async function generateMedia(job: JobRow, project: Project) {
       // on every scene of a one-minute video. For the paper-stage chibi template, animate only the opening scene
       // (the hook) and let the rest keep the calm still "breathing"; any other preset that explicitly turns motion
       // on keeps it on every scene (the creator's own choice).
-      const wantsMotion = Boolean(motionModel) && (!paperStage || scene.order === 0);
+      // Director mode: animate exactly the scenes the plan chose. Pipeline mode keeps the hybrid rule (see sceneWantsMotion).
+      const wantsMotion = sceneWantsMotion({
+        hasMotionModel: Boolean(motionModel),
+        motionScenes: project.settings.orchestrator === "director" ? project.settings.productionPlan?.motionScenes ?? null : null,
+        paperStage,
+        sceneOrder: scene.order,
+      });
       if (!videoPath && wantsMotion && media.createVideo && motionAvailable) {
         await progress(
           job,
