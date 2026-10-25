@@ -876,12 +876,10 @@ async function generateMedia(job: JobRow, project: Project) {
   // Motion (LTX image→video) is opt-in: it runs only when the creator explicitly turned it on for this
   // project (settings.localModels.video). LTX diffusion is slow — minutes per scene — so a still image with
   // a camera move stays the fast default. Do NOT auto-enable it just because a video lane is healthy.
-  // Director mode makes motion available (MLX on the Air) even without an explicit model pick, so the plan's
-  // motionScenes can drive it; which scenes actually animate is decided at the per-scene gate below.
-  const directorMotion = project.settings.orchestrator === "director" && !!project.settings.productionPlan;
-  const motionModel = drawsByHand(project.settings)
-    ? null
-    : (project.settings.localModels.video ?? (directorMotion ? "ltxv-2b-0.9.8-distilled" : null));
+  // Local image→video (MLX/LTX) stays OPT-IN only: it runs when the creator picks a motion model
+  // (settings.localModels.video). Free single-image I2V on this hardware morphs the art, so it is NOT on by default
+  // even in director mode — the plan still decides WHICH scenes animate (motionScenes), but only if a model is set.
+  const motionModel = drawsByHand(project.settings) ? null : project.settings.localModels.video;
   const targetId =
     job.job_type === "regenerate_scene"
       ? String(job.payload.sceneId ?? "")
