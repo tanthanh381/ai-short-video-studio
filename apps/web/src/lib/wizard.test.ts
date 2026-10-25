@@ -85,6 +85,10 @@ describe("autoModelPatch", () => {
   it("clears per-model overrides so bridge defaults win", () => {
     expect(autoModelPatch(statuses()).localModels).toEqual({ storyboard: null, image: null, video: null, tts: null, transcribe: null });
   });
+  it("keeps the current motion choice (video) so Auto never disables template motion", () => {
+    const patched = autoModelPatch(statuses(), { localModels: { storyboard: "x", image: "y", video: "ltxv-2b-0.9.8-distilled", tts: "z", transcribe: "w" } });
+    expect(patched.localModels).toMatchObject({ storyboard: null, image: null, video: "ltxv-2b-0.9.8-distilled", tts: null, transcribe: null });
+  });
 });
 
 describe("modelsReady", () => {
