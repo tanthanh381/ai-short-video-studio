@@ -185,7 +185,7 @@ export function modelSummary(settings: ProjectSettings, catalog: LocalModelCatal
  * "Auto": prefer the local pipeline (free, on-device) when its services are ready; otherwise fall back to a ready paid
  * provider so the project can still run. Returns only the fields it changes.
  */
-export function autoModelPatch(statuses: Statuses | null): Partial<ProjectSettings> {
+export function autoModelPatch(statuses: Statuses | null, current?: { localModels?: Partial<ProjectSettings["localModels"]> }): Partial<ProjectSettings> {
   const s = statuses ?? {};
   const ready = (id: ServiceId) => s[id] === "healthy";
   // Script first: prefer a saved cloud key (Claude writes trend-aware, stronger copy than the small local model);
@@ -193,11 +193,10 @@ export function autoModelPatch(statuses: Statuses | null): Partial<ProjectSettin
   // on a Claude key upgrades the writing without making images/voice paid.
   const textProvider: ProjectSettings["textProvider"] = ready("anthropic") ? "anthropic" : ready("openai") ? "openai" : ready("ollama") ? "ollama" : "ollama";
   const mediaProvider: ProjectSettings["mediaProvider"] = ready("localMedia") ? "local" : ready("openai") ? "openai" : "local";
-  // Clear per-model overrides so the bridge's own defaults (best available) are used — but DO NOT touch `video`:
-  // that field is the motion on/off CHOICE (a model id = motion on, null = still), not a "best model" pick, and a
-  // template (e.g. Chibi cổ trang) turns it on deliberately. The caller merges this onto the existing localModels,
-  // so leaving `video` out preserves the template's motion setting instead of silently disabling it.
-  return { textProvider, mediaProvider, localModels: { storyboard: null, image: null, tts: null, transcribe: null } };
+  // Reset per-model overrides to the bridge's own defaults (best available) — but KEEP the motion choice: `video`
+  // is on/off (a model id = motion on, null = still), not a "best model" pick, and a template (e.g. Chibi cổ trang)
+  // turns it on deliberately. Carrying the current `video` through means "Auto" no longer silently disables motion.
+  return { textProvider, mediaProvider, localModels: { storyboard: null, image: null, video: current?.localModels?.video ?? null, tts: null, transcribe: null } };
 }
 
 /** Whether every model the project will use is at least configured (so "Tạo video" will not fail at a dead service). */

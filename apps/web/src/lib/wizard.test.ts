@@ -82,10 +82,12 @@ describe("autoModelPatch", () => {
     expect(autoModelPatch({ ollama: "offline", localMedia: "offline", openai: "healthy", anthropic: "healthy" }))
       .toMatchObject({ textProvider: "anthropic", mediaProvider: "openai" });
   });
-  it("clears per-model overrides so bridge defaults win, but never touches video (motion choice)", () => {
-    const localModels = autoModelPatch(statuses()).localModels;
-    expect(localModels).toEqual({ storyboard: null, image: null, tts: null, transcribe: null });
-    expect(localModels).not.toHaveProperty("video"); // preserved on merge → template motion stays on
+  it("clears per-model overrides so bridge defaults win", () => {
+    expect(autoModelPatch(statuses()).localModels).toEqual({ storyboard: null, image: null, video: null, tts: null, transcribe: null });
+  });
+  it("keeps the current motion choice (video) so Auto never disables template motion", () => {
+    const patched = autoModelPatch(statuses(), { localModels: { storyboard: "x", image: "y", video: "ltxv-2b-0.9.8-distilled", tts: "z", transcribe: "w" } });
+    expect(patched.localModels).toMatchObject({ storyboard: null, image: null, video: "ltxv-2b-0.9.8-distilled", tts: null, transcribe: null });
   });
 });
 
