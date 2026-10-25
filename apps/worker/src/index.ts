@@ -1516,20 +1516,18 @@ async function poll(): Promise<boolean> {
 }
 
 let stopping = false;
+let realtimeNudge: (() => void) | null = null;
 const settingsWatch = setInterval(() => void followBalancerSettings(), 10_000);
 settingsWatch.unref();
-process.on("SIGTERM", () => {
+const shutdown = () => {
   stopping = true;
   clearInterval(settingsWatch);
+  realtimeNudge?.();
   pool.stop();
   healthServer.close();
-});
-process.on("SIGINT", () => {
-  stopping = true;
-  clearInterval(settingsWatch);
-  pool.stop();
-  healthServer.close();
-});
+};
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 await followBalancerSettings(); // machines the owner switched off must not get the first job either
 await pool.start(); // the first look at every machine, so the log and the first job already know who is available
 log.info(
@@ -1547,6 +1545,14 @@ log.info(
   "worker_started",
 );
 let lastJobAt = 0;
+const jobChannel = db.channel("worker-jobs").on(
+  "postgres_changes" as never,
+  { event: "INSERT", schema: "public", table: "jobs" } as never,
+  () => { realtimeNudge?.(); },
+).subscribe((status: string) => {
+  if (status === "SUBSCRIBED") log.info("realtime_jobs_subscribed");
+  else if (status === "CHANNEL_ERROR") log.warn("realtime_jobs_error");
+});
 while (!stopping) {
   try {
     const had = await poll();
@@ -1554,7 +1560,12 @@ while (!stopping) {
   }
   catch (error) { log.error({ err: error instanceof Error ? error.message : "unknown" }, "worker_poll_failed"); }
   const idleMs = Date.now() - lastJobAt;
-  const delay = idleMs > 10_000 ? 2_000 : config.WORKER_POLL_MS;
-  await new Promise((resolve) => setTimeout(resolve, delay));
+  const maxDelay = idleMs > 10_000 ? 5_000 : config.WORKER_POLL_MS;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, maxDelay);
+    realtimeNudge = () => { clearTimeout(timer); resolve(); };
+  });
+  realtimeNudge = null;
 }
+void jobChannel.unsubscribe();
 log.info("worker_stopped");
