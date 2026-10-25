@@ -3223,13 +3223,15 @@ function StudioPage() {
     : project.sourceText;
   // Plain computation, not useMemo: it sits after the early returns above, so a hook here would be called
   // conditionally and crash the page ("rendered more hooks than during the previous render").
+  const contentQuality = evaluateContentQuality(renderedNarration);
   const publishReadiness = evaluatePublishReadiness({
     completed: project.status === "completed" && !processing && saved,
     hasResult: Boolean(result),
     width: result?.width ?? null,
     height: result?.height ?? null,
     aspectRatio: project.settings.aspectRatio,
-    contentScore: evaluateContentQuality(renderedNarration).score,
+    contentScore: contentQuality.score,
+    hookScore: contentQuality.dimensions.hook.score,
     subtitlesEnabled: project.settings.subtitle.enabled,
     scenes: project.scenes,
   });
