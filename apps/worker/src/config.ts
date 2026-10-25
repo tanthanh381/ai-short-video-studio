@@ -47,7 +47,7 @@ const schema = z.object({
   /** Vision-capable local model used only by the Quality image audit when AI_QA_PROVIDER=local. With "auto" the gate prefers Claude vision. */
   OLLAMA_VISION_MODEL: z.string().default("qwen3.5:4b"),
   OLLAMA_NUM_CTX: z.coerce.number().int().min(2048).max(32768).default(8192),
-  OLLAMA_KEEP_ALIVE: z.string().default("10m"),
+  OLLAMA_KEEP_ALIVE: z.string().default("2m"),
   LOCAL_MEDIA_BASE_URL: z.string().url().default("http://host.docker.internal:8765"),
   MUSICGEN_ENABLED: z.preprocess((value) => value === true || value === "true" || value === "1", z.boolean()).default(false),
   WHITEBOARD_SERVER_URL: z.string().url().default("http://host.docker.internal:8766"),

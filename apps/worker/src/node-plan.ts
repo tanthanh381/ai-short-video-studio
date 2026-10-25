@@ -22,7 +22,7 @@ export const PRIOR_MS: Record<Lane, number> = {
   image: 25_000, tts: 8_000, video: 240_000, transcribe: 6_000, whiteboard: 45_000, llm: 30_000,
 };
 /** Tasks a node works on at once in a lane. The bridge itself serialises images, voices and motion. */
-export const LANE_CAPACITY: Record<Lane, number> = { image: 1, tts: 1, video: 1, transcribe: 1, whiteboard: 2, llm: 1 };
+export const LANE_CAPACITY: Record<Lane, number> = { image: 1, tts: 1, video: 1, transcribe: 2, whiteboard: 2, llm: 1 };
 /** Loading the Ollama model into memory when it is not resident yet. */
 const LLM_WARMUP_MS = 15_000;
 /** A sleeping image server has to load its model (~1 minute) before the first picture; later ones are as fast as ever. */
@@ -314,7 +314,7 @@ export function baseMs(node: NodeSnapshot, lane: Lane, ctx: AssessContext): numb
 }
 
 /** Network cost of using a machine other than the main one: the request and the finished picture or voice travel. */
-export const overheadMs = (node: NodeSnapshot) => (node.local ? 0 : 300 + 3 * (node.rttMs ?? 50));
+export const overheadMs = (node: NodeSnapshot) => (node.local ? 0 : 150 + 3 * (node.rttMs ?? 50));
 
 export function estimateMs(node: NodeSnapshot, lane: Lane, assessment: Assessment, ctx: AssessContext): number {
   return baseMs(node, lane, ctx) * assessment.speed + overheadMs(node);
