@@ -1,4 +1,4 @@
-import type { ProductionPlan } from "@studio/shared";
+import type { Platform, ProductionPlan, ProjectSettings } from "@studio/shared";
 
 // Director-Agent Phase 2b: pure helpers (no I/O) so they can be unit-tested. The orchestration that calls Claude and
 // persists the plan lives in index.ts (it needs the db/config/log); everything deterministic lives here.
@@ -43,4 +43,21 @@ export function sceneWantsMotion(opts: {
   if (!opts.hasMotionModel) return false;
   if (opts.motionScenes) return opts.motionScenes.includes(opts.sceneOrder);
   return !opts.paperStage || opts.sceneOrder === 0;
+}
+
+/**
+ * Platform-specific defaults the Director applies after planning, so the render settings match what the platform
+ * expects (hook title, progress bar, caption highlight, duration). Returns a partial ProjectSettings; the caller
+ * merges only fields that are still at their default value (so user overrides are kept).
+ */
+export function platformDefaults(platform: Platform | null | undefined): Partial<ProjectSettings> {
+  if (platform === "tiktok")
+    return { targetDurationSec: 30, captionHighlight: true, hookTitle: true, progressBar: true };
+  if (platform === "reels")
+    return { targetDurationSec: 45, captionHighlight: true, hookTitle: true, progressBar: false };
+  if (platform === "shorts")
+    return { targetDurationSec: 45, captionHighlight: true, hookTitle: true, progressBar: false };
+  if (platform === "facebook")
+    return { targetDurationSec: 60, captionHighlight: true, hookTitle: false, progressBar: true };
+  return {};
 }

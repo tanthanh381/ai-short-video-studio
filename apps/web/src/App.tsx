@@ -1969,6 +1969,32 @@ function WizardPage() {
               ))}
             </ul>
             {!modelsReady(settings, statuses) && <Notice tone="warn">Một số khâu đang chưa sẵn sàng. Bấm Auto để dùng cấu hình khả dụng, hoặc bật máy/khóa API ở <Link to="/settings">Cài đặt</Link>.</Notice>}
+            <div className="setting-group director-settings">
+              <h3><Sparkles /> Chế độ sản xuất</h3>
+              <Field label="Orchestrator" hint="Director: Claude lập kế hoạch toàn bộ, tối ưu cho nền tảng. Pipeline: quy trình cố định.">
+                <select value={settings.orchestrator ?? "pipeline"} onChange={(e) => editSettings({ ...settings, orchestrator: e.target.value as "pipeline" | "director" })}>
+                  <option value="pipeline">Pipeline — quy trình cố định</option>
+                  <option value="director">Director — Claude điều phối</option>
+                </select>
+              </Field>
+              {settings.orchestrator === "director" && <>
+                <Field label="Nền tảng mục tiêu" hint="Director tối ưu hook, nhịp, CTA và thời lượng theo nền tảng.">
+                  <select value={settings.platform ?? ""} onChange={(e) => editSettings({ ...settings, platform: (e.target.value || null) as ProjectSettings["platform"] })}>
+                    <option value="">Chung (không chỉ định)</option>
+                    <option value="tiktok">TikTok</option>
+                    <option value="reels">Instagram Reels</option>
+                    <option value="shorts">YouTube Shorts</option>
+                    <option value="facebook">Facebook</option>
+                  </select>
+                </Field>
+                <Field label="Mục tiêu video" hint="Ví dụ: tăng follower, giải thích chủ đề X, truyền cảm hứng">
+                  <input maxLength={500} value={settings.goal ?? ""} onChange={(e) => editSettings({ ...settings, goal: e.target.value })} placeholder="Mục tiêu bạn muốn đạt được..." />
+                </Field>
+                {settings.textProvider !== "anthropic" && (
+                  <Notice tone="info">Director mode cần Claude API. Hãy chọn Claude ở &quot;AI viết kịch bản&quot; phía trên hoặc dán khóa ở <Link to="/settings">Cài đặt</Link>.</Notice>
+                )}
+              </>}
+            </div>
           </section>
         )}
 
@@ -2138,7 +2164,7 @@ function WizardPage() {
               {([
                 ["input", "Nội dung", `${inputMode === "idea" ? "Ý tưởng" : "Kịch bản có sẵn"} · ${wordCount.toLocaleString("vi-VN")} từ${inputMode === "idea" ? ` · ${durationLabel(settings.targetDurationSec)}` : ""}`],
                 ["template", "Mẫu", `${templateId ? CHANNEL_PRESETS.find((p) => p.id === templateId)?.label : "Chưa chọn"}${customized ? " (Custom)" : ""}`],
-                ["models", "AI Models", modelSummary(settings, localModels)],
+                ["models", "AI Models", `${modelSummary(settings, localModels)}${settings.orchestrator === "director" ? ` · Director (${settings.platform ? ({ tiktok: "TikTok", reels: "Reels", shorts: "Shorts", facebook: "Facebook" } as const)[settings.platform] : "chung"})` : ""}`],
                 ["audio", "Giọng & nhạc", `${settings.mediaProvider === "local" ? (VOICE_PRESETS.find((v) => v.id === settings.voice)?.label ?? settings.voice) : (OPENAI_VOICES.find((v) => v.id === settings.voice)?.label ?? settings.voice)} · ${settings.backgroundMusicPath ? "Nhạc riêng" : settings.autoMusic ? "Nhạc tự tạo" : "Không nhạc"}`],
                 ["brand", "Logo & bố cục", `${settings.logoPath ? "Có logo" : "Không logo"} · ${settings.layoutTemplate === "story-card" ? "Thẻ truyện" : settings.layoutTemplate === "paper-stage" ? "Nền giấy" : "Toàn khung"} · ${settings.aspectRatio}`],
               ] as const).map(([id, label, value]) => (
@@ -3425,6 +3451,27 @@ function StudioPage() {
               <Plus size={17} /> Thêm cảnh
             </button>
           </div>
+          {project.settings.productionPlan && (
+            <details className="production-plan-card">
+              <summary><Sparkles size={16} /> Kế hoạch sản xuất (Director)</summary>
+              <div className="production-plan-content">
+                <dl className="plan-meta">
+                  <div><dt>Platform</dt><dd>{project.settings.productionPlan.platform ? ({ tiktok: "TikTok", reels: "Reels", shorts: "Shorts", facebook: "Facebook" } as const)[project.settings.productionPlan.platform] : "Chung"}</dd></div>
+                  <div><dt>Nhịp</dt><dd>{project.settings.productionPlan.pacing === "fast" ? "Nhanh" : "Vừa"}</dd></div>
+                  <div><dt>Hook</dt><dd>{project.settings.productionPlan.hook.text || "—"}</dd></div>
+                  {project.settings.productionPlan.cta && <div><dt>CTA</dt><dd>{project.settings.productionPlan.cta}</dd></div>}
+                </dl>
+                <ol className="plan-scenes">
+                  {project.settings.productionPlan.scenes.map((scene, i) => (
+                    <li key={i}>
+                      <strong>{scene.narration}</strong>
+                      <small>{scene.imagePrompt}</small>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </details>
+          )}
           <fieldset className="scene-editor" disabled={processing || Boolean(busyAction)}>
             <details className="source-editor">
               <summary>Kịch bản đầy đủ <ChevronDown size={16} /></summary>
