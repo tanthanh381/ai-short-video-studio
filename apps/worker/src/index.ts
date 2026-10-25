@@ -92,7 +92,7 @@ const openaiModels = { text: config.OPENAI_TEXT_MODEL, image: config.OPENAI_IMAG
 // The server's own keys (optional). An owner's own key, saved from the website, is used first for that owner's jobs.
 const openai = config.OPENAI_API_KEY ? new OpenAIAdapter(config.OPENAI_API_KEY, openaiModels, config.OPENAI_BASE_URL) : null;
 const anthropic = config.ANTHROPIC_API_KEY
-  ? new AnthropicStoryboardAdapter(config.ANTHROPIC_API_KEY, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL)
+  ? new AnthropicStoryboardAdapter(config.ANTHROPIC_API_KEY, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL, config.ANTHROPIC_VISION_MODEL)
   : null;
 async function openaiFor(userId: string): Promise<OpenAIAdapter | null> {
   const key = await loadUserKey(db, config.API_KEYS_SECRET, userId, "openai");
@@ -100,7 +100,15 @@ async function openaiFor(userId: string): Promise<OpenAIAdapter | null> {
 }
 async function anthropicFor(userId: string): Promise<AnthropicStoryboardAdapter | null> {
   const key = await loadUserKey(db, config.API_KEYS_SECRET, userId, "anthropic");
-  return key ? new AnthropicStoryboardAdapter(key, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL) : anthropic;
+  return key ? new AnthropicStoryboardAdapter(key, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL, config.ANTHROPIC_VISION_MODEL) : anthropic;
+}
+// Image QA on Claude vision (Director-Agent Phase 1): cache the per-owner adapter (avoid a key lookup per scene)
+// and cap Claude QA calls per job so a bad run cannot run up the bill; over the cap we fall back to local qwen.
+const qaAdapterCache = new Map<string, AnthropicStoryboardAdapter | null>();
+const qaClaudeCalls = new Map<string, number>();
+async function qaClaudeFor(userId: string): Promise<AnthropicStoryboardAdapter | null> {
+  if (!qaAdapterCache.has(userId)) qaAdapterCache.set(userId, await anthropicFor(userId));
+  return qaAdapterCache.get(userId) ?? null;
 }
 // This machine and, when AI_NODES lists them, other Macs that share the AI work. Without AI_NODES the pool only
 // forwards to this machine: same calls, same order, no probing.
@@ -657,6 +665,28 @@ async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project
     // fail-open when the local vision model is unavailable.
     && (project.settings.generationPreset === "quality" || paperStage || (textRisk && process.env.VISION_TEXT_GATE !== "false"));
   if (!visionEnabled) return null;
+  // Director-Agent Phase 1: run the gate on Claude vision (more reliable than the small local rule-model) when the
+  // owner has a key and the per-job cap is not hit. Fail-open: any miss falls through to the local qwen gate below.
+  if (config.AI_QA_PROVIDER !== "local") {
+    const used = qaClaudeCalls.get(job.id) ?? 0;
+    if (used < config.AI_QA_MAX_CLAUDE_CALLS) {
+      const adapter = await qaClaudeFor(project.userId);
+      if (adapter) {
+        try {
+          qaClaudeCalls.set(job.id, used + 1);
+          const audit = await adapter.auditImage({
+            image,
+            ...(referenceImageBase64 ? { referenceImage: Buffer.from(referenceImageBase64, "base64") } : {}),
+            sceneBrief: scene.narration,
+          });
+          if (audit) return audit;
+          log.warn({ jobId: job.id, sceneId: scene.id }, "vision_qa_claude_unparsed");
+        } catch (error) {
+          log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "vision_qa_claude_failed");
+        }
+      }
+    }
+  }
   try {
     return await pool.runOne("llm", (node) => ollamaOn(node.id).auditImage({
       image,

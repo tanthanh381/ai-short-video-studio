@@ -21,6 +21,13 @@ const schema = z.object({
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   ANTHROPIC_BASE_URL: z.string().url().default("https://api.anthropic.com"),
   ANTHROPIC_TEXT_MODEL: z.string().default("claude-haiku-5-5"),
+  /** Vision model for the image quality gate when QA runs on Claude (multimodal). Haiku is fast + cheap. */
+  ANTHROPIC_VISION_MODEL: z.string().default("claude-haiku-5-5"),
+  /** Who runs the image QA gate: "auto" = Claude vision when the owner has a key, else local qwen; "claude" forces
+   *  Claude; "local" forces the free qwen2.5vl. Phase 1 of the Director-Agent upgrade (director mode off by default). */
+  AI_QA_PROVIDER: z.enum(["auto", "claude", "local"]).default("auto"),
+  /** Hard cap on Claude vision QA calls per video so a bad run cannot run up the bill; over it falls back to local. */
+  AI_QA_MAX_CLAUDE_CALLS: z.coerce.number().int().min(0).max(200).default(40),
   /** Optional Pexels key. It stays on the worker and is never sent to the browser. */
   PEXELS_API_KEY: z.preprocess(
     (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
