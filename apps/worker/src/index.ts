@@ -1482,18 +1482,18 @@ async function finish(job: JobRow, error?: unknown) {
   log.error({ jobId: job.id, err: message, retry }, "job_failed");
 }
 
-async function poll() {
+async function poll(): Promise<boolean> {
   const { data, error } = await db.rpc("claim_next_job", {
     p_worker_id: workerId,
   });
   if (error) {
     log.error({ err: error.message }, "claim_failed");
-    return;
+    return false;
   }
   const job = Array.isArray(data)
     ? (data[0] as JobRow | undefined)
     : (data as JobRow | null);
-  if (!job) return;
+  if (!job) return false;
   job.deadline = Date.now() + 90 * 60_000;
   log.info({ jobId: job.id, type: job.job_type }, "job_started");
   const heartbeat = setInterval(() => {
@@ -1512,6 +1512,7 @@ async function poll() {
     // Whatever the error was, a job the person cancelled ends as cancelled, not as failed and not retried.
     await finish(job, error instanceof JobCancelled || !(await isCancelled(db as never, job.id)) ? error : new JobCancelled());
   } finally { clearInterval(heartbeat); }
+  return true;
 }
 
 let stopping = false;
@@ -1545,9 +1546,15 @@ log.info(
   },
   "worker_started",
 );
+let lastJobAt = 0;
 while (!stopping) {
-  try { await poll(); }
+  try {
+    const had = await poll();
+    if (had) lastJobAt = Date.now();
+  }
   catch (error) { log.error({ err: error instanceof Error ? error.message : "unknown" }, "worker_poll_failed"); }
-  await new Promise((resolve) => setTimeout(resolve, config.WORKER_POLL_MS));
+  const idleMs = Date.now() - lastJobAt;
+  const delay = idleMs > 10_000 ? 2_000 : config.WORKER_POLL_MS;
+  await new Promise((resolve) => setTimeout(resolve, delay));
 }
 log.info("worker_stopped");

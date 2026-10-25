@@ -217,7 +217,7 @@ export function sceneMotion(seconds: number, index = 0): string {
 }
 
 /** How many scene segments ffmpeg renders at once (bounded by the Docker VM's CPUs). */
-const SEGMENT_CONCURRENCY = Math.max(1, Math.min(Number(process.env.RENDER_CONCURRENCY ?? "3") || 3, 6));
+const SEGMENT_CONCURRENCY = Math.max(1, Math.min(Number(process.env.RENDER_CONCURRENCY ?? "4") || 4, 6));
 
 /** Like Promise.all over `items`, but at most `limit` running at a time; results keep the input order. */
 export async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {

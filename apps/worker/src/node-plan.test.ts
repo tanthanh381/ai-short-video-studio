@@ -166,7 +166,7 @@ describe("estimates", () => {
   it("adds network cost for another machine and the slowdown of its condition", () => {
     const air = node("air", { ewma: { image: 20_000 }, rttMs: 40 });
     const ok = { eligible: true, reasons: [], speed: 1.25, warmupMs: 0 };
-    expect(estimateMs(air, "image", ok, ctx([node("mini"), air]))).toBe(20_000 * 1.25 + 300 + 120);
+    expect(estimateMs(air, "image", ok, ctx([node("mini"), air]))).toBe(20_000 * 1.25 + 150 + 120);
     expect(estimateMs(node("mini", { ewma: { image: 20_000 } }), "image", { ...ok, speed: 1 }, ctx([node("mini")]))).toBe(20_000);
   });
 
