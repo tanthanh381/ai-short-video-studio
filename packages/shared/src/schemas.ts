@@ -176,7 +176,19 @@ export const DEFAULT_LOCAL_MODELS: LocalModels = {
   transcribe: null,
 };
 
+/** Short-form platform the video targets; steers the Director Agent's hook, pacing and caption style (Phase 2). */
+export const platformSchema = z.enum(["tiktok", "reels", "shorts", "facebook"]);
+export type Platform = z.infer<typeof platformSchema>;
+
 export const projectSettingsSchema = z.object({
+  // Director-Agent (Phase 2): "pipeline" = the fixed worker pipeline (default, unchanged); "director" = Claude plans
+  // the production and decides per scene. Stored in settings (jsonb) so no DB migration is needed. Optional in the
+  // TypeScript output (like imageSource) so older fixtures/projects stay compatible; Zod still materializes "pipeline".
+  orchestrator: z.enum(["pipeline", "director"]).default("pipeline").optional(),
+  /** Target platform for Director planning (hook/pacing/caption). null = unspecified. */
+  platform: platformSchema.nullable().default(null).optional(),
+  /** Creator's goal for this video (e.g. "grow followers", "explain X"); feeds the Director's plan. */
+  goal: z.string().trim().max(500).default("").optional(),
   textProvider: z.enum(["anthropic", "openai", "ollama"]).default("anthropic"),
   mediaProvider: z.enum(["local", "openai"]).default("local"),
   targetAudience: z.string().max(500).default("Người xem Việt Nam"),
