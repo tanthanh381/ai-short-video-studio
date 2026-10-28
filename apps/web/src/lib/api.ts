@@ -4,7 +4,6 @@ import { appConfig } from "./config";
 import { demoApi } from "./demo";
 import { demoSystem } from "./demo-system";
 import { supabase } from "./supabase";
-import { completeVideoSubmission, videoSubmission, type VideoInput } from "./video-submission";
 
 /** Projects saved (or served by an older API) before a setting existed lack it; fill from defaults so the editor never reads undefined. */
 function withSettingDefaults(project: Project): Project {
@@ -149,21 +148,6 @@ async function textToSpeechBlob(text: string, voice: string, engine: string | nu
 export const api = {
   voicePreview: voicePreviewBlob,
   textToSpeech: textToSpeechBlob,
-  async createVideo(input: VideoInput) {
-    if (appConfig.demoMode) throw new Error(DEMO_ONLY);
-    const submission = await videoSubmission(input);
-    const { project } = await request<{ project: Project; job: Job }>("/v1/videos", {
-      method: "POST",
-      headers: { "Idempotency-Key": submission.key },
-      body: JSON.stringify(input),
-    });
-    completeVideoSubmission(submission.storageKey);
-    return withSettingDefaults(project);
-  },
-  async continueVideo(id: string) {
-    const { job } = await request<{ project: Project; job: Job }>(`/v1/projects/${id}/continue`, { method: "POST" });
-    return job;
-  },
   async getResult(id: string): Promise<VideoResult | null> {
     if (appConfig.demoMode) return null;
     const response = await request<{ export: null | Omit<VideoResult, "url"> & { videoUrl: string; downloadUrl: string; createdAt: string }; expiresIn: number }>(`/v1/projects/${id}/result`);

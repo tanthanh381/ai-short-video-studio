@@ -104,24 +104,9 @@ import { demoBalancerAfter, demoSystem } from "./lib/demo-system";
 import { api, type ServiceId, type ServiceState, type ServiceStatus, type UsageStats, type VideoResult } from "./lib/api";
 import { appConfig } from "./lib/config";
 import { resetPasswordView } from "./lib/auth";
-import { withLayoutTemplate, withVisualPreset } from "./lib/visual-preset";
-import { ProjectSaver, type SaveState } from "./lib/project-saver";
 import { Badge, Button, Field, Notice } from "./components/ui";
 import { askConfirm, ConfirmHost } from "./components/ConfirmDialog";
-import { WIZARD_STEPS, stepIndex, detectInputMode, modelGroups, modelSummary, autoModelPatch, modelsReady, HEALTH_LABEL, HEALTH_TONE, type WizardStepId } from "./lib/wizard";
 import { DEMO_ONLY, DEMO_VOICE } from "./lib/copy";
-import { LOGO_MAX_BYTES, checkLogoFile } from "./lib/logo";
-import { StageGuides, StageLogo } from "./components/StageLogo";
-import { withScriptFromScenes } from "./lib/script-sync";
-import { OPENAI_VOICES, hookTitleAllowed, withMediaProvider } from "./lib/options";
-import { CHANNEL_PRESETS, estimatedNarrationSeconds } from "./lib/channel-presets";
-import { projectIsProcessing } from "./lib/video-submission";
-import { restoredPreviewTime, signedPreviewIsFresh, startSignedPreviewRefresh } from "./lib/preview-session";
-import { InfoPopover } from "./components/Disclosure";
-import { useSaveShortcut } from "./hooks/use-save-shortcut";
-import { BATCH_MAX_ITEMS, parseBatchIdeas } from "./lib/batch";
-import { applyChannelKit, readChannelKit, saveChannelKit } from "./lib/channel-kit";
-import { previewImageForSettings } from "./lib/preview";
 
 const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
