@@ -128,22 +128,14 @@ describe("modelRows", () => {
   });
   const rows = (value: NonNullable<NodeSummary["models"]>) => Object.fromEntries(modelRows(node("air", { models: value }), NOW).map((row) => [row.id, row]));
 
-  it("tells the model Ollama holds in memory from one that is only installed", () => {
-    expect(rows(models()).llm).toMatchObject({ state: "idle", chips: ["qwen3.5:4b"] });
-    const loaded = rows(models({ llm: { up: true, installed: ["qwen3.5:4b"], loaded: [{ name: "qwen3.5:4b", sizeGb: 3.4, expiresAt: "2026-10-11T08:04:00Z" }] } })).llm!;
-    expect(loaded.state).toBe("ready");
-    expect(loaded.detail).toBe("Đang nạp trong RAM: qwen3.5:4b (3,4 GB) · tự giải phóng sau 4 phút nếu không dùng");
-    expect(rows(models({ llm: { up: false, installed: [], loaded: [] } })).llm!.state).toBe("down");
-  });
-
-  it("reports the picture model loading, voices, Whisper, faces and the hand-drawing server", () => {
-    const all = rows(models({ image: { state: "loading", models: ["sdxl-turbo"], defaultModel: "sdxl-turbo" }, transcribe: false, faceDetail: false, whiteboard: false }));
-    expect(all.image).toMatchObject({ state: "loading", chips: ["sdxl-turbo"] });
+  it("reports only the voice and subtitle services", () => {
+    const all = rows(models());
+    expect(Object.keys(all)).toEqual(["tts", "transcribe"]);
     expect(all.tts).toMatchObject({ state: "ready", chips: ["vieneu"] });
-    expect(all.transcribe!.state).toBe("down");
-    expect(all.face!.state).toBe("down");
-    expect(all.whiteboard!.state).toBe("down");
-    expect(rows(models({ faceDetail: null })).face).toBeUndefined();
+    expect(all.transcribe!.state).toBe("ready");
+    const down = rows(models({ tts: { engines: [], defaultEngine: null }, transcribe: false }));
+    expect(down.tts!.state).toBe("down");
+    expect(down.transcribe!.state).toBe("down");
   });
 
   it("has nothing to list for a worker that does not report models yet", () => {
@@ -152,25 +144,25 @@ describe("modelRows", () => {
 });
 
 describe("work", () => {
-  it("lists the kinds of work a machine takes with the reason when it does not, and hides the motion lane it never has", () => {
-    const rows = laneRows(node("air", { lanes: { image: lane({ running: 1, done: 11, avgMs: 13_000 }), tts: lane({ eligible: false, reasons: ["cấu hình khác máy chính"] }), video: lane({ eligible: false }) } }));
-    expect(rows.map((row) => row.id)).toEqual(["image", "tts"]);
-    expect(rows[0]).toMatchObject({ status: "đang làm 1", avg: "13 giây", done: 11 });
+  it("lists the kinds of work a machine takes with the reason when it does not", () => {
+    const rows = laneRows(node("air", { lanes: { tts: lane({ running: 1, done: 11, avgMs: 2_500 }), transcribe: lane({ eligible: false, reasons: ["cấu hình khác máy chính"] }) } }));
+    expect(rows.map((row) => row.id)).toEqual(["tts", "transcribe"]);
+    expect(rows[0]).toMatchObject({ status: "đang làm 1", avg: "2,5 giây", done: 11 });
     expect(rows[1]).toMatchObject({ status: "không nhận", reason: "cấu hình khác máy chính", avg: "chưa đo" });
   });
 
   it("shows who did how much since the worker started", () => {
     const share = workShare([
-      node("mini", { lanes: { image: lane({ done: 4 }), tts: lane({ done: 9 }) } }),
-      node("air", { lanes: { image: lane({ done: 11 }), tts: lane({ done: 6 }) } }),
+      node("mini", { lanes: { tts: lane({ done: 4 }) } }),
+      node("air", { lanes: { tts: lane({ done: 11 }) } }),
     ]);
-    expect(share).toHaveLength(2);
-    expect(share[0]).toMatchObject({ lane: "image", total: 15, parts: [{ node: "mini", done: 4, percent: 27 }, { node: "air", done: 11, percent: 73 }] });
+    expect(share).toHaveLength(1);
+    expect(share[0]).toMatchObject({ lane: "tts", total: 15, parts: [{ node: "mini", done: 4, percent: 27 }, { node: "air", done: 11, percent: 73 }] });
     expect(workShare([node("mini")])).toEqual([]); // nothing done yet: nothing to split
   });
 
   it("describes a finished or failed task", () => {
-    expect(describeEvent({ at: "x", node: "air", lane: "image", ms: 13_000, ok: true })).toBe("Vẽ ảnh xong sau 13 giây");
+    expect(describeEvent({ at: "x", node: "air", lane: "transcribe", ms: 13_000, ok: true })).toBe("Nhận dạng giọng nói xong sau 13 giây");
     expect(describeEvent({ at: "x", node: "mini", lane: "tts", ms: 2_500, ok: false })).toBe("Giọng đọc lỗi sau 2,5 giây");
   });
 });
@@ -242,13 +234,13 @@ describe("systemAlerts and summaryTiles", () => {
 
   it("counts the work and the videos in the tiles", () => {
     const busy = system(
-      [node("mini", { lanes: { image: lane({ done: 4 }) } }), node("air", { lanes: { image: lane({ done: 11 }) } })],
-      { jobs: { running: 1, queued: 2, completed24h: 5, failed24h: 0, avgVideoSeconds24h: 380, recent: [{ id: "j", type: "create_video", title: "A", status: "running", stage: "Đang tạo ảnh cảnh 3 · máy air", progress: 30, startedAt: null, finishedAt: null, durationSeconds: 60 }] } },
+      [node("mini", { lanes: { tts: lane({ done: 4 }) } }), node("air", { lanes: { tts: lane({ done: 11 }) } })],
+      { jobs: { running: 1, queued: 2, completed24h: 5, failed24h: 0, avgVideoSeconds24h: 380, recent: [{ id: "j", type: "dub_video", title: "A", status: "running", stage: "Đang tạo giọng đọc · máy air", progress: 30, startedAt: null, finishedAt: null, durationSeconds: 60 }] } },
     );
     const tiles = Object.fromEntries(summaryTiles(busy).map((tile) => [tile.id, tile]));
-    expect(tiles.jobs).toMatchObject({ value: "1 chạy · 2 chờ", detail: "Đang tạo ảnh cảnh 3 · MacBook Air", tone: "ok" });
+    expect(tiles.jobs).toMatchObject({ value: "1 chạy · 2 chờ", detail: "Đang tạo giọng đọc · MacBook Air", tone: "ok" });
     expect(tiles.throughput).toMatchObject({ value: "5 video xong", detail: "trung bình 6 phút 20 giây mỗi video" });
-    expect(tiles.share).toMatchObject({ value: "15 ảnh", detail: "Mac Mini 4 · MacBook Air 11 · từ lần khởi động gần nhất" });
+    expect(tiles.share).toMatchObject({ value: "15 lượt", detail: "Mac Mini 4 · MacBook Air 11 · từ lần khởi động gần nhất" });
   });
 
   it("still works with one machine and no balancer", () => {
@@ -268,10 +260,10 @@ describe("the demo data", () => {
       expect(item.history!.length).toBe(180);
       expect(item.history![179]!.at).toBeLessThanOrEqual(NOW);
       expect(machineGauges(item).length).toBeGreaterThanOrEqual(5);
-      expect(modelRows(item, NOW).length).toBeGreaterThanOrEqual(6);
+      expect(modelRows(item, NOW).length).toBe(2);
     }
     expect(systemAlerts(demo).map((alert) => alert.id)).toContain("mini-swap");
-    expect(workShare(nodes)[0]).toMatchObject({ lane: "image", total: 15 });
+    expect(workShare(nodes)[0]).toMatchObject({ lane: "tts", total: 15 });
     expect(summaryTiles(demo).map((tile) => tile.id)).toEqual(["machines", "jobs", "throughput", "share", "sync", ]);
   });
 });
