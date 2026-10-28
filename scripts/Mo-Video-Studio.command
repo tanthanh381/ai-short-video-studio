@@ -37,6 +37,12 @@ if [[ "${TTS_ENGINES:-vieneu,omnivoice}" == *omnivoice* && -x "$LOCAL_AI_ROOT/om
   start_if_down http://127.0.0.1:5010/health omnivoice env LOCAL_AI_ROOT="$LOCAL_AI_ROOT" zsh "$studio_root/local-tools/toolkit/bin/start-omnivoice.sh"
 fi
 start_if_down http://127.0.0.1:5002/health image "$LOCAL_AI_ROOT/venv/bin/python" local-tools/image_server.py
+# Flux.1 Schnell là tùy chọn chất lượng cao hơn SDXL-Turbo. Bật bằng FLUX_AUTOSTART=true.
+# Trên máy 16 GB nó cạnh tranh RAM với SDXL-Turbo, nên mặc định tắt; media bridge tự
+# cho nó ngủ khi không dùng. Lần đầu tải ~9,6 GB model từ mflux-community (không cần HF login).
+if [[ "${FLUX_AUTOSTART:-false}" == "true" && -x "$LOCAL_AI_ROOT/venv/bin/python" ]]; then
+  start_if_down http://127.0.0.1:5003/health flux "$LOCAL_AI_ROOT/venv/bin/python" local-tools/flux_server.py
+fi
 if [[ "$COMFYUI_AUTOSTART" == "true" && -x "$LOCAL_AI_ROOT/comfy-venv/bin/python" && -f "$COMFYUI_ROOT/main.py" && -f "$COMFYUI_ROOT/models/checkpoints/${COMFYUI_CHECKPOINT:-sd_xl_base_1.0_0.9vae.safetensors}" ]]; then
   start_if_down http://127.0.0.1:8188/system_stats comfyui "$LOCAL_AI_ROOT/comfy-venv/bin/python" "$COMFYUI_ROOT/main.py" ${=COMFYUI_ARGS} --listen 127.0.0.1 --port 8188
 fi
