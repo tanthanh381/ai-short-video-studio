@@ -27,6 +27,10 @@ HOST = os.getenv("FLUX_SERVER_HOST", "127.0.0.1")
 PORT = int(os.getenv("FLUX_SERVER_PORT", "5003"))
 QUANTIZE = int(os.getenv("FLUX_QUANTIZE", "4"))
 STEPS = int(os.getenv("FLUX_STEPS", "4"))
+# Pre-quantized mflux-community mirror (Apache-2.0, not gated). Loading it needs no HuggingFace
+# login and no runtime quantization. Set FLUX_MODEL_REPO="" to use the official gated
+# black-forest-labs/FLUX.1-schnell instead (that path requires an HF token with accepted license).
+FLUX_MODEL_REPO = os.getenv("FLUX_MODEL_REPO", "mflux-community/flux-1-schnell-mflux-q4")
 
 LOCK = threading.Lock()
 STATE = {"flux": None, "error": None, "unloaded": False}
@@ -48,9 +52,15 @@ PRESETS = {
 
 def load_model():
     import mlx.core as mx
-    from mflux import Flux1
+    from mflux.models.flux.variants.txt2img.flux import Flux1
+    from mflux.models.common.config.model_config import ModelConfig
 
-    flux = Flux1.from_name("schnell", quantize=QUANTIZE)
+    if FLUX_MODEL_REPO:
+        # Pre-quantized community mirror: weights carry their own quantization, so quantize stays None.
+        config = ModelConfig.from_name(model_name=FLUX_MODEL_REPO, base_model="schnell")
+        flux = Flux1(model_config=config)
+    else:
+        flux = Flux1(quantize=QUANTIZE, model_config=ModelConfig.schnell())
     mx.set_cache_limit(int(os.getenv("FLUX_CACHE_LIMIT_MB", "768")) * 1024 * 1024)
     return flux
 
@@ -74,7 +84,10 @@ def model_thread():
             gc.collect()
             try:
                 import mlx.core as mx
-                mx.metal.clear_cache()
+                if hasattr(mx, "clear_cache"):
+                    mx.clear_cache()
+                elif hasattr(mx, "metal") and hasattr(mx.metal, "clear_cache"):
+                    mx.metal.clear_cache()
             except Exception:
                 pass
             print("[flux] model unloaded", flush=True)
