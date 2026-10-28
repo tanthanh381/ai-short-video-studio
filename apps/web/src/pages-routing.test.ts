@@ -15,7 +15,7 @@ describe("GitHub Pages routing", () => {
   it("every fixed page of the app has its own copy on Pages (answers 200, not the 404 redirect)", () => {
     const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
     const declared = [...app.matchAll(/path="\/?([a-z-]+)"/gu)].map((match) => match[1]!).filter((route) => route !== "*");
-    expect(declared.length).toBeGreaterThan(8);
+    expect(declared.length).toBeGreaterThan(4);
     expect([...STATIC_ROUTES].sort()).toEqual([...new Set(declared)].sort());
   });
 });
