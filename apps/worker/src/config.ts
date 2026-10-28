@@ -79,6 +79,8 @@ const schema = z.object({
   MIN_FREE_DISK_GB: z.coerce.number().positive().default(4),
   FFMPEG_PATH: z.string().default("ffmpeg"),
   FFPROBE_PATH: z.string().default("ffprobe"),
+  /** "libx264" inside Docker, "h264_videotoolbox" on native Mac for GPU-accelerated encoding. */
+  FFMPEG_ENCODER: z.string().default("libx264"),
 });
 export type WorkerConfig = z.infer<typeof schema>;
 export function getConfig() {
