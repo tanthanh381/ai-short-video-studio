@@ -38,7 +38,6 @@ import {
 } from "@studio/shared";
 import { readBalancerSettings, writeBalancerSettings } from "@studio/shared/balancer-store";
 import { checkKeyWithProvider, createKeyVault } from "./api-keys";
-import { createTrendService, startDailyTrendScheduler } from "./trends";
 import type { AppConfig } from "./config";
 import type { AdminClient } from "./db";
 import { mapJob, mapProject } from "./mappers";
@@ -172,7 +171,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
   let balancerSnapshot: BalancerSummary | null = null;
   let airSetupSnapshot: AirSetupSummary | null = null;
   const keyVault = createKeyVault(db, config);
-  const trends = createTrendService(db, config, keyVault);
 
   async function getUsageStats(userId: string, budgetUsd: number): Promise<UsageStats> {
     const now = new Date();
@@ -349,8 +347,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
   app.get("/health", (_req, res) =>
     res.json({ ok: true, service: "ai-short-video-studio-api" }),
   );
-
-  (app as unknown as { startDailyTrends: () => () => void }).startDailyTrends = () => startDailyTrendScheduler(trends);
 
   app.use("/v1", async (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
@@ -685,18 +681,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.json(await accountView(req.userId!));
   });
 
-  app.get("/v1/trends", async (req, res) => {
-    res.json({ digest: await trends.read(req.userId!) });
-  });
-  app.post("/v1/trends/refresh", async (req, res) => {
-    try {
-      res.json({ digest: await trends.refresh(req.userId!) });
-    } catch (error) {
-      const status = (error as { status?: number }).status ?? 502;
-      res.status(status).json({ error: error instanceof Error ? error.message : "Chưa tạo được ý tưởng xu hướng. Hãy thử lại." });
-    }
-  });
-
   app.get("/v1/local-models", async (_req, res) => {
     const empty = { models: [], default: null };
     const unavailable = { available: false, storyboard: empty, image: empty, video: empty, tts: empty, transcribe: empty };
@@ -827,66 +811,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.status(201).json(mapProject(data));
   });
 
-  app.post("/v1/videos", async (req, res) => {
-    const input = createVideoSchema.parse(req.body);
-    const settings = projectSettingsSchema.parse({
-      ...DEFAULT_PROJECT_SETTINGS,
-      textProvider: "ollama",
-      mediaProvider: "local",
-      voice: DEFAULT_PROJECT_SETTINGS.voice,
-      // One-click creation must produce a publishable short even when an older
-      // client sends only the script. The Studio UI sends these explicitly too;
-      // keeping the server default aligned prevents silent plain-image exports.
-      autoMusic: true,
-      captionHighlight: true,
-      hookTitle: true,
-      ...input.settings,
-    });
-    const unavailable = await paidProviderUnavailable(settings, req.userId!);
-    if (unavailable) return res.status(503).json({ error: unavailable });
-    if (settings.backgroundMusicPath)
-      return res.status(400).json({ error: "Hãy tải nhạc riêng trong Studio sau khi dự án được tạo." });
-    const suppliedKey = req.headers["idempotency-key"];
-    const key = suppliedKey === undefined
-      ? crypto.createHash("sha256").update(JSON.stringify(input)).digest("hex")
-      : z.string().min(8).max(160).regex(/^[a-zA-Z0-9:._-]+$/).parse(suppliedKey);
-    const { data, error } = await db.rpc("enqueue_video", {
-      p_user_id: req.userId,
-      p_idempotency_key: `create-video:${key}`,
-      p_source_text: input.sourceText,
-      p_input_mode: readAsScript(input.inputMode),
-      p_title: autoTitle(input.sourceText),
-      p_settings: settings,
-      p_max_concurrent: req.maxConcurrentJobs,
-    });
-    if (error) {
-      if (queueError(error, res)) return;
-      throw error;
-    }
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row) throw new Error("Chưa bắt đầu tạo video được. Hãy thử lại.");
-    res.status(202).json({ project: await loadProject(row.project_id, req.userId!), job: mapJob(row) });
-  });
-
-  app.post("/v1/projects/:id/continue", async (req, res) => {
-    const project = await loadProject(req.params.id, req.userId!);
-    if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
-    const unavailable = await paidProviderUnavailable(project.settings, req.userId!);
-    if (unavailable) return res.status(503).json({ error: unavailable });
-    const { data, error } = await db.rpc("continue_video", {
-      p_user_id: req.userId,
-      p_project_id: project.id,
-      p_max_concurrent: req.maxConcurrentJobs,
-    });
-    if (error) {
-      if (queueError(error, res)) return;
-      throw error;
-    }
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row) throw new Error("Chưa khôi phục được video đang làm. Hãy thử lại.");
-    res.status(202).json({ project: await loadProject(project.id, req.userId!), job: mapJob(row) });
-  });
-
   app.get("/v1/projects/:id/result", async (req, res) => {
     const project = await loadProject(req.params.id, req.userId!);
     if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
@@ -1013,17 +937,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.status(201).json(await loadProject(data.id, req.userId!));
   });
 
-  app.get("/v1/projects/:id/estimate", async (req, res) => {
-    const project = await loadProject(req.params.id, req.userId!);
-    if (!project)
-      return res.status(404).json({ error: "Không tìm thấy dự án" });
-    res.json(
-      estimateCost(
-        project,
-        project.settings.mediaProvider === "local" && config.LOCAL_MEDIA_FEATURES_ENABLED,
-      ),
-    );
-  });
   app.get("/v1/projects/:id/jobs", async (req, res) => {
     const { data, error } = await db
       .from("jobs")
@@ -1383,36 +1296,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
       .createSignedUrl(item.storage_path, 300, { download: true });
     if (error) throw error;
     res.json({ url: data.signedUrl, expiresIn: 300 });
-  });
-
-  app.put("/v1/projects/:id/scenes/:sceneId/annotation", async (req, res) => {
-    const project = await loadProject(req.params.id, req.userId!);
-    if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
-    if (!project.scenes.some((s) => s.id === req.params.sceneId))
-      return res.status(404).json({ error: "Không tìm thấy cảnh" });
-    if (!req.body || typeof req.body !== "object" || !("elements" in req.body))
-      return res.status(400).json({ error: "Dữ liệu annotation không hợp lệ — cần có trường elements" });
-    const { error } = await db
-      .from("scenes")
-      .update({ annotation_json: whiteboardAnnotationSchema.parse(req.body) })
-      .eq("id", req.params.sceneId)
-      .eq("project_id", req.params.id);
-    if (error) throw error;
-    res.json({ ok: true });
-  });
-
-  app.delete("/v1/projects/:id/scenes/:sceneId/annotation", async (req, res) => {
-    const project = await loadProject(req.params.id, req.userId!);
-    if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
-    if (!project.scenes.some((s) => s.id === req.params.sceneId))
-      return res.status(404).json({ error: "Không tìm thấy cảnh" });
-    const { error } = await db
-      .from("scenes")
-      .update({ annotation_json: null })
-      .eq("id", req.params.sceneId)
-      .eq("project_id", req.params.id);
-    if (error) throw error;
-    res.json({ ok: true });
   });
 
   app.use(

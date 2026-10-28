@@ -342,9 +342,6 @@ describe("API", () => {
       expect(response.status, path).toBe(404);
       expect(response.body.error).toMatch(/Không tìm thấy/);
     }
-    const scene = await request(app).delete("/v1/projects/00000000-0000-4000-8000-000000000001/scenes/x/annotation").set("Authorization", "Bearer test");
-    expect(scene.status).toBe(404);
-    expect(scene.body.error).toMatch(/Không tìm thấy/);
   });
 
   describe("huy tac vu", () => {
