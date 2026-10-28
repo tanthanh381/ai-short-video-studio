@@ -230,16 +230,10 @@ WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/g
 WHISPER_ENGINE = os.getenv("WHISPER_ENGINE", "faster-whisper")
 WHISPER_MODEL_ID = os.getenv("WHISPER_MODEL_ID", f"faster-whisper-{os.getenv('FASTER_WHISPER_MODEL', 'large-v3-turbo')}" if WHISPER_ENGINE == "faster-whisper" else Path(WHISPER_MODEL).stem)
 # Optional next-generation image runtimes are opt-in and only advertised when their own health endpoint responds.
-ZIMAGE_URL = os.getenv("ZIMAGE_URL", "").strip()
-FLUX2_URL = os.getenv("FLUX2_URL", "").strip()
-FLUX_SCHNELL_URL = os.getenv("FLUX_SCHNELL_URL", "http://127.0.0.1:5003")
 MUSICGEN_URL = os.getenv("MUSICGEN_URL", "").strip()
-IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo — nhanh (~15–25 giây/ảnh)"}
-OPTIONAL_IMAGE_MODELS = {
-    "flux-schnell": ("Flux.1 Schnell — chất lượng cao, ~30–60 giây/ảnh", FLUX_SCHNELL_URL),
-    "z-image-turbo": ("Z-Image-Turbo — chất lượng cao, nhẹ hơn FLUX", ZIMAGE_URL),
-    "flux2-klein": ("FLUX.2 Klein — Quality, cần runtime riêng", FLUX2_URL),
-}
+# Image generation was removed with the video features; the bridge now serves only TTS + subtitle transcription.
+IMAGE_MODELS: dict[str, str] = {}
+OPTIONAL_IMAGE_MODELS: dict[str, tuple] = {}
 COMFYUI_IMAGE_MODEL = "sdxl-base-1.0-comfyui"
 COMFYUI_IMAGE_LABEL = "SDXL Base 1.0 — đẹp hơn, ít người thừa, chậm (~1–1,5 phút/ảnh)"
 TTS_ENGINE_LABELS = {
@@ -496,8 +490,6 @@ def image_default_model(models=None):
     configured = os.getenv("IMAGE_DEFAULT_MODEL", "").strip()
     if configured and configured in models:
         return configured
-    if "flux-schnell" in models:
-        return "flux-schnell"
     return "sdxl-turbo" if "sdxl-turbo" in models else next(iter(models), None)
 
 
@@ -540,15 +532,6 @@ def release_comfy_model():
         with urllib.request.urlopen(request, timeout=10):
             pass
         IMAGE_ENGINE["comfy_used"] = False
-    except Exception:
-        pass
-
-
-def release_flux_model():
-    try:
-        request = urllib.request.Request(f"{FLUX_SCHNELL_URL}/unload", data=b"{}", headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(request, timeout=5):
-            pass
     except Exception:
         pass
 
@@ -1059,7 +1042,6 @@ SUPERVISED = {  # name -> (launchd label, port, health URL, limit in MB)
     "vieneu": ("com.ai-short-video.vieneu", 5001, None, int(os.getenv("VIENEU_MAX_MB", "3000"))),
     "omnivoice": ("com.ai-short-video.omnivoice", 5010, "/health", int(os.getenv("OMNIVOICE_MAX_MB", "7000"))),
     "image": ("com.ai-short-video.image", 5002, None, int(os.getenv("IMAGE_MAX_MB", "9000"))),
-    "flux": ("com.ai-short-video.flux", 5003, "/health", int(os.getenv("FLUX_MAX_MB", "9000"))),
 }
 RECYCLE_LOCK = threading.Lock()
 
@@ -1540,8 +1522,6 @@ def _by_script(name, port, *argv):
 SLEEPER = idle_sleep.Sleeper([
     idle_sleep.Service("image", "com.ai-short-video.image", lambda: image_server_state() == "ready", wake_timeout_s=420,
                        process=_by_script("image", 5002, LOCAL_AI_ROOT / "venv/bin/python", _REPO_ROOT / "local-tools/image_server.py")),
-    idle_sleep.Service("flux", "com.ai-short-video.flux", lambda: service_up(FLUX_SCHNELL_URL, "/health"), wake_timeout_s=420,
-                       process=_by_script("flux", 5003, LOCAL_AI_ROOT / "venv/bin/python", _REPO_ROOT / "local-tools/flux_server.py")),
     idle_sleep.Service("vieneu", "com.ai-short-video.vieneu", lambda: service_up(VIENEU_URL), wake_timeout_s=300,
                        process=_by_script("vieneu", 5001, "/bin/zsh", LOCAL_AI_ROOT / "bin/start-vieneu.sh")),
     idle_sleep.Service("omnivoice", "com.ai-short-video.omnivoice", lambda: service_up(OMNIVOICE_URL, "/health"), wake_timeout_s=900,
@@ -1578,8 +1558,6 @@ def services_for(path, body):
             preset = payload.get("preset")
         except (ValueError, AttributeError):
             model, preset = None, None
-        if model == "flux-schnell":
-            return ["flux"]
         wants_base = (model == COMFYUI_IMAGE_MODEL or (model in (None, "") and preset == "quality")) and comfyui_memory_safe()
         return ["image", "comfyui"] if wants_base else ["image"]
     if route in ("/tts", "/tts-aligned"):
@@ -1653,8 +1631,7 @@ def local_video(image_base64, prompt, aspect_ratio="9:16", model=None, seed=None
     # model out of memory. Active requests are never interrupted by park().
     release_turbo_model()
     release_comfy_model()
-    release_flux_model()
-    parked = SLEEPER.park(("image", "flux", "vieneu", "comfyui"), keep=("ltx",))
+    parked = SLEEPER.park(("image", "vieneu", "comfyui"), keep=("ltx",))
     if parked:
         print(f"[video] parked competing model services: {', '.join(parked)}", flush=True)
     # Re-check memory after parking. The first sample can still reflect the
@@ -1822,7 +1799,7 @@ def tts_engines_up():
 # Everything whose change would make this Mac's pictures or voices come out differently. Two Macs with different files here must not
 # share a video, so a change in any of them (not only in the two servers) separates the fingerprints.
 NODE_STATUS_SOURCES = [
-    Path(__file__).resolve(), Path(__file__).with_name("image_server.py"), Path(__file__).with_name("flux_server.py"), Path(__file__).with_name("face_detail.py"),
+    Path(__file__).resolve(),
     LOCAL_AI_ROOT / "vieneu_api.py", LOCAL_AI_ROOT / "vieneu_tts.py",
 ]
 _MODELS_DIGEST_CACHE = {"at": -1e9, "value": ""}

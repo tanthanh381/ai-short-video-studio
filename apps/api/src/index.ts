@@ -4,7 +4,6 @@ import { createApp } from "./app";
 
 const config = getConfig();
 const app = createApp(config, createAdminClient(config));
-(app as unknown as { startDailyTrends?: () => () => void }).startDailyTrends?.();
 app.listen(config.PORT, () => {
   console.log(
     JSON.stringify({
