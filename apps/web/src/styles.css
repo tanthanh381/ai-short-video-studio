@@ -1847,6 +1847,63 @@ a:focus-visible {
 .tts-result > div span { margin-top: 4px; color: var(--text-muted); font-size: var(--text-sm); }
 .tts-result audio { width: 100%; grid-column: 1 / -1; }
 .tts-result .button { justify-self: end; }
+
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+  margin-top: 8px;
+}
+.hub-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.hub-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.hub-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md, 12px);
+  background: var(--accent-soft, rgba(99, 102, 241, 0.15));
+  color: var(--accent);
+}
+.hub-card strong { font-size: var(--text-lg, 1.05rem); }
+.hub-card span { color: var(--text-muted); font-size: var(--text-sm); line-height: 1.5; }
+
+.dub-progress { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.dub-progress-row { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: var(--text-sm); }
+.dub-progress-bar { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.dub-progress-bar span { display: block; height: 100%; background: var(--accent); transition: width 0.4s ease; }
+.dub-result {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--ok-line);
+  border-radius: var(--radius-lg);
+  background: var(--ok-soft-2);
+}
+.dub-result > div strong, .dub-result > div span { display: block; }
+.dub-result > div span { margin-top: 4px; color: var(--text-muted); font-size: var(--text-sm); }
+.dub-result video { width: 100%; grid-column: 1 / -1; border-radius: var(--radius-md, 10px); }
+.dub-result .button { justify-self: end; }
+
 .export-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -4049,3 +4106,20 @@ a.button { text-decoration: none; }
 .trend-tags { margin: 0; font-size: var(--text-sm); color: var(--link); overflow-wrap: anywhere; }
 .trend-card .button { margin-top: auto; justify-content: center; }
 @media (max-width: 560px) { .trend-list { grid-template-columns: 1fr; } }
+
+/* Director controls (Phase 2d) */
+.director-settings { border-top: 1px solid var(--line-soft); padding-top: var(--space-4); margin-top: var(--space-3); }
+
+/* Production plan card in the studio scene panel */
+.production-plan-card { margin: 0 0 12px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.production-plan-card summary { cursor: pointer; padding: 10px 14px; font-weight: 600; font-size: var(--text-sm); color: var(--accent); display: flex; align-items: center; gap: 6px; }
+.production-plan-content { padding: 0 14px 14px; }
+.plan-meta { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px 12px; font-size: var(--text-sm); }
+.plan-meta > div { display: flex; gap: 6px; }
+.plan-meta dt { color: var(--text-muted); white-space: nowrap; }
+.plan-meta dt::after { content: ":"; }
+.plan-meta dd { margin: 0; color: var(--text-strong); font-weight: 600; overflow-wrap: anywhere; }
+.plan-scenes { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 8px; font-size: var(--text-sm); }
+.plan-scenes li { line-height: 1.45; }
+.plan-scenes strong { display: block; color: var(--text-strong); }
+.plan-scenes small { color: var(--text-muted); display: block; margin-top: 2px; overflow-wrap: anywhere; }

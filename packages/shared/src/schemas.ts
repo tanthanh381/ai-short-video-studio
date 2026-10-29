@@ -176,7 +176,38 @@ export const DEFAULT_LOCAL_MODELS: LocalModels = {
   transcribe: null,
 };
 
+/** Short-form platform the video targets; steers the Director Agent's hook, pacing and caption style (Phase 2). */
+export const platformSchema = z.enum(["tiktok", "reels", "shorts", "facebook"]);
+export type Platform = z.infer<typeof platformSchema>;
+
+/** The Director Agent's plan for one video (Phase 2b). Stored in settings.productionPlan (jsonb) — no DB migration. */
+export const productionPlanSchema = z.object({
+  platform: platformSchema.nullable().default(null),
+  hook: z.object({ text: z.string().max(400).default(""), visual: z.string().max(600).default("") }).default({ text: "", visual: "" }),
+  pacing: z.enum(["fast", "medium"]).default("medium"),
+  cta: z.string().max(200).default(""),
+  /** Scene orders (0-based) the Director chose to animate with MLX motion; keep small (1–2) for render cost. */
+  motionScenes: z.array(z.number().int().min(0).max(50)).max(12).default([]),
+  scenes: z.array(z.object({
+    narration: z.string().min(1).max(5_000),
+    imagePrompt: z.string().min(1).max(3_000),
+    caption: z.string().max(400).optional(),
+    voiceDirection: z.string().max(300).optional(),
+  })).min(1).max(40),
+});
+export type ProductionPlan = z.infer<typeof productionPlanSchema>;
+
 export const projectSettingsSchema = z.object({
+  // Director-Agent (Phase 2): "pipeline" = the fixed worker pipeline (default, unchanged); "director" = Claude plans
+  // the production and decides per scene. Stored in settings (jsonb) so no DB migration is needed. Optional in the
+  // TypeScript output (like imageSource) so older fixtures/projects stay compatible; Zod still materializes "pipeline".
+  orchestrator: z.enum(["pipeline", "director"]).default("pipeline").optional(),
+  /** Target platform for Director planning (hook/pacing/caption). null = unspecified. */
+  platform: platformSchema.nullable().default(null).optional(),
+  /** Creator's goal for this video (e.g. "grow followers", "explain X"); feeds the Director's plan. */
+  goal: z.string().trim().max(500).default("").optional(),
+  /** The Director's generated plan (Phase 2b), kept for execution + audit. null = not planned yet. Optional in TS output. */
+  productionPlan: productionPlanSchema.nullable().default(null).optional(),
   textProvider: z.enum(["anthropic", "openai", "ollama"]).default("anthropic"),
   mediaProvider: z.enum(["local", "openai"]).default("local"),
   targetAudience: z.string().max(500).default("Người xem Việt Nam"),

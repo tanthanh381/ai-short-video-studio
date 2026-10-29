@@ -306,7 +306,7 @@ class ImageServerInfoTests(unittest.TestCase):
                 with_voice = fingerprint()
                 voice.write_text("# voice server v2")
                 self.assertNotEqual(fingerprint(), with_voice)  # the voice program changed
-        self.assertIn(Path("face_detail.py"), [Path(p.name) for p in media.NODE_STATUS_SOURCES])
+        self.assertIn(Path("vieneu_api.py"), [Path(p.name) for p in media.NODE_STATUS_SOURCES])
 
 
 class BridgeEndpointTests(unittest.TestCase):

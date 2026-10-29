@@ -79,7 +79,6 @@ describe("API", () => {
     expect(response.status).toBe(200);
     expect(response.body.serviceStatuses.api.state).toBe("healthy");
     expect(response.body.serviceStatuses.supabase.state).toBe("healthy");
-    expect(response.body.serviceStatuses.ollama.state).toBe("disabled");
     expect(response.body.serviceStatuses.worker.state).toBe("disabled");
     expect(response.body.balancer).toBeNull();
   });
@@ -342,9 +341,6 @@ describe("API", () => {
       expect(response.status, path).toBe(404);
       expect(response.body.error).toMatch(/Không tìm thấy/);
     }
-    const scene = await request(app).delete("/v1/projects/00000000-0000-4000-8000-000000000001/scenes/x/annotation").set("Authorization", "Bearer test");
-    expect(scene.status).toBe(404);
-    expect(scene.body.error).toMatch(/Không tìm thấy/);
   });
 
   describe("huy tac vu", () => {

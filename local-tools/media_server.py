@@ -230,14 +230,10 @@ WHISPER_MODEL = os.getenv("WHISPER_MODEL", str(LOCAL_AI_ROOT / "models/whisper/g
 WHISPER_ENGINE = os.getenv("WHISPER_ENGINE", "faster-whisper")
 WHISPER_MODEL_ID = os.getenv("WHISPER_MODEL_ID", f"faster-whisper-{os.getenv('FASTER_WHISPER_MODEL', 'large-v3-turbo')}" if WHISPER_ENGINE == "faster-whisper" else Path(WHISPER_MODEL).stem)
 # Optional next-generation image runtimes are opt-in and only advertised when their own health endpoint responds.
-ZIMAGE_URL = os.getenv("ZIMAGE_URL", "").strip()
-FLUX2_URL = os.getenv("FLUX2_URL", "").strip()
 MUSICGEN_URL = os.getenv("MUSICGEN_URL", "").strip()
-IMAGE_MODELS = {"sdxl-turbo": "SDXL-Turbo — nhanh (~15–25 giây/ảnh)"}
-OPTIONAL_IMAGE_MODELS = {
-    "z-image-turbo": ("Z-Image-Turbo — chất lượng cao, nhẹ hơn FLUX", ZIMAGE_URL),
-    "flux2-klein": ("FLUX.2 Klein — Quality, cần runtime riêng", FLUX2_URL),
-}
+# Image generation was removed with the video features; the bridge now serves only TTS + subtitle transcription.
+IMAGE_MODELS: dict[str, str] = {}
+OPTIONAL_IMAGE_MODELS: dict[str, tuple] = {}
 COMFYUI_IMAGE_MODEL = "sdxl-base-1.0-comfyui"
 COMFYUI_IMAGE_LABEL = "SDXL Base 1.0 — đẹp hơn, ít người thừa, chậm (~1–1,5 phút/ảnh)"
 TTS_ENGINE_LABELS = {
@@ -492,7 +488,9 @@ def available_image_models():
 def image_default_model(models=None):
     models = models or available_image_models()
     configured = os.getenv("IMAGE_DEFAULT_MODEL", "").strip()
-    return configured if configured in models else "sdxl-turbo" if "sdxl-turbo" in models else next(iter(models), None)
+    if configured and configured in models:
+        return configured
+    return "sdxl-turbo" if "sdxl-turbo" in models else next(iter(models), None)
 
 
 def proxy_image_model(base_url, prompt, aspect_ratio, seed, preset, reference_image_base64=None, reference_strength=None):
@@ -1069,7 +1067,7 @@ def listener_pid(port):
         return None
 
 
-POWER_PORTS = (11434, 8080, 5000, 5001, 5002, 8766, 8770, 8188)
+POWER_PORTS = (11434, 8080, 5000, 5001, 5002, 5003, 8766, 8770, 8188)
 
 
 def stop_local_ai_services():
@@ -1801,7 +1799,7 @@ def tts_engines_up():
 # Everything whose change would make this Mac's pictures or voices come out differently. Two Macs with different files here must not
 # share a video, so a change in any of them (not only in the two servers) separates the fingerprints.
 NODE_STATUS_SOURCES = [
-    Path(__file__).resolve(), Path(__file__).with_name("image_server.py"), Path(__file__).with_name("face_detail.py"),
+    Path(__file__).resolve(),
     LOCAL_AI_ROOT / "vieneu_api.py", LOCAL_AI_ROOT / "vieneu_tts.py",
 ]
 _MODELS_DIGEST_CACHE = {"at": -1e9, "value": ""}

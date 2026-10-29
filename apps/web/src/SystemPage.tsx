@@ -12,8 +12,8 @@ import {
 
 const REFRESH_MS = 3_000;
 const SERVICE_ORDER: Array<[string, string]> = [
-  ["api", "API ứng dụng"], ["supabase", "Cơ sở dữ liệu"], ["worker", "Bộ xử lý video"], ["render", "Bộ xuất video"],
-  ["ollama", "Ollama · nội dung"], ["localMedia", "Bộ tạo media"], ["faceDetail", "Tăng cường khuôn mặt"], ["whiteboard", "Bảng vẽ"],
+  ["api", "API ứng dụng"], ["supabase", "Cơ sở dữ liệu"], ["worker", "Bộ xử lý lồng tiếng"], ["render", "Bộ dựng video"],
+  ["localMedia", "Giọng đọc & phụ đề"],
 ];
 const SERVICE_TONE: Record<string, { label: string; tone: Tone }> = {
   healthy: { label: "Hoạt động", tone: "ok" },

@@ -6,8 +6,9 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import pino from "pino";
-import { drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type Scene, visualPresetPrompt, voiceDirectionForScript } from "@studio/shared";
+import { DEFAULT_PROJECT_SETTINGS, drawsByHand, paceCorrection, parseSrt, projectSchema, type Project, type ProductionPlan, type Scene, visualPresetPrompt, voiceDirectionForScript } from "@studio/shared";
 import { sceneMotionPrompt } from "./motion-prompts";
+import { directorStoryboardResult, platformDefaults, sceneWantsMotion } from "./director";
 import { getConfig } from "./config";
 import { writerModelForSettings } from "./model-policy";
 import { imageLooksBlank } from "./image-check";
@@ -92,7 +93,7 @@ const openaiModels = { text: config.OPENAI_TEXT_MODEL, image: config.OPENAI_IMAG
 // The server's own keys (optional). An owner's own key, saved from the website, is used first for that owner's jobs.
 const openai = config.OPENAI_API_KEY ? new OpenAIAdapter(config.OPENAI_API_KEY, openaiModels, config.OPENAI_BASE_URL) : null;
 const anthropic = config.ANTHROPIC_API_KEY
-  ? new AnthropicStoryboardAdapter(config.ANTHROPIC_API_KEY, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL)
+  ? new AnthropicStoryboardAdapter(config.ANTHROPIC_API_KEY, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL, config.ANTHROPIC_VISION_MODEL)
   : null;
 async function openaiFor(userId: string): Promise<OpenAIAdapter | null> {
   const key = await loadUserKey(db, config.API_KEYS_SECRET, userId, "openai");
@@ -100,7 +101,15 @@ async function openaiFor(userId: string): Promise<OpenAIAdapter | null> {
 }
 async function anthropicFor(userId: string): Promise<AnthropicStoryboardAdapter | null> {
   const key = await loadUserKey(db, config.API_KEYS_SECRET, userId, "anthropic");
-  return key ? new AnthropicStoryboardAdapter(key, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL) : anthropic;
+  return key ? new AnthropicStoryboardAdapter(key, config.ANTHROPIC_TEXT_MODEL, config.ANTHROPIC_BASE_URL, config.ANTHROPIC_VISION_MODEL) : anthropic;
+}
+// Image QA on Claude vision (Director-Agent Phase 1): cache the per-owner adapter (avoid a key lookup per scene)
+// and cap Claude QA calls per job so a bad run cannot run up the bill; over the cap we fall back to local qwen.
+const qaAdapterCache = new Map<string, AnthropicStoryboardAdapter | null>();
+const qaClaudeCalls = new Map<string, number>();
+async function qaClaudeFor(userId: string): Promise<AnthropicStoryboardAdapter | null> {
+  if (!qaAdapterCache.has(userId)) qaAdapterCache.set(userId, await anthropicFor(userId));
+  return qaAdapterCache.get(userId) ?? null;
 }
 // This machine and, when AI_NODES lists them, other Macs that share the AI work. Without AI_NODES the pool only
 // forwards to this machine: same calls, same order, no probing.
@@ -482,6 +491,43 @@ async function storyboard(job: JobRow, project: Project) {
   return writeStoryboard(job, project, null);
 }
 
+/**
+ * Director-Agent Phase 2b: run the planner when the project opts in (orchestrator="director"), the global kill-switch
+ * is on, and the owner has a Claude key. Persists the plan to settings.productionPlan (jsonb — no migration) and
+ * mutates the in-memory project so the later motion gate can read plan.motionScenes. Returns null to fall back to the
+ * normal storyboard writer (no key, disabled, unparsed, or any error) — the fixed pipeline stays the safety net.
+ */
+async function maybeDirectorPlan(job: JobRow, project: Project, idea: string, visualStyle: string): Promise<ProductionPlan | null> {
+  if (project.settings.orchestrator !== "director") return null;
+  if (!config.AI_DIRECTOR_ENABLED) { log.info({ jobId: job.id, projectId: project.id }, "director_disabled_fallback"); return null; }
+  const adapter = await anthropicFor(project.userId);
+  if (!adapter) { log.warn({ jobId: job.id, projectId: project.id }, "director_no_claude_key_fallback"); return null; }
+  try {
+    const plan = await adapter.planProduction({
+      idea,
+      platform: project.settings.platform ?? null,
+      goal: project.settings.goal ?? "",
+      durationSec: project.settings.targetDurationSec,
+      visualStyle,
+    });
+    if (!plan) { log.warn({ jobId: job.id, projectId: project.id }, "director_plan_unparsed_fallback"); return null; }
+    project.settings.productionPlan = plan; // in-memory: the per-scene motion gate reads plan.motionScenes later this run
+    const defaults = platformDefaults(plan.platform);
+    for (const [key, value] of Object.entries(defaults) as Array<[keyof typeof defaults, unknown]>) {
+      if ((project.settings as Record<string, unknown>)[key] === (DEFAULT_PROJECT_SETTINGS as Record<string, unknown>)[key]) {
+        (project.settings as Record<string, unknown>)[key] = value;
+      }
+    }
+    const { error } = await db.from("projects").update({ settings: { ...project.settings } }).eq("id", project.id).eq("user_id", project.userId);
+    if (error) log.warn({ jobId: job.id, projectId: project.id }, "director_plan_save_failed");
+    log.info({ jobId: job.id, projectId: project.id, scenes: plan.scenes.length, motionScenes: plan.motionScenes }, "director_plan_ready");
+    return plan;
+  } catch (error) {
+    log.warn({ jobId: job.id, projectId: project.id, err: error instanceof Error ? error.message : String(error) }, "director_plan_failed_fallback");
+    return null;
+  }
+}
+
 async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStoryboardAdapter | null) {
   const providerName = project.settings.textProvider;
   const provider: StoryboardProvider | null =
@@ -539,7 +585,14 @@ async function writeStoryboard(job: JobRow, project: Project, ollama: OllamaStor
   const notes = { realigned: (event: { misaligned: number[]; repaired: number[] }) => log.warn({ jobId: job.id, projectId: project.id, ...event }, "storyboard_prompts_realigned") };
   let cast = "";
   let result;
-  if (cardMode) {
+  // Director-Agent Phase 2b: when the project opts into director mode, Claude plans the whole short (platform-aware,
+  // picking which scenes earn motion) and that plan becomes the storyboard. Any miss falls back to the normal writer.
+  const directorPlan = await maybeDirectorPlan(job, project, sourceText, storyboardInput.visualStyle);
+  if (directorPlan) {
+    result = directorStoryboardResult(directorPlan);
+    const scriptCast = castForScript(sourceText, describedPeople);
+    cast = scriptCast || await describeCast();
+  } else if (cardMode) {
     // The prompt writer must know the family up front so every scene shows the same two characters.
     cast = castForScript(sourceText, describedPeople) || await describeCast();
     result = await createFaithfulStoryboard(provider, { ...storyboardInput, cast }, notes);
@@ -657,6 +710,28 @@ async function auditSceneImage(image: Uint8Array, scene: Scene, project: Project
     // fail-open when the local vision model is unavailable.
     && (project.settings.generationPreset === "quality" || paperStage || (textRisk && process.env.VISION_TEXT_GATE !== "false"));
   if (!visionEnabled) return null;
+  // Director-Agent Phase 1: run the gate on Claude vision (more reliable than the small local rule-model) when the
+  // owner has a key and the per-job cap is not hit. Fail-open: any miss falls through to the local qwen gate below.
+  if (config.AI_QA_PROVIDER !== "local") {
+    const used = qaClaudeCalls.get(job.id) ?? 0;
+    if (used < config.AI_QA_MAX_CLAUDE_CALLS) {
+      const adapter = await qaClaudeFor(project.userId);
+      if (adapter) {
+        try {
+          qaClaudeCalls.set(job.id, used + 1);
+          const audit = await adapter.auditImage({
+            image,
+            ...(referenceImageBase64 ? { referenceImage: Buffer.from(referenceImageBase64, "base64") } : {}),
+            sceneBrief: scene.narration,
+          });
+          if (audit) return audit;
+          log.warn({ jobId: job.id, sceneId: scene.id }, "vision_qa_claude_unparsed");
+        } catch (error) {
+          log.warn({ jobId: job.id, sceneId: scene.id, err: error instanceof Error ? error.message : String(error) }, "vision_qa_claude_failed");
+        }
+      }
+    }
+  }
   try {
     return await pool.runOne("llm", (node) => ollamaOn(node.id).auditImage({
       image,
@@ -807,6 +882,9 @@ async function generateMedia(job: JobRow, project: Project) {
   // Motion (LTX image→video) is opt-in: it runs only when the creator explicitly turned it on for this
   // project (settings.localModels.video). LTX diffusion is slow — minutes per scene — so a still image with
   // a camera move stays the fast default. Do NOT auto-enable it just because a video lane is healthy.
+  // Local image→video (MLX/LTX) stays OPT-IN only: it runs when the creator picks a motion model
+  // (settings.localModels.video). Free single-image I2V on this hardware morphs the art, so it is NOT on by default
+  // even in director mode — the plan still decides WHICH scenes animate (motionScenes), but only if a model is set.
   const motionModel = drawsByHand(project.settings) ? null : project.settings.localModels.video;
   const targetId =
     job.job_type === "regenerate_scene"
@@ -1024,11 +1102,22 @@ async function generateMedia(job: JobRow, project: Project) {
       // LTX fails, render.ts keeps the safe paper composition and falls back to camera motion.
       const paperStage = usesPaperStage(project.settings);
       const motionAvailable = media.videoAvailable ? media.videoAvailable() : true;
-      if (!videoPath && motionModel && media.createVideo && motionAvailable) {
+      // Hybrid motion: real image→video (the Air's MLX Wan2.2 server) is ~minutes per clip — far too slow to run
+      // on every scene of a one-minute video. For the paper-stage chibi template, animate only the opening scene
+      // (the hook) and let the rest keep the calm still "breathing"; any other preset that explicitly turns motion
+      // on keeps it on every scene (the creator's own choice).
+      // Director mode: animate exactly the scenes the plan chose. Pipeline mode keeps the hybrid rule (see sceneWantsMotion).
+      const wantsMotion = sceneWantsMotion({
+        hasMotionModel: Boolean(motionModel),
+        motionScenes: project.settings.orchestrator === "director" ? project.settings.productionPlan?.motionScenes ?? null : null,
+        paperStage,
+        sceneOrder: scene.order,
+      });
+      if (!videoPath && wantsMotion && media.createVideo && motionAvailable) {
         await progress(
           job,
           mediaProgress(finished) + 2,
-          `Đang tạo chuyển động LTX cảnh ${scene.order + 1}`,
+          `Đang tạo chuyển động nhân vật cảnh ${scene.order + 1}`,
         );
         try {
           const motion = await media.createVideo(
@@ -1414,18 +1503,18 @@ async function finish(job: JobRow, error?: unknown) {
   log.error({ jobId: job.id, err: message, retry }, "job_failed");
 }
 
-async function poll() {
+async function poll(): Promise<boolean> {
   const { data, error } = await db.rpc("claim_next_job", {
     p_worker_id: workerId,
   });
   if (error) {
     log.error({ err: error.message }, "claim_failed");
-    return;
+    return false;
   }
   const job = Array.isArray(data)
     ? (data[0] as JobRow | undefined)
     : (data as JobRow | null);
-  if (!job) return;
+  if (!job) return false;
   job.deadline = Date.now() + 90 * 60_000;
   log.info({ jobId: job.id, type: job.job_type }, "job_started");
   const heartbeat = setInterval(() => {
@@ -1444,23 +1533,22 @@ async function poll() {
     // Whatever the error was, a job the person cancelled ends as cancelled, not as failed and not retried.
     await finish(job, error instanceof JobCancelled || !(await isCancelled(db as never, job.id)) ? error : new JobCancelled());
   } finally { clearInterval(heartbeat); }
+  return true;
 }
 
 let stopping = false;
+let realtimeNudge: (() => void) | null = null;
 const settingsWatch = setInterval(() => void followBalancerSettings(), 10_000);
 settingsWatch.unref();
-process.on("SIGTERM", () => {
+const shutdown = () => {
   stopping = true;
   clearInterval(settingsWatch);
+  realtimeNudge?.();
   pool.stop();
   healthServer.close();
-});
-process.on("SIGINT", () => {
-  stopping = true;
-  clearInterval(settingsWatch);
-  pool.stop();
-  healthServer.close();
-});
+};
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 await followBalancerSettings(); // machines the owner switched off must not get the first job either
 await pool.start(); // the first look at every machine, so the log and the first job already know who is available
 log.info(
@@ -1477,9 +1565,28 @@ log.info(
   },
   "worker_started",
 );
+let lastJobAt = 0;
+const jobChannel = db.channel("worker-jobs").on(
+  "postgres_changes" as never,
+  { event: "INSERT", schema: "public", table: "jobs" } as never,
+  () => { realtimeNudge?.(); },
+).subscribe((status: string) => {
+  if (status === "SUBSCRIBED") log.info("realtime_jobs_subscribed");
+  else if (status === "CHANNEL_ERROR") log.warn("realtime_jobs_error");
+});
 while (!stopping) {
-  try { await poll(); }
+  try {
+    const had = await poll();
+    if (had) lastJobAt = Date.now();
+  }
   catch (error) { log.error({ err: error instanceof Error ? error.message : "unknown" }, "worker_poll_failed"); }
-  await new Promise((resolve) => setTimeout(resolve, config.WORKER_POLL_MS));
+  const idleMs = Date.now() - lastJobAt;
+  const maxDelay = idleMs > 10_000 ? 5_000 : config.WORKER_POLL_MS;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, maxDelay);
+    realtimeNudge = () => { clearTimeout(timer); resolve(); };
+  });
+  realtimeNudge = null;
 }
+void jobChannel.unsubscribe();
 log.info("worker_stopped");

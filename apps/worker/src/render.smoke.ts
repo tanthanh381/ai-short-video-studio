@@ -125,7 +125,7 @@ const project: Project = {
 };
 
 const result = await renderProject(
-  { FFMPEG_PATH: ffmpeg, FFPROBE_PATH: ffprobe } as never,
+  { FFMPEG_PATH: ffmpeg, FFPROBE_PATH: ffprobe, FFMPEG_ENCODER: process.env.FFMPEG_ENCODER || "libx264" } as never,
   project,
   (path) => readFile(join(outputDir, path)),
   async () => undefined,

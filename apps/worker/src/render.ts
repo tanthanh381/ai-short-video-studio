@@ -31,6 +31,14 @@ export function videoEncoderPreset(preset?: string) {
   return preset === "fast" ? "veryfast" : preset === "quality" ? "medium" : "faster";
 }
 
+function encoderArgs(encoder: string, opts: { preset?: string; crf?: number; quality?: number }): string[] {
+  if (encoder === "h264_videotoolbox") {
+    const q = opts.quality ?? (opts.crf != null ? Math.max(30, Math.round(opts.crf * 3)) : 65);
+    return ["-c:v", encoder, "-q:v", String(q), "-allow_sw", "1"];
+  }
+  return ["-c:v", encoder, ...(opts.preset ? ["-preset", opts.preset] : []), ...(opts.crf != null ? ["-crf", String(opts.crf)] : [])];
+}
+
 type OutputProbe = {
   format?: { duration?: string };
   streams?: Array<{ codec_type?: string; codec_name?: string; width?: number; height?: number; duration?: string }>;
@@ -217,7 +225,7 @@ export function sceneMotion(seconds: number, index = 0): string {
 }
 
 /** How many scene segments ffmpeg renders at once (bounded by the Docker VM's CPUs). */
-const SEGMENT_CONCURRENCY = Math.max(1, Math.min(Number(process.env.RENDER_CONCURRENCY ?? "3") || 3, 6));
+const SEGMENT_CONCURRENCY = Math.max(1, Math.min(Number(process.env.RENDER_CONCURRENCY ?? "4") || 4, 6));
 
 /** Like Promise.all over `items`, but at most `limit` running at a time; results keep the input order. */
 export async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
@@ -506,14 +514,7 @@ export async function renderProject(
           "[v]",
           "-map",
           "1:a:0",
-          "-c:v",
-          "libx264",
-          // Intermediate only: the final pass re-encodes every frame, so encode fast and near-lossless here
-          // instead of compressing twice (CRF 22 then CRF 21 lost detail and took twice the CPU).
-          "-preset",
-          "ultrafast",
-          "-crf",
-          "16",
+          ...encoderArgs(config.FFMPEG_ENCODER, { preset: "ultrafast", crf: 16, quality: 45 }),
           "-c:a",
           "pcm_s16le",
           "-ar",
@@ -696,12 +697,7 @@ export async function renderProject(
       "[v]",
       "-map",
       "[a]",
-      "-c:v",
-      "libx264",
-      "-preset",
-      encoderPreset,
-      "-crf",
-      "21",
+      ...encoderArgs(config.FFMPEG_ENCODER, { preset: encoderPreset, crf: 21 }),
       "-c:a",
       "aac",
       "-b:a",

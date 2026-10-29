@@ -21,6 +21,17 @@ const schema = z.object({
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   ANTHROPIC_BASE_URL: z.string().url().default("https://api.anthropic.com"),
   ANTHROPIC_TEXT_MODEL: z.string().default("claude-haiku-5-5"),
+  /** Vision model for the image quality gate when QA runs on Claude (multimodal). Haiku is fast + cheap. */
+  ANTHROPIC_VISION_MODEL: z.string().default("claude-haiku-5-5"),
+  /** Who runs the image QA gate: "auto" = Claude vision when the owner has a key, else local Ollama; "claude" forces
+   *  Claude; "local" forces the local model. Phase 1 of the Director-Agent upgrade (director mode off by default). */
+  AI_QA_PROVIDER: z.enum(["auto", "claude", "local"]).default("auto"),
+  /** Hard cap on Claude vision QA calls per video so a bad run cannot run up the bill; over it falls back to local. */
+  AI_QA_MAX_CLAUDE_CALLS: z.coerce.number().int().min(0).max(200).default(40),
+  /** Global kill-switch for the Director Agent (Phase 2b). false => projects with orchestrator="director" fall back to
+   *  the normal pipeline (budget / cost guard). Director planning also needs the owner's Claude key; without it, it
+   *  falls back too. */
+  AI_DIRECTOR_ENABLED: z.preprocess((v) => v === true || v === "true" || v === "1" || v === undefined || v === "", z.boolean()).default(true),
   /** Optional Pexels key. It stays on the worker and is never sent to the browser. */
   PEXELS_API_KEY: z.preprocess(
     (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -30,13 +41,13 @@ const schema = z.object({
   OLLAMA_BASE_URL: z.string().url().default("http://host.docker.internal:11434"),
   OLLAMA_MODEL: z.string().default("qwen3.5:4b"),
   /** Optional smaller writer for Fast projects; falls back to OLLAMA_MODEL when it is not installed. */
-  OLLAMA_FAST_MODEL: z.string().default("qwen3:1.7b"),
+  OLLAMA_FAST_MODEL: z.string().default("qwen3.5:4b"),
   /** Optional higher-quality writer selected only for the Quality generation preset when a node has it installed. */
-  OLLAMA_QUALITY_MODEL: z.string().default("qwen3:8b"),
-  /** Vision-capable local model used only by the Quality image audit. Qwen2.5-VL supports Ollama JSON schemas on both Mini and Air. */
-  OLLAMA_VISION_MODEL: z.string().default("qwen2.5vl:7b"),
+  OLLAMA_QUALITY_MODEL: z.string().default("qwen3.5:4b"),
+  /** Vision-capable local model used only by the Quality image audit when AI_QA_PROVIDER=local. With "auto" the gate prefers Claude vision. */
+  OLLAMA_VISION_MODEL: z.string().default("qwen3.5:4b"),
   OLLAMA_NUM_CTX: z.coerce.number().int().min(2048).max(32768).default(8192),
-  OLLAMA_KEEP_ALIVE: z.string().default("10m"),
+  OLLAMA_KEEP_ALIVE: z.string().default("2m"),
   LOCAL_MEDIA_BASE_URL: z.string().url().default("http://host.docker.internal:8765"),
   MUSICGEN_ENABLED: z.preprocess((value) => value === true || value === "true" || value === "1", z.boolean()).default(false),
   WHITEBOARD_SERVER_URL: z.string().url().default("http://host.docker.internal:8766"),
@@ -68,6 +79,8 @@ const schema = z.object({
   MIN_FREE_DISK_GB: z.coerce.number().positive().default(4),
   FFMPEG_PATH: z.string().default("ffmpeg"),
   FFPROBE_PATH: z.string().default("ffprobe"),
+  /** "libx264" inside Docker, "h264_videotoolbox" on native Mac for GPU-accelerated encoding. */
+  FFMPEG_ENCODER: z.string().default("libx264"),
 });
 export type WorkerConfig = z.infer<typeof schema>;
 export function getConfig() {

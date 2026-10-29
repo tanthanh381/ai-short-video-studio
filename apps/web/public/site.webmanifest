@@ -1,6 +1,6 @@
 {
-  "name": "AI Short Video Studio",
-  "short_name": "AI Studio",
+  "name": "Studio Giọng Việt",
+  "short_name": "Giọng Việt",
   "start_url": "/ai-short-video-studio/",
   "display": "standalone",
   "background_color": "#071A2B",

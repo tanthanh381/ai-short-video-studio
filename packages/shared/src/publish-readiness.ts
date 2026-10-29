@@ -5,6 +5,8 @@ export type PublishReadinessInput = {
   height?: number | null;
   aspectRatio: string;
   contentScore?: number | null;
+  /** Editorial hook score on a 0–100 scale; 80 is the publish minimum (8/10). */
+  hookScore: number | null;
   subtitlesEnabled: boolean;
   scenes: Array<{
     imagePath?: string | null;
@@ -23,6 +25,8 @@ export function evaluatePublishReadiness(input: PublishReadinessInput): PublishR
   if (!input.scenes.length) blockers.push("Chưa có scene");
   if (input.contentScore !== null && input.contentScore !== undefined && input.contentScore < 80)
     blockers.push("Content check dưới 80/100");
+  if (input.hookScore === null) blockers.push("Chưa có điểm hook 3 giây đầu");
+  else if (input.hookScore < 80) blockers.push("Hook 3 giây đầu dưới 8/10");
   if (input.scenes.some((scene) => scene.errorMessage)) blockers.push("Có scene cần xử lý lại");
   if (input.scenes.some((scene) => !scene.imagePath || !scene.audioPath)) blockers.push("Thiếu ảnh hoặc giọng đọc");
   if (input.subtitlesEnabled && input.scenes.some((scene) => !scene.subtitles?.length)) blockers.push("Thiếu phụ đề ở một hoặc nhiều scene");

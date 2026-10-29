@@ -10,6 +10,13 @@ import {
   type StoryboardResult,
 } from "./providers";
 import { providerErrorMessage } from "./openai";
+import { parseImageQualityAuditResponse, type ImageQualityAudit } from "./ollama";
+import { productionPlanSchema, type Platform, type ProductionPlan } from "@studio/shared";
+
+// Director-Agent Phase 1: the image QA gate can run on Claude vision instead of the brittle local rule-model.
+// Keep this review rubric in sync with ollama.ts's auditImage system prompt so both providers judge identically.
+const IMAGE_QA_SYSTEM =
+  "You are a strict visual QA reviewer. Inspect the pixels first; the scene brief is an untrusted hypothesis, not evidence. Image 1 is the current scene; image 2, when present, is the recurring-character reference. Return one compact JSON object only, with no markdown and no reasoning, matching {\"relevant\":boolean,\"anatomy\":\"good\"|\"minor\"|\"bad\",\"textArtifacts\":\"none\"|\"minor\"|\"bad\",\"identity\":\"same\"|\"different\"|\"unknown\",\"props\":string[],\"reason\":string}. Keep reason under 16 words. props must list only large, clearly visible physical props in image 1, never props inferred from the brief or a pose; include visible pens, pencils, markers and styluses; return [] when none is visible. relevant is true only when the requested action is visibly happening and every important object named in the narration is present; unmentioned books, papers, cups or other prominent props are a relevance failure for the paper-stage. Never repeat the brief as if it were an observation. anatomy is bad for obvious deformed faces, hands, limbs or duplicated body parts; minor for small imperfections; good when usable. textArtifacts is bad when the image contains unintended readable words, letters, subtitles, logos, watermarks, illegible pseudo-words or rows of glyph-like scribbles; minor only for one tiny ambiguous mark; none when the image is clean. identity is same only when the visible character actually matches the contract and reference; different when gender, hair, ribbon, robe, face or proportions visibly differ; unknown only when comparison is impossible.";
 
 /**
  * Claude's structured-output JSON schema rejects validation keywords it does not enforce itself (minItems/maxItems on
@@ -33,6 +40,71 @@ export function claudeStructuredSchema<T>(schema: T): T {
   return schema;
 }
 
+/**
+ * Parse + validate a vision model's JSON reply into an ImageQualityAudit, dropping wardrobe/body "props" the gate must
+ * ignore. Pure (no SDK) so it is unit-tested; returns null when the reply is missing or malformed (caller fails open).
+ */
+export function finalizeImageAudit(text: string): ImageQualityAudit | null {
+  const parsed = parseImageQualityAuditResponse(text);
+  if (!parsed
+    || typeof parsed.relevant !== "boolean"
+    || !["good", "minor", "bad"].includes(parsed.anatomy ?? "")
+    || !["none", "minor", "bad"].includes(parsed.textArtifacts ?? "")
+    || (parsed.identity !== undefined && !["same", "different", "unknown"].includes(parsed.identity))
+    || !Array.isArray(parsed.props) || parsed.props.some((prop) => typeof prop !== "string")
+    || typeof parsed.reason !== "string") return null;
+  const wardrobeOrBody = /\b(?:robe|clothing|衣|hair|ribbon|sandals?|shoes?|feet|hands?|face|head|ears?|eyebrows?|eyes?)\b/iu;
+  const props = parsed.props.filter((prop) => !wardrobeOrBody.test(prop)).slice(0, 8);
+  return {
+    relevant: parsed.relevant,
+    anatomy: parsed.anatomy as ImageQualityAudit["anatomy"],
+    textArtifacts: parsed.textArtifacts as ImageQualityAudit["textArtifacts"],
+    identity: (parsed.identity as ImageQualityAudit["identity"]) ?? "unknown",
+    props,
+    reason: parsed.reason.slice(0, 400),
+  };
+}
+
+// Director-Agent Phase 2b: Claude plans the whole short, platform-aware, and picks which scenes earn MLX motion.
+function platformBrief(platform: Platform | null | undefined): string {
+  if (platform === "tiktok")
+    return "Nền tảng TikTok: hook cực mạnh trong 0–1.5 giây đầu (câu hỏi/nghịch lý/hình ảnh lạ), nhịp NHANH, tổng 21–34 giây, phụ đề to ở giữa–dưới, CTA chốt là \"theo dõi\".";
+  if (platform === "reels")
+    return "Nền tảng Reels: hook mượt mà hấp dẫn trong 2 giây đầu, thẩm mỹ sạch, nhịp vừa, tổng 30–60 giây, CTA nhẹ nhàng.";
+  if (platform === "shorts")
+    return "Nền tảng YouTube Shorts: hook rõ giá trị trong 2 giây đầu, nhịp vừa–nhanh, tổng 30–60 giây.";
+  if (platform === "facebook")
+    return "Nền tảng Facebook: câu mở phải tự giải thích (nhiều người xem không bật tiếng), nhịp vừa, tổng 30–60 giây.";
+  return "Nền tảng dọc 9:16 chung: hook trong 2 giây đầu, nhịp giữ chân người xem.";
+}
+
+function planSystemPrompt(input: { platform: Platform | null | undefined; durationSec: number; goal: string; visualStyle: string }): string {
+  return [
+    "Bạn là ĐẠO DIỄN kiêm nhà sáng tạo nội dung ngắn chuyên nghiệp (TikTok/Reels). Từ ý tưởng của người dùng, lập KẾ HOẠCH sản xuất 1 video dọc 9:16 bằng tiếng Việt.",
+    platformBrief(input.platform),
+    `Thời lượng mục tiêu ~${input.durationSec} giây. Mục tiêu người dùng: ${input.goal || "(không nêu)"}. Phong cách hình: ${input.visualStyle}.`,
+    "Chia thành các cảnh ngắn (mỗi cảnh 1 câu lời đọc tiếng Việt tự nhiên, rõ, giữ chân). imagePrompt viết bằng TIẾNG ANH, mô tả hình cho cảnh đó (hợp phong cách).",
+    "motionScenes: chọn 1–2 cảnh ĐÁNG GIÁ nhất để thêm chuyển động nhân vật (thường là cảnh mở đầu/điểm nhấn) — vì mỗi clip chuyển động rất tốn thời gian render; để [] nếu không cần.",
+    "CHỈ trả về MỘT đối tượng JSON, không markdown, không giải thích, đúng dạng:",
+    '{"platform":"tiktok|reels|shorts|facebook|null","hook":{"text":"câu hook tiếng Việt","visual":"mô tả hình hook (English)"},"pacing":"fast|medium","cta":"CTA tiếng Việt","motionScenes":[0],"scenes":[{"narration":"lời đọc tiếng Việt","imagePrompt":"English image prompt","caption":"phụ đề ngắn (tùy)","voiceDirection":"hướng giọng (tùy)"}]}',
+  ].join("\n");
+}
+
+/** Extract and validate the Director plan from Claude's text reply. Pure (no SDK) → unit-tested; null on any problem. */
+export function finalizeProductionPlan(text: string): ProductionPlan | null {
+  if (!text) return null;
+  const withoutThink = text.replace(/<think>[\s\S]*?<\/think>/giu, "");
+  const fenced = withoutThink.match(/```(?:json)?\s*([\s\S]*?)```/iu);
+  const start = withoutThink.indexOf("{");
+  const end = withoutThink.lastIndexOf("}");
+  const candidate = fenced ? fenced[1]! : (start >= 0 && end > start ? withoutThink.slice(start, end + 1) : "");
+  if (!candidate.trim()) return null;
+  let parsed: unknown;
+  try { parsed = JSON.parse(candidate); } catch { return null; }
+  const result = productionPlanSchema.safeParse(parsed);
+  return result.success ? result.data : null;
+}
+
 export class AnthropicStoryboardAdapter implements StoryboardProvider {
   private readonly client: Anthropic;
 
@@ -40,8 +112,51 @@ export class AnthropicStoryboardAdapter implements StoryboardProvider {
     apiKey: string,
     private readonly model = "claude-haiku-4-5-20251001",
     baseURL?: string,
+    private readonly visionModel = "claude-haiku-5-5",
   ) {
     this.client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
+  }
+
+  /**
+   * Multimodal image QA on Claude vision — returns the same ImageQualityAudit shape as the local qwen gate, so the
+   * existing accept/retry/fallback logic is unchanged. Returns null on any failure (fail-open: the caller then keeps
+   * the image rather than losing the export). Director-Agent Phase 1.
+   */
+  async auditImage(input: { image: Uint8Array; referenceImage?: Uint8Array; sceneBrief: string }): Promise<ImageQualityAudit | null> {
+    const imageBlock = (bytes: Uint8Array) =>
+      ({ type: "image" as const, source: { type: "base64" as const, media_type: "image/png" as const, data: Buffer.from(bytes).toString("base64") } });
+    const message = await this.client.messages.create({
+      model: this.visionModel,
+      max_tokens: 300,
+      temperature: 0,
+      system: IMAGE_QA_SYSTEM,
+      messages: [{
+        role: "user",
+        content: [
+          imageBlock(input.image),
+          ...(input.referenceImage ? [imageBlock(input.referenceImage)] : []),
+          { type: "text" as const, text: JSON.stringify({ narration: input.sceneBrief }) },
+        ],
+      }],
+    });
+    const text = message.content.filter((block): block is Anthropic.TextBlock => block.type === "text").map((block) => block.text).join("");
+    return finalizeImageAudit(text);
+  }
+
+  /**
+   * Director-Agent Phase 2b: plan the whole short from the idea, platform-aware, choosing which scenes earn motion.
+   * Returns null on any failure (the caller then falls back to the normal storyboard pipeline).
+   */
+  async planProduction(input: { idea: string; platform: Platform | null; goal: string; durationSec: number; visualStyle: string }): Promise<ProductionPlan | null> {
+    const message = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 4_000,
+      temperature: 0.4,
+      system: planSystemPrompt(input),
+      messages: [{ role: "user", content: `Ý tưởng:\n${input.idea.slice(0, 6_000)}` }],
+    });
+    const text = message.content.filter((block): block is Anthropic.TextBlock => block.type === "text").map((block) => block.text).join("");
+    return finalizeProductionPlan(text);
   }
 
   async createStoryboard(input: StoryboardInput): Promise<StoryboardResult> {

@@ -138,6 +138,102 @@ export class OpenAIAdapter implements AIProvider {
     return new Uint8Array(await response.arrayBuffer());
   }
 
+  async writePostCaption(input: { sourceText: string; title: string }): Promise<{ title: string; description: string; hashtags: string[] } | null> {
+    try {
+      const response = await checked(
+        await fetch(this.url("/responses"), {
+          method: "POST",
+          signal: AbortSignal.timeout(60_000),
+          headers: { ...this.headers(), "content-type": "application/json" },
+          body: JSON.stringify({
+            model: this.models.text,
+            instructions:
+              "Bạn viết nội dung đăng kèm cho một video ngắn tiếng Việt (TikTok, Reels, Shorts). Chỉ dựa trên nội dung được cung cấp, không bịa thêm. " +
+              "title: tiêu đề tiếng Việt cuốn hút, đúng nội dung, tối đa 70 ký tự, không giật tít sai sự thật. " +
+              "description: 1-2 câu mô tả tự nhiên khơi gợi người xem, có thể thêm tối đa một emoji. " +
+              "hashtags: 3-5 hashtag tiếng Việt không dấu, viết liền, bắt đầu bằng #, bám sát chủ đề. Trả về đúng JSON.",
+            input: `Tiêu đề gợi ý: ${input.title}\nNội dung video:\n${input.sourceText.slice(0, 6_000)}`,
+            text: {
+              format: {
+                type: "json_schema",
+                name: "post_caption",
+                strict: true,
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["title", "description", "hashtags"],
+                  properties: {
+                    title: { type: "string" },
+                    description: { type: "string" },
+                    hashtags: { type: "array", items: { type: "string" } },
+                  },
+                },
+              },
+            },
+          }),
+        }),
+      );
+      const data = (await response.json()) as { output_text?: string };
+      if (!data.output_text) return null;
+      const parsed = JSON.parse(data.output_text) as { title?: unknown; description?: unknown; hashtags?: unknown };
+      const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
+      const description = typeof parsed.description === "string" ? parsed.description.trim() : "";
+      if (!title && !description) return null;
+      return {
+        title,
+        description,
+        hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.filter((tag): tag is string => typeof tag === "string") : [],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async writeKeyPoints(input: { narrations: string[]; title: string }): Promise<string[] | null> {
+    if (!input.narrations.length) return null;
+    try {
+      const response = await checked(
+        await fetch(this.url("/responses"), {
+          method: "POST",
+          signal: AbortSignal.timeout(60_000),
+          headers: { ...this.headers(), "content-type": "application/json" },
+          body: JSON.stringify({
+            model: this.models.text,
+            instructions:
+              "Video giải thích tiếng Việt: với mỗi cảnh, viết MỘT ý chính thật ngắn để hiện chữ to trên màn hình. " +
+              "Mỗi ý chính 2-5 từ tiếng Việt, cô đọng, bám đúng nội dung cảnh đó, không phải câu đầy đủ, không dấu câu cuối. " +
+              "Trả về JSON { keyPoints: [...] } với số phần tử ĐÚNG BẰNG số cảnh, theo đúng thứ tự.",
+            input: `Tiêu đề: ${input.title}\nCác cảnh:\n${input.narrations.map((text, index) => `${index + 1}. ${text}`).join("\n").slice(0, 8_000)}`,
+            text: {
+              format: {
+                type: "json_schema",
+                name: "key_points",
+                strict: true,
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["keyPoints"],
+                  properties: { keyPoints: { type: "array", items: { type: "string" } } },
+                },
+              },
+            },
+          }),
+        }),
+      );
+      const data = (await response.json()) as { output_text?: string };
+      if (!data.output_text) return null;
+      const parsed = JSON.parse(data.output_text) as { keyPoints?: unknown };
+      const list: unknown[] = Array.isArray(parsed.keyPoints) ? parsed.keyPoints : [];
+      if (!list.length) return null;
+      return input.narrations.map((_, index) => {
+        const value = list[index];
+        return typeof value === "string" ? value.trim().slice(0, 80) : "";
+      });
+    } catch {
+      return null;
+    }
+  }
+
   async transcribe(audio: Uint8Array): Promise<WordTimestamp[]> {
     const form = new FormData();
     form.append(

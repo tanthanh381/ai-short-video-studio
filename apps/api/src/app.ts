@@ -38,7 +38,6 @@ import {
 } from "@studio/shared";
 import { readBalancerSettings, writeBalancerSettings } from "@studio/shared/balancer-store";
 import { checkKeyWithProvider, createKeyVault } from "./api-keys";
-import { createTrendService, startDailyTrendScheduler } from "./trends";
 import type { AppConfig } from "./config";
 import type { AdminClient } from "./db";
 import { mapJob, mapProject } from "./mappers";
@@ -83,9 +82,8 @@ type WorkerHealthPayload = {
   balancer?: BalancerSummary;
   /** The installation of the second machine while it goes on (worker/src/air-setup.ts). */
   airSetup?: AirSetupSummary | null;
-  services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "ollama" | "localMedia" | "whiteboard", { state: ServiceState; detail: string }>>;
+  services?: Partial<Record<"worker" | "render" | "openai" | "anthropic" | "localMedia", { state: ServiceState; detail: string }>>;
 };
-type LocalMediaHealthPayload = { video?: boolean; videoState?: string; videoDetail?: string; faceDetail?: boolean; faceDetailDetail?: string; faceDetailState?: string };
 
 type UsageStats = {
   today: { usedUsd: number; eventCount: number; inputTokens: number; outputTokens: number; totalTokens: number };
@@ -172,7 +170,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
   let balancerSnapshot: BalancerSummary | null = null;
   let airSetupSnapshot: AirSetupSummary | null = null;
   const keyVault = createKeyVault(db, config);
-  const trends = createTrendService(db, config, keyVault);
 
   async function getUsageStats(userId: string, budgetUsd: number): Promise<UsageStats> {
     const now = new Date();
@@ -241,19 +238,13 @@ export function createApp(config: AppConfig, db: AdminClient) {
     if (serviceStatusCache && Date.now() - serviceStatusCache.at < maxAgeMs) return serviceStatusCache.value;
     const checkedAt = new Date().toISOString();
     const shouldCheckWorker = config.RENDER_WORKER_ENABLED || config.OPENAI_FEATURES_ENABLED || config.ANTHROPIC_FEATURES_ENABLED || config.OLLAMA_FEATURES_ENABLED || config.LOCAL_MEDIA_FEATURES_ENABLED;
-    const [workerResponse, ollamaReady, mediaReady, mediaHealth] = await Promise.all([
+    const [workerResponse, mediaReady] = await Promise.all([
       shouldCheckWorker
         ? fetch(`${config.WORKER_HEALTH_URL.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(2_500) })
         .then(async (response) => response.ok ? await response.json() as WorkerHealthPayload : null)
         .catch(() => null)
         : Promise.resolve(null),
-      config.OLLAMA_FEATURES_ENABLED ? probe(`${config.OLLAMA_BASE_URL.replace(/\/$/, "")}/api/tags`) : Promise.resolve(false),
       config.LOCAL_MEDIA_FEATURES_ENABLED ? probe(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/models`) : Promise.resolve(false),
-      config.LOCAL_MEDIA_FEATURES_ENABLED
-        ? fetch(`${config.LOCAL_MEDIA_BASE_URL.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(2_500) })
-          .then(async (response) => response.ok ? await response.json() as LocalMediaHealthPayload : null)
-          .catch(() => null)
-        : Promise.resolve(null),
     ]);
     const workerService = workerResponse?.services?.worker;
     const renderService = workerResponse?.services?.render;
@@ -272,30 +263,14 @@ export function createApp(config: AppConfig, db: AdminClient) {
       render: renderService
         ? status(renderService.state, renderService.detail)
         : status(config.RENDER_WORKER_ENABLED ? "offline" : "disabled", config.RENDER_WORKER_ENABLED ? "Chưa nhận được tín hiệu từ bộ dựng video" : "Bước ghép video đang tắt"),
-      ollama: status(
-        config.OLLAMA_FEATURES_ENABLED ? (ollamaReady ? "healthy" : "offline") : "disabled",
-        config.OLLAMA_FEATURES_ENABLED ? (ollamaReady ? "Ollama đang phản hồi /api/tags" : "Không kết nối được Ollama") : "Tính năng Ollama đang tắt",
-      ),
       localMedia: status(
         config.LOCAL_MEDIA_FEATURES_ENABLED ? (mediaReady ? "healthy" : "offline") : "disabled",
         config.LOCAL_MEDIA_FEATURES_ENABLED
           ? mediaReady
-            ? mediaHealth?.videoState && mediaHealth.videoState !== "ready"
-              ? `Bộ tạo ảnh và giọng đang chạy; chuyển động (LTX): ${mediaHealth.videoDetail ?? "chưa sẵn sàng"}`
-              : "Bộ tạo ảnh, giọng và chuyển động đang chạy"
-            : "Không kết nối được bộ tạo ảnh và giọng"
-          : "Tạo ảnh và giọng trên máy đang tắt",
+            ? "Giọng đọc và phụ đề đang chạy"
+            : "Không kết nối được bộ giọng đọc"
+          : "Giọng đọc trên máy đang tắt",
       ),
-      // Faces of generated pictures are redrawn by the media bridge; shown so a silently disabled pass gets noticed.
-      faceDetail: status(
-        // switched off on purpose (FACE_DETAIL=false) is not an outage: it must not raise a red alert
-        config.LOCAL_MEDIA_FEATURES_ENABLED ? (mediaHealth ? (mediaHealth.faceDetail ? "healthy" : mediaHealth.faceDetailState === "disabled" ? "disabled" : "offline") : "offline") : "disabled",
-        config.LOCAL_MEDIA_FEATURES_ENABLED
-          ? mediaHealth?.faceDetailDetail ?? (mediaHealth ? "Bộ tạo ảnh chưa hỗ trợ sửa khuôn mặt" : "Không kết nối được bộ tạo ảnh và giọng")
-          : "Tạo ảnh và giọng trên máy đang tắt",
-      ),
-      // The worker reaches the hand-drawing server; the API container does not need to.
-      whiteboard: fromWorker("whiteboard", status(config.RENDER_WORKER_ENABLED ? "unknown" : "disabled", config.RENDER_WORKER_ENABLED ? "Chưa kiểm tra được bộ dựng video" : "Bộ dựng video đang tắt")),
       openai: fromWorker("openai", status(config.OPENAI_FEATURES_ENABLED ? "unknown" : "disabled", config.OPENAI_FEATURES_ENABLED ? "Chưa kiểm tra được bộ dựng video" : "Tính năng OpenAI đang tắt")),
       anthropic: fromWorker("anthropic", status(config.ANTHROPIC_FEATURES_ENABLED ? "unknown" : "disabled", config.ANTHROPIC_FEATURES_ENABLED ? "Chưa kiểm tra được bộ dựng video" : "Tính năng Claude đang tắt")),
     };
@@ -349,8 +324,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
   app.get("/health", (_req, res) =>
     res.json({ ok: true, service: "ai-short-video-studio-api" }),
   );
-
-  (app as unknown as { startDailyTrends: () => () => void }).startDailyTrends = () => startDailyTrendScheduler(trends);
 
   app.use("/v1", async (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
@@ -685,18 +658,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.json(await accountView(req.userId!));
   });
 
-  app.get("/v1/trends", async (req, res) => {
-    res.json({ digest: await trends.read(req.userId!) });
-  });
-  app.post("/v1/trends/refresh", async (req, res) => {
-    try {
-      res.json({ digest: await trends.refresh(req.userId!) });
-    } catch (error) {
-      const status = (error as { status?: number }).status ?? 502;
-      res.status(status).json({ error: error instanceof Error ? error.message : "Chưa tạo được ý tưởng xu hướng. Hãy thử lại." });
-    }
-  });
-
   app.get("/v1/local-models", async (_req, res) => {
     const empty = { models: [], default: null };
     const unavailable = { available: false, storyboard: empty, image: empty, video: empty, tts: empty, transcribe: empty };
@@ -827,66 +788,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.status(201).json(mapProject(data));
   });
 
-  app.post("/v1/videos", async (req, res) => {
-    const input = createVideoSchema.parse(req.body);
-    const settings = projectSettingsSchema.parse({
-      ...DEFAULT_PROJECT_SETTINGS,
-      textProvider: "ollama",
-      mediaProvider: "local",
-      voice: DEFAULT_PROJECT_SETTINGS.voice,
-      // One-click creation must produce a publishable short even when an older
-      // client sends only the script. The Studio UI sends these explicitly too;
-      // keeping the server default aligned prevents silent plain-image exports.
-      autoMusic: true,
-      captionHighlight: true,
-      hookTitle: true,
-      ...input.settings,
-    });
-    const unavailable = await paidProviderUnavailable(settings, req.userId!);
-    if (unavailable) return res.status(503).json({ error: unavailable });
-    if (settings.backgroundMusicPath)
-      return res.status(400).json({ error: "Hãy tải nhạc riêng trong Studio sau khi dự án được tạo." });
-    const suppliedKey = req.headers["idempotency-key"];
-    const key = suppliedKey === undefined
-      ? crypto.createHash("sha256").update(JSON.stringify(input)).digest("hex")
-      : z.string().min(8).max(160).regex(/^[a-zA-Z0-9:._-]+$/).parse(suppliedKey);
-    const { data, error } = await db.rpc("enqueue_video", {
-      p_user_id: req.userId,
-      p_idempotency_key: `create-video:${key}`,
-      p_source_text: input.sourceText,
-      p_input_mode: readAsScript(input.inputMode),
-      p_title: autoTitle(input.sourceText),
-      p_settings: settings,
-      p_max_concurrent: req.maxConcurrentJobs,
-    });
-    if (error) {
-      if (queueError(error, res)) return;
-      throw error;
-    }
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row) throw new Error("Chưa bắt đầu tạo video được. Hãy thử lại.");
-    res.status(202).json({ project: await loadProject(row.project_id, req.userId!), job: mapJob(row) });
-  });
-
-  app.post("/v1/projects/:id/continue", async (req, res) => {
-    const project = await loadProject(req.params.id, req.userId!);
-    if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
-    const unavailable = await paidProviderUnavailable(project.settings, req.userId!);
-    if (unavailable) return res.status(503).json({ error: unavailable });
-    const { data, error } = await db.rpc("continue_video", {
-      p_user_id: req.userId,
-      p_project_id: project.id,
-      p_max_concurrent: req.maxConcurrentJobs,
-    });
-    if (error) {
-      if (queueError(error, res)) return;
-      throw error;
-    }
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row) throw new Error("Chưa khôi phục được video đang làm. Hãy thử lại.");
-    res.status(202).json({ project: await loadProject(project.id, req.userId!), job: mapJob(row) });
-  });
-
   app.get("/v1/projects/:id/result", async (req, res) => {
     const project = await loadProject(req.params.id, req.userId!);
     if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
@@ -1013,17 +914,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
     res.status(201).json(await loadProject(data.id, req.userId!));
   });
 
-  app.get("/v1/projects/:id/estimate", async (req, res) => {
-    const project = await loadProject(req.params.id, req.userId!);
-    if (!project)
-      return res.status(404).json({ error: "Không tìm thấy dự án" });
-    res.json(
-      estimateCost(
-        project,
-        project.settings.mediaProvider === "local" && config.LOCAL_MEDIA_FEATURES_ENABLED,
-      ),
-    );
-  });
   app.get("/v1/projects/:id/jobs", async (req, res) => {
     const { data, error } = await db
       .from("jobs")
@@ -1390,36 +1280,6 @@ export function createApp(config: AppConfig, db: AdminClient) {
       .createSignedUrl(item.storage_path, 300, { download: true });
     if (error) throw error;
     res.json({ url: data.signedUrl, expiresIn: 300 });
-  });
-
-  app.put("/v1/projects/:id/scenes/:sceneId/annotation", async (req, res) => {
-    const project = await loadProject(req.params.id, req.userId!);
-    if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
-    if (!project.scenes.some((s) => s.id === req.params.sceneId))
-      return res.status(404).json({ error: "Không tìm thấy cảnh" });
-    if (!req.body || typeof req.body !== "object" || !("elements" in req.body))
-      return res.status(400).json({ error: "Dữ liệu annotation không hợp lệ — cần có trường elements" });
-    const { error } = await db
-      .from("scenes")
-      .update({ annotation_json: whiteboardAnnotationSchema.parse(req.body) })
-      .eq("id", req.params.sceneId)
-      .eq("project_id", req.params.id);
-    if (error) throw error;
-    res.json({ ok: true });
-  });
-
-  app.delete("/v1/projects/:id/scenes/:sceneId/annotation", async (req, res) => {
-    const project = await loadProject(req.params.id, req.userId!);
-    if (!project) return res.status(404).json({ error: "Không tìm thấy dự án" });
-    if (!project.scenes.some((s) => s.id === req.params.sceneId))
-      return res.status(404).json({ error: "Không tìm thấy cảnh" });
-    const { error } = await db
-      .from("scenes")
-      .update({ annotation_json: null })
-      .eq("id", req.params.sceneId)
-      .eq("project_id", req.params.id);
-    if (error) throw error;
-    res.json({ ok: true });
   });
 
   app.use(

@@ -16,14 +16,10 @@ export function withDisplayNames(text: string): string {
 }
 
 export const LANE_LABELS: Record<string, string> = {
-  image: "Vẽ ảnh",
   tts: "Giọng đọc",
   transcribe: "Nhận dạng giọng nói",
-  whiteboard: "Vẽ tay",
-  llm: "Viết kịch bản (Ollama)",
-  video: "Chuyển động",
 };
-export const LANE_ORDER = ["image", "tts", "transcribe", "whiteboard", "llm", "video"] as const;
+export const LANE_ORDER = ["tts", "transcribe"] as const;
 
 export const NODE_STATE_LABEL: Record<NodeSummary["state"], { label: string; tone: Tone }> = {
   healthy: { label: "Sẵn sàng", tone: "ok" },
@@ -210,31 +206,6 @@ export function modelRows(node: NodeSummary, now = Date.now()): ModelRow[] {
   const models = node.models;
   if (!models) return [];
   const rows: ModelRow[] = [];
-  const loaded = models.llm.loaded;
-  if (!models.llm.up) rows.push({ id: "llm", label: "Ollama (viết kịch bản)", state: "down", detail: "Ollama không phản hồi", chips: [] });
-  else if (loaded.length) {
-    rows.push({
-      id: "llm", label: "Ollama (viết kịch bản)", state: "ready",
-      detail: `Đang nạp trong RAM: ${loaded.map((model) => `${model.name}${model.sizeGb != null ? ` (${formatGb(model.sizeGb)})` : ""}`).join(", ")}${unloadsIn(loaded[0]?.expiresAt ?? null, now)}`,
-      chips: models.llm.installed,
-    });
-  } else {
-    rows.push({
-      id: "llm", label: "Ollama (viết kịch bản)", state: "idle",
-      detail: models.llm.installed.length ? "Đã cài, chưa nạp vào RAM (tự nạp khi có kịch bản cần viết)" : "Chưa cài model nào",
-      chips: models.llm.installed,
-    });
-  }
-  const image = models.image;
-  rows.push({
-    id: "image", label: "Vẽ ảnh",
-    state: image.state === "ready" ? "ready" : image.state === "loading" ? "loading" : image.state === "asleep" ? "idle" : "down",
-    detail: image.state === "loading" ? "Đang nạp model ảnh vào bộ nhớ"
-      : image.state === "asleep" ? "Đang ngủ để nhả RAM · tự thức khi có ảnh cần vẽ (mất khoảng 1 phút nạp model)"
-      : image.state === "ready" ? `Sẵn sàng · mặc định ${image.defaultModel ?? "—"}`
-      : image.state === "down" ? "Máy vẽ ảnh không phản hồi" : "Chưa có thông tin",
-    chips: image.models,
-  });
   rows.push({
     id: "tts", label: "Giọng đọc",
     state: models.tts.engines.length ? "ready" : "down",
@@ -247,10 +218,6 @@ export function modelRows(node: NodeSummary, now = Date.now()): ModelRow[] {
     detail: models.transcribe ? "Sẵn sàng" : models.transcribe === false ? "Whisper không phản hồi" : "Chưa có thông tin",
     chips: [],
   });
-  if (models.faceDetail !== null) {
-    rows.push({ id: "face", label: "Sửa khuôn mặt", state: models.faceDetail ? "ready" : "down", detail: models.faceDetail ? "Sẵn sàng" : "Đang tắt hoặc thiếu mô hình dò mặt (video vẫn tạo bình thường)", chips: [] });
-  }
-  rows.push({ id: "whiteboard", label: "Máy vẽ tay", state: models.whiteboard ? "ready" : "down", detail: models.whiteboard ? "Sẵn sàng" : "Không phản hồi", chips: [] });
   return rows;
 }
 
@@ -262,8 +229,6 @@ export function laneRows(node: NodeSummary): LaneRow[] {
   return LANE_ORDER.flatMap((id) => {
     const lane = node.lanes[id];
     if (!lane) return [];
-    // A second Mac is not expected to move pictures (LTX): show that lane only when it has done something.
-    if (id === "video" && !lane.eligible && lane.done === 0) return [];
     return [{
       id, label: LANE_LABELS[id] ?? id, eligible: lane.eligible,
       status: lane.running > 0 ? `đang làm ${lane.running}` : lane.eligible ? "nhận việc" : "không nhận",
@@ -409,8 +374,8 @@ function gaugeAlertTitle(name: string, gauge: Gauge): string {
 export type SystemAlert = { id: string; tone: "bad" | "warn" | "info"; title: string; detail: string };
 
 const SERVICE_NAMES: Record<string, string> = {
-  api: "Dịch vụ ứng dụng", supabase: "Cơ sở dữ liệu", worker: "Bộ dựng video", render: "Bộ xuất video (FFmpeg)",
-  ollama: "Ollama", localMedia: "Bộ tạo ảnh và giọng", faceDetail: "Sửa khuôn mặt", whiteboard: "Máy vẽ tay",
+  api: "Dịch vụ ứng dụng", supabase: "Cơ sở dữ liệu", worker: "Bộ xử lý lồng tiếng", render: "Bộ dựng video (FFmpeg)",
+  localMedia: "Giọng đọc & phụ đề",
 };
 
 /** What the owner should look at first: a machine that dropped out, one short of memory, a service down, videos that failed. */
@@ -423,7 +388,7 @@ export function systemAlerts(system: SystemSummary): SystemAlert[] {
     const outdated = node.role !== "primary" && node.state !== "offline" && node.state !== "disabled" && !node.sync && node.matchesPrimary === false;
     if (node.state === "disabled") {
       // switched off by the owner: nothing to fix, and its readings are not a problem either
-      alerts.push({ id: `${node.id}-disabled`, tone: "info", title: `${displayName} đang tắt`, detail: "Đã tắt trong Cài đặt: máy này không nhận việc mới. Bật lại ở Cài đặt → Máy tạo video." });
+      alerts.push({ id: `${node.id}-disabled`, tone: "info", title: `${displayName} đang tắt`, detail: "Đã tắt trong Cài đặt: máy này không nhận việc mới. Bật lại ở Cài đặt → Máy xử lý." });
       continue;
     }
     if (node.state === "offline") alerts.push({ id: `${node.id}-offline`, tone: "bad", title: `${displayName} mất kết nối`, detail: node.detail });
@@ -431,7 +396,7 @@ export function systemAlerts(system: SystemSummary): SystemAlert[] {
     else if (outdated) {
       alerts.push({
         id: `${node.id}-outdated`, tone: "warn", title: `${displayName} đang chạy bản cũ`,
-        detail: `Cập nhật một lần: mở Terminal trên ${displayName} và dán dòng lệnh cài (Cài đặt → Máy xử lý video, hoặc docs/TU-HOST.md). Từ lần sau máy tự đồng bộ với Mac Mini. Trong lúc này ${displayName} chưa được giao việc vẽ ảnh và đọc giọng vì hai máy làm ra kết quả khác nhau.`,
+        detail: `Cập nhật một lần: mở Terminal trên ${displayName} và dán dòng lệnh cài (Cài đặt → Máy xử lý, hoặc docs/TU-HOST.md). Từ lần sau máy tự đồng bộ với Mac Mini. Trong lúc này ${displayName} chưa được giao việc đọc giọng vì hai máy làm ra kết quả khác nhau.`,
       });
     } else if (node.state === "degraded") alerts.push({ id: `${node.id}-degraded`, tone: "warn", title: `${displayName} bị hạn chế`, detail: node.detail });
     for (const gauge of machineGauges(node)) {
@@ -468,10 +433,10 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
   const switchedOff = all.length - nodes.length;
   const ready = nodes.filter((node) => node.state === "healthy").length;
   const usable = nodes.filter((node) => node.state === "healthy" || node.state === "degraded").length;
-  const share = system.balancer ? workShare(system.balancer.nodes).find((row) => row.lane === "image") : undefined;
+  const share = system.balancer ? workShare(system.balancer.nodes)[0] : undefined;
   const tiles: SummaryTile[] = [
     {
-      id: "machines", label: "Máy tạo video",
+      id: "machines", label: "Máy xử lý",
       value: nodes.length ? `${usable}/${nodes.length} hoạt động` : "1 máy",
       detail: nodes.length
         ? `${ready} sẵn sàng hoàn toàn${nodes.length > ready ? `, ${nodes.length - ready} hạn chế` : ""}${switchedOff ? ` · ${switchedOff} máy đã tắt` : ""}`
@@ -479,22 +444,22 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
       tone: nodes.length === 0 ? "idle" : usable === nodes.length ? (ready === nodes.length ? "ok" : "warn") : "bad",
     },
     {
-      id: "jobs", label: "Video đang làm",
+      id: "jobs", label: "Bản đang làm",
       value: `${system.jobs.running} chạy · ${system.jobs.queued} chờ`,
-      detail: system.jobs.running ? withDisplayNames(system.jobs.recent.find((job) => job.status === "running")?.stage ?? "Đang xử lý") : "Không có video nào đang chạy",
+      detail: system.jobs.running ? withDisplayNames(system.jobs.recent.find((job) => job.status === "running")?.stage ?? "Đang xử lý") : "Không có bản nào đang chạy",
       tone: system.jobs.running ? "ok" : "idle",
     },
     {
       id: "throughput", label: "24 giờ qua",
-      value: `${system.jobs.completed24h} video xong`,
-      detail: system.jobs.avgVideoSeconds24h !== null ? `trung bình ${formatDuration(system.jobs.avgVideoSeconds24h)} mỗi video${system.jobs.failed24h ? ` · ${system.jobs.failed24h} lỗi` : ""}` : system.jobs.failed24h ? `${system.jobs.failed24h} lỗi` : "Chưa có video nào hoàn thành",
+      value: `${system.jobs.completed24h} bản xong`,
+      detail: system.jobs.avgVideoSeconds24h !== null ? `trung bình ${formatDuration(system.jobs.avgVideoSeconds24h)} mỗi bản${system.jobs.failed24h ? ` · ${system.jobs.failed24h} lỗi` : ""}` : system.jobs.failed24h ? `${system.jobs.failed24h} lỗi` : "Chưa có bản nào hoàn thành",
       tone: system.jobs.failed24h ? "warn" : "idle",
     },
   ];
   if (share) {
     tiles.push({
-      id: "share", label: "Chia việc vẽ ảnh",
-      value: `${share.total} ảnh`,
+      id: "share", label: `Chia việc ${share.label.toLowerCase()}`,
+      value: `${share.total} lượt`,
       detail: `${share.parts.map((part) => `${nodeDisplayName(part.node)} ${part.done}`).join(" · ")} · từ lần khởi động gần nhất`,
       tone: "idle",
     });
