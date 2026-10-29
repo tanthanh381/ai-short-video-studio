@@ -1042,12 +1042,14 @@ function TextToSpeechPage() {
   );
 }
 
+type DubSegment = { id: string; startTimeMs: number; text: string };
+
 function DubSubtitlePage() {
   const navigate = useNavigate();
   const { isDemo } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [script, setScript] = useState("");
+  const [segments, setSegments] = useState<DubSegment[]>([]);
   const [voice, setVoice] = useState(DEFAULT_VOICE_PRESET);
   const [engine, setEngine] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -1061,6 +1063,7 @@ function DubSubtitlePage() {
   const [subtitleOutline, setSubtitleOutline] = useState(true);
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [currentSubtitleIdx, setCurrentSubtitleIdx] = useState<number | null>(null);
   const [voicePreviewState, setVoicePreviewState] = useState<"idle" | "loading" | "playing">("idle");
   const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
   const [voicePreviewError, setVoicePreviewError] = useState<string | null>(null);
@@ -1080,6 +1083,19 @@ function DubSubtitlePage() {
     if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
   }, [videoUrl, audioUrl, voicePreviewUrl]);
 
+  useEffect(() => {
+    if (!playing || !videoRef.current) return;
+    const interval = setInterval(() => {
+      const currentTimeMs = (videoRef.current?.currentTime ?? 0) * 1000;
+      const activeIdx = segments.findIndex((seg, idx) => {
+        const nextSeg = segments[idx + 1];
+        return seg.startTimeMs <= currentTimeMs && (!nextSeg || nextSeg.startTimeMs > currentTimeMs);
+      });
+      setCurrentSubtitleIdx(activeIdx >= 0 ? activeIdx : null);
+    }, 100);
+    return () => clearInterval(interval);
+  }, [playing, segments]);
+
   function selectVideo(next: File | undefined) {
     if (!next) return;
     if (!next.type.startsWith("video/")) {
@@ -1096,7 +1112,7 @@ function DubSubtitlePage() {
 
   async function createDub() {
     if (!file) { setError("Hãy tải video cần lồng tiếng lên trước."); return; }
-    if (!script.trim()) { setError("Hãy nhập lời thoại để tạo giọng đọc và phụ đề."); return; }
+    if (segments.length === 0 || !segments.some((s) => s.text.trim())) { setError("Hãy nhập lời thoại để tạo giọng đọc và phụ đề."); return; }
     if (isDemo) { setError(DEMO_VOICE); return; }
     setBusy(true); setError(null);
     try {
@@ -1116,14 +1132,15 @@ function DubSubtitlePage() {
           backgroundOpacity: subtitleOpacity / 100,
         },
       };
+      const sourceText = segments.map((s) => s.text).join(" ");
       const project = await api.createProject({
         title: file.name.replace(/\.[^.]+$/u, "") || "Video lồng tiếng",
-        sourceText: script,
+        sourceText,
         inputMode: "full-script",
         settings,
       });
       const sourceVideoPath = await api.uploadMedia(project.id, file, "video");
-      await api.queue(project.id, "dub_video", { sourceVideoPath, script, voice, engine, subtitle: settings.subtitle });
+      await api.queue(project.id, "dub_video", { sourceVideoPath, segments, voice, engine, subtitle: settings.subtitle });
       navigate(`/studio/${project.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chưa bắt đầu lồng tiếng được. Kiểm tra máy chính đang bật rồi bấm lại.");
@@ -1150,7 +1167,8 @@ function DubSubtitlePage() {
       setVoicePreviewState("idle");
       return;
     }
-    if (!script.trim()) {
+    const allText = segments.map((s) => s.text).join(" ");
+    if (!allText.trim()) {
       setVoicePreviewError("Nhập lời thoại trước khi nghe thử.");
       return;
     }
@@ -1161,7 +1179,7 @@ function DubSubtitlePage() {
     setVoicePreviewError(null);
     setVoicePreviewState("loading");
     try {
-      const blob = await api.textToSpeech(script, voice, engine, 1);
+      const blob = await api.textToSpeech(allText, voice, engine, 1);
       const url = URL.createObjectURL(blob);
       setVoicePreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return url; });
       const player = voicePreviewAudioRef.current;
@@ -1192,10 +1210,10 @@ function DubSubtitlePage() {
           <div className="video-preview-frame">
             {videoUrl ? <>
               <video ref={videoRef} src={videoUrl} onEnded={() => setPlaying(false)} playsInline />
-              {subtitleEnabled && script.trim() && <div
+              {subtitleEnabled && currentSubtitleIdx !== null && segments[currentSubtitleIdx]?.text.trim() && <div
                 className={`dub-subtitle-overlay dub-subtitle-${subtitlePosition} dub-subtitle-${subtitlePreset}`}
                 style={{ color: subtitleColor, backgroundColor: subtitleBackgroundColor, fontSize: `${subtitleFontSize}px`, textShadow: subtitleShadow }}
-              >{script.trim()}</div>}
+              >{segments[currentSubtitleIdx].text.trim()}</div>}
               <audio ref={audioRef} src={audioUrl ?? undefined} onEnded={() => setPlaying(false)} />
             </> : (
               <label className="video-empty video-empty-upload">
@@ -1222,9 +1240,64 @@ function DubSubtitlePage() {
               <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => selectVideo(event.target.files?.[0])} />
             </label>
           )}
-          <Field label="Lời thoại lồng tiếng và nội dung phụ đề" hint="Nội dung này sẽ được dùng cho cả giọng đọc và dòng phụ đề xem trước.">
-            <textarea value={script} onChange={(event) => setScript(event.target.value)} rows={7} maxLength={10000} placeholder="Nhập lời thoại tiếng Việt…" />
-          </Field>
+          <div className="field">
+            <span className="field-label">Lời thoại lồng tiếng (theo khoảng thời gian)</span>
+            <span className="field-hint">Thêm từng đoạn lời thoại với thời gian bắt đầu. Để trống thời gian để bắt đầu từ 0:00.</span>
+            <div className="dub-segments-list">
+              {segments.length === 0 && (
+                <div className="dub-segments-empty">
+                  <p>Chưa có đoạn lời thoại nào. Bấm nút dưới để thêm.</p>
+                </div>
+              )}
+              {segments.map((segment, idx) => {
+                const mins = Math.floor(segment.startTimeMs / 60000);
+                const secs = Math.floor((segment.startTimeMs % 60000) / 1000);
+                const timeStr = `${mins}:${secs.toString().padStart(2, "0")}`;
+                return (
+                  <div key={segment.id} className="dub-segment-item">
+                    <input
+                      type="text"
+                      placeholder="0:00"
+                      value={timeStr}
+                      onChange={(e) => {
+                        const [m, s] = e.target.value.split(":").map(Number);
+                        const ms = ((m || 0) * 60000) + ((s || 0) * 1000);
+                        setSegments((prev) => prev.map((seg) => seg.id === segment.id ? { ...seg, startTimeMs: ms } : seg));
+                      }}
+                      className="dub-segment-time"
+                      aria-label="Thời gian bắt đầu"
+                    />
+                    <textarea
+                      value={segment.text}
+                      onChange={(e) => setSegments((prev) => prev.map((seg) => seg.id === segment.id ? { ...seg, text: e.target.value } : seg))}
+                      placeholder="Nhập lời thoại tiếng Việt…"
+                      className="dub-segment-text"
+                      rows={3}
+                      maxLength={2000}
+                    />
+                    <button
+                      type="button"
+                      className="dub-segment-delete"
+                      onClick={() => setSegments((prev) => prev.filter((seg) => seg.id !== segment.id))}
+                      aria-label="Xóa đoạn này"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                const newId = crypto.randomUUID?.() || Date.now().toString();
+                setSegments((prev) => [...prev, { id: newId, startTimeMs: 0, text: "" }]);
+              }}
+            >
+              <Plus size={16} /> Thêm đoạn lời thoại
+            </Button>
+          </div>
           <div className="dub-form-row">
             <Field label="Giọng đọc">
               <span className="select-with-action">

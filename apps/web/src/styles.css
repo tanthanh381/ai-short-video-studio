@@ -2752,6 +2752,16 @@ a:focus-visible {
 .dub-check { margin: 4px 0 20px; }
 .dub-check span { display: grid; gap: 4px; }
 .dub-check small { color: var(--text-muted); font-weight: 400; font-size: var(--text-sm); }
+.dub-segments-list { display: grid; gap: 12px; margin-bottom: 12px; }
+.dub-segments-empty { padding: 20px; text-align: center; border: 1px dashed var(--line-hover); border-radius: var(--radius-md); color: var(--text-muted); }
+.dub-segment-item { display: grid; grid-template-columns: 60px 1fr 32px; gap: 8px; align-items: start; padding: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.dub-segment-time { width: 100%; padding: 6px 8px; font-size: var(--text-sm); font-family: monospace; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.dub-segment-time:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.dub-segment-text { width: 100%; padding: 8px; font-size: var(--text-sm); font-family: inherit; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); resize: vertical; }
+.dub-segment-text:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.dub-segment-delete { width: 32px; height: 32px; padding: 0; border: 1px solid var(--line-hover); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-muted); cursor: pointer; font-weight: 600; }
+.dub-segment-delete:hover { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+.dub-segment-delete:focus { outline: 0; box-shadow: var(--focus-ring); }
 
 @media (max-width: 1100px) {
   .dub-page-grid { grid-template-columns: 1fr; }

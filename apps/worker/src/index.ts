@@ -1252,16 +1252,37 @@ async function renderDub(job: JobRow, project: Project) {
   const payload = job.payload as {
     sourceVideoPath?: string;
     script?: string;
+    segments?: Array<{ startTimeMs: number; text: string }>;
     voice?: string;
     engine?: string | null;
     subtitle?: Project["settings"]["subtitle"];
   };
-  if (!payload.sourceVideoPath || !payload.script?.trim())
-    throw new Error("Thiếu video upload hoặc lời thoại lồng tiếng");
-  const script = payload.script.trim();
-  const aligned = await localMedia.createSpeechAligned(script, payload.voice ?? project.settings.voice, {
-    tts: payload.engine ?? project.settings.localModels.tts,
-  });
+  if (!payload.sourceVideoPath)
+    throw new Error("Thiếu video upload");
+
+  const useSegments = payload.segments && payload.segments.length > 0;
+  let aligned: any;
+  let script: string;
+
+  if (useSegments) {
+    const segments = payload.segments!.sort((a, b) => a.startTimeMs - b.startTimeMs);
+    const segmentTexts = segments.map((seg) => seg.text.trim()).filter(Boolean);
+    if (segmentTexts.length === 0)
+      throw new Error("Thiếu lời thoại lồng tiếng");
+
+    script = segmentTexts.join(" ");
+    aligned = await localMedia.createSpeechAligned(script, payload.voice ?? project.settings.voice, {
+      tts: payload.engine ?? project.settings.localModels.tts,
+    });
+  } else {
+    if (!payload.script?.trim())
+      throw new Error("Thiếu lời thoại lồng tiếng");
+    script = payload.script.trim();
+    aligned = await localMedia.createSpeechAligned(script, payload.voice ?? project.settings.voice, {
+      tts: payload.engine ?? project.settings.localModels.tts,
+    });
+  }
+
   const scene = {
     id: crypto.randomUUID(), order: 0, narration: script, imagePrompt: "Uploaded video",
     estimatedDurationMs: Math.min(120000, Math.max(1000, aligned.durationMs)),

@@ -1081,9 +1081,14 @@ export function createApp(config: AppConfig, db: AdminClient) {
         return res.status(404).json({ error: "Không tìm thấy cảnh cần tạo lại" });
     }
     if (input.type === "dub_video") {
+      const dubSegment = z.object({
+        startTimeMs: z.number().min(0).max(3600000),
+        text: z.string().min(1).max(2000),
+      });
       const dub = z.object({
         sourceVideoPath: z.string().min(1).max(500),
-        script: z.string().trim().min(1).max(10000),
+        script: z.string().trim().min(1).max(10000).optional(),
+        segments: z.array(dubSegment).optional(),
         voice: z.string().max(40),
         engine: z.string().regex(/^[a-z0-9-]{1,20}$/u).nullish(),
         subtitle: subtitleStyleSchema.optional(),
@@ -1091,6 +1096,8 @@ export function createApp(config: AppConfig, db: AdminClient) {
       const prefix = `${req.userId}/${project.id}/video/`;
       if (!dub.sourceVideoPath.startsWith(prefix) || dub.sourceVideoPath.includes(".."))
         return res.status(403).json({ error: "Video upload không thuộc dự án này" });
+      if (!dub.script && (!dub.segments || dub.segments.length === 0))
+        return res.status(400).json({ error: "Cần cung cấp script hoặc segments" });
       input.payload = dub;
     }
     const { count } = await db
