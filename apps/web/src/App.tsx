@@ -1260,12 +1260,18 @@ function DubSubtitlePage() {
                       placeholder="0:00"
                       value={timeStr}
                       onChange={(e) => {
-                        const [m, s] = e.target.value.split(":").map(Number);
-                        const ms = ((m || 0) * 60000) + ((s || 0) * 1000);
+                        const parts = e.target.value.split(":").filter(Boolean);
+                        let ms = 0;
+                        if (parts.length === 2) {
+                          const [m, s] = parts.map(Number);
+                          ms = ((m || 0) * 60000) + ((s || 0) * 1000);
+                        } else if (parts.length === 1) {
+                          ms = (Number(parts[0]) || 0) * 1000;
+                        }
                         setSegments((prev) => prev.map((seg) => seg.id === segment.id ? { ...seg, startTimeMs: ms } : seg));
                       }}
                       className="dub-segment-time"
-                      aria-label="Thời gian bắt đầu"
+                      aria-label="Thời gian bắt đầu (MM:SS hoặc giây)"
                     />
                     <textarea
                       value={segment.text}
