@@ -374,8 +374,8 @@ function gaugeAlertTitle(name: string, gauge: Gauge): string {
 export type SystemAlert = { id: string; tone: "bad" | "warn" | "info"; title: string; detail: string };
 
 const SERVICE_NAMES: Record<string, string> = {
-  api: "Dịch vụ ứng dụng", supabase: "Cơ sở dữ liệu", worker: "Bộ dựng video", render: "Bộ xuất video (FFmpeg)",
-  ollama: "Ollama", localMedia: "Bộ tạo ảnh và giọng", faceDetail: "Sửa khuôn mặt", whiteboard: "Máy vẽ tay",
+  api: "Dịch vụ ứng dụng", supabase: "Cơ sở dữ liệu", worker: "Bộ xử lý lồng tiếng", render: "Bộ dựng video (FFmpeg)",
+  localMedia: "Giọng đọc & phụ đề",
 };
 
 /** What the owner should look at first: a machine that dropped out, one short of memory, a service down, videos that failed. */

@@ -205,8 +205,8 @@ describe("systemAlerts and summaryTiles", () => {
   it("puts a machine that dropped out and a squeezed Mac first, then the rest", () => {
     const squeezed = node("mini", { resources: { ...node("mini").resources!, memUsedGb: 12, memPressure: "warn", swapUsedGb: 8, swapTotalGb: 9, swapOutMBps: 60 } });
     const off = node("air", { state: "offline", detail: "cầu nối media không kết nối được", matchesPrimary: null });
-    const alerts = systemAlerts(system([squeezed, off], { jobs: { running: 0, queued: 0, completed24h: 2, failed24h: 1, avgVideoSeconds24h: 300, recent: [] }, services: { ollama: { state: "offline", detail: "Không kết nối được Ollama", checkedAt: "x" }, supabase: { state: "healthy", detail: "ok", checkedAt: "x" } } }));
-    expect(alerts.map((alert) => alert.id)).toEqual(["mini-swap", "air-offline", "service-ollama", "jobs-failed"]); // red ones first, in the order found
+    const alerts = systemAlerts(system([squeezed, off], { jobs: { running: 0, queued: 0, completed24h: 2, failed24h: 1, avgVideoSeconds24h: 300, recent: [] }, services: { localMedia: { state: "offline", detail: "Không kết nối được bộ giọng đọc", checkedAt: "x" }, supabase: { state: "healthy", detail: "ok", checkedAt: "x" } } }));
+    expect(alerts.map((alert) => alert.id)).toEqual(["mini-swap", "air-offline", "service-localMedia", "jobs-failed"]); // red ones first, in the order found
     expect(alerts[1]).toMatchObject({ tone: "bad", title: "MacBook Air mất kết nối" });
     // the title says the problem in words; the swap numbers move to the detail
     expect(alerts[0]!.title).toBe("Mac Mini thiếu RAM, đang dùng ổ đĩa thay RAM nên ảnh và giọng chậm hơn");
