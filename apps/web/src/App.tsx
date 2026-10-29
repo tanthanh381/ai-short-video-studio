@@ -117,7 +117,7 @@ const navItems = [
   { to: "/settings", label: "Cài đặt", icon: Settings },
 ];
 
-const APP_NAME = "AI Short Video Studio";
+const APP_NAME = "Studio Giọng Việt";
 
 /** The browser tab says which page this is (WCAG 2.4.2): the menu name, else the page's own heading. */
 function pageTitle(pathname: string, heading: string | null): string {
@@ -220,7 +220,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
             <Clapperboard size={24} />
           </div>
           <div>
-            <strong>Short Video</strong>
+            <strong>Giọng Việt</strong>
             <span>Studio</span>
           </div>
         </div>
@@ -280,12 +280,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Menu />
           </button>
-          <span>Short Video Studio</span>
+          <span>Studio Giọng Việt</span>
         </header>
         {isDemo && (
           <div className="demo-bar">
-            <strong>Đang xem chế độ mẫu.</strong> Bạn có thể tạo và sửa kịch bản;
-            tạo video cần máy chính đang bật.
+            <strong>Đang xem chế độ mẫu.</strong> Bạn có thể xem giao diện;
+            lồng tiếng và tạo giọng đọc cần máy chính đang bật.
           </div>
         )}
         {children}
@@ -373,9 +373,9 @@ function LoginPage() {
         <div className="vertical-frame">
           <div className="frame-sun" />
           <div className="frame-caption">
-            Biến một ý tưởng
+            Biến lời thoại
             <br />
-            thành video kể chuyện.
+            thành giọng đọc tiếng Việt.
           </div>
           <div className="sound-wave">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
@@ -391,7 +391,7 @@ function LoginPage() {
               <Clapperboard size={24} />
             </div>
             <div>
-              <strong>Short Video</strong>
+              <strong>Giọng Việt</strong>
               <span>Studio</span>
             </div>
           </div>
@@ -399,7 +399,7 @@ function LoginPage() {
           <p>
             {resetMode
               ? "Nhập email được cấp quyền để nhận liên kết đặt mật khẩu."
-              : "Không gian riêng để sản xuất video ngắn tiếng Việt."}
+              : "Không gian riêng để lồng tiếng và đọc văn bản tiếng Việt."}
           </p>
           {isDemo ? (
             <Notice tone="warn">
@@ -570,7 +570,7 @@ function ResetPasswordPage() {
         <div className="login-box">
           <div className="brand login-brand">
             <div className="brand-mark"><Clapperboard size={24} /></div>
-            <div><strong>Short Video</strong><span>Studio</span></div>
+            <div><strong>Giọng Việt</strong><span>Studio</span></div>
           </div>
           <h1>Đặt mật khẩu mới</h1>
           <p>Mật khẩu mới áp dụng cho tài khoản {user.email}.</p>
@@ -1163,9 +1163,9 @@ function ExportsPage() {
       ) : (
         <div className="empty">
           <Film size={42} />
-          <h2>Chưa có video nào được xuất</h2>
-          <p>Video làm xong sẽ hiện ở đây, kèm thời lượng và nút tải MP4.</p>
-          <Link className="button button-primary" to="/new"><Plus size={17} /> Tạo video mới</Link>
+          <h2>Chưa có bản dựng nào được xuất</h2>
+          <p>Video lồng tiếng làm xong sẽ hiện ở đây, kèm thời lượng và nút tải MP4.</p>
+          <Link className="button button-primary" to="/dub-subtitle"><Plus size={17} /> Lồng tiếng video mới</Link>
         </div>
       )}
     </SimplePage>
@@ -1467,7 +1467,7 @@ function SettingsPage() {
         <section>
           <div className="section-heading-row">
             <div>
-              <h2>Máy tạo video</h2>
+              <h2>Máy xử lý</h2>
               <p className="microcopy">Chọn máy nhận việc mới. Việc đang chạy vẫn tiếp tục.</p>
             </div>
           </div>
@@ -1483,8 +1483,8 @@ function SettingsPage() {
             />
           ) : (
             <p className="microcopy">
-              Hiện chỉ có máy chính nên chưa có gì để bật hoặc tắt. Thêm máy phụ (ví dụ MacBook Air) theo hướng dẫn "Thêm máy phụ" trong <code>docs/TU-HOST.md</code>;
-              tình trạng các dịch vụ xem ở <Link to="/system">Hệ thống</Link>.
+              Ứng dụng chạy trên một máy chính (Mac Mini), tự lo lồng tiếng và giọng đọc — không cần máy phụ.
+              Tình trạng các dịch vụ xem ở <Link to="/system">Hệ thống</Link>.
             </p>
           )}
           {settings.airSetup ? <AirSetupPanel setup={settings.airSetup} /> : null}
