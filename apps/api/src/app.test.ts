@@ -79,7 +79,6 @@ describe("API", () => {
     expect(response.status).toBe(200);
     expect(response.body.serviceStatuses.api.state).toBe("healthy");
     expect(response.body.serviceStatuses.supabase.state).toBe("healthy");
-    expect(response.body.serviceStatuses.ollama.state).toBe("disabled");
     expect(response.body.serviceStatuses.worker.state).toBe("disabled");
     expect(response.body.balancer).toBeNull();
   });

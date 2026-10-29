@@ -22,7 +22,7 @@ export function MachinesPanel({ balancer, busy, notice, services, onChange, onSy
   const summary = serviceSummary(services);
   return (
     <div className="machines-panel">
-      <ul className="machine-list" aria-label="Các máy tạo video">
+      <ul className="machine-list" aria-label="Các máy xử lý">
         {choices.map((choice) => {
           const locked = busy || (choice.enabled && !choice.canSwitchOff);
           const name = nodeDisplayName(choice.id);

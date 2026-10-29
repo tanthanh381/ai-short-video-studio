@@ -8,7 +8,7 @@ import { SWAP_HURTS_MBPS, formatGb, syncView, type SyncView } from "./system";
 export type Mode = BalancerSummary["mode"];
 
 export const MODE_CHOICES: Array<{ id: Mode; label: string; hint: string }> = [
-  { id: "parallel", label: "Active-active", hint: "Mini và Air cùng nhận việc phù hợp; máy lỗi tự được loại ra." },
+  { id: "parallel", label: "Active-active", hint: "Mọi máy khỏe cùng nhận việc phù hợp; máy lỗi tự được loại ra." },
   { id: "auto", label: "Tự cân tải", hint: "Chỉ bật thêm máy khi dự kiến nhanh hơn đủ mức." },
   { id: "single", label: "Một máy", hint: "Chỉ dùng một máy; máy còn lại để bảo trì hoặc dự phòng." },
 ];
@@ -85,8 +85,8 @@ export function machineWarning(balancer: BalancerSummary): string | null {
 }
 
 export const SERVICE_NAMES: Array<[string, string]> = [
-  ["api", "API ứng dụng"], ["supabase", "Cơ sở dữ liệu"], ["worker", "Bộ xử lý video"], ["render", "Bộ xuất video"],
-  ["ollama", "Ollama · nội dung"], ["localMedia", "Bộ tạo media"], ["faceDetail", "Tăng cường khuôn mặt"], ["whiteboard", "Bảng vẽ"],
+  ["api", "API ứng dụng"], ["supabase", "Cơ sở dữ liệu"], ["worker", "Bộ xử lý lồng tiếng"], ["render", "Bộ dựng video"],
+  ["localMedia", "Giọng đọc & phụ đề"],
 ];
 
 /** "7/8 dịch vụ hoạt động" and the ones that are not: all Cài đặt says about services; the full list is in Hệ thống. */
