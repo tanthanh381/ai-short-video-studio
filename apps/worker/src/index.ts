@@ -366,6 +366,18 @@ async function probeAudioDuration(audio: Uint8Array) {
     return result;
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
+
+async function probeMediaDuration(bytes: Uint8Array): Promise<number | null> {
+  const directory = await mkdtemp(join(tmpdir(), "studio-probe-"));
+  try {
+    const path = join(directory, "media");
+    await writeFile(path, bytes);
+    const { stdout } = await exec(config.FFPROBE_PATH, ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path], { timeout: 30_000 });
+    const result = Math.round(Number(stdout.trim()) * 1000);
+    return Number.isFinite(result) && result > 0 ? result : null;
+  } catch { return null; }
+  finally { await rm(directory, { recursive: true, force: true }); }
+}
 async function getProject(id: string): Promise<Project> {
   const { data: project, error } = await db
     .from("projects")
@@ -1353,6 +1365,10 @@ async function renderDub(job: JobRow, project: Project) {
   let aligned: any;
   let script: string;
 
+  // Download video first to probe its actual duration before generating TTS
+  const videoBytes = await download(payload.sourceVideoPath!);
+  const videoDurationMs = await probeMediaDuration(new Uint8Array(videoBytes));
+
   if (useSegments) {
     const segments = payload.segments!.sort((a, b) => a.startTimeMs - b.startTimeMs);
     const segmentTexts = segments.map((seg) => seg.text.trim()).filter(Boolean);
@@ -1372,10 +1388,13 @@ async function renderDub(job: JobRow, project: Project) {
     });
   }
 
+  // Use the source video's actual duration so the output is not cut short.
+  // If probing failed, fall back to audio duration.
+  const sceneDurationMs = videoDurationMs ?? aligned.durationMs;
   const scene = {
     id: crypto.randomUUID(), order: 0, narration: script, imagePrompt: "Uploaded video",
-    estimatedDurationMs: Math.min(120000, Math.max(1000, aligned.durationMs)),
-    actualDurationMs: aligned.durationMs, imagePath: null, videoPath: payload.sourceVideoPath,
+    estimatedDurationMs: Math.min(3600000, Math.max(1000, sceneDurationMs)),
+    actualDurationMs: sceneDurationMs, imagePath: null, videoPath: payload.sourceVideoPath,
     audioPath: "memory://dubbing-audio", thumbnailUrl: null, mediaStatus: "ready" as const,
     errorMessage: null, subtitles: aligned.cues,
   } as Scene;
@@ -1389,7 +1408,11 @@ async function renderDub(job: JobRow, project: Project) {
   const result = await renderProject(
     config,
     dubProject,
-    async (path) => path === "memory://dubbing-audio" ? aligned.audio : download(path),
+    async (path) => {
+      if (path === "memory://dubbing-audio") return aligned.audio;
+      if (path === payload.sourceVideoPath) return videoBytes;
+      return download(path);
+    },
     (value, stage) => setProgress(job.id, value, stage),
     { whiteboard },
   );
