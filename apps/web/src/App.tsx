@@ -948,19 +948,20 @@ function DubSubtitlePage() {
       setVoicePreviewState("idle");
       return;
     }
-    const allText = segments.map((s) => s.text).join(" ");
-    if (!allText.trim()) {
-      setVoicePreviewError("Nhập lời thoại trước khi nghe thử.");
-      return;
-    }
     if (isDemo) {
       setVoicePreviewError(DEMO_VOICE);
+      return;
+    }
+    // Preset voices play a fixed sample clip instantly — no text needed.
+    // Non-preset voices require text to generate speech.
+    const allText = segments.map((s) => s.text).join(" ");
+    if (!isVoicePreset(voice) && !allText.trim()) {
+      setVoicePreviewError("Nhập lời thoại trước khi nghe thử.");
       return;
     }
     setVoicePreviewError(null);
     setVoicePreviewState("loading");
     try {
-      const key = `${voice}|${engine ?? ""}`;
       let url: string;
       if (isVoicePreset(voice)) {
         url = `${import.meta.env.BASE_URL}voice-samples/${voice}.mp3`;
