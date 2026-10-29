@@ -960,8 +960,14 @@ function DubSubtitlePage() {
     setVoicePreviewError(null);
     setVoicePreviewState("loading");
     try {
-      const blob = await api.textToSpeech(allText, voice, engine, 1);
-      const url = URL.createObjectURL(blob);
+      const key = `${voice}|${engine ?? ""}`;
+      let url: string;
+      if (isVoicePreset(voice)) {
+        url = `${import.meta.env.BASE_URL}voice-samples/${voice}.mp3`;
+      } else {
+        const blob = await api.textToSpeech(allText, voice, engine, 1);
+        url = URL.createObjectURL(blob);
+      }
       setVoicePreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return url; });
       const player = voicePreviewAudioRef.current;
       if (!player) throw new Error("Không khởi tạo được trình phát audio");
