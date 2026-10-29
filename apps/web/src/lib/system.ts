@@ -388,7 +388,7 @@ export function systemAlerts(system: SystemSummary): SystemAlert[] {
     const outdated = node.role !== "primary" && node.state !== "offline" && node.state !== "disabled" && !node.sync && node.matchesPrimary === false;
     if (node.state === "disabled") {
       // switched off by the owner: nothing to fix, and its readings are not a problem either
-      alerts.push({ id: `${node.id}-disabled`, tone: "info", title: `${displayName} đang tắt`, detail: "Đã tắt trong Cài đặt: máy này không nhận việc mới. Bật lại ở Cài đặt → Máy tạo video." });
+      alerts.push({ id: `${node.id}-disabled`, tone: "info", title: `${displayName} đang tắt`, detail: "Đã tắt trong Cài đặt: máy này không nhận việc mới. Bật lại ở Cài đặt → Máy xử lý." });
       continue;
     }
     if (node.state === "offline") alerts.push({ id: `${node.id}-offline`, tone: "bad", title: `${displayName} mất kết nối`, detail: node.detail });
@@ -396,7 +396,7 @@ export function systemAlerts(system: SystemSummary): SystemAlert[] {
     else if (outdated) {
       alerts.push({
         id: `${node.id}-outdated`, tone: "warn", title: `${displayName} đang chạy bản cũ`,
-        detail: `Cập nhật một lần: mở Terminal trên ${displayName} và dán dòng lệnh cài (Cài đặt → Máy xử lý video, hoặc docs/TU-HOST.md). Từ lần sau máy tự đồng bộ với Mac Mini. Trong lúc này ${displayName} chưa được giao việc vẽ ảnh và đọc giọng vì hai máy làm ra kết quả khác nhau.`,
+        detail: `Cập nhật một lần: mở Terminal trên ${displayName} và dán dòng lệnh cài (Cài đặt → Máy xử lý, hoặc docs/TU-HOST.md). Từ lần sau máy tự đồng bộ với Mac Mini. Trong lúc này ${displayName} chưa được giao việc đọc giọng vì hai máy làm ra kết quả khác nhau.`,
       });
     } else if (node.state === "degraded") alerts.push({ id: `${node.id}-degraded`, tone: "warn", title: `${displayName} bị hạn chế`, detail: node.detail });
     for (const gauge of machineGauges(node)) {
@@ -436,7 +436,7 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
   const share = system.balancer ? workShare(system.balancer.nodes)[0] : undefined;
   const tiles: SummaryTile[] = [
     {
-      id: "machines", label: "Máy tạo video",
+      id: "machines", label: "Máy xử lý",
       value: nodes.length ? `${usable}/${nodes.length} hoạt động` : "1 máy",
       detail: nodes.length
         ? `${ready} sẵn sàng hoàn toàn${nodes.length > ready ? `, ${nodes.length - ready} hạn chế` : ""}${switchedOff ? ` · ${switchedOff} máy đã tắt` : ""}`
@@ -444,15 +444,15 @@ export function summaryTiles(system: SystemSummary): SummaryTile[] {
       tone: nodes.length === 0 ? "idle" : usable === nodes.length ? (ready === nodes.length ? "ok" : "warn") : "bad",
     },
     {
-      id: "jobs", label: "Video đang làm",
+      id: "jobs", label: "Bản đang làm",
       value: `${system.jobs.running} chạy · ${system.jobs.queued} chờ`,
-      detail: system.jobs.running ? withDisplayNames(system.jobs.recent.find((job) => job.status === "running")?.stage ?? "Đang xử lý") : "Không có video nào đang chạy",
+      detail: system.jobs.running ? withDisplayNames(system.jobs.recent.find((job) => job.status === "running")?.stage ?? "Đang xử lý") : "Không có bản nào đang chạy",
       tone: system.jobs.running ? "ok" : "idle",
     },
     {
       id: "throughput", label: "24 giờ qua",
-      value: `${system.jobs.completed24h} video xong`,
-      detail: system.jobs.avgVideoSeconds24h !== null ? `trung bình ${formatDuration(system.jobs.avgVideoSeconds24h)} mỗi video${system.jobs.failed24h ? ` · ${system.jobs.failed24h} lỗi` : ""}` : system.jobs.failed24h ? `${system.jobs.failed24h} lỗi` : "Chưa có video nào hoàn thành",
+      value: `${system.jobs.completed24h} bản xong`,
+      detail: system.jobs.avgVideoSeconds24h !== null ? `trung bình ${formatDuration(system.jobs.avgVideoSeconds24h)} mỗi bản${system.jobs.failed24h ? ` · ${system.jobs.failed24h} lỗi` : ""}` : system.jobs.failed24h ? `${system.jobs.failed24h} lỗi` : "Chưa có bản nào hoàn thành",
       tone: system.jobs.failed24h ? "warn" : "idle",
     },
   ];

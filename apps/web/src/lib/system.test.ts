@@ -226,7 +226,7 @@ describe("systemAlerts and summaryTiles", () => {
     const alerts = systemAlerts(system([node("mini"), old]));
     expect(alerts.map((alert) => alert.id)).toEqual(["air-outdated"]);
     expect(alerts[0]!.detail).toMatch(/dán dòng lệnh cài/);
-    expect(alerts[0]!.detail).toMatch(/chưa được giao việc vẽ ảnh và đọc giọng/);
+    expect(alerts[0]!.detail).toMatch(/chưa được giao việc đọc giọng/);
     // once it runs the new agent but is still different, the specific complaint comes back
     const withAgent = node("air", { state: "degraded", matchesPrimary: false, lanes: { image: lane({ eligible: false, reasons: ["cấu hình khác máy chính ở số bước vẽ ảnh"] }) } });
     expect(systemAlerts(system([node("mini"), withAgent])).map((alert) => alert.id)).toEqual(["air-degraded", "air-parity"]);
@@ -239,7 +239,7 @@ describe("systemAlerts and summaryTiles", () => {
     );
     const tiles = Object.fromEntries(summaryTiles(busy).map((tile) => [tile.id, tile]));
     expect(tiles.jobs).toMatchObject({ value: "1 chạy · 2 chờ", detail: "Đang tạo giọng đọc · MacBook Air", tone: "ok" });
-    expect(tiles.throughput).toMatchObject({ value: "5 video xong", detail: "trung bình 6 phút 20 giây mỗi video" });
+    expect(tiles.throughput).toMatchObject({ value: "5 bản xong", detail: "trung bình 6 phút 20 giây mỗi bản" });
     expect(tiles.share).toMatchObject({ value: "15 lượt", detail: "Mac Mini 4 · MacBook Air 11 · từ lần khởi động gần nhất" });
   });
 
@@ -251,20 +251,18 @@ describe("systemAlerts and summaryTiles", () => {
 });
 
 describe("the demo data", () => {
-  it("tells a consistent story: a Mac short of memory, a healthy one, work shared between them", async () => {
+  it("tells a consistent story: a single healthy Mac doing voice-over and subtitles", async () => {
     const { demoSystem } = await import("./demo-system");
     const demo = demoSystem(NOW);
     const nodes = demo.balancer!.nodes;
-    expect(nodes.map((item) => item.id)).toEqual(["mini", "air"]);
-    for (const item of nodes) {
-      expect(item.history!.length).toBe(180);
-      expect(item.history![179]!.at).toBeLessThanOrEqual(NOW);
-      expect(machineGauges(item).length).toBeGreaterThanOrEqual(5);
-      expect(modelRows(item, NOW).length).toBe(2);
-    }
-    expect(systemAlerts(demo).map((alert) => alert.id)).toContain("mini-swap");
-    expect(workShare(nodes)[0]).toMatchObject({ lane: "tts", total: 15 });
-    expect(summaryTiles(demo).map((tile) => tile.id)).toEqual(["machines", "jobs", "throughput", "share", "sync", ]);
+    expect(nodes.map((item) => item.id)).toEqual(["mini"]);
+    const mini = nodes[0]!;
+    expect(mini.history!.length).toBe(180);
+    expect(mini.history![179]!.at).toBeLessThanOrEqual(NOW);
+    expect(machineGauges(mini).length).toBeGreaterThanOrEqual(5);
+    expect(modelRows(mini, NOW).length).toBe(2);
+    expect(systemAlerts(demo)).toEqual([]); // the demo Mac is healthy, nothing to flag
+    expect(workShare(nodes)[0]).toMatchObject({ lane: "tts", total: 12 });
   });
 });
 
@@ -282,7 +280,7 @@ describe("machines switched off in Cài đặt", () => {
     const squeezed = { ...off, resources: { ...off.resources!, memUsedGb: 23.5, memPressure: "critical" as const, swapUsedGb: 7, swapTotalGb: 7 } };
     const alerts = systemAlerts(system([node("mini"), squeezed]));
     expect(alerts.map((alert) => [alert.id, alert.tone])).toEqual([["air-disabled", "info"]]);
-    expect(alerts[0]!.detail).toMatch(/Cài đặt → Máy tạo video/);
+    expect(alerts[0]!.detail).toMatch(/Cài đặt → Máy xử lý/);
   });
 
   it("counts only the machines that are on, and says how many are off", () => {
