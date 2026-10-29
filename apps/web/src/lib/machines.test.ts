@@ -69,9 +69,9 @@ describe("machineFacts and serviceSummary", () => {
   it("counts the services that are running and names the ones that are not", () => {
     const summary = serviceSummary({
       api: { state: "healthy", detail: "ok" }, supabase: { state: "healthy", detail: "ok" }, worker: { state: "healthy", detail: "ok" },
-      ollama: { state: "offline", detail: "Không kết nối được Ollama" }, faceDetail: { state: "disabled", detail: "tắt" }, whiteboard: { state: "unknown", detail: "?" },
+      localMedia: { state: "offline", detail: "Không kết nối được bộ giọng đọc" },
     });
-    expect(summary).toEqual({ ok: 3, total: 4, problems: [{ name: "Ollama · nội dung", detail: "Không kết nối được Ollama" }] });
+    expect(summary).toEqual({ ok: 3, total: 4, problems: [{ name: "Giọng đọc & phụ đề", detail: "Không kết nối được bộ giọng đọc" }] });
   });
 });
 

@@ -1293,10 +1293,7 @@ function SettingsPage() {
     supabase: { state: isDemo ? "disabled" : "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     openai: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     anthropic: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
-    ollama: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     localMedia: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
-    faceDetail: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
-    whiteboard: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     worker: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
     render: { state: "unknown", detail: "Chưa kiểm tra", checkedAt: "" },
   };
@@ -1317,7 +1314,6 @@ function SettingsPage() {
       ai: false,
       openai: false,
       anthropic: false,
-      ollama: false,
       localMedia: false,
       render: false,
     },
@@ -1512,10 +1508,10 @@ function SettingsPage() {
           </details>
         </section>
         <section>
-          <div className="section-heading-row"><div><h2>Hiệu suất và chi phí</h2><p className="microcopy">Giới hạn số video chạy cùng lúc và ngân sách dịch vụ trả phí. Tạo trên máy của bạn không tốn phí.</p></div></div>
+          <div className="section-heading-row"><div><h2>Hiệu suất và chi phí</h2><p className="microcopy">Giới hạn số bản lồng tiếng chạy cùng lúc và ngân sách dịch vụ trả phí. Tạo trên máy của bạn không tốn phí.</p></div></div>
           <Field
-            label="Số video tạo cùng lúc"
-            hint="Mac Mini xử lý nhanh nhất khi tạo một video một lúc; video sau tự xếp hàng."
+            label="Số bản lồng tiếng cùng lúc"
+            hint="Mac Mini xử lý nhanh nhất khi làm một bản một lúc; bản sau tự xếp hàng."
           >
             <input
               type="number"
