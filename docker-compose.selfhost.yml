@@ -29,6 +29,8 @@ services:
       API_KEYS_SECRET: ${API_KEYS_SECRET:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:8787:8787"
     healthcheck:
@@ -94,6 +96,8 @@ services:
       FFMPEG_PATH: ${FFMPEG_PATH:-ffmpeg}
       FFPROBE_PATH: ${FFPROBE_PATH:-ffprobe}
       FFMPEG_ENCODER: ${FFMPEG_ENCODER:-libx264}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - worker-tmp:/app/apps/worker/tmp
 
