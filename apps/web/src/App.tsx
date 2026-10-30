@@ -1116,17 +1116,17 @@ function DubSubtitlePage() {
                   onClick={() => {
                     const parsed: DubSegment[] = [];
                     for (const line of bulkText.split("\n")) {
-                      const m = line.match(/^\*?\s*(\d+):(\d+)\s+"?(.+?)"?\s*$/) || line.match(/^\*?\s*(\d+)\s+"?(.+?)"?\s*$/);
-                      if (!m) continue;
+                      const mms = line.match(/^\*?\s*(\d+):(\d+)\s+"?(.+?)"?\s*$/);
+                      const ms = !mms ? line.match(/^\*?\s*(\d+)\s+"?(.+?)"?\s*$/) : null;
                       let startTimeMs: number;
                       let text: string;
-                      if (m.length === 4) { // MM:SS match
-                        startTimeMs = (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) * 1000;
-                        text = m[3].trim();
-                      } else { // seconds only
-                        startTimeMs = parseInt(m[1], 10) * 1000;
-                        text = m[2].trim();
-                      }
+                      if (mms?.[1] != null && mms[2] != null && mms[3] != null) {
+                        startTimeMs = (parseInt(mms[1], 10) * 60 + parseInt(mms[2], 10)) * 1000;
+                        text = mms[3].trim();
+                      } else if (ms?.[1] != null && ms[2] != null) {
+                        startTimeMs = parseInt(ms[1], 10) * 1000;
+                        text = ms[2].trim();
+                      } else { continue; }
                       if (text) parsed.push({ id: crypto.randomUUID?.() || Date.now().toString() + parsed.length, startTimeMs, text });
                     }
                     if (parsed.length > 0) {
