@@ -812,6 +812,7 @@ function DubSubtitlePage() {
   const [file, setFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [segments, setSegments] = useState<DubSegment[]>([]);
+  const [bulkText, setBulkText] = useState<string | null>(null);
   const [voice, setVoice] = useState(DEFAULT_VOICE_PRESET);
   const [engine, setEngine] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -1081,16 +1082,63 @@ function DubSubtitlePage() {
                 );
               })}
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                const newId = crypto.randomUUID?.() || Date.now().toString();
-                setSegments((prev) => [...prev, { id: newId, startTimeMs: 0, text: "" }]);
-              }}
-            >
-              <Plus size={16} /> Thêm đoạn lời thoại
-            </Button>
+            <div className="dub-segments-actions">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  const newId = crypto.randomUUID?.() || Date.now().toString();
+                  setSegments((prev) => [...prev, { id: newId, startTimeMs: 0, text: "" }]);
+                }}
+              >
+                <Plus size={16} /> Thêm đoạn lời thoại
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setBulkText(bulkText === null ? "" : null)}
+              >
+                <FileText size={16} /> Nhập từ văn bản
+              </Button>
+            </div>
+            {bulkText !== null && (
+              <div className="dub-bulk-import">
+                <p className="dub-bulk-hint">Mỗi dòng: <code>0:05 "lời thoại"</code> hoặc <code>* 0:05 lời thoại</code></p>
+                <textarea
+                  className="dub-bulk-textarea"
+                  rows={8}
+                  placeholder={"* 0:00 \"Sự trả thù tốt nhất là không trả thù.\"\n* 0:05 \"Có người nói sai về bạn...\"\n* 0:10 \"Bạn đau, muốn đáp trả ngay...\""}
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const parsed: DubSegment[] = [];
+                    for (const line of bulkText.split("\n")) {
+                      const m = line.match(/^\*?\s*(\d+):(\d+)\s+"?(.+?)"?\s*$/) || line.match(/^\*?\s*(\d+)\s+"?(.+?)"?\s*$/);
+                      if (!m) continue;
+                      let startTimeMs: number;
+                      let text: string;
+                      if (m.length === 4) { // MM:SS match
+                        startTimeMs = (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) * 1000;
+                        text = m[3].trim();
+                      } else { // seconds only
+                        startTimeMs = parseInt(m[1], 10) * 1000;
+                        text = m[2].trim();
+                      }
+                      if (text) parsed.push({ id: crypto.randomUUID?.() || Date.now().toString() + parsed.length, startTimeMs, text });
+                    }
+                    if (parsed.length > 0) {
+                      setSegments((prev) => [...prev, ...parsed]);
+                      setBulkText(null);
+                    }
+                  }}
+                >
+                  Thêm {bulkText.split("\n").filter((l) => /^\*?\s*\d/.test(l)).length} đoạn
+                </Button>
+              </div>
+            )}
           </div>
           <div className="dub-form-row">
             <Field label="Giọng đọc">
