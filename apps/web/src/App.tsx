@@ -1115,17 +1115,18 @@ function DubSubtitlePage() {
                   type="button"
                   onClick={() => {
                     const parsed: DubSegment[] = [];
-                    for (const line of bulkText.split("\n")) {
+                    for (const raw of bulkText.split(/\r?\n/)) {
+                      const line = raw.trim().replace(/[“”„‟«»]/g, '"');
                       const mms = line.match(/^\*?\s*(\d+):(\d+)\s+"?(.+?)"?\s*$/);
                       const ms = !mms ? line.match(/^\*?\s*(\d+)\s+"?(.+?)"?\s*$/) : null;
                       let startTimeMs: number;
                       let text: string;
                       if (mms?.[1] != null && mms[2] != null && mms[3] != null) {
                         startTimeMs = (parseInt(mms[1], 10) * 60 + parseInt(mms[2], 10)) * 1000;
-                        text = mms[3].trim();
+                        text = mms[3].replace(/^"+|"+$/g, "").trim();
                       } else if (ms?.[1] != null && ms[2] != null) {
                         startTimeMs = parseInt(ms[1], 10) * 1000;
-                        text = ms[2].trim();
+                        text = ms[2].replace(/^"+|"+$/g, "").trim();
                       } else { continue; }
                       if (text) parsed.push({ id: crypto.randomUUID?.() || Date.now().toString() + parsed.length, startTimeMs, text });
                     }
@@ -1135,7 +1136,7 @@ function DubSubtitlePage() {
                     }
                   }}
                 >
-                  Thêm {bulkText.split("\n").filter((l) => /^\*?\s*\d/.test(l)).length} đoạn
+                  Thêm {bulkText.split(/\r?\n/).filter((l) => /^\*?\s*\d/.test(l.trim())).length} đoạn
                 </Button>
               </div>
             )}
