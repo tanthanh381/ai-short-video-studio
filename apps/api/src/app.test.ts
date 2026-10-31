@@ -19,6 +19,7 @@ const config: AppConfig = {
   OLLAMA_FEATURES_ENABLED: false,
   LOCAL_MEDIA_FEATURES_ENABLED: false,
   LOCAL_MEDIA_BASE_URL: "http://localhost:8765",
+  OMNIVOICE_BASE_URL: "http://localhost:5010",
   RENDER_WORKER_ENABLED: false,
   OPENAI_BASE_URL: "https://api.openai.com/v1",
   ANTHROPIC_BASE_URL: "https://api.anthropic.com", ANTHROPIC_TREND_MODEL: "claude-sonnet-4-6",
@@ -321,7 +322,7 @@ describe("API", () => {
     const broken = await request(app).post("/v1/videos").set("Authorization", "Bearer x").set("Content-Type", "application/json").send("{bad");
     expect(broken.status).toBe(400);
     expect(broken.body.error).toMatch(/không đọc được/);
-    const huge = await request(app).post("/v1/videos").set("Content-Type", "application/json").send(JSON.stringify({ sourceText: "a".repeat(1_200_000) }));
+    const huge = await request(app).post("/v1/videos").set("Content-Type", "application/json").send(JSON.stringify({ sourceText: "a".repeat(5_000_000) }));
     expect(huge.status).toBe(413);
     expect(huge.body.error).toMatch(/quá lớn/);
     expect(JSON.stringify([refused.body, broken.body, huge.body])).not.toMatch(/stack|at .*\.ts|node_modules/);

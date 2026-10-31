@@ -291,7 +291,7 @@ export function createApp(config: AppConfig, db: AdminClient) {
       credentials: false,
     }),
   );
-  app.use(express.json({ limit: "1mb" }));
+  app.use(express.json({ limit: "4mb" })); // 4mb headroom for the base64 reference clip on /v1/voice-clone
   // A project, scene, job or export id that is not a UUID can never exist: answer 404 here instead of letting the database
   // reject the malformed value and the request end as a 500.
   const asUuid = (_req: Request, res: Response, next: NextFunction, value: string) => {
@@ -751,6 +751,42 @@ export function createApp(config: AppConfig, db: AdminClient) {
       res.type("audio/mpeg").send(Buffer.from(await response.arrayBuffer()));
     } catch {
       return res.status(503).json({ error: "Không kết nối được dịch vụ giọng đọc. Hãy kiểm tra máy tạo video." });
+    }
+  });
+
+  // Zero-shot voice cloning: speak `text` in the voice of an uploaded reference clip, via the local OmniVoice engine.
+  app.post("/v1/voice-clone", async (req, res) => {
+    const input = z
+      .object({
+        text: z.string().trim().min(1, "Văn bản cần đọc không được để trống").max(10_000),
+        refAudioBase64: z.string().min(16).max(5_600_000, "Mẫu giọng quá lớn (tối đa ~4MB)"),
+        refAudioFormat: z.string().regex(/^[a-z0-9]{1,5}$/u).default("wav"),
+        refText: z.string().trim().max(2_000).nullish(),
+        speed: z.number().min(0.75).max(1.25).default(1),
+      })
+      .parse(req.body);
+    if (!config.LOCAL_MEDIA_FEATURES_ENABLED)
+      return res.status(503).json({ error: "Chưa kết nối dịch vụ giọng đọc trên máy." });
+    try {
+      const response = await fetch(`${config.OMNIVOICE_BASE_URL.replace(/\/$/, "")}/v1/audio/clone`, {
+        method: "POST",
+        signal: AbortSignal.timeout(180_000),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          input: input.text,
+          ref_audio_b64: input.refAudioBase64,
+          ref_audio_format: input.refAudioFormat,
+          ref_text: input.refText ?? undefined,
+          speed: input.speed,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        return res.status(502).json({ error: "Nhân bản giọng thất bại.", detail: detail.slice(0, 300) });
+      }
+      res.type("audio/wav").send(Buffer.from(await response.arrayBuffer()));
+    } catch {
+      return res.status(503).json({ error: "Không kết nối được dịch vụ nhân bản giọng (OmniVoice). Hãy kiểm tra máy chính." });
     }
   });
 

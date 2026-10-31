@@ -31,6 +31,8 @@ const configSchema = z.object({
     .default("false")
     .transform((value) => value === "true"),
   LOCAL_MEDIA_BASE_URL: z.string().url().default("http://host.docker.internal:8765"),
+  // OmniVoice TTS service (same host), called directly for interactive voice cloning.
+  OMNIVOICE_BASE_URL: z.string().url().default("http://host.docker.internal:5010"),
   // Encrypts the account owner's own OpenAI / Claude keys at rest. Empty means "not set": keys cannot be saved.
   API_KEYS_SECRET: z.preprocess(
     (value) => (value === "" ? undefined : value),
