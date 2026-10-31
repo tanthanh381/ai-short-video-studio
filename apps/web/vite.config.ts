@@ -4,7 +4,7 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
 /** The pages a person can open or refresh by address. GitHub Pages answers an unknown path with 404 (404.html then sends the visitor to the app); a copy of the app at each known path answers 200 instead. */
-export const STATIC_ROUTES = ["login", "reset-password", "dub-subtitle", "tts", "exports", "system", "settings"];
+export const STATIC_ROUTES = ["login", "reset-password", "dub-subtitle", "tts", "voice-clone", "exports", "system", "settings"];
 
 function routePages(): Plugin {
   let outDir = "dist";

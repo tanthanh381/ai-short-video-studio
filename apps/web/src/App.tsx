@@ -22,6 +22,7 @@ import {
   LoaderCircle,
   LogOut,
   Menu,
+  Fingerprint,
   Mic2,
   MoreHorizontal,
   Move,
@@ -112,6 +113,7 @@ const navItems = [
   { to: "/", label: "Tổng quan", icon: Gauge },
   { to: "/dub-subtitle", label: "Lồng tiếng & phụ đề", icon: Subtitles },
   { to: "/tts", label: "Đọc văn bản (TTS)", icon: Mic2 },
+  { to: "/voice-clone", label: "Nhân bản giọng", icon: Fingerprint },
   { to: "/exports", label: "Lịch sử xuất", icon: Film },
   { to: "/system", label: "Hệ thống", icon: Activity },
   { to: "/settings", label: "Cài đặt", icon: Settings },
@@ -701,6 +703,11 @@ function HubPage() {
           <strong>Đọc văn bản (TTS)</strong>
           <span>Dán văn bản, chọn giọng đọc rồi tải file MP3.</span>
         </Link>
+        <Link to="/voice-clone" className="hub-card">
+          <span className="hub-card-icon"><Fingerprint size={28} /></span>
+          <strong>Nhân bản giọng</strong>
+          <span>Tải mẫu giọng ngắn, đọc văn bản bằng chính giọng đó.</span>
+        </Link>
       </div>
     </SimplePage>
   );
@@ -799,6 +806,110 @@ function TextToSpeechPage() {
             <input type="range" min="0.75" max="1.25" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
           </label>
           <VoicePreview voice={voice} engine={engine} disabled={isDemo} />
+        </section>
+      </div>
+    </SimplePage>
+  );
+}
+
+const MAX_REF_BYTES = 4 * 1024 * 1024;
+
+/** Reads a File into the base64 payload (without the `data:...;base64,` prefix) for the voice-clone request. */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+    reader.onerror = () => reject(new Error("Không đọc được file mẫu giọng"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function VoiceClonePage() {
+  const { isDemo } = useAuth();
+  const [refFile, setRefFile] = useState<File | null>(null);
+  const [refText, setRefText] = useState("");
+  const [text, setText] = useState("");
+  const [speed, setSpeed] = useState(1);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
+
+  function selectRef(next: File | undefined) {
+    setError(null);
+    if (!next) return;
+    if (!next.type.startsWith("audio/")) { setError("Hãy chọn file âm thanh (MP3, WAV, M4A…)."); return; }
+    if (next.size > MAX_REF_BYTES) { setError("Mẫu giọng quá lớn (tối đa ~4MB). Hãy dùng clip ngắn khoảng 10–30 giây."); return; }
+    setRefFile(next);
+  }
+
+  async function createClone() {
+    if (isDemo) { setError(DEMO_VOICE); return; }
+    if (!refFile) { setError("Hãy tải lên một mẫu giọng (khoảng 10–30 giây)."); return; }
+    if (!text.trim()) { setError("Hãy nhập văn bản cần đọc."); return; }
+    setBusy(true); setError(null);
+    try {
+      const b64 = await fileToBase64(refFile);
+      const ext = (refFile.name.split(".").pop() ?? "wav").toLowerCase().replace(/[^a-z0-9]/gu, "").slice(0, 5) || "wav";
+      const blob = await api.cloneSpeech(text, b64, ext, refText.trim() || null, speed);
+      setAudioUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chưa nhân bản được giọng");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <SimplePage title="Nhân bản giọng" subtitle="Tải lên một mẫu giọng ngắn, nhập văn bản và nhận lời đọc bằng chính giọng đó. Chạy trên máy của bạn, không tốn phí.">
+      <div className="tts-page-grid">
+        <section className="tts-editor-card">
+          <div className="section-heading-row">
+            <h2>Văn bản cần đọc</h2>
+            <span className="tts-counter">{text.length.toLocaleString("vi-VN")} / 10.000</span>
+          </div>
+          <textarea
+            className="tts-textarea"
+            aria-label="Văn bản cần đọc"
+            maxLength={10000}
+            value={text}
+            onChange={(event) => { setText(event.target.value); setError(null); }}
+            placeholder="Nhập văn bản tiếng Việt sẽ được đọc bằng giọng nhân bản…"
+          />
+          <div className="tts-editor-footer">
+            <span>{refFile ? refFile.name : "Chưa có mẫu giọng"} · {formatSpeed(speed)}</span>
+            <Button busy={busy} onClick={() => void createClone()}><Play size={17} /> Nhân bản &amp; đọc</Button>
+          </div>
+          {error && <Notice tone="bad">{error}</Notice>}
+          {audioUrl && (
+            <div className="tts-result">
+              <div><strong>Bản đọc đã sẵn sàng</strong><span>Nghe lại hoặc tải file</span></div>
+              <audio controls src={audioUrl} />
+              <a className="button button-secondary" href={audioUrl} download="giong-nhan-ban.wav"><Download size={17} /> Tải về</a>
+            </div>
+          )}
+        </section>
+        <section className="tts-options-card">
+          <h2>Mẫu giọng</h2>
+          <label className="clone-upload">
+            <Fingerprint size={24} />
+            <strong>{refFile ? "Đổi mẫu giọng" : "Tải mẫu giọng lên"}</strong>
+            <small>MP3, WAV, M4A · clip sạch ~10–30 giây · tối đa 4MB</small>
+            <input type="file" accept="audio/*" onChange={(event) => selectRef(event.target.files?.[0])} />
+          </label>
+          <label className="field">
+            <span className="field-label">Lời thoại trong mẫu <small>(nên nhập — giúp giọng giống hơn)</small></span>
+            <textarea
+              className="clone-reftext"
+              value={refText}
+              maxLength={2000}
+              onChange={(event) => setRefText(event.target.value)}
+              placeholder="Gõ đúng câu đang nói trong mẫu giọng. Để trống thì máy tự nghe và đoán (chậm hơn)."
+            />
+          </label>
+          <label className="field tts-speed-field">
+            <span>Tốc độ đọc <b>{formatSpeed(speed)}</b></span>
+            <input type="range" min="0.75" max="1.25" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
+          </label>
+          {isDemo && <Notice tone="warn">{DEMO_VOICE}</Notice>}
         </section>
       </div>
     </SimplePage>
@@ -1782,6 +1893,7 @@ export function App() {
               <Route index element={<HubPage />} />
               <Route path="dub-subtitle" element={<DubSubtitlePage />} />
               <Route path="tts" element={<TextToSpeechPage />} />
+              <Route path="voice-clone" element={<VoiceClonePage />} />
               <Route path="exports" element={<ExportsPage />} />
               <Route path="system" element={<SystemPage />} />
               <Route path="settings" element={<SettingsPage />} />

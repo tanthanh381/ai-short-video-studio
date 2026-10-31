@@ -144,9 +144,35 @@ async function textToSpeechBlob(text: string, voice: string, engine: string | nu
   return response.blob();
 }
 
+async function cloneSpeechBlob(
+  text: string,
+  refAudioBase64: string,
+  refAudioFormat: string,
+  refText: string | null,
+  speed: number,
+): Promise<Blob> {
+  const token = await getAuthToken();
+  let response: Response;
+  try {
+    response = await fetch(`${appConfig.apiUrl}/v1/voice-clone`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ text, refAudioBase64, refAudioFormat, refText, speed }),
+    });
+  } catch {
+    throw new Error("Chưa kết nối được dịch vụ nhân bản giọng. Kiểm tra máy chính đang bật rồi thử lại.");
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Chưa nhân bản được giọng");
+  }
+  return response.blob();
+}
+
 export const api = {
   voicePreview: voicePreviewBlob,
   textToSpeech: textToSpeechBlob,
+  cloneSpeech: cloneSpeechBlob,
   async getResult(id: string): Promise<VideoResult | null> {
     if (appConfig.demoMode) return null;
     const response = await request<{ export: null | Omit<VideoResult, "url"> & { videoUrl: string; downloadUrl: string; createdAt: string }; expiresIn: number }>(`/v1/projects/${id}/result`);

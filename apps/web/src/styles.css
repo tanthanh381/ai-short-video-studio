@@ -1848,6 +1848,37 @@ a:focus-visible {
 .tts-result audio { width: 100%; grid-column: 1 / -1; }
 .tts-result .button { justify-self: end; }
 
+.clone-upload {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+  cursor: pointer;
+  padding: 20px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-2);
+}
+.clone-upload:hover { background: var(--nav-2); }
+.clone-upload:focus-within { box-shadow: inset var(--focus-ring); }
+.clone-upload strong { color: var(--text); font-size: var(--text-base); }
+.clone-upload small { font-size: var(--text-sm); color: var(--text-muted); }
+.clone-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.clone-reftext {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.clone-reftext:focus { outline: none; box-shadow: var(--focus-ring); border-color: var(--link); }
+
 .hub-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

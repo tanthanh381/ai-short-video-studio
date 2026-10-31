@@ -26,7 +26,7 @@ const config: AppConfig = {
   DAILY_BUDGET_USD: 3, MAX_CONCURRENT_JOBS: 1, AI_FEATURES_ENABLED: false,
   OPENAI_FEATURES_ENABLED: true, ANTHROPIC_FEATURES_ENABLED: true,
   OLLAMA_FEATURES_ENABLED: true, LOCAL_MEDIA_FEATURES_ENABLED: true,
-  LOCAL_MEDIA_BASE_URL: "http://media.test:8765", RENDER_WORKER_ENABLED: true, NODE_ENV: "test",
+  LOCAL_MEDIA_BASE_URL: "http://media.test:8765", OMNIVOICE_BASE_URL: "http://media.test:5010", RENDER_WORKER_ENABLED: true, NODE_ENV: "test",
   OPENAI_BASE_URL: "https://openai.test/v1", ANTHROPIC_BASE_URL: "https://anthropic.test", ANTHROPIC_TREND_MODEL: "claude-sonnet-4-6",
   API_KEYS_SECRET: SECRET,
 };
